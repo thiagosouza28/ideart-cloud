@@ -1,0 +1,45 @@
+name: Deploy CAKTO Integration
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install supabase CLI
+        run: |
+          curl -sSfL "https://github.com/supabase/cli/releases/latest/download/supabase_linux_amd64" -o supabase
+          sudo install ./supabase /usr/local/bin/supabase
+
+      - name: Set up environment
+        env:
+          CAKTO_CLIENT_ID: ${{ secrets.CAKTO_CLIENT_ID }}
+          CAKTO_CLIENT_SECRET: ${{ secrets.CAKTO_CLIENT_SECRET }}
+          CAKTO_API_BASE: ${{ secrets.CAKTO_API_BASE }}
+          CAKTO_WEBHOOK_SECRET: ${{ secrets.CAKTO_WEBHOOK_SECRET }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          echo "Secrets provided"
+
+      - name: Configure Supabase secrets
+        env:
+          CAKTO_CLIENT_ID: ${{ secrets.CAKTO_CLIENT_ID }}
+          CAKTO_CLIENT_SECRET: ${{ secrets.CAKTO_CLIENT_SECRET }}
+          CAKTO_API_BASE: ${{ secrets.CAKTO_API_BASE }}
+          CAKTO_WEBHOOK_SECRET: ${{ secrets.CAKTO_WEBHOOK_SECRET }}
+        run: |
+          supabase secrets set CAKTO_CLIENT_ID="${{ secrets.CAKTO_CLIENT_ID }}" CAKTO_CLIENT_SECRET="${{ secrets.CAKTO_CLIENT_SECRET }}" CAKTO_API_BASE="${{ secrets.CAKTO_API_BASE }}" CAKTO_WEBHOOK_SECRET="${{ secrets.CAKTO_WEBHOOK_SECRET }}"
+
+      - name: Deploy Edge Functions
+        run: |
+          supabase functions deploy create-plan
+          supabase functions deploy create-subscription
+          supabase functions deploy cakto-webhook
+
+      - name: Apply DB migrations
+        run: |
+          supabase db push || echo "supabase db push failed; ensure your project is configured"

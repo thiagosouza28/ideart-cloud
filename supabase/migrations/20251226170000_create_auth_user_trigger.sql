@@ -1,0 +1,30 @@
+-- Ensure new auth users get a profile and default role.
+create or replace function public.handle_new_user() returns trigger
+language plpgsql security definer
+set search_path to 'public'
+as $$
+begin
+  insert into public.profiles (id, full_name)
+  values (new.id, coalesce(new.raw_user_meta_data->>'full_name', new.email))
+  on conflict (id) do nothing;
+
+  insert into public.user_roles (user_id, role)
+  values (new.id, 'atendente')
+  on conflict (user_id, role) do nothing;
+
+  return new;
+end;
+$$;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_trigger
+    where tgname = 'on_auth_user_created'
+  ) then
+    create trigger on_auth_user_created
+    after insert on auth.users
+    for each row execute function public.handle_new_user();
+  end if;
+end $$;
