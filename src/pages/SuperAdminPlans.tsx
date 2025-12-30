@@ -126,7 +126,7 @@ export default function SuperAdminPlans() {
       toast.success('Plano atualizado com sucesso');
     } else {
       try {
-        await invokeEdgeFunction<{ plan: Plan }>('plans', planData);
+        await invokeEdgeFunction<{ plan: Plan }>('create-plan', planData);
         toast.success('Plano criado com sucesso');
       } catch (error: any) {
         const message = error?.message || 'Erro ao criar plano';
@@ -270,9 +270,9 @@ export default function SuperAdminPlans() {
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 placeholder="Ex: Básico, Profissional, Empresarial"
               />
-              </div>
+            </div>
 
-              <div className="space-y-2">
+            <div className="space-y-2">
               <Label>Descrição</Label>
               <Textarea
                 value={formData.description || ''}
@@ -337,10 +337,10 @@ export default function SuperAdminPlans() {
                     <div key={index} className="flex items-center gap-2 bg-muted/50 rounded-lg px-3 py-2">
                       <Check className="h-4 w-4 text-chart-2 shrink-0" />
                       <span className="flex-1 text-sm">{feature}</span>
-                      <Button 
-                        type="button" 
-                        variant="ghost" 
-                        size="icon" 
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
                         className="h-6 w-6"
                         onClick={() => removeFeature(index)}
                       >
