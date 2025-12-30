@@ -60,15 +60,20 @@ export default function SuperAdminPlans() {
   };
 
   const openEditDialog = (plan: Plan) => {
+    const periodDaysBase = plan.billing_period === 'yearly' ? 365 : 30;
+    const intervalCount = Math.round((plan.period_days || periodDaysBase) / periodDaysBase);
+
     setSelectedPlan(plan);
     setFormData({
       name: plan.name,
       description: plan.description,
       price: plan.price,
-      billing_period: plan.billing_period,
+      billing_period: plan.billing_period as BillingPeriod,
       features: plan.features || [],
       max_users: plan.max_users,
       is_active: plan.is_active,
+      ['interval_count' as any]: intervalCount,
+      ['trial_days' as any]: 0, // Fallback as it's not in DB yet
     });
     setDialogOpen(true);
   };
@@ -101,21 +106,37 @@ export default function SuperAdminPlans() {
     }
 
     const periodDays = (formData.billing_period || 'monthly') === 'yearly' ? 365 : 30;
+    const intervalCount = (formData as any).interval_count || 1;
+
     const planData = {
       name: formData.name,
       description: formData.description || null,
       price: formData.price || 0,
+      interval: (formData.billing_period || 'monthly') === 'yearly' ? 'year' : 'month',
+      interval_count: intervalCount,
       billing_period: formData.billing_period || 'monthly',
-      period_days: periodDays,
+      period_days: periodDays * intervalCount,
       features: formData.features || [],
       max_users: formData.max_users || null,
       is_active: formData.is_active ?? true,
+      trial_days: (formData as any).trial_days || 0,
     };
 
     if (selectedPlan) {
+      const localUpdateData = {
+        name: planData.name,
+        description: planData.description,
+        price: planData.price,
+        billing_period: planData.billing_period,
+        period_days: planData.period_days,
+        features: planData.features,
+        max_users: planData.max_users,
+        is_active: planData.is_active,
+      };
+
       const { error } = await supabase
         .from('plans')
-        .update(planData)
+        .update(localUpdateData)
         .eq('id', selectedPlan.id);
 
       if (error) {
@@ -284,38 +305,59 @@ export default function SuperAdminPlans() {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Preço</Label>
+                <Label>Preço *</Label>
                 <CurrencyInput
                   value={formData.price || 0}
                   onChange={(value) => setFormData({ ...formData, price: value })}
                 />
               </div>
               <div className="space-y-2">
-                <Label>Período</Label>
-                <Select
-                  value={formData.billing_period || 'monthly'}
-                  onValueChange={(value) => setFormData({ ...formData, billing_period: value as BillingPeriod })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="monthly">Mensal</SelectItem>
-                    <SelectItem value="yearly">Anual</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Label>Duração do Ciclo</Label>
+                <div className="flex gap-2">
+                  <Input
+                    type="number"
+                    min="1"
+                    className="w-20"
+                    value={(formData as any).interval_count || 1}
+                    onChange={(e) => setFormData({ ...formData, ['interval_count' as any]: parseInt(e.target.value) || 1 })}
+                  />
+                  <Select
+                    value={formData.billing_period || 'monthly'}
+                    onValueChange={(value) => setFormData({ ...formData, billing_period: value as BillingPeriod })}
+                  >
+                    <SelectTrigger className="flex-1">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="monthly">Mês(es)</SelectItem>
+                      <SelectItem value="yearly">Ano(s)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label>Máximo de Usuários (deixe vazio para ilimitado)</Label>
-              <Input
-                type="number"
-                min="1"
-                value={formData.max_users || ''}
-                onChange={(e) => setFormData({ ...formData, max_users: e.target.value ? parseInt(e.target.value) : null })}
-                placeholder="Ilimitado"
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Dias de Teste (Trial)</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  value={(formData as any).trial_days || 0}
+                  onChange={(e) => setFormData({ ...formData, ['trial_days' as any]: parseInt(e.target.value) || 0 })}
+                  placeholder="0 (sem trial)"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Máximo de Usuários</Label>
+                <Input
+                  type="number"
+                  min="1"
+                  value={formData.max_users || ''}
+                  onChange={(e) => setFormData({ ...formData, max_users: e.target.value ? parseInt(e.target.value) : null })}
+                  placeholder="Ilimitado"
+                />
+              </div>
             </div>
 
             <div className="space-y-2">

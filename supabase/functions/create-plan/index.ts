@@ -117,9 +117,9 @@ serve(async (req) => {
         name,
         description: body.description ?? null,
         price,
-        interval: interval === 'year' || interval === 'yearly' ? 'yearly' : 'monthly',
-        interval_count: intervalCount,
-        active: true,
+        billing_period: interval === 'year' || interval === 'yearly' ? 'yearly' : 'monthly',
+        period_days: interval === 'year' || interval === 'yearly' ? 365 : 30 * intervalCount,
+        is_active: true,
       })
       .select('*')
       .single();
@@ -134,13 +134,17 @@ serve(async (req) => {
       // Ensure interval is strictly 'month' or 'year' for Cakto
       const caktoInterval = interval === 'yearly' || interval === 'year' ? 'year' : 'month';
 
-      const caktoPayload = {
+      const caktoPayload: Record<string, unknown> = {
         name,
         description: body.description ?? null,
         price: Math.round(price * 100), // cents
         interval: caktoInterval,
         interval_count: intervalCount,
-      } as Record<string, unknown>;
+      };
+
+      if (body.trial_days && Number(body.trial_days) > 0) {
+        caktoPayload.trial_days = Number(body.trial_days);
+      }
 
       const caktoResp = await caktoCreatePlan(cfg, caktoPayload);
       const caktoId = (caktoResp && (caktoResp.id || caktoResp.plan_id || caktoResp.cakto_id)) ?? null;
