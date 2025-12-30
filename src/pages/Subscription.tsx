@@ -232,7 +232,7 @@ export default function Subscription() {
             {paymentLinkUrl && (
               <>
                 <div className="space-y-2">
-                  <p className="text-sm font-medium">Link de pagamento (Yampi):</p>
+                  <p className="text-sm font-medium">Link de pagamento:</p>
                   <div className="flex items-center gap-2 p-3 bg-muted rounded-lg">
                     <code className="flex-1 text-sm font-mono break-all">{paymentLinkUrl}</code>
                     <Button variant="ghost" size="icon" onClick={copyPaymentLink}>
