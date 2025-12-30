@@ -7,7 +7,7 @@ import { Separator } from '@/components/ui/separator';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import { Plan, Company, Subscription } from '@/types/database';
+import { Plan, Company, Subscription as SubscriptionType } from '@/types/database';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { computeSubscriptionState } from '@/services/subscription';
 import { invokeEdgeFunction } from '@/services/edgeFunctions';
@@ -18,7 +18,7 @@ export default function Subscription() {
   const [searchParams] = useSearchParams();
   const [plans, setPlans] = useState<Plan[]>([]);
   const [company, setCompany] = useState<Company | null>(null);
-  const [latestSubscription, setLatestSubscription] = useState<Subscription | null>(null);
+  const [latestSubscription, setLatestSubscription] = useState<SubscriptionType | null>(null);
   const [loading, setLoading] = useState(true);
   const [subscribing, setSubscribing] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -64,20 +64,27 @@ export default function Subscription() {
       setCompany(companyData as Company);
 
       try {
-        let subscriptionQuery = supabase
-          .from('subscriptions')
-          .select('*')
-          .order('created_at', { ascending: false })
-          .limit(1);
+        let subscriptionData: SubscriptionType | null = null;
 
         if (user?.id) {
-          subscriptionQuery = subscriptionQuery.eq('user_id', user.id);
+          const { data } = await supabase
+            .from('subscriptions')
+            .select('*')
+            .eq('user_id', user.id)
+            .order('created_at', { ascending: false })
+            .maybeSingle();
+          subscriptionData = data;
         } else {
-          subscriptionQuery = subscriptionQuery.eq('company_id', profile.company_id);
+          const { data } = await supabase
+            .from('subscriptions')
+            .select('*')
+            .eq('company_id', profile.company_id)
+            .order('created_at', { ascending: false })
+            .maybeSingle();
+          subscriptionData = data;
         }
 
-        const { data: subscriptionData } = await subscriptionQuery.maybeSingle();
-        setLatestSubscription(subscriptionData as Subscription | null);
+        setLatestSubscription(subscriptionData);
       } catch (error) {
         console.error('Erro ao buscar assinatura:', error);
         setLatestSubscription(null);
@@ -111,7 +118,8 @@ export default function Subscription() {
       }
 
       window.location.href = redirectUrl;
-    } catch (error: any) {
+    } catch (err: unknown) {
+      const error = err as { message?: string; status?: number; payload?: unknown };
       console.error('Checkout error', {
         planId,
         message: error?.message,
@@ -198,7 +206,7 @@ export default function Subscription() {
                 <>
                   <Badge variant="outline" className="gap-1">
                     <Crown className="h-3 w-3" />
-                    {(company.plan as any).name}
+                    {(company.plan as unknown as Plan).name}
                   </Badge>
                   {subscriptionState.expiresAt && (
                     <span className="text-sm">
@@ -332,7 +340,7 @@ export default function Subscription() {
                 </ul>
               </CardContent>
 
-              <CardFooter>
+              <CardFooter className="flex flex-col gap-2">
                 <Button
                   className="w-full gap-2"
                   variant={isActivePlan ? 'outline' : 'default'}
@@ -346,15 +354,18 @@ export default function Subscription() {
                     </>
                   ) : isActivePlan ? (
                     'Plano Atual'
-                  ) : isExpiredPlan ? (
-                    'Renovar com Yampi'
                   ) : (
                     <>
                       <CreditCard className="h-4 w-4" />
-                      Pagar com Yampi
+                      {isSamePlan && isExpiredPlan ? 'Renovar Assinatura' : 'Assinar este plano'}
                     </>
                   )}
                 </Button>
+                {isActivePlan && (
+                  <Button variant="ghost" className="w-full text-xs text-muted-foreground h-auto py-1" onClick={() => window.open('https://api.whatsapp.com/send?phone=5511999999999&text=Gostaria de cancelar ou alterar minha assinatura', '_blank')}>
+                    Gerenciar / Cancelar
+                  </Button>
+                )}
               </CardFooter>
             </Card>
           );
@@ -371,4 +382,3 @@ export default function Subscription() {
     </div>
   );
 }
-

@@ -43,8 +43,16 @@ export function BibleVerse() {
 
                 localStorage.setItem('daily_verse', JSON.stringify(data));
                 localStorage.setItem('daily_verse_date', today);
-            } catch (error) {
-                console.error('Erro ao buscar versículo', error);
+            } catch {
+                // Silently fail and use fallback
+                // console.warn('Bible API unavailable, using fallback.');
+                // Fallback verse
+                setVerse({
+                    book: { name: 'João', version: 'nvi', author: 'João' },
+                    chapter: 3,
+                    number: 16,
+                    text: 'Porque Deus tanto amou o mundo que deu o seu Filho Unigênito, para que todo o que nele crer não pereça, mas tenha a vida eterna.'
+                });
             } finally {
                 setLoading(false);
             }

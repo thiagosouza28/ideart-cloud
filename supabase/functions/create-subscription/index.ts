@@ -6,6 +6,9 @@ import { getCaktoConfig, createCustomer as caktoCreateCustomer, createSubscripti
 const defaultAllowedOrigins = [
   "http://192.168.0.221:8080",
   "http://localhost:8080",
+  "https://ideart-cloud.vercel.app",
+  "https://ideartcloud.com.br",
+  "https://www.ideartcloud.com.br"
 ];
 
 const getAppOrigin = () => {
@@ -70,7 +73,7 @@ type CreateSubscriptionRequest = {
 
 serve(async (req) => {
   const corsHeaders = getCorsHeaders(req);
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders, status: 204 });
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders, status: 200 });
   if (req.method !== "POST") return jsonResponse(corsHeaders, 405, { error: "Invalid method" });
 
   try {
