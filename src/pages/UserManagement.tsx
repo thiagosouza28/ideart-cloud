@@ -52,11 +52,14 @@ const roleBadgeColors: Record<AppRole, string> = {
 };
 
 export default function UserManagement() {
-  const { user, profile, hasPermission } = useAuth();
+  const { user, profile, hasPermission, role } = useAuth();
   const [users, setUsers] = useState<UserWithRole[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState<string | null>(null);
+  const [companies, setCompanies] = useState<any[]>([]);
+
+  const isSuperAdmin = role === 'super_admin';
   const canCreateUsers = hasPermission(['admin', 'super_admin']);
 
   // Add user state
@@ -67,6 +70,7 @@ export default function UserManagement() {
     fullName: '',
     password: '',
     role: '' as AppRole | '',
+    companyId: '',
   });
 
   // Remove user state
@@ -81,17 +85,19 @@ export default function UserManagement() {
   const [reactivating, setReactivating] = useState<string | null>(null);
 
   const loadUsers = async () => {
-    if (!profile?.company_id) {
+    // If not super admin and no company, return
+    if (!profile?.company_id && !isSuperAdmin) {
       setLoading(false);
       return;
     }
 
-    // Fetch profiles for the same company
-    const { data: profiles, error: profilesError } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('company_id', profile.company_id)
-      .order('full_name');
+    // Fetch profiles - all if super admin, otherwise just for the company
+    let query = supabase.from('profiles').select('*');
+    if (!isSuperAdmin) {
+      query = query.eq('company_id', profile?.company_id as string);
+    }
+
+    const { data: profiles, error: profilesError } = await query.order('full_name');
 
     if (profilesError) {
       toast.error('Erro ao carregar usuários');
@@ -101,6 +107,12 @@ export default function UserManagement() {
 
     // Fetch roles for these users
     const userIds = profiles?.map(p => p.id) || [];
+    if (userIds.length === 0) {
+      setUsers([]);
+      setLoading(false);
+      return;
+    }
+
     const { data: roles, error: rolesError } = await supabase
       .from('user_roles')
       .select('*')
@@ -130,13 +142,30 @@ export default function UserManagement() {
     setLoading(false);
   };
 
+  const loadCompanies = async () => {
+    if (!isSuperAdmin) return;
+    const { data, error } = await supabase
+      .from('companies')
+      .select('id, name')
+      .order('name');
+
+    if (error) {
+      console.error('Error loading companies:', error);
+      return;
+    }
+    setCompanies(data || []);
+  };
+
   useEffect(() => {
     loadUsers();
-  }, [profile?.company_id]);
+    if (isSuperAdmin) {
+      loadCompanies();
+    }
+  }, [profile?.company_id, isSuperAdmin]);
 
   const loadInactiveUsers = async () => {
     setLoadingInactive(true);
-    
+
     // Fetch profiles without company (removed users)
     const { data: profiles, error: profilesError } = await supabase
       .from('profiles')
@@ -187,14 +216,26 @@ export default function UserManagement() {
   };
 
   const handleReactivateUser = async (userId: string) => {
-    if (!profile?.company_id) return;
+    if (!profile?.company_id && !isSuperAdmin) {
+      toast.error('Você não está vinculado a uma empresa');
+      return;
+    }
 
     setReactivating(userId);
 
     try {
+      // If super admin reactivates without a company context, we can't really "reactivate" into nothing.
+      // But typically they'd reactivate into THEIR company if they have one.
+      const targetCompanyId = profile?.company_id;
+      if (!targetCompanyId) {
+        toast.error('Defina uma empresa para o usuário primeiro');
+        setReactivating(null);
+        return;
+      }
+
       const { error } = await supabase
         .from('profiles')
-        .update({ company_id: profile.company_id })
+        .update({ company_id: targetCompanyId })
         .eq('id', userId);
 
       if (error) throw error;
@@ -210,7 +251,7 @@ export default function UserManagement() {
     }
   };
 
-  const filtered = users.filter(u => 
+  const filtered = users.filter(u =>
     u.full_name.toLowerCase().includes(search.toLowerCase())
   );
 
@@ -258,7 +299,7 @@ export default function UserManagement() {
       return;
     }
 
-    if (!profile?.company_id) {
+    if (!profile?.company_id && !isSuperAdmin) {
       toast.error('Empresa não encontrada para o usuário logado');
       return;
     }
@@ -281,18 +322,27 @@ export default function UserManagement() {
     setAddingUser(true);
 
     try {
-      // Cria o usuário via Edge Function para não trocar a sessão e já vincular à empresa.
+      // If super admin is adding a user, we might need a company_id. 
+      // For now, assume they add it to THEIR company if they have one.
+      const targetCompanyId = isSuperAdmin ? newUserData.companyId : (profile?.company_id || null);
+
+      if (isSuperAdmin && !targetCompanyId) {
+        toast.error('Selecione uma empresa para o usuário');
+        setAddingUser(false);
+        return;
+      }
+
       await invokeEdgeFunction('company-users', {
         email: newUserData.email,
         password: newUserData.password,
         full_name: newUserData.fullName,
         role: newUserData.role,
-        company_id: profile.company_id,
+        company_id: targetCompanyId,
       });
 
       toast.success('Usuário adicionado com sucesso!');
       setAddDialogOpen(false);
-      setNewUserData({ email: '', fullName: '', password: '', role: '' });
+      setNewUserData({ email: '', fullName: '', password: '', role: '', companyId: '' });
       await loadUsers();
     } catch (error: any) {
       console.error('Add user error:', error);
@@ -359,7 +409,7 @@ export default function UserManagement() {
         <div>
           <h1 className="page-title">Gestão de Usuários</h1>
           <p className="text-muted-foreground text-sm mt-1">
-            Gerencie os usuários e permissões da sua empresa
+            {isSuperAdmin ? 'Gerencie todos os usuários do sistema' : 'Gerencie os usuários e permissões da sua empresa'}
           </p>
         </div>
         <div className="flex gap-2">
@@ -384,7 +434,7 @@ export default function UserManagement() {
             <div>
               <CardTitle className="flex items-center gap-2">
                 <Shield className="h-5 w-5" />
-                Usuários da Empresa
+                {isSuperAdmin ? 'Todos os Usuários' : 'Usuários da Empresa'}
               </CardTitle>
               <CardDescription>
                 {users.length} usuário{users.length !== 1 ? 's' : ''} cadastrado{users.length !== 1 ? 's' : ''}
@@ -392,11 +442,11 @@ export default function UserManagement() {
             </div>
             <div className="relative max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input 
-                placeholder="Buscar usuários..." 
-                value={search} 
-                onChange={(e) => setSearch(e.target.value)} 
-                className="pl-9" 
+              <Input
+                placeholder="Buscar usuários..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-9"
               />
             </div>
           </div>
@@ -469,6 +519,7 @@ export default function UserManagement() {
                           <SelectValue placeholder="Selecionar cargo" />
                         </SelectTrigger>
                         <SelectContent>
+                          <SelectItem value="super_admin">Super Admin</SelectItem>
                           <SelectItem value="admin">Administrador</SelectItem>
                           <SelectItem value="atendente">Atendente</SelectItem>
                           <SelectItem value="caixa">Caixa</SelectItem>
@@ -541,7 +592,7 @@ export default function UserManagement() {
               Adicionar Novo Usuário
             </DialogTitle>
             <DialogDescription>
-              Cadastre um novo usuário para sua empresa. Ele receberá acesso imediato ao sistema.
+              Cadastre um novo usuário para o sistema.
             </DialogDescription>
           </DialogHeader>
 
@@ -581,6 +632,27 @@ export default function UserManagement() {
               />
             </div>
 
+            {isSuperAdmin && (
+              <div className="space-y-2">
+                <Label htmlFor="company">Empresa *</Label>
+                <Select
+                  value={newUserData.companyId}
+                  onValueChange={(value) => setNewUserData({ ...newUserData, companyId: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecionar empresa" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {companies.map((company) => (
+                      <SelectItem key={company.id} value={company.id}>
+                        {company.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
             <div className="space-y-2">
               <Label htmlFor="role">Cargo</Label>
               <Select
@@ -591,6 +663,7 @@ export default function UserManagement() {
                   <SelectValue placeholder="Selecionar cargo" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="super_admin">Super Admin</SelectItem>
                   <SelectItem value="admin">Administrador</SelectItem>
                   <SelectItem value="atendente">Atendente</SelectItem>
                   <SelectItem value="caixa">Caixa</SelectItem>
@@ -618,14 +691,14 @@ export default function UserManagement() {
           <AlertDialogHeader>
             <AlertDialogTitle>Remover usuário da empresa</AlertDialogTitle>
             <AlertDialogDescription>
-              Tem certeza que deseja remover <strong>{removeUserName}</strong> da empresa? 
+              Tem certeza que deseja remover <strong>{removeUserName}</strong> da empresa?
               O usuário perderá acesso ao sistema, mas a conta continuará existindo.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={removing}>Cancelar</AlertDialogCancel>
-            <AlertDialogAction 
-              onClick={handleRemoveUser} 
+            <AlertDialogAction
+              onClick={handleRemoveUser}
               disabled={removing}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
@@ -645,7 +718,7 @@ export default function UserManagement() {
               Usuários Inativos
             </DialogTitle>
             <DialogDescription>
-              Usuários que foram removidos da empresa e podem ser reativados.
+              Usuários que foram removidos de uma empresa e podem ser reativados.
             </DialogDescription>
           </DialogHeader>
 
@@ -677,7 +750,7 @@ export default function UserManagement() {
                   <Button
                     size="sm"
                     onClick={() => handleReactivateUser(u.id)}
-                    disabled={reactivating === u.id}
+                    disabled={reactivating === u.id || (!profile?.company_id && !isSuperAdmin)}
                   >
                     {reactivating === u.id ? (
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />

@@ -1,10 +1,10 @@
-import { 
-  LayoutDashboard, 
-  ShoppingCart, 
-  Package, 
-  Boxes, 
-  Users, 
-  ClipboardList, 
+import {
+  LayoutDashboard,
+  ShoppingCart,
+  Package,
+  Boxes,
+  Users,
+  ClipboardList,
   Factory,
   Kanban,
   Settings,
@@ -17,7 +17,8 @@ import {
   Building2,
   FolderTree,
   Tags,
-  BarChart3
+  BarChart3,
+  Image as ImageIcon
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -56,15 +57,17 @@ const menuItems: MenuItem[] = [
   { title: 'Clientes', url: '/clientes', icon: Users, roles: ['admin', 'atendente'] },
   { title: 'Relatórios', url: '/relatorios', icon: BarChart3, roles: ['admin'] },
   { title: 'Empresas', url: '/empresas', icon: Building2, roles: ['admin'] },
+  { title: 'Banners', url: '/banners', icon: ImageIcon, roles: ['admin'] },
   { title: 'Usuários', url: '/usuarios', icon: User, roles: ['admin'] },
   { title: 'Assinatura', url: '/assinatura', icon: Crown, roles: ['admin'] },
   { title: 'Configurações', url: '/configuracoes', icon: Settings, roles: ['admin'] },
 ];
 
 const superAdminMenuItems: MenuItem[] = [
-  { title: 'Super Admin', url: '/super-admin', icon: Shield, roles: ['super_admin'] },
+  { title: 'Painel', url: '/super-admin', icon: LayoutDashboard, roles: ['super_admin'] },
   { title: 'Empresas SaaS', url: '/super-admin/empresas', icon: Building2, roles: ['super_admin'] },
   { title: 'Planos', url: '/super-admin/planos', icon: CreditCard, roles: ['super_admin'] },
+  { title: 'Usuários', url: '/usuarios', icon: Users, roles: ['super_admin'] },
 ];
 
 const roleLabels: Record<AppRole, string> = {
@@ -146,7 +149,7 @@ export function AppSidebar() {
             </SidebarGroupContent>
           </SidebarGroup>
         )}
-        
+
         {!isSuperAdmin && (
           <SidebarGroup>
             <SidebarGroupContent>

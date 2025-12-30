@@ -1,7 +1,7 @@
-// @ts-nocheck
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { getCaktoConfig, createCustomer as caktoCreateCustomer, createSubscription as caktoCreateSubscription } from "../_shared/cakto.ts";
+
+export const config = { verify_jwt: false };
 
 const defaultAllowedOrigins = [
   "http://192.168.0.221:8080",
@@ -25,19 +25,12 @@ const allowedOrigins = new Set(
   [...defaultAllowedOrigins, getAppOrigin()].filter(Boolean) as string[],
 );
 
-const getCorsHeaders = (req: Request) => {
-  const origin = req.headers.get("origin");
-  const requestHeaders = req.headers.get("access-control-request-headers");
-  const allowOrigin = origin && allowedOrigins.has(origin) ? origin : "*";
-
+const getCorsHeaders = (origin: string | null) => {
   return {
-    "Access-Control-Allow-Origin": allowOrigin,
-    "Access-Control-Allow-Headers":
-      requestHeaders ??
-      "authorization, x-client-info, apikey, content-type, x-supabase-authorization",
+    "Access-Control-Allow-Origin": origin || "*",
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-authorization",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Access-Control-Max-Age": "86400",
-    "Vary": "Origin",
   };
 };
 
@@ -71,9 +64,11 @@ type CreateSubscriptionRequest = {
   customer?: CustomerPayload;
 };
 
-serve(async (req) => {
-  const corsHeaders = getCorsHeaders(req);
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders, status: 200 });
+Deno.serve(async (req) => {
+  const origin = req.headers.get("origin");
+  const corsHeaders = getCorsHeaders(origin);
+
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders, status: 204 });
   if (req.method !== "POST") return jsonResponse(corsHeaders, 405, { error: "Invalid method" });
 
   try {

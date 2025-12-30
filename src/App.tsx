@@ -42,6 +42,7 @@ import SuperAdminCompanies from "./pages/SuperAdminCompanies";
 import SuperAdminPlans from "./pages/SuperAdminPlans";
 import Profile from "./pages/Profile";
 import Reports from "./pages/Reports";
+import BannerManagement from "./pages/BannerManagement";
 
 const queryClient = new QueryClient();
 
@@ -177,8 +178,14 @@ const App = () => (
             } />
 
             <Route path="/usuarios" element={
-              <ProtectedRoute allowedRoles={['admin']}>
+              <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
                 <AppLayout><UserManagement /></AppLayout>
+              </ProtectedRoute>
+            } />
+
+            <Route path="/banners" element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <AppLayout><BannerManagement /></AppLayout>
               </ProtectedRoute>
             } />
 

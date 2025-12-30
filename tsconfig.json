@@ -23,6 +23,7 @@
     "strictNullChecks": false
   },
   "exclude": [
-    "supabase"
+    "supabase",
+    "node_modules"
   ]
 }

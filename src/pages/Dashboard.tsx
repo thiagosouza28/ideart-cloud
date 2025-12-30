@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
 import { Progress } from '@/components/ui/progress';
+import { BannerCarousel } from '@/components/BannerCarousel';
 import type { Customer, OrderItem, PaymentMethod } from '@/types/database';
 
 interface DashboardStats {
@@ -59,8 +60,15 @@ interface ProductionOrder {
 }
 
 export default function Dashboard() {
-  const { hasPermission } = useAuth();
+  const { hasPermission, role, profile } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (role === 'super_admin') {
+      navigate('/super-admin');
+    }
+  }, [role, navigate]);
+
   const [stats, setStats] = useState<DashboardStats>({
     totalProducts: 0,
     lowStockProducts: 0,
@@ -323,6 +331,10 @@ export default function Dashboard() {
       </div>
 
       <BibleVerse />
+
+      {profile?.company_id && (
+        <BannerCarousel companyId={profile.company_id} position="dashboard" />
+      )}
 
       {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">

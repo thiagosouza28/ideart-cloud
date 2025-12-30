@@ -30,6 +30,7 @@ const pageTitles: Record<string, string> = {
   '/relatorios': 'Relatórios',
   '/configuracoes': 'Configurações',
   '/assinatura': 'Assinatura e Catálogo',
+  '/banners': 'Gerenciamento de Banners',
   '/perfil': 'Meu Perfil',
   '/super-admin': 'Super Admin',
   '/super-admin/empresas': 'Empresas SaaS',

@@ -13,10 +13,10 @@ export async function invokeEdgeFunction<T>(
     ? `${name}${options.path.startsWith('/') ? options.path : `/${options.path}`}`
     : name;
 
-  // 1. Ensure we have a session.
+  // 1. Prepare headers. We don't need to manually pass Authorization or X-Supabase-Authorization
+  // if we are logged in, as supabase.functions.invoke handles it. 
+  // However, we can add X-Supabase-Authorization just in case.
   const { data: { session } } = await supabase.auth.getSession();
-
-  // 2. Prepare headers. We add X-Supabase-Authorization explicitly.
   const headers: Record<string, string> = {};
   if (session?.access_token) {
     headers['X-Supabase-Authorization'] = `Bearer ${session.access_token}`;
@@ -32,11 +32,14 @@ export async function invokeEdgeFunction<T>(
     if (error) {
       console.error(`Edge Function ${functionName} error:`, error);
 
-      let message = error.message;
       const status = (error as any).status;
+      let message = error.message;
 
-      if (status === 401 || status === 403) {
-        message = 'Sessão inválida ou sem permissão. Tente fazer login novamente.';
+      // Many times the error message is just status code, try to get more info
+      if (status === 401) {
+        message = 'Sessão inválida ou expirada. Tente fazer login novamente.';
+      } else if (status === 403) {
+        message = 'Você não tem permissão para realizar esta ação.';
       }
 
       const wrapped = new Error(message) as Error & { status?: number };

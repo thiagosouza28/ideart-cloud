@@ -10,6 +10,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Company, Product, Category } from '@/types/database';
 import { ensurePublicStorageUrl } from '@/lib/storage';
 import { resolveSuggestedPrice } from '@/lib/pricing';
+import { BannerCarousel } from '@/components/BannerCarousel';
 
 interface CompanyWithColors extends Company {
   catalog_primary_color?: string;
@@ -272,6 +273,7 @@ export default function PublicCatalog() {
       </header>
 
       <main className="container mx-auto px-4 py-8">
+        {company && <BannerCarousel companyId={company.id} position="catalog" />}
         {/* Company Info */}
         {company?.description && (
           <div className="mb-8">
