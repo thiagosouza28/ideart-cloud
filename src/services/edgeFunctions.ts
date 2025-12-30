@@ -29,7 +29,6 @@ export async function invokeEdgeFunction<T>(
 
   const { data, error: sessionError } = await supabase.auth.getSession();
   if (sessionError || !data.session?.access_token) {
-    await supabase.auth.signOut();
     throw invalidSessionError();
   }
 
@@ -38,20 +37,13 @@ export async function invokeEdgeFunction<T>(
   if (expiresAtMs && expiresAtMs <= Date.now() + 60_000) {
     const refresh = await supabase.auth.refreshSession();
     if (refresh.error || !refresh.data.session?.access_token) {
-      await supabase.auth.signOut();
+      console.warn('Failed to refresh session', refresh.error);
       throw invalidSessionError();
     }
     session = refresh.data.session;
   }
 
-  const { data: userData, error: userError } = await supabase.auth.getUser();
-  if (userError || !userData.user) {
-    await supabase.auth.signOut();
-    throw invalidSessionError();
-  }
-
   if (!session?.access_token) {
-    await supabase.auth.signOut();
     throw invalidSessionError();
   }
 
@@ -82,18 +74,9 @@ export async function invokeEdgeFunction<T>(
   const payload = await readResponsePayload(response);
 
   if (!response.ok) {
-    if (response.status === 401) {
-      await supabase.auth.signOut();
-      const wrapped = invalidSessionError() as Error & { status?: number; payload?: unknown };
-      wrapped.status = 401;
-      wrapped.payload = payload;
-      throw wrapped;
-    }
-
-    const wrapped = new Error(`Edge Function error (${response.status})`) as Error & {
-      status?: number;
-      payload?: unknown;
-    };
+    const wrapped = new Error(
+      payload?.error || payload?.message || `Edge Function error (${response.status})`
+    ) as Error & { status?: number; payload?: unknown };
     wrapped.status = response.status;
     wrapped.payload = payload;
     throw wrapped;
@@ -101,3 +84,4 @@ export async function invokeEdgeFunction<T>(
 
   return payload as T;
 }
+

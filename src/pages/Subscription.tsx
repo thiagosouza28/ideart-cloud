@@ -1,101 +1,178 @@
-﻿import { useEffect, useMemo, useState } from 'react';
-import { Check, Crown, Loader2, Building2, ExternalLink, Copy, CreditCard } from 'lucide-react';
+﻿import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  Check,
+  Crown,
+  Loader2,
+  Building2,
+  ExternalLink,
+  Copy,
+  CreditCard,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import { Plan, Company, Subscription as SubscriptionType } from '@/types/database';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { computeSubscriptionState } from '@/services/subscription';
 import { invokeEdgeFunction } from '@/services/edgeFunctions';
+import { Plan, Company } from '@/types/database';
+
+/* ======================================================
+   TIPOS DE LEITURA (DTOs) — NÃO use tipos crus do banco
+====================================================== */
+
+type SubscriptionRow = {
+  id: string;
+  company_id: string | null;
+  user_id: string | null;
+  status: string;
+  payment_link_url?: string | null;
+  created_at: string;
+  current_period_ends_at?: string | null;
+};
+
+type CompanyWithPlan = Company & {
+  plan?: Plan | null;
+};
 
 export default function Subscription() {
   const { profile, user } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+
   const [plans, setPlans] = useState<Plan[]>([]);
-  const [company, setCompany] = useState<Company | null>(null);
-  const [latestSubscription, setLatestSubscription] = useState<SubscriptionType | null>(null);
+  const [company, setCompany] = useState<CompanyWithPlan | null>(null);
+  const [latestSubscription, setLatestSubscription] =
+    useState<SubscriptionRow | null>(null);
+
   const [loading, setLoading] = useState(true);
   const [subscribing, setSubscribing] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [copiedPaymentLink, setCopiedPaymentLink] = useState(false);
-  const subscriptionState = useMemo(() => computeSubscriptionState(company), [company]);
 
+  const subscriptionState = useMemo(
+    () => computeSubscriptionState(company),
+    [company]
+  );
+
+  /* ======================================================
+     LOAD DATA
+  ====================================================== */
+  const loadData = useCallback(async () => {
+    setLoading(true);
+
+    /* ---------- PLANOS ---------- */
+    const { data: plansData, error: plansError } = await supabase
+      .from('plans')
+      .select('*')
+      .eq('is_active', true)
+      .order('price', { ascending: true });
+
+    if (plansError) {
+      console.error(plansError);
+      toast.error('Erro ao carregar planos');
+    }
+
+    setPlans((plansData as Plan[]) ?? []);
+
+    /* ---------- EMPRESA ---------- */
+    if (!profile?.company_id) {
+      setCompany(null);
+      setLatestSubscription(null);
+      setLoading(false);
+      return;
+    }
+
+    const { data: companyData, error: companyError } = await supabase
+      .from('companies')
+      .select('*, plan:plans(*)')
+      .eq('id', profile.company_id)
+      .single();
+
+    if (companyError) {
+      console.error(companyError);
+      toast.error('Erro ao carregar empresa');
+      setCompany(null);
+    } else {
+      setCompany(companyData as CompanyWithPlan);
+    }
+
+    /* ---------- ASSINATURA ---------- */
+    try {
+      let subscription: SubscriptionRow | null = null;
+
+      if (user?.id) {
+        const { data, error } = await supabase
+          .from('subscriptions' as any)
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (error) throw error;
+        subscription = data as unknown as SubscriptionRow | null;
+      } else {
+        const { data, error } = await supabase
+          .from('subscriptions' as any)
+          .select('*')
+          .eq('company_id', profile.company_id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (error) throw error;
+        subscription = data as unknown as SubscriptionRow | null;
+      }
+
+      setLatestSubscription(subscription);
+    } catch (err) {
+      console.error('Erro ao buscar assinatura', err);
+      setLatestSubscription(null);
+    }
+
+    setLoading(false);
+  }, [profile?.company_id, user?.id]);
+
+  /* ======================================================
+     CALLBACK DO CHECKOUT
+  ====================================================== */
   useEffect(() => {
-    // Check for optional success/cancel flags
     const success = searchParams.get('success');
     const canceled = searchParams.get('canceled');
 
     if (success === 'true') {
       toast.success('Assinatura realizada com sucesso!');
-      // Reload company data to get updated subscription
       loadData();
-    } else if (canceled === 'true') {
+    }
+
+    if (canceled === 'true') {
       toast.info('Pagamento cancelado');
     }
-  }, [searchParams]);
+  }, [searchParams, loadData]);
 
   useEffect(() => {
     loadData();
-  }, [profile]);
+  }, [loadData]);
 
-  const loadData = async () => {
-    // Load available plans
-    const { data: plansData } = await supabase
-      .from('plans')
-      .select('*')
-      .eq('is_active', true)
-      .order('price');
-
-    setPlans(plansData as Plan[] || []);
-
-    // Load user's company
-    if (profile?.company_id) {
-      const { data: companyData } = await supabase
-        .from('companies')
-        .select('*, plan:plans(*)')
-        .eq('id', profile.company_id)
-        .single();
-
-      setCompany(companyData as Company);
-
-      try {
-        let subscriptionData: SubscriptionType | null = null;
-
-        if (user?.id) {
-          const { data } = await supabase
-            .from('subscriptions')
-            .select('*')
-            .eq('user_id', user.id)
-            .order('created_at', { ascending: false })
-            .maybeSingle();
-          subscriptionData = data;
-        } else {
-          const { data } = await supabase
-            .from('subscriptions')
-            .select('*')
-            .eq('company_id', profile.company_id)
-            .order('created_at', { ascending: false })
-            .maybeSingle();
-          subscriptionData = data;
-        }
-
-        setLatestSubscription(subscriptionData);
-      } catch (error) {
-        console.error('Erro ao buscar assinatura:', error);
-        setLatestSubscription(null);
-      }
-    }
-
-    setLoading(false);
-  };
-
+  /* ======================================================
+     HELPERS
+  ====================================================== */
   const formatCurrency = (v: number) =>
-    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
+    new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+    }).format(v);
 
   const handleSubscribe = async (planId: string) => {
     if (!company) {
@@ -106,57 +183,56 @@ export default function Subscription() {
     setSubscribing(planId);
 
     try {
-      // Usar a nova função de assinatura do Cakto
-      const data = await invokeEdgeFunction<{ checkout_url?: string; url?: string }>('create-subscription', { plan_id: planId });
+      const data = await invokeEdgeFunction<{
+        checkout_url?: string;
+        url?: string;
+      }>('create-subscription', { plan_id: planId });
 
-      const redirectUrl = data?.checkout_url || data?.url;
+      const redirectUrl = data?.checkout_url ?? data?.url;
 
       if (!redirectUrl) {
-        console.error('Checkout error: missing url', { planId, data });
         toast.error('Erro ao iniciar checkout');
         return;
       }
 
       window.location.href = redirectUrl;
-    } catch (err: unknown) {
-      const error = err as { message?: string; status?: number; payload?: unknown };
-      console.error('Checkout error', {
-        planId,
-        message: error?.message,
-        status: error?.status,
-        payload: error?.payload,
-      });
-      if (error?.status === 401 || /sessao invalida|sessao expirada/i.test(error?.message || '')) {
-        toast.error('Sessao invalida. Faca login novamente.');
+    } catch (err: any) {
+      console.error(err);
+
+      if (
+        err?.status === 401 ||
+        /sess[aã]o inv[aá]lida|expirada/i.test(err?.message ?? '')
+      ) {
+        toast.error('Sessão inválida. Faça login novamente.');
         navigate('/auth');
         return;
       }
-      toast.error(error?.message || 'Erro ao iniciar checkout');
+
+      toast.error(err?.message || 'Erro ao iniciar checkout');
     } finally {
       setSubscribing(null);
     }
   };
 
-  const catalogUrl = company?.slug ? `${window.location.origin}/catalogo/${company.slug}` : null;
-  const paymentLinkUrl = latestSubscription?.payment_link_url || null;
-  const isPendingPayment = latestSubscription?.status?.toLowerCase() === 'pending';
+  const catalogUrl = company?.slug
+    ? `${window.location.origin}/catalogo/${company.slug}`
+    : '';
 
-  const copyCatalogLink = () => {
-    if (catalogUrl) {
-      navigator.clipboard.writeText(catalogUrl);
-      setCopied(true);
-      toast.success('Link copiado!');
-      setTimeout(() => setCopied(false), 2000);
-    }
-  };
+  const paymentLinkUrl = latestSubscription?.payment_link_url ?? '';
 
-  const copyPaymentLink = () => {
-    if (paymentLinkUrl) {
-      navigator.clipboard.writeText(paymentLinkUrl);
-      setCopiedPaymentLink(true);
-      toast.success('Link copiado!');
-      setTimeout(() => setCopiedPaymentLink(false), 2000);
-    }
+  const isPendingPayment = (latestSubscription?.status ?? '')
+    .toLowerCase()
+    .includes('pending');
+
+  const copyText = async (
+    text: string,
+    setter: (v: boolean) => void
+  ) => {
+    if (!text) return;
+    await navigator.clipboard.writeText(text);
+    setter(true);
+    toast.success('Link copiado!');
+    setTimeout(() => setter(false), 2000);
   };
 
   const getStatusBadge = () => {
@@ -172,9 +248,12 @@ export default function Subscription() {
     }
   };
 
+  /* ======================================================
+     RENDER
+  ====================================================== */
   if (loading) {
     return (
-      <div className="page-container flex items-center justify-center min-h-[400px]">
+      <div className="page-container flex min-h-[400px] items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
@@ -185,11 +264,12 @@ export default function Subscription() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Assinatura e Catálogo</h1>
-          <p className="text-muted-foreground mt-1">Gerencie seu plano e acesse seu catálogo público</p>
+          <p className="text-muted-foreground mt-1">
+            Gerencie seu plano e acesse seu catálogo público
+          </p>
         </div>
       </div>
 
-      {/* Company Info & Catalog Link */}
       {company && (
         <Card className="mb-8">
           <CardHeader>
@@ -197,77 +277,81 @@ export default function Subscription() {
               <Building2 className="h-5 w-5" />
               {company.name}
             </CardTitle>
-            <div className="flex items-center gap-2 flex-wrap text-sm text-muted-foreground">
+
+            <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
               {getStatusBadge()}
+
               {isPendingPayment && subscriptionState.status !== 'active' && (
                 <Badge variant="outline">Pagamento pendente</Badge>
               )}
+
               {subscriptionState.status === 'active' && company.plan && (
                 <>
                   <Badge variant="outline" className="gap-1">
                     <Crown className="h-3 w-3" />
-                    {(company.plan as unknown as Plan).name}
+                    {company.plan.name}
                   </Badge>
-                  {subscriptionState.expiresAt && (
-                    <span className="text-sm">
-                      Valido ate {subscriptionState.expiresAt.toLocaleDateString('pt-BR')}
-                    </span>
-                  )}
-                  {subscriptionState.daysRemaining !== null && (
-                    <span className="text-sm">
-                      Restam {subscriptionState.daysRemaining} {subscriptionState.daysRemaining === 1 ? 'dia' : 'dias'}
-                    </span>
-                  )}
                 </>
-              )}
-              {subscriptionState.status === 'trial' && (
-                <span className="text-sm">
-                  Teste {subscriptionState.daysRemaining !== null ? `- ${subscriptionState.daysRemaining} ${subscriptionState.daysRemaining === 1 ? 'dia' : 'dias'}` : 'ativo'}
-                </span>
               )}
             </div>
           </CardHeader>
 
           <CardContent className="space-y-4">
             {paymentLinkUrl && (
-              <>
-                <div className="space-y-2">
-                  <p className="text-sm font-medium">Link de pagamento:</p>
-                  <div className="flex items-center gap-2 p-3 bg-muted rounded-lg">
-                    <code className="flex-1 text-sm font-mono break-all">{paymentLinkUrl}</code>
-                    <Button variant="ghost" size="icon" onClick={copyPaymentLink}>
-                      {copiedPaymentLink ? <Check className="h-4 w-4 text-chart-2" /> : <Copy className="h-4 w-4" />}
-                    </Button>
-                    <Button variant="ghost" size="icon" asChild>
-                      <a href={paymentLinkUrl} target="_blank" rel="noopener noreferrer">
-                        <ExternalLink className="h-4 w-4" />
-                      </a>
-                    </Button>
-                  </div>
+              <div className="space-y-2">
+                <p className="text-sm font-medium">Link de pagamento:</p>
+                <div className="flex items-center gap-2 p-3 bg-muted rounded-lg">
+                  <code className="flex-1 break-all text-sm font-mono">
+                    {paymentLinkUrl}
+                  </code>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => copyText(paymentLinkUrl, setCopiedPaymentLink)}
+                  >
+                    {copiedPaymentLink ? (
+                      <Check className="h-4 w-4 text-chart-2" />
+                    ) : (
+                      <Copy className="h-4 w-4" />
+                    )}
+                  </Button>
+                  <Button variant="ghost" size="icon" asChild>
+                    <a href={paymentLinkUrl} target="_blank" rel="noreferrer">
+                      <ExternalLink className="h-4 w-4" />
+                    </a>
+                  </Button>
                 </div>
-              </>
+              </div>
             )}
 
-            {/* Catalog Link */}
             {company.slug && (
               <>
                 <Separator />
                 <div className="space-y-2">
-                  <p className="text-sm font-medium">Link do seu Catálogo Público:</p>
+                  <p className="text-sm font-medium">
+                    Link do seu Catálogo Público:
+                  </p>
                   <div className="flex items-center gap-2 p-3 bg-muted rounded-lg">
-                    <code className="flex-1 text-sm font-mono break-all">{catalogUrl}</code>
-                    <Button variant="ghost" size="icon" onClick={copyCatalogLink}>
-                      {copied ? <Check className="h-4 w-4 text-chart-2" /> : <Copy className="h-4 w-4" />}
+                    <code className="flex-1 break-all text-sm font-mono">
+                      {catalogUrl}
+                    </code>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => copyText(catalogUrl, setCopied)}
+                    >
+                      {copied ? (
+                        <Check className="h-4 w-4 text-chart-2" />
+                      ) : (
+                        <Copy className="h-4 w-4" />
+                      )}
                     </Button>
                     <Button variant="ghost" size="icon" asChild>
-                      <a href={catalogUrl || '#'} target="_blank" rel="noopener noreferrer">
+                      <a href={catalogUrl} target="_blank" rel="noreferrer">
                         <ExternalLink className="h-4 w-4" />
                       </a>
                     </Button>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Compartilhe este link com seus clientes para que vejam seus produtos
-                  </p>
                 </div>
               </>
             )}
@@ -275,35 +359,21 @@ export default function Subscription() {
         </Card>
       )}
 
-      {/* Plans Grid */}
       <div className="mb-4">
         <h2 className="text-xl font-semibold">Planos Disponíveis</h2>
-        <p className="text-muted-foreground text-sm">Escolha o plano ideal para sua empresa</p>
+        <p className="text-muted-foreground text-sm">
+          Escolha o plano ideal para sua empresa
+        </p>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {plans.map((plan) => {
           const isSamePlan = company?.plan_id === plan.id;
-          const isActivePlan = isSamePlan && subscriptionState.status === 'active';
-          const isExpiredPlan = isSamePlan && subscriptionState.status === 'expired';
-          const features = Array.isArray(plan.features) ? plan.features : [];
+          const isActivePlan =
+            isSamePlan && subscriptionState.status === 'active';
 
           return (
-            <Card
-              key={plan.id}
-              className={`relative ${isActivePlan ? 'border-primary ring-2 ring-primary/20' : ''}`}
-            >
-              {isActivePlan && (
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                  <Badge className="bg-primary">Plano Atual</Badge>
-                </div>
-              )}
-              {isExpiredPlan && (
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                  <Badge variant="destructive">Plano expirado</Badge>
-                </div>
-              )}
-
+            <Card key={plan.id}>
               <CardHeader>
                 <CardTitle className="flex items-center justify-between">
                   {plan.name}
@@ -318,29 +388,16 @@ export default function Subscription() {
 
               <CardContent className="space-y-4">
                 <div className="flex items-baseline gap-1">
-                  <span className="text-3xl font-bold">{formatCurrency(plan.price)}</span>
-                  <span className="text-muted-foreground">/{plan.billing_period === 'monthly' ? 'mês' : 'ano'}</span>
+                  <span className="text-3xl font-bold">
+                    {formatCurrency(plan.price)}
+                  </span>
+                  <span className="text-muted-foreground">
+                    /{plan.billing_period === 'monthly' ? 'mês' : 'ano'}
+                  </span>
                 </div>
-
-                {plan.max_users && (
-                  <p className="text-sm text-muted-foreground">
-                    Até {plan.max_users} usuário{plan.max_users > 1 ? 's' : ''}
-                  </p>
-                )}
-
-                <Separator />
-
-                <ul className="space-y-2">
-                  {features.map((feature, idx) => (
-                    <li key={idx} className="flex items-center gap-2 text-sm">
-                      <Check className="h-4 w-4 text-chart-2 flex-shrink-0" />
-                      <span>{String(feature)}</span>
-                    </li>
-                  ))}
-                </ul>
               </CardContent>
 
-              <CardFooter className="flex flex-col gap-2">
+              <CardFooter>
                 <Button
                   className="w-full gap-2"
                   variant={isActivePlan ? 'outline' : 'default'}
@@ -352,33 +409,18 @@ export default function Subscription() {
                       <Loader2 className="h-4 w-4 animate-spin" />
                       Processando...
                     </>
-                  ) : isActivePlan ? (
-                    'Plano Atual'
                   ) : (
                     <>
                       <CreditCard className="h-4 w-4" />
-                      {isSamePlan && isExpiredPlan ? 'Renovar Assinatura' : 'Assinar este plano'}
+                      {isActivePlan ? 'Plano Atual' : 'Assinar este plano'}
                     </>
                   )}
                 </Button>
-                {isActivePlan && (
-                  <Button variant="ghost" className="w-full text-xs text-muted-foreground h-auto py-1" onClick={() => window.open('https://api.whatsapp.com/send?phone=5511999999999&text=Gostaria de cancelar ou alterar minha assinatura', '_blank')}>
-                    Gerenciar / Cancelar
-                  </Button>
-                )}
               </CardFooter>
             </Card>
           );
         })}
       </div>
-
-      {plans.length === 0 && (
-        <Card className="text-center py-12">
-          <CardContent>
-            <p className="text-muted-foreground">Nenhum plano disponível no momento.</p>
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 }
