@@ -137,7 +137,11 @@ Deno.serve(async (req) => {
       req.headers.get("Authorization");
     logStep("Auth header present", { present: Boolean(authHeader) });
     if (!authHeader) {
-      return jsonResponse(corsHeaders, 401, { error: "No authorization header" });
+      logStep("ERROR", "No authorization header found");
+      return jsonResponse(corsHeaders, 401, {
+        error: "No authorization header",
+        detail: "Missing Authorization or X-Supabase-Authorization"
+      });
     }
 
     const token = authHeader.startsWith("Bearer ")
@@ -149,7 +153,11 @@ Deno.serve(async (req) => {
       token,
     );
     if (authError || !authData.user) {
-      return jsonResponse(corsHeaders, 401, { error: "Invalid session" });
+      logStep("ERROR", { authError: authError?.message || "User not found" });
+      return jsonResponse(corsHeaders, 401, {
+        error: "Invalid session",
+        detail: authError?.message || "Auth user not found for provided token"
+      });
     }
 
     const userId = authData.user.id;
