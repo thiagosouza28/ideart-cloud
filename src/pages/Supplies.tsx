@@ -243,129 +243,8 @@ export default function Supplies() {
 
   return (
     <div className="page-container">
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Gestão de Insumos</h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            Gerencie os insumos e matérias-primas utilizados nos produtos
-          </p>
-        </div>
-        <Button onClick={openCreateDialog}>
-          <Plus className="h-4 w-4 mr-2" />
-          Novo Insumo
-        </Button>
-        <Button variant="outline" onClick={handlePrint} className="ml-2">
-          <Printer className="h-4 w-4 mr-2" />
-          Imprimir
-        </Button>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <Package className="h-5 w-5" />
-                Insumos Cadastrados
-              </CardTitle>
-              <CardDescription>
-                {supplies.length} insumo{supplies.length !== 1 ? 's' : ''} no sistema
-              </CardDescription>
-            </div>
-            <div className="relative max-w-sm">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Buscar insumos..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-9"
-              />
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[80px]">Foto</TableHead>
-                <TableHead>Insumo</TableHead>
-                <TableHead>Unidade</TableHead>
-                <TableHead>Custo</TableHead>
-                <TableHead>Venda</TableHead>
-                <TableHead>Margem</TableHead>
-                <TableHead>Estoque</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="w-[100px]"></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell colSpan={9} className="text-center py-8">
-                    Carregando...
-                  </TableCell>
-                </TableRow>
-              ) : filtered.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
-                    {search ? 'Nenhum insumo encontrado' : 'Nenhum insumo cadastrado'}
-                  </TableCell>
-                </TableRow>
-              ) : filtered.map((supply) => (
-                <TableRow key={supply.id}>
-                  <TableCell>
-                    {supply.image_url ? (
-                      <img
-                        src={supply.image_url}
-                        alt={supply.name}
-                        className="w-12 h-12 object-cover rounded-lg"
-                      />
-                    ) : (
-                      <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center">
-                        <Package className="h-5 w-5 text-muted-foreground" />
-                      </div>
-                    )}
-                  </TableCell>
-                  <TableCell className="font-medium">{supply.name}</TableCell>
-                  <TableCell>{supply.unit}</TableCell>
-                  <TableCell>{formatCurrency(supply.cost_per_unit)}</TableCell>
-                  <TableCell className="font-medium">{formatCurrency(supply.sale_price || 0)}</TableCell>
-                  <TableCell>
-                    {supply.sale_price > 0 ? (
-                      <span className={calculateMargin(supply.cost_per_unit, supply.sale_price) >= 0 ? 'text-chart-2' : 'text-destructive'}>
-                        {calculateMargin(supply.cost_per_unit, supply.sale_price).toFixed(1)}%
-                      </span>
-                    ) : (
-                      <span className="text-muted-foreground">-</span>
-                    )}
-                  </TableCell>
-                  <TableCell>{supply.stock_quantity} {supply.unit}</TableCell>
-                  <TableCell>
-                    <Badge
-                      variant={supply.stock_quantity <= supply.min_stock ? 'destructive' : 'default'}
-                    >
-                      {supply.stock_quantity <= supply.min_stock ? 'Baixo' : 'OK'}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex gap-1">
-                      <Button variant="ghost" size="icon" onClick={() => openEditDialog(supply)}>
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" onClick={() => openDeleteDialog(supply)}>
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-
-      {/* Create/Edit Form (Inline) */}
-      {(dialogOpen || !supplies.length && supplies.length === 0 && false) ? ( // showing form if dialogOpen is true. Using dialogState for compatibility logic
+      {/* Create/Edit Form (Inline) - Visible when Dialog is open */}
+      {dialogOpen ? (
         <div className="flex flex-col h-full bg-background animate-in slide-in-from-right-4 duration-300">
           <div className="border-b px-6 py-4 flex items-center gap-4">
             <Button variant="ghost" size="icon" onClick={() => setDialogOpen(false)}>
@@ -553,127 +432,133 @@ export default function Supplies() {
             </Button>
           </div>
         </div>
-      ) : null}
-
-      {/* List View - Hidden when Dialog (Edit Mode) is Open */}
-      <div className={dialogOpen ? 'hidden' : 'block'}>
-        <div className="page-header">
-          <div>
-            <h1 className="page-title">Gestão de Insumos</h1>
-            <p className="text-muted-foreground text-sm mt-1">
-              Gerencie os insumos e matérias-primas utilizados nos produtos
-            </p>
-          </div>
-          <Button onClick={openCreateDialog}>
-            <Plus className="h-4 w-4 mr-2" />
-            Novo Insumo
-          </Button>
-        </div>
-
-        <Card>
-          <CardHeader>
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <CardTitle className="flex items-center gap-2">
-                  <Package className="h-5 w-5" />
-                  Insumos Cadastrados
-                </CardTitle>
-                <CardDescription>
-                  {supplies.length} insumo{supplies.length !== 1 ? 's' : ''} no sistema
-                </CardDescription>
-              </div>
-              <div className="relative max-w-sm">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Buscar insumos..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="pl-9"
-                />
-              </div>
+      ) : (
+        /* List View - Hidden when Form is Open */
+        <>
+          <div className="page-header">
+            <div>
+              <h1 className="page-title">Gestão de Insumos</h1>
+              <p className="text-muted-foreground text-sm mt-1">
+                Gerencie os insumos e matérias-primas utilizados nos produtos
+              </p>
             </div>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[80px]">Foto</TableHead>
-                  <TableHead>Insumo</TableHead>
-                  <TableHead>Unidade</TableHead>
-                  <TableHead>Custo</TableHead>
-                  <TableHead>Venda</TableHead>
-                  <TableHead>Margem</TableHead>
-                  <TableHead>Estoque</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="w-[100px]"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {loading ? (
+            <div className="flex gap-2">
+              <Button onClick={openCreateDialog}>
+                <Plus className="h-4 w-4 mr-2" />
+                Novo Insumo
+              </Button>
+              <Button variant="outline" onClick={handlePrint}>
+                <Printer className="h-4 w-4 mr-2" />
+                Imprimir
+              </Button>
+            </div>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Package className="h-5 w-5" />
+                    Insumos Cadastrados
+                  </CardTitle>
+                  <CardDescription>
+                    {supplies.length} insumo{supplies.length !== 1 ? 's' : ''} no sistema
+                  </CardDescription>
+                </div>
+                <div className="relative max-w-sm">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar insumos..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="pl-9"
+                  />
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={9} className="text-center py-8">
-                      Carregando...
-                    </TableCell>
+                    <TableHead className="w-[80px]">Foto</TableHead>
+                    <TableHead>Insumo</TableHead>
+                    <TableHead>Unidade</TableHead>
+                    <TableHead>Custo</TableHead>
+                    <TableHead>Venda</TableHead>
+                    <TableHead>Margem</TableHead>
+                    <TableHead>Estoque</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="w-[100px]"></TableHead>
                   </TableRow>
-                ) : filtered.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
-                      {search ? 'Nenhum insumo encontrado' : 'Nenhum insumo cadastrado'}
-                    </TableCell>
-                  </TableRow>
-                ) : filtered.map((supply) => (
-                  <TableRow key={supply.id}>
-                    <TableCell>
-                      {supply.image_url ? (
-                        <img
-                          src={supply.image_url}
-                          alt={supply.name}
-                          className="w-12 h-12 object-cover rounded-lg"
-                        />
-                      ) : (
-                        <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center">
-                          <Package className="h-5 w-5 text-muted-foreground" />
+                </TableHeader>
+                <TableBody>
+                  {loading ? (
+                    <TableRow>
+                      <TableCell colSpan={9} className="text-center py-8">
+                        Carregando...
+                      </TableCell>
+                    </TableRow>
+                  ) : filtered.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                        {search ? 'Nenhum insumo encontrado' : 'Nenhum insumo cadastrado'}
+                      </TableCell>
+                    </TableRow>
+                  ) : filtered.map((supply) => (
+                    <TableRow key={supply.id}>
+                      <TableCell>
+                        {supply.image_url ? (
+                          <img
+                            src={supply.image_url}
+                            alt={supply.name}
+                            className="w-12 h-12 object-cover rounded-lg"
+                          />
+                        ) : (
+                          <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center">
+                            <Package className="h-5 w-5 text-muted-foreground" />
+                          </div>
+                        )}
+                      </TableCell>
+                      <TableCell className="font-medium">{supply.name}</TableCell>
+                      <TableCell>{supply.unit}</TableCell>
+                      <TableCell>{formatCurrency(supply.cost_per_unit)}</TableCell>
+                      <TableCell className="font-medium">{formatCurrency(supply.sale_price || 0)}</TableCell>
+                      <TableCell>
+                        {supply.sale_price > 0 ? (
+                          <span className={calculateMargin(supply.cost_per_unit, supply.sale_price) >= 0 ? 'text-chart-2' : 'text-destructive'}>
+                            {calculateMargin(supply.cost_per_unit, supply.sale_price).toFixed(1)}%
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell>{supply.stock_quantity} {supply.unit}</TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={supply.stock_quantity <= supply.min_stock ? 'destructive' : 'default'}
+                        >
+                          {supply.stock_quantity <= supply.min_stock ? 'Baixo' : 'OK'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex gap-1">
+                          <Button variant="ghost" size="icon" onClick={() => openEditDialog(supply)}>
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="icon" onClick={() => openDeleteDialog(supply)}>
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
                         </div>
-                      )}
-                    </TableCell>
-                    <TableCell className="font-medium">{supply.name}</TableCell>
-                    <TableCell>{supply.unit}</TableCell>
-                    <TableCell>{formatCurrency(supply.cost_per_unit)}</TableCell>
-                    <TableCell className="font-medium">{formatCurrency(supply.sale_price || 0)}</TableCell>
-                    <TableCell>
-                      {supply.sale_price > 0 ? (
-                        <span className={calculateMargin(supply.cost_per_unit, supply.sale_price) >= 0 ? 'text-chart-2' : 'text-destructive'}>
-                          {calculateMargin(supply.cost_per_unit, supply.sale_price).toFixed(1)}%
-                        </span>
-                      ) : (
-                        <span className="text-muted-foreground">-</span>
-                      )}
-                    </TableCell>
-                    <TableCell>{supply.stock_quantity} {supply.unit}</TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={supply.stock_quantity <= supply.min_stock ? 'destructive' : 'default'}
-                      >
-                        {supply.stock_quantity <= supply.min_stock ? 'Baixo' : 'OK'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-1">
-                        <Button variant="ghost" size="icon" onClick={() => openEditDialog(supply)}>
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button variant="ghost" size="icon" onClick={() => openDeleteDialog(supply)}>
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </>
+      )}
 
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <DialogContent>

@@ -133,9 +133,18 @@ Deno.serve(async (req) => {
       return jsonResponse(corsHeaders, 400, { error: "Missing Supabase config" });
     }
 
+    const allHeaders: Record<string, string> = {};
+    req.headers.forEach((value, key) => {
+      allHeaders[key] = key.toLowerCase().includes('authorization') ? (value.slice(0, 15) + '...') : value;
+    });
+    logStep("All headers (masked auth)", allHeaders);
+
     const authHeader = req.headers.get("x-supabase-authorization") ??
       req.headers.get("Authorization");
-    logStep("Auth header present", { present: Boolean(authHeader) });
+    logStep("Auth header present", {
+      x_supabase_auth: Boolean(req.headers.get("x-supabase-authorization")),
+      authorization: Boolean(req.headers.get("Authorization"))
+    });
     if (!authHeader) {
       logStep("ERROR", "No authorization header found");
       return jsonResponse(corsHeaders, 401, {

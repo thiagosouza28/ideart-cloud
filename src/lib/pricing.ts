@@ -18,12 +18,31 @@ export const calculateSuggestedPrice = (
   return costWithWaste * (1 + profitMargin / 100);
 };
 
+export const isPromotionActive = (product: Product) => {
+  if (!product.promo_price) return false;
+
+  const now = new Date();
+  const start = product.promo_start_at ? new Date(product.promo_start_at) : null;
+  const end = product.promo_end_at ? new Date(product.promo_end_at) : null;
+
+  if (start && now < start) return false;
+  if (end && now > end) return false;
+
+  return true;
+};
+
 export const resolveSuggestedPrice = (
   product: Product,
   quantity: number,
   priceTiers: PriceTier[],
   suppliesCost = 0,
 ) => {
+  // 1. Check for active promotion first (it overrides everything)
+  if (isPromotionActive(product) && product.promo_price !== null) {
+    return Number(product.promo_price);
+  }
+
+  // 2. Check for volume-based price tiers
   const tiers = priceTiers.filter((tier) => tier.product_id === product.id);
   if (tiers.length > 0) {
     const tier = tiers.find(
@@ -34,9 +53,37 @@ export const resolveSuggestedPrice = (
     if (tier) return Number(tier.price);
   }
 
+  // 3. Fallback to manually set fixed final price
   if (product.final_price !== null && product.final_price !== undefined) {
     return Number(product.final_price);
   }
 
+  // 4. Default to calculated suggested price
+  return calculateSuggestedPrice(product, suppliesCost);
+};
+
+export const getBasePrice = (
+  product: Product,
+  quantity: number = 1,
+  priceTiers: PriceTier[] = [],
+  suppliesCost = 0,
+) => {
+  // 1. Check for volume-based price tiers
+  const tiers = priceTiers.filter((tier) => tier.product_id === product.id);
+  if (tiers.length > 0) {
+    const tier = tiers.find(
+      (t) =>
+        quantity >= t.min_quantity &&
+        (t.max_quantity === null || quantity <= t.max_quantity),
+    );
+    if (tier) return Number(tier.price);
+  }
+
+  // 2. Fallback to manually set fixed final price
+  if (product.final_price !== null && product.final_price !== undefined) {
+    return Number(product.final_price);
+  }
+
+  // 3. Default to calculated suggested price
   return calculateSuggestedPrice(product, suppliesCost);
 };

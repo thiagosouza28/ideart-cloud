@@ -143,6 +143,9 @@ export interface Product {
   labor_cost: number;
   waste_percentage: number;
   profit_margin: number;
+  promo_price: number | null;
+  promo_start_at: string | null;
+  promo_end_at: string | null;
   final_price: number | null;
   stock_quantity: number;
   min_stock: number;

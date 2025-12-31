@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { Phone, Mail, MapPin, Instagram, Facebook, MessageCircle, Package, Building2, LayoutGrid, List, ArrowUpDown } from 'lucide-react';
+import { Package, Search, Filter, ArrowUpDown, ChevronRight, MessageCircle, LayoutGrid, List, Tag, Phone, Mail, MapPin, Building2, Instagram } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { supabase } from '@/integrations/supabase/client';
 import { Company, Product, Category } from '@/types/database';
 import { ensurePublicStorageUrl } from '@/lib/storage';
-import { resolveSuggestedPrice } from '@/lib/pricing';
+import { resolveSuggestedPrice, isPromotionActive, getBasePrice } from '@/lib/pricing';
 import { BannerCarousel } from '@/components/BannerCarousel';
 
 interface CompanyWithColors extends Company {
@@ -34,10 +34,14 @@ interface CompanyWithColors extends Company {
   catalog_layout?: 'grid' | 'list';
 }
 
+interface ProductWithCategory extends Omit<Product, 'category'> {
+  category?: { name: string } | null;
+}
+
 export default function PublicCatalog() {
   const { slug } = useParams<{ slug: string }>();
   const [company, setCompany] = useState<CompanyWithColors | null>(null);
-  const [products, setProducts] = useState<Product[]>([]);
+  const [products, setProducts] = useState<ProductWithCategory[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -79,7 +83,7 @@ export default function PublicCatalog() {
         .eq('is_active', true)
         .order('name');
 
-      const mappedProducts = (productsData as Product[] || []).map((product) => ({
+      const mappedProducts = (productsData as unknown as ProductWithCategory[] || []).map((product) => ({
         ...product,
         image_url: ensurePublicStorageUrl('product-images', product.image_url),
       }));
@@ -102,8 +106,8 @@ export default function PublicCatalog() {
     loadCatalog();
   }, [slug]);
 
-  const getProductPrice = (product: Product) =>
-    resolveSuggestedPrice(product, 1, [], 0);
+  const getProductPrice = (product: ProductWithCategory) =>
+    resolveSuggestedPrice(product as unknown as Product, 1, [], 0);
 
   const filteredProducts = (selectedCategory
     ? products.filter(p => p.category_id === selectedCategory)
@@ -126,7 +130,7 @@ export default function PublicCatalog() {
   const formatCurrency = (value: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 
-  const openWhatsApp = (product?: Product) => {
+  const openWhatsApp = (product?: ProductWithCategory) => {
     if (!company?.whatsapp) return;
     const phone = company.whatsapp.replace(/\D/g, '');
     const message = product
@@ -407,6 +411,14 @@ export default function PublicCatalog() {
                 <Link key={product.id} to={`/catalogo/${slug}/produto/${product.id}`}>
                   <Card className="relative overflow-hidden group hover:shadow-lg transition-shadow cursor-pointer h-full catalog-card flex flex-col">
                     <div className="aspect-square bg-muted relative overflow-hidden">
+                      {isPromotionActive(product as unknown as Product) && (
+                        <div className="absolute top-2 left-2 z-10">
+                          <Badge className="bg-amber-500 text-white border-none gap-1 py-1 px-2 font-bold shadow-sm">
+                            <Tag className="h-3 w-3" />
+                            OFERTA
+                          </Badge>
+                        </div>
+                      )}
                       {product.image_url ? (
                         <img
                           src={product.image_url}
@@ -422,9 +434,16 @@ export default function PublicCatalog() {
                     <CardContent className="p-4 flex-1 flex flex-col">
                       <h3 className="font-semibold text-foreground mb-2 line-clamp-2 flex-grow">{product.name}</h3>
                       <div className="mt-auto">
-                        <span className="text-lg font-bold block mb-3" style={{ color: priceColor }}>
-                          {formatCurrency(getProductPrice(product))}
-                        </span>
+                        <div className="flex flex-col mb-3">
+                          {isPromotionActive(product as unknown as Product) && (
+                            <span className="text-sm text-muted-foreground line-through">
+                              {formatCurrency(getBasePrice(product as unknown as Product))}
+                            </span>
+                          )}
+                          <span className="text-lg font-bold" style={{ color: priceColor }}>
+                            {formatCurrency(getProductPrice(product))}
+                          </span>
+                        </div>
                         <Button className="w-full catalog-btn gap-2">
                           <Package className="h-4 w-4" />
                           Fazer Pedido

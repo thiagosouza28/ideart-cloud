@@ -14,7 +14,7 @@ import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Category, Supply, Attribute, AttributeValue, ProductType } from '@/types/database';
-import { ArrowLeft, Plus, Trash2, Calculator, Save, Loader2, Upload, Image, Globe, Package, FolderPlus } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Calculator, Save, Loader2, Upload, Image, Globe, Package, FolderPlus, Tag } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useAuth } from '@/contexts/AuthContext';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -37,6 +37,9 @@ const productSchema = z.object({
   min_stock: z.number().min(0),
   min_order_quantity: z.number().int().min(1, 'Quantidade minima deve ser pelo menos 1'),
   track_stock: z.boolean(),
+  promo_price: z.number().min(0, 'Preço promocional deve ser positivo').optional().nullable(),
+  promo_start_at: z.string().optional().nullable(),
+  promo_end_at: z.string().optional().nullable(),
 });
 
 interface ProductSupplyItem {
@@ -89,6 +92,9 @@ export default function ProductForm() {
   const [minStock, setMinStock] = useState(0);
   const [minOrderQuantity, setMinOrderQuantity] = useState(1);
   const [trackStock, setTrackStock] = useState(true);
+  const [promoPrice, setPromoPrice] = useState<number | null>(null);
+  const [promoStartAt, setPromoStartAt] = useState<string>('');
+  const [promoEndAt, setPromoEndAt] = useState<string>('');
 
   // Related data
   const [categories, setCategories] = useState<Category[]>([]);
@@ -186,7 +192,7 @@ export default function ProductForm() {
     // Initialize product attributes structure
     const attrs = attrResult.data as Attribute[] || [];
     const attrVals = attrValResult.data as AttributeValue[] || [];
-    
+
     let productAttrSelection: ProductAttributeItem[] = attrs.map(attr => ({
       attribute_id: attr.id,
       attribute_name: attr.name,
@@ -234,6 +240,9 @@ export default function ProductForm() {
       setMinStock(Number(product.min_stock));
       setMinOrderQuantity(Number(product.min_order_quantity ?? 1));
       setTrackStock(product.track_stock ?? true);
+      setPromoPrice(product.promo_price !== null ? Number(product.promo_price) : null);
+      setPromoStartAt(product.promo_start_at ? new Date(product.promo_start_at).toISOString().slice(0, 16) : '');
+      setPromoEndAt(product.promo_end_at ? new Date(product.promo_end_at).toISOString().slice(0, 16) : '');
 
       // Load product supplies
       const { data: prodSupplies } = await supabase
@@ -411,7 +420,7 @@ export default function ProductForm() {
     setProductAttributes(updated);
   };
 
-  const formatCurrency = (v: number) => 
+  const formatCurrency = (v: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
 
   const normalizeSku = (value: string) => value.trim().toUpperCase();
@@ -524,6 +533,9 @@ export default function ProductForm() {
       min_stock: minStock,
       min_order_quantity: minOrderQuantity,
       track_stock: trackStock,
+      promo_price: promoPrice,
+      promo_start_at: promoStartAt ? new Date(promoStartAt).toISOString() : null,
+      promo_end_at: promoEndAt ? new Date(promoEndAt).toISOString() : null,
     };
 
     const validation = productSchema.safeParse(formData);
@@ -601,7 +613,7 @@ export default function ProductForm() {
           supply_id: ps.supply_id,
           quantity: ps.quantity,
         }));
-      
+
       if (suppliesData.length > 0) {
         await supabase.from('product_supplies').insert(suppliesData);
       }
@@ -839,7 +851,7 @@ export default function ProductForm() {
               onChange={handleImageUpload}
               className="hidden"
             />
-            
+
             {imageUrl ? (
               <div className="flex items-start gap-4">
                 <div className="relative">
@@ -968,7 +980,7 @@ export default function ProductForm() {
                   <Plus className="h-4 w-4 mr-1" /> Adicionar Insumo
                 </Button>
               </div>
-              
+
               {productSupplies.length > 0 ? (
                 <Table>
                   <TableHeader>
@@ -1184,6 +1196,52 @@ export default function ProductForm() {
           </CardContent>
         </Card>
 
+        {/* Promotion */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Tag className="h-5 w-5 text-primary" />
+              <CardTitle>Promoção (Opcional)</CardTitle>
+            </div>
+            <CardDescription>
+              Defina um preço promocional e o período de validade. O preço original aparecerá riscado no catálogo.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="space-y-2">
+                <Label htmlFor="promoPrice">Preço Promocional (R$)</Label>
+                <CurrencyInput
+                  id="promoPrice"
+                  value={promoPrice || 0}
+                  onChange={(v) => setPromoPrice(v > 0 ? v : null)}
+                />
+                {errors?.promo_price && <p className="text-xs text-destructive">{errors.promo_price}</p>}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="promoStartAt">Data de Início</Label>
+                <Input
+                  id="promoStartAt"
+                  type="datetime-local"
+                  value={promoStartAt}
+                  onChange={(e) => setPromoStartAt(e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="promoEndAt">Data de Término</Label>
+                <Input
+                  id="promoEndAt"
+                  type="datetime-local"
+                  value={promoEndAt}
+                  onChange={(e) => setPromoEndAt(e.target.value)}
+                />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Attributes */}
         <Card>
           <CardHeader>
@@ -1200,9 +1258,8 @@ export default function ProductForm() {
                   {attr.values.map((val, valIndex) => (
                     <div
                       key={val.id}
-                      className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-colors ${
-                        val.selected ? 'border-primary bg-primary/10' : 'hover:border-muted-foreground'
-                      }`}
+                      className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-colors ${val.selected ? 'border-primary bg-primary/10' : 'hover:border-muted-foreground'
+                        }`}
                       onClick={() => toggleAttributeValue(attrIndex, valIndex)}
                     >
                       <Badge variant={val.selected ? 'default' : 'outline'}>
@@ -1290,8 +1347,8 @@ export default function ProductForm() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="parent-category">Categoria Pai (opcional)</Label>
-              <Select 
-                value={newCategoryParentId || "none"} 
+              <Select
+                value={newCategoryParentId || "none"}
                 onValueChange={(v) => setNewCategoryParentId(v === "none" ? "" : v)}
               >
                 <SelectTrigger>

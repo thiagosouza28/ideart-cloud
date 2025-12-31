@@ -37,9 +37,13 @@ export async function invokeEdgeFunction<T>(
 
     if (error) {
       // Handle the case where error.status is a number or a string
-      const status = typeof (error as any).status === 'number'
-        ? (error as any).status
-        : parseInt((error as any).status);
+      let status = 500;
+      if (typeof (error as any).status === 'number') {
+        status = (error as any).status;
+      } else if (typeof (error as any).status === 'string') {
+        const parsed = parseInt((error as any).status);
+        if (!isNaN(parsed)) status = parsed;
+      }
 
       console.error(`Edge Function ${functionName} failed with status ${status}:`, error);
 

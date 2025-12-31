@@ -121,12 +121,12 @@ export type Database = {
           email: string | null
           facebook: string | null
           id: string
-            instagram: string | null
-            is_active: boolean
-            logo_url: string | null
-            minimum_order_value: number | null
-            name: string
-            phone: string | null
+          instagram: string | null
+          is_active: boolean
+          logo_url: string | null
+          minimum_order_value: number | null
+          name: string
+          phone: string | null
           plan_id: string | null
           slug: string
           state: string | null
@@ -165,12 +165,12 @@ export type Database = {
           email?: string | null
           facebook?: string | null
           id?: string
-            instagram?: string | null
-            is_active?: boolean
-            logo_url?: string | null
-            minimum_order_value?: number | null
-            name: string
-            phone?: string | null
+          instagram?: string | null
+          is_active?: boolean
+          logo_url?: string | null
+          minimum_order_value?: number | null
+          name: string
+          phone?: string | null
           plan_id?: string | null
           slug: string
           state?: string | null
@@ -209,12 +209,12 @@ export type Database = {
           email?: string | null
           facebook?: string | null
           id?: string
-            instagram?: string | null
-            is_active?: boolean
-            logo_url?: string | null
-            minimum_order_value?: number | null
-            name?: string
-            phone?: string | null
+          instagram?: string | null
+          is_active?: boolean
+          logo_url?: string | null
+          minimum_order_value?: number | null
+          name?: string
+          phone?: string | null
           plan_id?: string | null
           slug?: string
           state?: string | null
@@ -475,31 +475,31 @@ export type Database = {
         ]
       }
       orders: {
-          Row: {
-            amount_paid: number
-            approved_at: string | null
-            approved_by: string | null
-            cancel_reason: string | null
-            company_id: string | null
-            created_at: string
-            created_by: string | null
-            customer_id: string | null
-            customer_name: string | null
-            discount: number
-            gateway: string | null
-            gateway_order_id: string | null
-            id: string
-            notes: string | null
-            order_number: number
-            payment_method: Database["public"]["Enums"]["payment_method"] | null
-            payment_link_id: string | null
-            payment_link_url: string | null
-            payment_status: Database["public"]["Enums"]["payment_status"]
-            status: Database["public"]["Enums"]["order_status"]
-            subtotal: number
-            total: number
-            updated_at: string
-            updated_by: string | null
+        Row: {
+          amount_paid: number
+          approved_at: string | null
+          approved_by: string | null
+          cancel_reason: string | null
+          company_id: string | null
+          created_at: string
+          created_by: string | null
+          customer_id: string | null
+          customer_name: string | null
+          discount: number
+          gateway: string | null
+          gateway_order_id: string | null
+          id: string
+          notes: string | null
+          order_number: number
+          payment_method: Database["public"]["Enums"]["payment_method"] | null
+          payment_link_id: string | null
+          payment_link_url: string | null
+          payment_status: Database["public"]["Enums"]["payment_status"]
+          status: Database["public"]["Enums"]["order_status"]
+          subtotal: number
+          total: number
+          updated_at: string
+          updated_by: string | null
         }
         Insert: {
           amount_paid?: number
@@ -509,23 +509,23 @@ export type Database = {
           company_id?: string | null
           created_at?: string
           created_by?: string | null
-            customer_id?: string | null
-            customer_name?: string | null
-            discount?: number
-            gateway?: string | null
-            gateway_order_id?: string | null
-            id?: string
-            notes?: string | null
-            order_number?: number
-            payment_method?: Database["public"]["Enums"]["payment_method"] | null
-            payment_link_id?: string | null
-            payment_link_url?: string | null
-            payment_status?: Database["public"]["Enums"]["payment_status"]
-            status?: Database["public"]["Enums"]["order_status"]
-            subtotal?: number
-            total?: number
-            updated_at?: string
-            updated_by?: string | null
+          customer_id?: string | null
+          customer_name?: string | null
+          discount?: number
+          gateway?: string | null
+          gateway_order_id?: string | null
+          id?: string
+          notes?: string | null
+          order_number?: number
+          payment_method?: Database["public"]["Enums"]["payment_method"] | null
+          payment_link_id?: string | null
+          payment_link_url?: string | null
+          payment_status?: Database["public"]["Enums"]["payment_status"]
+          status?: Database["public"]["Enums"]["order_status"]
+          subtotal?: number
+          total?: number
+          updated_at?: string
+          updated_by?: string | null
         }
         Update: {
           amount_paid?: number
@@ -535,23 +535,23 @@ export type Database = {
           company_id?: string | null
           created_at?: string
           created_by?: string | null
-            customer_id?: string | null
-            customer_name?: string | null
-            discount?: number
-            gateway?: string | null
-            gateway_order_id?: string | null
-            id?: string
-            notes?: string | null
-            order_number?: number
-            payment_method?: Database["public"]["Enums"]["payment_method"] | null
-            payment_link_id?: string | null
-            payment_link_url?: string | null
-            payment_status?: Database["public"]["Enums"]["payment_status"]
-            status?: Database["public"]["Enums"]["order_status"]
-            subtotal?: number
-            total?: number
-            updated_at?: string
-            updated_by?: string | null
+          customer_id?: string | null
+          customer_name?: string | null
+          discount?: number
+          gateway?: string | null
+          gateway_order_id?: string | null
+          id?: string
+          notes?: string | null
+          order_number?: number
+          payment_method?: Database["public"]["Enums"]["payment_method"] | null
+          payment_link_id?: string | null
+          payment_link_url?: string | null
+          payment_status?: Database["public"]["Enums"]["payment_status"]
+          status?: Database["public"]["Enums"]["order_status"]
+          subtotal?: number
+          total?: number
+          updated_at?: string
+          updated_by?: string | null
         }
         Relationships: [
           {
@@ -619,54 +619,54 @@ export type Database = {
         ]
       }
       order_payments: {
-          Row: {
-            amount: number
-            company_id: string | null
-            created_at: string
-            created_by: string | null
-            gateway: string | null
-            gateway_order_id: string | null
-            gateway_transaction_id: string | null
-            id: string
-            method: Database["public"]["Enums"]["payment_method"] | null
-            notes: string | null
-            order_id: string
-            paid_at: string | null
-            raw_payload: Json | null
-            status: Database["public"]["Enums"]["payment_status"]
-          }
-          Insert: {
-            amount: number
-            company_id?: string | null
-            created_at?: string
-            created_by?: string | null
-            gateway?: string | null
-            gateway_order_id?: string | null
-            gateway_transaction_id?: string | null
-            id?: string
-            method?: Database["public"]["Enums"]["payment_method"] | null
-            notes?: string | null
-            order_id: string
-            paid_at?: string | null
-            raw_payload?: Json | null
-            status?: Database["public"]["Enums"]["payment_status"]
-          }
-          Update: {
-            amount?: number
-            company_id?: string | null
-            created_at?: string
-            created_by?: string | null
-            gateway?: string | null
-            gateway_order_id?: string | null
-            gateway_transaction_id?: string | null
-            id?: string
-            method?: Database["public"]["Enums"]["payment_method"] | null
-            notes?: string | null
-            order_id?: string
-            paid_at?: string | null
-            raw_payload?: Json | null
-            status?: Database["public"]["Enums"]["payment_status"]
-          }
+        Row: {
+          amount: number
+          company_id: string | null
+          created_at: string
+          created_by: string | null
+          gateway: string | null
+          gateway_order_id: string | null
+          gateway_transaction_id: string | null
+          id: string
+          method: Database["public"]["Enums"]["payment_method"] | null
+          notes: string | null
+          order_id: string
+          paid_at: string | null
+          raw_payload: Json | null
+          status: Database["public"]["Enums"]["payment_status"]
+        }
+        Insert: {
+          amount: number
+          company_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          gateway?: string | null
+          gateway_order_id?: string | null
+          gateway_transaction_id?: string | null
+          id?: string
+          method?: Database["public"]["Enums"]["payment_method"] | null
+          notes?: string | null
+          order_id: string
+          paid_at?: string | null
+          raw_payload?: Json | null
+          status?: Database["public"]["Enums"]["payment_status"]
+        }
+        Update: {
+          amount?: number
+          company_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          gateway?: string | null
+          gateway_order_id?: string | null
+          gateway_transaction_id?: string | null
+          id?: string
+          method?: Database["public"]["Enums"]["payment_method"] | null
+          notes?: string | null
+          order_id?: string
+          paid_at?: string | null
+          raw_payload?: Json | null
+          status?: Database["public"]["Enums"]["payment_status"]
+        }
         Relationships: [
           {
             foreignKeyName: "order_payments_company_id_fkey"
@@ -717,60 +717,60 @@ export type Database = {
         ]
       }
       plans: {
-          Row: {
-            billing_period: string
-            created_at: string
-            description: string | null
-            features: Json
-            id: string
-            is_active: boolean
-            max_users: number | null
-            name: string
-            period_days: number
-            price: number
-            stripe_price_id: string | null
-            stripe_product_id: string | null
-            yampi_checkout_url: string | null
-            yampi_product_id: string | null
-            yampi_sku_id: string | null
-            updated_at: string
-          }
-          Insert: {
-            billing_period?: string
-            created_at?: string
-            description?: string | null
-            features?: Json
-            id?: string
-            is_active?: boolean
-            max_users?: number | null
-            name: string
-            period_days?: number
-            price?: number
-            stripe_price_id?: string | null
-            stripe_product_id?: string | null
-            yampi_checkout_url?: string | null
-            yampi_product_id?: string | null
-            yampi_sku_id?: string | null
-            updated_at?: string
-          }
-          Update: {
-            billing_period?: string
-            created_at?: string
-            description?: string | null
-            features?: Json
-            id?: string
-            is_active?: boolean
-            max_users?: number | null
-            name?: string
-            period_days?: number
-            price?: number
-            stripe_price_id?: string | null
-            stripe_product_id?: string | null
-            yampi_checkout_url?: string | null
-            yampi_product_id?: string | null
-            yampi_sku_id?: string | null
-            updated_at?: string
-          }
+        Row: {
+          billing_period: string
+          created_at: string
+          description: string | null
+          features: Json
+          id: string
+          is_active: boolean
+          max_users: number | null
+          name: string
+          period_days: number
+          price: number
+          stripe_price_id: string | null
+          stripe_product_id: string | null
+          yampi_checkout_url: string | null
+          yampi_product_id: string | null
+          yampi_sku_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          billing_period?: string
+          created_at?: string
+          description?: string | null
+          features?: Json
+          id?: string
+          is_active?: boolean
+          max_users?: number | null
+          name: string
+          period_days?: number
+          price?: number
+          stripe_price_id?: string | null
+          stripe_product_id?: string | null
+          yampi_checkout_url?: string | null
+          yampi_product_id?: string | null
+          yampi_sku_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          billing_period?: string
+          created_at?: string
+          description?: string | null
+          features?: Json
+          id?: string
+          is_active?: boolean
+          max_users?: number | null
+          name?: string
+          period_days?: number
+          price?: number
+          stripe_price_id?: string | null
+          stripe_product_id?: string | null
+          yampi_checkout_url?: string | null
+          yampi_product_id?: string | null
+          yampi_sku_id?: string | null
+          updated_at?: string
+        }
         Relationships: []
       }
       price_tiers: {
@@ -903,13 +903,16 @@ export type Database = {
           name: string
           product_type: Database["public"]["Enums"]["product_type"]
           profit_margin: number
+          promo_end_at: string | null
+          promo_price: number | null
+          promo_start_at: string | null
           show_in_catalog: boolean
-            sku: string | null
-            stock_quantity: number
-            track_stock: boolean
-            unit: string
-            updated_at: string
-            waste_percentage: number
+          sku: string | null
+          stock_quantity: number
+          track_stock: boolean
+          unit: string
+          updated_at: string
+          waste_percentage: number
           yampi_sku_id: string | null
         }
         Insert: {
@@ -928,13 +931,16 @@ export type Database = {
           name: string
           product_type?: Database["public"]["Enums"]["product_type"]
           profit_margin?: number
+          promo_end_at?: string | null
+          promo_price?: number | null
+          promo_start_at?: string | null
           show_in_catalog?: boolean
-            sku?: string | null
-            stock_quantity?: number
-            track_stock?: boolean
-            unit?: string
-            updated_at?: string
-            waste_percentage?: number
+          sku?: string | null
+          stock_quantity?: number
+          track_stock?: boolean
+          unit?: string
+          updated_at?: string
+          waste_percentage?: number
           yampi_sku_id?: string | null
         }
         Update: {
@@ -953,13 +959,16 @@ export type Database = {
           name?: string
           product_type?: Database["public"]["Enums"]["product_type"]
           profit_margin?: number
+          promo_end_at?: string | null
+          promo_price?: number | null
+          promo_start_at?: string | null
           show_in_catalog?: boolean
-            sku?: string | null
-            stock_quantity?: number
-            track_stock?: boolean
-            unit?: string
-            updated_at?: string
-            waste_percentage?: number
+          sku?: string | null
+          stock_quantity?: number
+          track_stock?: boolean
+          unit?: string
+          updated_at?: string
+          waste_percentage?: number
           yampi_sku_id?: string | null
         }
         Relationships: [
@@ -1156,8 +1165,8 @@ export type Database = {
           },
         ]
       }
-        supplies: {
-          Row: {
+      supplies: {
+        Row: {
           cost_per_unit: number
           created_at: string
           id: string
@@ -1193,79 +1202,79 @@ export type Database = {
           unit?: string
           updated_at?: string
         }
-          Relationships: []
+        Relationships: []
+      }
+      subscriptions: {
+        Row: {
+          company_id: string
+          created_at: string
+          current_period_ends_at: string | null
+          gateway: string
+          gateway_order_id: string | null
+          gateway_payment_link_id: string | null
+          gateway_subscription_id: string | null
+          id: string
+          last_payment_status: string | null
+          payment_link_url: string | null
+          plan_id: string | null
+          status: string
+          trial_ends_at: string | null
+          updated_at: string
         }
-        subscriptions: {
-          Row: {
-            company_id: string
-            created_at: string
-            current_period_ends_at: string | null
-            gateway: string
-            gateway_order_id: string | null
-            gateway_payment_link_id: string | null
-            gateway_subscription_id: string | null
-            id: string
-            last_payment_status: string | null
-            payment_link_url: string | null
-            plan_id: string | null
-            status: string
-            trial_ends_at: string | null
-            updated_at: string
-          }
-          Insert: {
-            company_id: string
-            created_at?: string
-            current_period_ends_at?: string | null
-            gateway?: string
-            gateway_order_id?: string | null
-            gateway_payment_link_id?: string | null
-            gateway_subscription_id?: string | null
-            id?: string
-            last_payment_status?: string | null
-            payment_link_url?: string | null
-            plan_id?: string | null
-            status?: string
-            trial_ends_at?: string | null
-            updated_at?: string
-          }
-          Update: {
-            company_id?: string
-            created_at?: string
-            current_period_ends_at?: string | null
-            gateway?: string
-            gateway_order_id?: string | null
-            gateway_payment_link_id?: string | null
-            gateway_subscription_id?: string | null
-            id?: string
-            last_payment_status?: string | null
-            payment_link_url?: string | null
-            plan_id?: string | null
-            status?: string
-            trial_ends_at?: string | null
-            updated_at?: string
-          }
-          Relationships: [
-            {
-              foreignKeyName: "subscriptions_company_id_fkey"
-              columns: ["company_id"]
-              isOneToOne: false
-              referencedRelation: "companies"
-              referencedColumns: ["id"]
-            },
-            {
-              foreignKeyName: "subscriptions_plan_id_fkey"
-              columns: ["plan_id"]
-              isOneToOne: false
-              referencedRelation: "plans"
-              referencedColumns: ["id"]
-            },
-          ]
+        Insert: {
+          company_id: string
+          created_at?: string
+          current_period_ends_at?: string | null
+          gateway?: string
+          gateway_order_id?: string | null
+          gateway_payment_link_id?: string | null
+          gateway_subscription_id?: string | null
+          id?: string
+          last_payment_status?: string | null
+          payment_link_url?: string | null
+          plan_id?: string | null
+          status?: string
+          trial_ends_at?: string | null
+          updated_at?: string
         }
-        user_roles: {
-          Row: {
-            created_at: string
-            id: string
-            role: Database["public"]["Enums"]["app_role"]
+        Update: {
+          company_id?: string
+          created_at?: string
+          current_period_ends_at?: string | null
+          gateway?: string
+          gateway_order_id?: string | null
+          gateway_payment_link_id?: string | null
+          gateway_subscription_id?: string | null
+          id?: string
+          last_payment_status?: string | null
+          payment_link_url?: string | null
+          plan_id?: string | null
+          status?: string
+          trial_ends_at?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscriptions_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "subscriptions_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
           user_id: string
         }
         Insert: {
@@ -1279,63 +1288,63 @@ export type Database = {
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
           user_id?: string
-          }
-          Relationships: []
         }
-        webhook_events: {
-          Row: {
-            event_id: string
-            event_type: string | null
-            gateway: string
-            id: string
-            payload: Json | null
-            processed_at: string | null
-            received_at: string
-          }
-          Insert: {
-            event_id: string
-            event_type?: string | null
-            gateway: string
-            id?: string
-            payload?: Json | null
-            processed_at?: string | null
-            received_at?: string
-          }
-          Update: {
-            event_id?: string
-            event_type?: string | null
-            gateway?: string
-            id?: string
-            payload?: Json | null
-            processed_at?: string | null
-            received_at?: string
-          }
-          Relationships: []
+        Relationships: []
+      }
+      webhook_events: {
+        Row: {
+          event_id: string
+          event_type: string | null
+          gateway: string
+          id: string
+          payload: Json | null
+          processed_at: string | null
+          received_at: string
         }
+        Insert: {
+          event_id: string
+          event_type?: string | null
+          gateway: string
+          id?: string
+          payload?: Json | null
+          processed_at?: string | null
+          received_at?: string
+        }
+        Update: {
+          event_id?: string
+          event_type?: string | null
+          gateway?: string
+          id?: string
+          payload?: Json | null
+          processed_at?: string | null
+          received_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-        approve_order_by_token: {
-          Args: { p_token: string }
-          Returns: Json
+      approve_order_by_token: {
+        Args: { p_token: string }
+        Returns: Json
+      }
+      create_public_order: {
+        Args: {
+          p_company_id: string
+          p_customer_document: string
+          p_customer_name: string
+          p_customer_phone: string
+          p_items: Json
+          p_payment_method: Database["public"]["Enums"]["payment_method"]
         }
-        create_public_order: {
-          Args: {
-            p_company_id: string
-            p_customer_document: string
-            p_customer_name: string
-            p_customer_phone: string
-            p_items: Json
-            p_payment_method: Database["public"]["Enums"]["payment_method"]
-          }
-          Returns: Json
-        }
-        get_user_role: {
-          Args: { _user_id: string }
-          Returns: Database["public"]["Enums"]["app_role"]
-        }
+        Returns: Json
+      }
+      get_user_role: {
+        Args: { _user_id: string }
+        Returns: Database["public"]["Enums"]["app_role"]
+      }
       get_public_order: {
         Args: { p_token: string }
         Returns: Json
@@ -1361,13 +1370,13 @@ export type Database = {
       financial_entry_status: "pendente" | "pago" | "atrasado"
       financial_entry_type: "receita" | "despesa"
       order_status:
-        | "orcamento"
-        | "pendente"
-        | "em_producao"
-        | "pronto"
-        | "aguardando_retirada"
-        | "entregue"
-        | "cancelado"
+      | "orcamento"
+      | "pendente"
+      | "em_producao"
+      | "pronto"
+      | "aguardando_retirada"
+      | "entregue"
+      | "cancelado"
       payment_method: "dinheiro" | "cartao" | "pix" | "boleto" | "outro"
       payment_status: "pendente" | "parcial" | "pago"
       product_type: "produto" | "confeccionado" | "servico"
@@ -1385,116 +1394,116 @@ type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
 
 export type Tables<
   DefaultSchemaTableNameOrOptions extends
-    | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
-    | { schema: keyof DatabaseWithoutInternals },
+  | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+  | { schema: keyof DatabaseWithoutInternals },
   TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
-    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
-        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+  ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+    DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
+  : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
   ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
-      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+    DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
       Row: infer R
     }
-    ? R
-    : never
+  ? R
+  : never
   : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
-        DefaultSchema["Views"])
-    ? (DefaultSchema["Tables"] &
-        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
-        Row: infer R
-      }
-      ? R
-      : never
-    : never
+    DefaultSchema["Views"])
+  ? (DefaultSchema["Tables"] &
+    DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
+      Row: infer R
+    }
+  ? R
+  : never
+  : never
 
 export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
-    | keyof DefaultSchema["Tables"]
-    | { schema: keyof DatabaseWithoutInternals },
+  | keyof DefaultSchema["Tables"]
+  | { schema: keyof DatabaseWithoutInternals },
   TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
-    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+  ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+  : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
   ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
-      Insert: infer I
-    }
-    ? I
-    : never
+    Insert: infer I
+  }
+  ? I
+  : never
   : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
-    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
-        Insert: infer I
-      }
-      ? I
-      : never
-    : never
+  ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+    Insert: infer I
+  }
+  ? I
+  : never
+  : never
 
 export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
-    | keyof DefaultSchema["Tables"]
-    | { schema: keyof DatabaseWithoutInternals },
+  | keyof DefaultSchema["Tables"]
+  | { schema: keyof DatabaseWithoutInternals },
   TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
-    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+  ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+  : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
   ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
-      Update: infer U
-    }
-    ? U
-    : never
+    Update: infer U
+  }
+  ? U
+  : never
   : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
-    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
-        Update: infer U
-      }
-      ? U
-      : never
-    : never
+  ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+    Update: infer U
+  }
+  ? U
+  : never
+  : never
 
 export type Enums<
   DefaultSchemaEnumNameOrOptions extends
-    | keyof DefaultSchema["Enums"]
-    | { schema: keyof DatabaseWithoutInternals },
+  | keyof DefaultSchema["Enums"]
+  | { schema: keyof DatabaseWithoutInternals },
   EnumName extends DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
-    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+  ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
+  : never = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
   ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
   : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
-    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
-    : never
+  ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
+  : never
 
 export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
-    | keyof DefaultSchema["CompositeTypes"]
-    | { schema: keyof DatabaseWithoutInternals },
+  | keyof DefaultSchema["CompositeTypes"]
+  | { schema: keyof DatabaseWithoutInternals },
   CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
-    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+  ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+  : never = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
   ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
   : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
-    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
-    : never
+  ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+  : never
 
 export const Constants = {
   public: {

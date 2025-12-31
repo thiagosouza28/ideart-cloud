@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { Phone, Mail, MapPin, MessageCircle, Package, Building2, ArrowLeft, Share2, Check, Copy } from 'lucide-react';
+import { Phone, Mail, MapPin, MessageCircle, Package, Building2, ArrowLeft, Share2, Check, Copy, Tag } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { supabase } from '@/integrations/supabase/client';
 import { Company, PaymentMethod, Product } from '@/types/database';
 import { ensurePublicStorageUrl } from '@/lib/storage';
-import { resolveSuggestedPrice } from '@/lib/pricing';
+import { resolveSuggestedPrice, isPromotionActive, getBasePrice } from '@/lib/pricing';
 import { CpfCnpjInput, PhoneInput, validateCpf } from '@/components/ui/masked-input';
 import { useToast } from '@/hooks/use-toast';
 
@@ -155,6 +155,12 @@ export default function PublicProductDetails() {
       prev.quantity < minimumQuantity ? { ...prev, quantity: minimumQuantity } : prev
     );
   }, [product]);
+
+  const productPrice = product ? resolveSuggestedPrice(product as Product, orderForm.quantity, [], 0) : 0;
+  const unitPrice = product ? resolveSuggestedPrice(product as Product, 1, [], 0) : 0;
+  const orderTotal = productPrice * orderForm.quantity;
+  const minimumOrderValue = Number(company?.minimum_order_value || 0);
+  const minimumOrderQuantity = Math.max(1, Number(product?.min_order_quantity ?? 1));
 
   const formatCurrency = (value: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
@@ -336,8 +342,8 @@ export default function PublicProductDetails() {
       const errorMessage = isMinQuantityError
         ? `A quantidade minima para este produto e ${minimumQuantity} unidade(s).`
         : isMinOrderError
-        ? `O valor mínimo para pedidos é ${formatCurrency(Number(company?.minimum_order_value || 0))}.`
-        : error.message;
+          ? `O valor mínimo para pedidos é ${formatCurrency(Number(company?.minimum_order_value || 0))}.`
+          : error.message;
 
       toast({
         title: 'Erro ao enviar pedido',
@@ -387,11 +393,7 @@ export default function PublicProductDetails() {
   const cardBgColor = company?.catalog_card_bg_color || '#ffffff';
   const cardBorderColor = company?.catalog_card_border_color || '#e5e7eb';
 
-  const getProductPrice = (item: Product) => resolveSuggestedPrice(item, 1, [], 0);
-  const productPrice = product ? getProductPrice(product) : 0;
-  const orderTotal = productPrice * orderForm.quantity;
-  const minimumOrderValue = Number(company?.minimum_order_value || 0);
-  const minimumOrderQuantity = Math.max(1, Number(product?.min_order_quantity ?? 1));
+
 
   if (loading) {
     return (
@@ -509,6 +511,14 @@ export default function PublicProductDetails() {
         <div className="grid lg:grid-cols-2 gap-8">
           {/* Product Image */}
           <div className="relative">
+            {product && isPromotionActive(product as Product) && (
+              <div className="absolute top-4 left-4 z-10">
+                <Badge className="bg-amber-500 text-white border-none gap-1 py-1 px-3 font-bold shadow-md text-sm">
+                  <Tag className="h-4 w-4" />
+                  OFERTA
+                </Badge>
+              </div>
+            )}
             <div className="aspect-square bg-muted rounded-lg overflow-hidden">
               {product.image_url ? (
                 <img
@@ -524,7 +534,7 @@ export default function PublicProductDetails() {
             </div>
             {product.category?.name && (
               <Badge
-                className="absolute top-4 left-4 border-0 catalog-badge"
+                className="absolute top-4 right-4 border-0 catalog-badge shadow-sm"
               >
                 {product.category.name}
               </Badge>
@@ -535,8 +545,15 @@ export default function PublicProductDetails() {
           <div className="flex flex-col">
             <h1 className="text-3xl font-bold text-foreground mb-4">{product.name}</h1>
 
-            <div className="text-4xl font-bold mb-6" style={{ color: priceColor }}>
-              {formatCurrency(productPrice)}
+            <div className="flex flex-col mb-6">
+              {product && isPromotionActive(product as Product) && (
+                <span className="text-lg text-muted-foreground line-through">
+                  {formatCurrency(getBasePrice(product as Product))}
+                </span>
+              )}
+              <div className="text-4xl font-bold" style={{ color: priceColor }}>
+                {formatCurrency(unitPrice)}
+              </div>
             </div>
 
             {product.description && (
@@ -687,8 +704,8 @@ export default function PublicProductDetails() {
                             cpfStatus === 'valid'
                               ? 'border-emerald-500 focus-visible:ring-emerald-500'
                               : cpfStatus === 'invalid' || orderErrors.document
-                              ? 'border-destructive focus-visible:ring-destructive'
-                              : ''
+                                ? 'border-destructive focus-visible:ring-destructive'
+                                : ''
                           }
                         />
                         {orderErrors.document && (
@@ -758,9 +775,8 @@ export default function PublicProductDetails() {
 
                     {minimumOrderValue > 0 && (
                       <p
-                        className={`text-xs ${
-                          orderTotal < minimumOrderValue ? 'text-destructive' : 'text-muted-foreground'
-                        }`}
+                        className={`text-xs ${orderTotal < minimumOrderValue ? 'text-destructive' : 'text-muted-foreground'
+                          }`}
                       >
                         O valor mínimo para pedidos é {formatCurrency(minimumOrderValue)}.
                       </p>
@@ -788,8 +804,16 @@ export default function PublicProductDetails() {
               <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
                 {relatedProducts.map(related => (
                   <Link key={related.id} to={`/catalogo/${slug}/produto/${related.id}`}>
-                    <Card className="overflow-hidden group hover:shadow-lg transition-shadow cursor-pointer catalog-card">
+                    <Card className="overflow-hidden group hover:shadow-lg transition-shadow cursor-pointer catalog-card h-full">
                       <div className="aspect-square bg-muted relative overflow-hidden">
+                        {isPromotionActive(related) && (
+                          <div className="absolute top-2 left-2 z-10">
+                            <Badge className="bg-amber-500 text-white border-none gap-1 py-1 px-2 font-bold shadow-sm">
+                              <Tag className="h-3 w-3" />
+                              OFERTA
+                            </Badge>
+                          </div>
+                        )}
                         {related.image_url ? (
                           <img
                             src={related.image_url}
@@ -803,10 +827,17 @@ export default function PublicProductDetails() {
                         )}
                       </div>
                       <CardContent className="p-4">
-                        <h3 className="font-semibold text-foreground mb-1 line-clamp-2">{related.name}</h3>
-                        <span className="text-lg font-bold" style={{ color: priceColor }}>
-                          {formatCurrency(getProductPrice(related))}
-                        </span>
+                        <h3 className="font-semibold text-foreground mb-2 line-clamp-1">{related.name}</h3>
+                        <div className="flex flex-col">
+                          {isPromotionActive(related) && (
+                            <span className="text-xs text-muted-foreground line-through">
+                              {formatCurrency(getBasePrice(related))}
+                            </span>
+                          )}
+                          <span className="font-bold" style={{ color: priceColor }}>
+                            {formatCurrency(resolveSuggestedPrice(related, 1, [], 0))}
+                          </span>
+                        </div>
                       </CardContent>
                     </Card>
                   </Link>

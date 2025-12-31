@@ -7,18 +7,18 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { StockMovement, Product, StockMovementType } from '@/types/database';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 
 const typeLabels: Record<StockMovementType, string> = { entrada: 'Entrada', saida: 'Saída', ajuste: 'Ajuste' };
-const typeColors: Record<StockMovementType, string> = { 
-  entrada: 'bg-chart-2/10 text-chart-2 border-chart-2/20', 
-  saida: 'bg-destructive/10 text-destructive border-destructive/20', 
-  ajuste: 'bg-primary/10 text-primary border-primary/20' 
+const typeColors: Record<StockMovementType, string> = {
+  entrada: 'bg-chart-2/10 text-chart-2 border-chart-2/20',
+  saida: 'bg-destructive/10 text-destructive border-destructive/20',
+  ajuste: 'bg-primary/10 text-primary border-primary/20'
 };
 
 export default function Stock() {
@@ -27,11 +27,10 @@ export default function Stock() {
   const [movements, setMovements] = useState<StockMovement[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
-  const [view, setView] = useState<'products' | 'movements'>('products');
+  const [view, setView] = useState<'products' | 'movements' | 'form'>('products');
+  const [previousView, setPreviousView] = useState<'products' | 'movements'>('products');
   const [editingMovement, setEditingMovement] = useState<StockMovement | null>(null);
-  
-  // Modal state
-  const [modalOpen, setModalOpen] = useState(false);
+
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
     product_id: '',
@@ -72,7 +71,8 @@ export default function Stock() {
   const filteredProducts = products.filter(p => p.name.toLowerCase().includes(search.toLowerCase()));
   const formatDate = (d: string) => new Date(d).toLocaleString('pt-BR');
 
-  const openModal = (type?: StockMovementType, productId?: string) => {
+  const openForm = (type?: StockMovementType, productId?: string) => {
+    setPreviousView(view === 'form' ? 'products' : view);
     setEditingMovement(null);
     setForm({
       product_id: productId || '',
@@ -80,14 +80,15 @@ export default function Stock() {
       quantity: '',
       reason: ''
     });
-    setModalOpen(true);
+    setView('form');
   };
 
-  const openEditModal = (movement: StockMovement) => {
+  const openEditForm = (movement: StockMovement) => {
     if (!isLatestMovement(movement)) {
       toast.error('Apenas a última movimentação do produto pode ser editada');
       return;
     }
+    setPreviousView(view === 'form' ? 'movements' : view);
     setEditingMovement(movement);
     setForm({
       product_id: movement.product_id,
@@ -95,7 +96,7 @@ export default function Stock() {
       quantity: String(movement.quantity),
       reason: movement.reason || ''
     });
-    setModalOpen(true);
+    setView('form');
   };
 
   const handleSubmit = async () => {
@@ -171,7 +172,7 @@ export default function Stock() {
       }
 
       toast.success('Movimentação atualizada com sucesso');
-      setModalOpen(false);
+      setView(previousView);
       setEditingMovement(null);
       setSaving(false);
       loadData();
@@ -223,7 +224,7 @@ export default function Stock() {
     }
 
     toast.success('Movimentação registrada com sucesso');
-    setModalOpen(false);
+    setView(previousView);
     setEditingMovement(null);
     setSaving(false);
     loadData();
@@ -236,167 +237,51 @@ export default function Stock() {
       <div className="page-header">
         <h1 className="page-title">Controle de Estoque</h1>
         <div className="flex gap-2">
-          <Button variant={view === 'products' ? 'default' : 'outline'} onClick={() => setView('products')}>
-            Produtos
-          </Button>
-          <Button variant={view === 'movements' ? 'default' : 'outline'} onClick={() => setView('movements')}>
-            Movimentações
-          </Button>
-          <Button onClick={() => openModal()}>
-            <Plus className="mr-2 h-4 w-4" />Nova Movimentação
-          </Button>
+          {view !== 'form' ? (
+            <>
+              <Button variant={view === 'products' ? 'default' : 'outline'} onClick={() => setView('products')}>
+                Produtos
+              </Button>
+              <Button variant={view === 'movements' ? 'default' : 'outline'} onClick={() => setView('movements')}>
+                Movimentações
+              </Button>
+              <Button onClick={() => openForm()}>
+                <Plus className="mr-2 h-4 w-4" />Nova Movimentação
+              </Button>
+            </>
+          ) : (
+            <Button variant="outline" onClick={() => setView(previousView)}>
+              Voltar
+            </Button>
+          )}
         </div>
       </div>
 
-      <Card>
-        <CardHeader>
-          <div className="relative max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="Buscar..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
-          </div>
-        </CardHeader>
-        <CardContent>
-          {view === 'products' ? (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Produto</TableHead>
-                  <TableHead>Estoque Atual</TableHead>
-                  <TableHead>Estoque Mínimo</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="w-[260px]">Ações</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {loading ? (
-                  <TableRow><TableCell colSpan={5} className="text-center py-8">Carregando...</TableCell></TableRow>
-                ) : filteredProducts.length === 0 ? (
-                  <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">Nenhum produto encontrado</TableCell></TableRow>
-                ) : filteredProducts.map((p) => (
-                  <TableRow key={p.id}>
-                    <TableCell className="font-medium">{p.name}</TableCell>
-                    <TableCell>{p.stock_quantity} {p.unit}</TableCell>
-                    <TableCell>{p.min_stock} {p.unit}</TableCell>
-                    <TableCell>
-                      <Badge variant={p.stock_quantity <= p.min_stock ? 'destructive' : 'default'}>
-                        {p.stock_quantity <= p.min_stock ? 'Baixo' : 'OK'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1">
-                        <Button 
-                          variant="outline" 
-                          size="sm" 
-                          className="text-chart-2 hover:text-chart-2"
-                          onClick={() => openModal('entrada', p.id)}
-                        >
-                          <ArrowDown className="h-3 w-3 mr-1" />
-                          Entrada
-                        </Button>
-                        <Button 
-                          variant="outline" 
-                          size="sm" 
-                          className="text-destructive hover:text-destructive"
-                          onClick={() => openModal('saida', p.id)}
-                        >
-                          <ArrowUp className="h-3 w-3 mr-1" />
-                          Saída
-                        </Button>
-                        <Button 
-                          variant="outline" 
-                          size="sm" 
-                          className="text-primary hover:text-primary"
-                          onClick={() => openModal('ajuste', p.id)}
-                        >
-                          <RefreshCw className="h-3 w-3 mr-1" />
-                          Ajuste
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Data</TableHead>
-                  <TableHead>Produto</TableHead>
-                  <TableHead>Tipo</TableHead>
-                  <TableHead>Quantidade</TableHead>
-                  <TableHead>Motivo</TableHead>
-                  <TableHead className="w-16">Ações</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {movements.length === 0 ? (
-                  <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">Nenhuma movimentação registrada</TableCell></TableRow>
-                ) : movements.map((m) => (
-                  <TableRow key={m.id}>
-                    <TableCell>{formatDate(m.created_at)}</TableCell>
-                    <TableCell className="font-medium">{(m as any).product?.name || '-'}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className={typeColors[m.movement_type]}>
-                        {typeLabels[m.movement_type]}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className={m.movement_type === 'entrada' ? 'text-chart-2 font-medium' : m.movement_type === 'saida' ? 'text-destructive font-medium' : ''}>
-                      {m.movement_type === 'entrada' ? '+' : m.movement_type === 'saida' ? '-' : ''}{m.quantity}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">{m.reason || '-'}</TableCell>
-                    <TableCell>
-                      <span title={isLatestMovement(m) ? 'Editar movimentação' : 'Apenas a última movimentação pode ser editada'}>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          disabled={!isLatestMovement(m)}
-                          onClick={() => openEditModal(m)}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                      </span>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Stock Movement Modal */}
-      <Dialog
-        open={modalOpen}
-        onOpenChange={(open) => {
-          setModalOpen(open);
-          if (!open) {
-            setEditingMovement(null);
-          }
-        }}
-      >
-        <DialogContent aria-describedby={undefined} className="sm:max-w-[480px]">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
+      {view === 'form' ? (
+        <Card>
+          <CardHeader>
+            <h2 className="text-xl font-bold flex items-center gap-2">
               {form.movement_type === 'entrada' && <ArrowDown className="h-5 w-5 text-chart-2" />}
               {form.movement_type === 'saida' && <ArrowUp className="h-5 w-5 text-destructive" />}
               {form.movement_type === 'ajuste' && <RefreshCw className="h-5 w-5 text-primary" />}
-              {isEditingMovement && 'Editar Movimentação de Estoque'}
-              {!isEditingMovement && !form.movement_type && 'Nova Movimentação de Estoque'}
+              {isEditingMovement && 'Editar Movimentação'}
+              {!isEditingMovement && !form.movement_type && 'Nova Movimentação'}
               {form.movement_type === 'entrada' && 'Entrada de Estoque'}
               {form.movement_type === 'saida' && 'Saída de Estoque'}
               {form.movement_type === 'ajuste' && 'Ajuste de Estoque'}
-            </DialogTitle>
-          </DialogHeader>
-
-          <div className="space-y-4 py-4">
+            </h2>
+          </CardHeader>
+          <CardContent className="space-y-6">
             <div className="space-y-2">
               <Label>Tipo de Movimentação *</Label>
               <div className="grid grid-cols-3 gap-2">
                 <Button
                   type="button"
-                  variant={form.movement_type === 'entrada' ? 'default' : 'outline'}
-                  className={form.movement_type === 'entrada' ? 'bg-chart-2 hover:bg-chart-2/90' : ''}
+                  variant="outline"
+                  className={cn(
+                    "flex-1",
+                    form.movement_type === 'entrada' ? "bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-600" : "hover:bg-emerald-50 text-emerald-600 border-emerald-200"
+                  )}
                   onClick={() => setForm(prev => ({ ...prev, movement_type: 'entrada' }))}
                   disabled={isEditingMovement}
                 >
@@ -405,8 +290,11 @@ export default function Stock() {
                 </Button>
                 <Button
                   type="button"
-                  variant={form.movement_type === 'saida' ? 'default' : 'outline'}
-                  className={form.movement_type === 'saida' ? 'bg-destructive hover:bg-destructive/90' : ''}
+                  variant="outline"
+                  className={cn(
+                    "flex-1",
+                    form.movement_type === 'saida' ? "bg-destructive hover:bg-destructive/90 text-white border-destructive" : "hover:bg-destructive/10 text-destructive border-destructive/20"
+                  )}
                   onClick={() => setForm(prev => ({ ...prev, movement_type: 'saida' }))}
                   disabled={isEditingMovement}
                 >
@@ -415,7 +303,11 @@ export default function Stock() {
                 </Button>
                 <Button
                   type="button"
-                  variant={form.movement_type === 'ajuste' ? 'default' : 'outline'}
+                  variant="outline"
+                  className={cn(
+                    "flex-1",
+                    form.movement_type === 'ajuste' ? "bg-primary hover:bg-primary/90 text-white border-primary" : "hover:bg-primary/10 text-primary border-primary/20"
+                  )}
                   onClick={() => setForm(prev => ({ ...prev, movement_type: 'ajuste' }))}
                   disabled={isEditingMovement}
                 >
@@ -425,60 +317,67 @@ export default function Stock() {
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label>Produto *</Label>
-              <Select
-                value={form.product_id}
-                onValueChange={(v) => setForm(prev => ({ ...prev, product_id: v }))}
-                disabled={isEditingMovement}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione o produto" />
-                </SelectTrigger>
-                <SelectContent>
-                  {products.map(p => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.name} (Estoque: {p.stock_quantity} {p.unit})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Produto *</Label>
+                <Select
+                  value={form.product_id}
+                  onValueChange={(v) => setForm(prev => ({ ...prev, product_id: v }))}
+                  disabled={isEditingMovement}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o produto" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {products.map(p => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>
+                  {form.movement_type === 'ajuste' ? 'Novo Estoque *' : 'Quantidade *'}
+                </Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={form.quantity}
+                  onChange={(e) => setForm(prev => ({ ...prev, quantity: e.target.value }))}
+                  placeholder={form.movement_type === 'ajuste' ? 'Estoque total' : 'Quantidade'}
+                />
+              </div>
             </div>
 
             {selectedProduct && (
-              <div className="p-3 rounded-lg bg-muted/50 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Estoque atual:</span>
-                  <span className="font-medium">{selectedProduct.stock_quantity} {selectedProduct.unit}</span>
+              <div className="p-4 rounded-lg bg-muted/40 border text-sm grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-muted-foreground mb-1">Estoque atual:</p>
+                  <p className="font-bold text-lg">{selectedProduct.stock_quantity} {selectedProduct.unit}</p>
                 </div>
+                {form.movement_type === 'ajuste' && form.quantity && (
+                  <div>
+                    <p className="text-muted-foreground mb-1">Diferença:</p>
+                    <p className={cn(
+                      "font-bold text-lg",
+                      parseFloat(form.quantity) - selectedProduct.stock_quantity >= 0 ? "text-chart-2" : "text-destructive"
+                    )}>
+                      {parseFloat(form.quantity) - selectedProduct.stock_quantity > 0 ? '+' : ''}
+                      {(parseFloat(form.quantity) - selectedProduct.stock_quantity).toFixed(2)} {selectedProduct.unit}
+                    </p>
+                  </div>
+                )}
                 {selectedProduct.min_stock > 0 && (
-                  <div className="flex justify-between mt-1">
-                    <span className="text-muted-foreground">Estoque mínimo:</span>
-                    <span>{selectedProduct.min_stock} {selectedProduct.unit}</span>
+                  <div className="col-span-2 pt-2 border-t">
+                    <p className="text-xs text-muted-foreground">Estoque mínimo configurado: {selectedProduct.min_stock} {selectedProduct.unit}</p>
                   </div>
                 )}
               </div>
             )}
-
-            <div className="space-y-2">
-              <Label>
-                {form.movement_type === 'ajuste' ? 'Novo Estoque *' : 'Quantidade *'}
-              </Label>
-              <Input
-                type="number"
-                min="0"
-                step="0.01"
-                value={form.quantity}
-                onChange={(e) => setForm(prev => ({ ...prev, quantity: e.target.value }))}
-                placeholder={form.movement_type === 'ajuste' ? 'Quantidade total em estoque' : 'Quantidade a movimentar'}
-              />
-              {form.movement_type === 'ajuste' && form.quantity && selectedProduct && (
-                <p className="text-sm text-muted-foreground">
-                  Diferença: {parseFloat(form.quantity) - selectedProduct.stock_quantity > 0 ? '+' : ''}
-                  {(parseFloat(form.quantity) - selectedProduct.stock_quantity).toFixed(2)} {selectedProduct.unit}
-                </p>
-              )}
-            </div>
 
             <div className="space-y-2">
               <Label>Motivo / Observação</Label>
@@ -486,22 +385,138 @@ export default function Stock() {
                 value={form.reason}
                 onChange={(e) => setForm(prev => ({ ...prev, reason: e.target.value }))}
                 placeholder="Ex: Compra de fornecedor, Venda avulsa, Inventário..."
-                rows={3}
+                rows={4}
               />
             </div>
-          </div>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setModalOpen(false)}>
-              Cancelar
-            </Button>
-            <Button onClick={handleSubmit} disabled={saving}>
-              {saving ? 'Salvando...' : isEditingMovement ? 'Salvar Alterações' : 'Confirmar'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            <div className="flex justify-end gap-3 pt-4">
+              <Button variant="outline" onClick={() => setView(previousView)} disabled={saving}>
+                Cancelar
+              </Button>
+              <Button onClick={handleSubmit} disabled={saving} className="min-w-[120px]">
+                {saving ? 'Salvando...' : isEditingMovement ? 'Salvar Alterações' : 'Confirmar Movimentação'}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card>
+          <CardHeader>
+            <div className="relative max-w-sm">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input placeholder="Buscar..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            {view === 'products' ? (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Produto</TableHead>
+                    <TableHead>Estoque Atual</TableHead>
+                    <TableHead>Estoque Mínimo</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="w-[260px]">Ações</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {loading ? (
+                    <TableRow><TableCell colSpan={5} className="text-center py-8">Carregando...</TableCell></TableRow>
+                  ) : filteredProducts.length === 0 ? (
+                    <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">Nenhum produto encontrado</TableCell></TableRow>
+                  ) : filteredProducts.map((p) => (
+                    <TableRow key={p.id}>
+                      <TableCell className="font-medium">{p.name}</TableCell>
+                      <TableCell>{p.stock_quantity} {p.unit}</TableCell>
+                      <TableCell>{p.min_stock} {p.unit}</TableCell>
+                      <TableCell>
+                        <Badge variant={p.stock_quantity <= p.min_stock ? 'destructive' : 'default'}>
+                          {p.stock_quantity <= p.min_stock ? 'Baixo' : 'OK'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-1">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="text-chart-2 hover:text-chart-2 border-chart-2/20"
+                            onClick={() => openForm('entrada', p.id)}
+                          >
+                            <ArrowDown className="h-3 w-3 mr-1" />
+                            Entrada
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="text-destructive hover:text-destructive border-destructive/20"
+                            onClick={() => openForm('saida', p.id)}
+                          >
+                            <ArrowUp className="h-3 w-3 mr-1" />
+                            Saída
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="text-primary hover:text-primary"
+                            onClick={() => openForm('ajuste', p.id)}
+                          >
+                            <RefreshCw className="h-3 w-3 mr-1" />
+                            Ajuste
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Data</TableHead>
+                    <TableHead>Produto</TableHead>
+                    <TableHead>Tipo</TableHead>
+                    <TableHead>Quantidade</TableHead>
+                    <TableHead>Motivo</TableHead>
+                    <TableHead className="w-16">Ações</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {movements.length === 0 ? (
+                    <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">Nenhuma movimentação registrada</TableCell></TableRow>
+                  ) : movements.map((m) => (
+                    <TableRow key={m.id}>
+                      <TableCell>{formatDate(m.created_at)}</TableCell>
+                      <TableCell className="font-medium">{(m as any).product?.name || '-'}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className={typeColors[m.movement_type]}>
+                          {typeLabels[m.movement_type]}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className={m.movement_type === 'entrada' ? 'text-chart-2 font-medium' : m.movement_type === 'saida' ? 'text-destructive font-medium' : ''}>
+                        {m.movement_type === 'entrada' ? '+' : m.movement_type === 'saida' ? '-' : ''}{m.quantity}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">{m.reason || '-'}</TableCell>
+                      <TableCell>
+                        <span title={isLatestMovement(m) ? 'Editar movimentação' : 'Apenas a última movimentação pode ser editada'}>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            disabled={!isLatestMovement(m)}
+                            onClick={() => openEditForm(m)}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
-

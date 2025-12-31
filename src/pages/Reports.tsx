@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Bar,
   BarChart,
@@ -184,14 +184,12 @@ export default function Reports() {
     }
   };
 
-  const handleApply = () => {
+  useEffect(() => {
     loadData(filters);
-  };
+  }, [filters]);
 
   const handleClear = () => {
-    const reset = { startDate: defaults.start, endDate: defaults.end, status: 'all' as const };
-    setFilters(reset);
-    loadData(reset);
+    setFilters({ startDate: defaults.start, endDate: defaults.end, status: 'all' as const });
   };
 
   const cashSeries = useMemo(() => {
@@ -271,13 +269,10 @@ export default function Reports() {
               </Select>
             </div>
             <div className="flex items-end gap-2 lg:col-span-6">
-              <Button onClick={handleApply} disabled={loading}>
-                Aplicar
-              </Button>
               <Button variant="outline" onClick={handleClear} disabled={loading}>
-                Limpar
+                Limpar filtros
               </Button>
-              {loading && <span className="text-sm text-muted-foreground">Carregando...</span>}
+              {loading && <span className="text-sm text-muted-foreground animate-pulse">Carregando dados...</span>}
             </div>
           </div>
         </CardContent>

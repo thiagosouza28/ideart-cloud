@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { Plus, Search, Edit, Trash2, Filter, Upload, Download, FileSpreadsheet, Loader2, X, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Filter, Upload, Download, FileSpreadsheet, Loader2, X, CheckCircle2, AlertCircle, Tag } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,6 +13,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Product, Category, ProductType } from '@/types/database';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
+import { isPromotionActive } from '@/lib/pricing';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -85,7 +86,7 @@ export default function Products() {
         .order('name'),
       supabase.from('categories').select('*').order('name'),
     ]);
-    
+
     setProducts(productsResult.data as ProductWithSupplies[] || []);
     setCategories(categoriesResult.data as Category[] || []);
     setLoading(false);
@@ -93,9 +94,9 @@ export default function Products() {
 
   const handleDelete = async () => {
     if (!deleteId) return;
-    
+
     const { error } = await supabase.from('products').delete().eq('id', deleteId);
-    
+
     if (error) {
       toast({ title: 'Erro ao excluir produto', variant: 'destructive' });
     } else {
@@ -131,10 +132,10 @@ export default function Products() {
   };
 
   const getTypeColor = (type: string) => {
-    const colors: Record<string, string> = { 
-      produto: 'bg-blue-100 text-blue-800', 
-      confeccionado: 'bg-purple-100 text-purple-800', 
-      servico: 'bg-green-100 text-green-800' 
+    const colors: Record<string, string> = {
+      produto: 'bg-blue-100 text-blue-800',
+      confeccionado: 'bg-purple-100 text-purple-800',
+      servico: 'bg-green-100 text-green-800'
     };
     return colors[type] || '';
   };
@@ -143,7 +144,7 @@ export default function Products() {
   const downloadTemplate = () => {
     const headers = ['nome', 'sku', 'descricao', 'tipo', 'categoria', 'unidade', 'custo_base', 'custo_mao_obra', 'margem_lucro', 'estoque', 'estoque_minimo', 'ativo'];
     const exampleRow = ['Produto Exemplo', 'SKU001', 'Descrição do produto', 'produto', 'Categoria 1', 'un', '10.00', '5.00', '30', '100', '10', 'sim'];
-    
+
     const csvContent = [
       headers.join(';'),
       exampleRow.join(';'),
@@ -172,7 +173,7 @@ export default function Products() {
 
     const text = await file.text();
     const lines = text.split('\n').filter(line => line.trim() && !line.startsWith('#'));
-    
+
     if (lines.length < 2) {
       toast({ title: 'Arquivo vazio ou inválido', variant: 'destructive' });
       return;
@@ -189,8 +190,8 @@ export default function Products() {
       const getNumber = (index: number) => parseFloat(values[index]?.replace(',', '.')) || 0;
 
       const typeValue = getValue(3).toLowerCase();
-      const validType: ProductType = ['produto', 'confeccionado', 'servico'].includes(typeValue) 
-        ? typeValue as ProductType 
+      const validType: ProductType = ['produto', 'confeccionado', 'servico'].includes(typeValue)
+        ? typeValue as ProductType
         : 'produto';
 
       const activeValue = getValue(11).toLowerCase();
@@ -217,7 +218,7 @@ export default function Products() {
 
     setCsvData(rows);
     setImportStep('preview');
-    
+
     // Reset file input
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
@@ -232,7 +233,7 @@ export default function Products() {
 
     for (let i = 0; i < csvData.length; i++) {
       const row = csvData[i];
-      
+
       try {
         if (!row.name || row.name.length < 2) {
           results.push({ row: i + 1, name: row.name || '(sem nome)', status: 'error', message: 'Nome inválido' });
@@ -298,7 +299,7 @@ export default function Products() {
     }
 
     const headers = ['nome', 'sku', 'descricao', 'tipo', 'categoria', 'unidade', 'custo_base', 'custo_mao_obra', 'margem_lucro', 'estoque', 'estoque_minimo', 'ativo'];
-    
+
     const rows = filteredProducts.map(product => {
       const categoryName = (product as any).category?.name || '';
       return [
@@ -325,7 +326,7 @@ export default function Products() {
     link.download = `produtos_${new Date().toISOString().split('T')[0]}.csv`;
     link.click();
     URL.revokeObjectURL(url);
-    
+
     toast({ title: `${filteredProducts.length} produtos exportados com sucesso` });
   };
 
@@ -416,7 +417,19 @@ export default function Products() {
               ) : (
                 filteredProducts.map((product) => (
                   <TableRow key={product.id}>
-                    <TableCell className="font-medium">{product.name}</TableCell>
+                    <TableCell className="font-medium">
+                      <div className="flex flex-col">
+                        <div className="flex items-center gap-2">
+                          {product.name}
+                          {isPromotionActive(product) && (
+                            <Badge variant="secondary" className="bg-amber-100 text-amber-800 hover:bg-amber-100 border-amber-200 py-0 h-5 px-1.5 gap-1">
+                              <Tag className="h-3 w-3" />
+                              Promo
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    </TableCell>
                     <TableCell className="text-muted-foreground">{product.sku || '-'}</TableCell>
                     <TableCell>
                       <span className={`status-badge ${getTypeColor(product.product_type)}`}>
