@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -116,21 +116,95 @@
 
   body {
     @apply bg-background text-foreground font-sans antialiased;
-    font-family: 'Inter', system-ui, sans-serif;
+    font-family: 'Manrope', ui-sans-serif, system-ui, sans-serif;
+    overscroll-behavior-y: none;
   }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+}
+
+.app-locked {
+  overflow: hidden;
 }
 
 @layer components {
+  .app-shell {
+    @apply flex h-svh flex-col bg-background;
+    background: radial-gradient(circle at top, hsl(var(--background)) 0%, hsl(var(--background)) 40%, hsl(var(--muted)) 100%);
+  }
+
+  .app-header {
+    @apply sticky top-0 z-40 flex h-14 shrink-0 items-center justify-between gap-2 border-b bg-card/95 px-3 backdrop-blur sm:h-16 sm:px-6;
+    padding-top: env(safe-area-inset-top);
+  }
+
+  .app-title {
+    @apply text-base font-semibold tracking-tight sm:text-lg;
+  }
+
+  .app-content {
+    @apply min-h-0 flex-1 overflow-y-auto px-4 py-4 pb-24 sm:px-6 sm:py-6 sm:pb-6;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .app-bottom-nav {
+    @apply fixed bottom-0 left-0 right-0 z-40 grid grid-cols-5 gap-1 border-t bg-card/95 px-2 py-2 backdrop-blur;
+    padding-bottom: calc(0.5rem + env(safe-area-inset-bottom));
+  }
+
+  .bottom-nav-item {
+    @apply flex flex-col items-center justify-center gap-1 rounded-lg px-2 py-2 text-xs text-muted-foreground transition-colors;
+  }
+
+  .bottom-nav-item:active {
+    @apply bg-muted;
+  }
+
+  .bottom-nav-active {
+    @apply text-foreground bg-muted;
+  }
+
+  .bottom-nav-icon {
+    @apply h-6 w-6;
+  }
+
+  .bottom-nav-label {
+    @apply text-[11px] font-medium;
+  }
+
+  .kanban-board {
+    @apply grid gap-4;
+  }
+
+  @media (max-width: 768px) {
+    .kanban-board {
+      grid-auto-flow: column;
+      grid-auto-columns: minmax(260px, 80vw);
+      overflow-x: auto;
+      padding-bottom: 12px;
+      scroll-snap-type: x mandatory;
+    }
+
+    .kanban-board > * {
+      scroll-snap-align: start;
+    }
+  }
+
   .page-container {
-    @apply p-6 space-y-6;
+    @apply space-y-6;
   }
 
   .page-header {
-    @apply sticky top-0 z-20 -mx-6 flex flex-col gap-2 bg-background px-6 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:py-4;
+    @apply -mx-4 flex flex-col gap-2 px-4 py-2 sm:-mx-6 sm:flex-row sm:items-center sm:justify-between sm:px-6;
   }
 
   .page-title {
-    @apply text-2xl font-semibold tracking-tight;
+    @apply text-xl font-semibold tracking-tight sm:text-2xl;
   }
 
   .stat-card {
@@ -159,6 +233,45 @@
 
   .data-table tr:hover td {
     @apply bg-muted/30;
+  }
+
+  .table-stack {
+    @apply w-full border-collapse;
+  }
+
+  @media (max-width: 768px) {
+    .table-stack thead {
+      display: none;
+    }
+
+    .table-stack tbody {
+      display: block;
+    }
+
+    .table-stack tr {
+      display: block;
+      border: 1px solid hsl(var(--border));
+      border-radius: 12px;
+      padding: 12px;
+      margin-bottom: 12px;
+      background: hsl(var(--card));
+      box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06);
+    }
+
+    .table-stack td {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 6px 0;
+      border: 0;
+    }
+
+    .table-stack td::before {
+      content: attr(data-label);
+      font-weight: 600;
+      color: hsl(var(--muted-foreground));
+    }
   }
 
   .status-badge {

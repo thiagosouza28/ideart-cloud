@@ -1,14 +1,10 @@
+import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { getCaktoConfig, createCustomer as caktoCreateCustomer, createSubscription as caktoCreateSubscription } from "../_shared/cakto.ts";
-
-export const config = { verify_jwt: false };
 
 const defaultAllowedOrigins = [
   "http://192.168.0.221:8080",
   "http://localhost:8080",
-  "https://ideart-cloud.vercel.app",
-  "https://ideartcloud.com.br",
-  "https://www.ideartcloud.com.br"
 ];
 
 const getAppOrigin = () => {
@@ -25,12 +21,19 @@ const allowedOrigins = new Set(
   [...defaultAllowedOrigins, getAppOrigin()].filter(Boolean) as string[],
 );
 
-const getCorsHeaders = (origin: string | null) => {
+const getCorsHeaders = (req: Request) => {
+  const origin = req.headers.get("origin");
+  const requestHeaders = req.headers.get("access-control-request-headers");
+  const allowOrigin = origin && allowedOrigins.has(origin) ? origin : "*";
+
   return {
-    "Access-Control-Allow-Origin": origin || "*",
-    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-authorization",
+    "Access-Control-Allow-Origin": allowOrigin,
+    "Access-Control-Allow-Headers":
+      requestHeaders ??
+        "authorization, x-client-info, apikey, content-type, x-supabase-authorization",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Access-Control-Max-Age": "86400",
+    "Vary": "Origin",
   };
 };
 
@@ -64,10 +67,8 @@ type CreateSubscriptionRequest = {
   customer?: CustomerPayload;
 };
 
-Deno.serve(async (req) => {
-  const origin = req.headers.get("origin");
-  const corsHeaders = getCorsHeaders(origin);
-
+serve(async (req) => {
+  const corsHeaders = getCorsHeaders(req);
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders, status: 204 });
   if (req.method !== "POST") return jsonResponse(corsHeaders, 405, { error: "Invalid method" });
 
@@ -88,28 +89,12 @@ Deno.serve(async (req) => {
 
     const body = (await req.json().catch(() => ({}))) as CreateSubscriptionRequest;
     const planId = body.plan_id;
-    // company_id and customer are now fetched from DB for security/convenience
+    const companyId = body.company_id;
+    const customer = body.customer;
 
-    if (!planId) {
-      return jsonResponse(corsHeaders, 400, { error: 'Missing plan_id' });
+    if (!planId || !companyId || !customer?.email) {
+      return jsonResponse(corsHeaders, 400, { error: 'Missing plan_id, company_id or customer.email' });
     }
-
-    // Fetch user profile and company
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('*, company:companies(*)')
-      .eq('id', authData.user.id)
-      .single();
-
-    if (!profile || !profile.company_id) {
-      return jsonResponse(corsHeaders, 400, { error: 'Usuario sem empresa vinculada' });
-    }
-
-    const companyId = profile.company_id;
-    const email = authData.user.email; // reliable email from auth
-    const fullName = profile.full_name || authData.user.user_metadata?.full_name || 'Cliente';
-    // cpf could be in profile or company, assume for now we don't strict require it for simple creation or fetch from profile if exists
-    // const cpf = profile.cpf ... 
 
     // Fetch plan to get cakto_plan_id
     const { data: plan } = await supabase.from('plans').select('*').eq('id', planId).maybeSingle();
@@ -117,14 +102,14 @@ Deno.serve(async (req) => {
       return jsonResponse(corsHeaders, 400, { error: 'Plano nao encontrado ou nao vinculado ao CAKTO' });
     }
 
-    log('Creating customer in CAKTO', { email });
+    log('Creating customer in CAKTO', { email: customer.email });
     const cfg = getCaktoConfig();
     let caktoCustomer: any = null;
     try {
       const custPayload: Record<string, unknown> = {
-        name: fullName,
-        email: email,
-        // cpf: ... 
+        name: customer.name ?? null,
+        email: customer.email,
+        cpf: customer.cpf ?? null,
       };
       caktoCustomer = await caktoCreateCustomer(cfg, custPayload);
     } catch (e) {

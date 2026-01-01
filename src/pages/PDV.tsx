@@ -335,9 +335,9 @@ export default function PDV() {
         </div>
       </div>
 
-      <div className="flex flex-1 min-h-0">
-        <div className="flex-1 flex min-h-0 flex-col pr-6 overflow-hidden">
-          <div className="flex gap-2 mb-4">
+      <div className="flex flex-1 min-h-0 flex-col lg:flex-row">
+        <div className="flex-1 flex min-h-0 flex-col pr-0 lg:pr-6 overflow-hidden">
+          <div className="flex flex-col gap-2 mb-4 sm:flex-row">
           <form onSubmit={handleBarcodeSubmit} className="relative flex-1">
             <Barcode className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input 
@@ -373,7 +373,7 @@ export default function PDV() {
                 <Card key={p.id} className="cursor-pointer hover:border-primary transition-colors" onClick={() => addToCart(p)}>
                   <CardContent className="p-3">
                     <div className="aspect-square bg-muted rounded-md mb-2 flex items-center justify-center">
-                      {p.image_url ? <img src={p.image_url} alt={p.name} className="w-full h-full object-cover rounded-md" /> : <ShoppingCart className="h-8 w-8 text-muted-foreground" />}
+                      {p.image_url ? <img src={p.image_url} alt={p.name} loading="lazy" className="w-full h-full object-cover rounded-md" /> : <ShoppingCart className="h-8 w-8 text-muted-foreground" />}
                     </div>
                     <p className="font-medium text-sm truncate">{p.name}</p>
                     <p className="text-primary font-bold">{formatCurrency(getUnitPrice(p))}</p>
@@ -388,7 +388,7 @@ export default function PDV() {
           </div>
         </div>
 
-      <Card className="w-96 flex flex-col rounded-none border-l border-t-0 border-b-0 border-r-0 lg:sticky lg:top-4 lg:self-start lg:max-h-[calc(100vh-5rem)] lg:overflow-hidden">
+      <Card className="w-full flex flex-col rounded-none border-t border-l-0 border-b-0 border-r-0 sticky bottom-0 bg-card lg:w-96 lg:border-l lg:border-t-0 lg:sticky lg:top-4 lg:self-start lg:max-h-[calc(100vh-5rem)] lg:overflow-hidden">
         <CardHeader className="pb-2 space-y-2">
           <CardTitle className="flex items-center gap-2"><ShoppingCart className="h-5 w-5" />Carrinho</CardTitle>
           <CustomerSearch selectedCustomer={selectedCustomer} onSelect={setSelectedCustomer} />

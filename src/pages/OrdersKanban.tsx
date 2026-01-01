@@ -522,7 +522,7 @@ export default function OrdersKanban() {
           onDragCancel={handleDragCancel}
           onDragEnd={handleDragEnd}
         >
-          <div className="grid gap-4 grid-cols-[repeat(auto-fit,minmax(240px,1fr))]">
+          <div className="kanban-board grid-cols-[repeat(auto-fit,minmax(240px,1fr))]">
             {columns.map((column) => (
               <KanbanColumn
                 key={column.id}

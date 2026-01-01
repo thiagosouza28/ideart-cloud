@@ -473,7 +473,7 @@ export default function PublicProductDetails() {
               </Link>
               <div className="hidden sm:flex items-center gap-3">
                 {company?.logo_url ? (
-                  <img src={company.logo_url} alt={company.name} className="w-8 h-8 object-cover rounded bg-white/10" />
+                  <img src={company.logo_url} alt={company.name} loading="lazy" className="w-8 h-8 object-cover rounded bg-white/10" />
                 ) : (
                   <div className="w-8 h-8 bg-white/20 rounded flex items-center justify-center">
                     <Building2 className="h-4 w-4" />
@@ -524,6 +524,7 @@ export default function PublicProductDetails() {
                 <img
                   src={product.image_url}
                   alt={product.name}
+                  loading="lazy"
                   className="w-full h-full object-cover"
                 />
               ) : (
@@ -818,6 +819,7 @@ export default function PublicProductDetails() {
                           <img
                             src={related.image_url}
                             alt={related.name}
+                            loading="lazy"
                             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                           />
                         ) : (
@@ -854,7 +856,7 @@ export default function PublicProductDetails() {
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
               <div className="flex items-center gap-4 flex-1">
                 {company?.logo_url ? (
-                  <img src={company.logo_url} alt={company.name} className="w-16 h-16 object-cover rounded-lg" />
+                  <img src={company.logo_url} alt={company.name} loading="lazy" className="w-16 h-16 object-cover rounded-lg" />
                 ) : (
                   <div className="w-16 h-16 bg-muted rounded-lg flex items-center justify-center">
                     <Building2 className="h-8 w-8 text-muted-foreground" />

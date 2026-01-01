@@ -69,6 +69,7 @@ export function BannerCarousel({ companyId, position }: BannerCarouselProps) {
             <img
                 src={ensurePublicStorageUrl('product-images', banner.image_url) || ''}
                 alt={banner.title || 'Banner'}
+                loading="lazy"
                 className="h-full w-full object-cover transition-transform duration-500 hover:scale-105"
             />
         </div>

@@ -1,14 +1,14 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
+import { ArrowLeft, BarChart3, ClipboardList, Home, Package, User } from 'lucide-react';
 import { SidebarProvider, SidebarTrigger, SidebarInset } from '@/components/ui/sidebar';
 import { AppSidebar } from './AppSidebar';
-import { Separator } from '@/components/ui/separator';
-import { Breadcrumb, BreadcrumbItem, BreadcrumbList, BreadcrumbPage } from '@/components/ui/breadcrumb';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useOrderNotifications } from '@/hooks/useOrderNotifications';
 import { useAuth } from '@/contexts/AuthContext';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { AppRole } from '@/types/database';
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -41,7 +41,7 @@ const pageTitles: Record<string, string> = {
 export function AppLayout({ children }: AppLayoutProps) {
   const location = useLocation();
   const navigate = useNavigate();
-  const { subscription, refreshCompany, role } = useAuth();
+  const { subscription, refreshCompany, role, hasPermission } = useAuth();
   let pageTitle = pageTitles[location.pathname];
   if (!pageTitle) {
     if (location.pathname.startsWith('/clientes/') && location.pathname.endsWith('/historico')) {
@@ -62,6 +62,51 @@ export function AppLayout({ children }: AppLayoutProps) {
   useEffect(() => {
     refreshCompany();
   }, [location.pathname, refreshCompany]);
+
+  useEffect(() => {
+    document.body.classList.add('app-locked');
+    return () => {
+      document.body.classList.remove('app-locked');
+    };
+  }, []);
+
+  const navItems = useMemo(() => ([
+    { label: 'Inicio', url: '/dashboard', icon: Home, roles: ['super_admin', 'admin', 'atendente', 'caixa', 'producao'] as AppRole[] },
+    { label: 'Pedidos', url: '/pedidos', icon: ClipboardList, roles: ['admin', 'atendente', 'caixa'] as AppRole[] },
+    { label: 'Catalogo', url: '/produtos', icon: Package, roles: ['admin', 'atendente'] as AppRole[] },
+    { label: 'Financeiro', url: '/relatorios', icon: BarChart3, roles: ['admin'] as AppRole[] },
+    { label: 'Perfil', url: '/perfil', icon: User, roles: ['super_admin', 'admin', 'atendente', 'caixa', 'producao'] as AppRole[] },
+  ]), []);
+
+  const visibleNavItems = navItems.filter((item) => hasPermission(item.roles));
+
+  const showBack = useMemo(() => {
+    const topLevelRoutes = new Set([
+      '/dashboard',
+      '/pdv',
+      '/pedidos',
+      '/pedidos/kanban',
+      '/producao',
+      '/produtos',
+      '/insumos',
+      '/categorias',
+      '/atributos',
+      '/estoque',
+      '/clientes',
+      '/relatorios',
+      '/usuarios',
+      '/banners',
+      '/empresas',
+      '/configuracoes',
+      '/assinatura',
+      '/super-admin',
+      '/super-admin/empresas',
+      '/super-admin/planos',
+      '/perfil',
+    ]);
+
+    return !topLevelRoutes.has(location.pathname);
+  }, [location.pathname]);
 
   const formatDays = (value: number | null) => {
     if (value === null) return null;
@@ -125,29 +170,47 @@ export function AppLayout({ children }: AppLayoutProps) {
     <SidebarProvider defaultOpen={true}>
       <div className="flex min-h-screen w-full">
         <AppSidebar />
-        <SidebarInset className="flex flex-col h-screen overflow-hidden">
-          <header className="flex h-14 shrink-0 items-center gap-2 border-b bg-card px-4">
+        <SidebarInset className="app-shell">
+          <header className="app-header">
             <div className="flex items-center gap-2">
               <SidebarTrigger className="-ml-1" />
-              <Separator orientation="vertical" className="mr-2 h-4" />
-              <Breadcrumb>
-                <BreadcrumbList>
-                  <BreadcrumbItem>
-                    <BreadcrumbPage className="font-medium">{pageTitle}</BreadcrumbPage>
-                  </BreadcrumbItem>
-                </BreadcrumbList>
-              </Breadcrumb>
+              {showBack && (
+                <Button variant="ghost" size="icon" onClick={() => navigate(-1)} aria-label="Voltar">
+                  <ArrowLeft className="h-5 w-5" />
+                </Button>
+              )}
+              <div className="flex flex-col">
+                <span className="app-title">{pageTitle}</span>
+                <span className="text-xs text-muted-foreground sm:hidden">GraficaERP</span>
+              </div>
             </div>
             {subscriptionLabel && (
-              <div className="ml-auto">
+              <div className="ml-auto hidden sm:flex">
                 <Badge variant={subscriptionVariant}>{subscriptionLabel}</Badge>
               </div>
             )}
           </header>
-          <main className="flex-1 overflow-auto">
+          <main className="app-content">
             {subscriptionBanner}
             {children}
           </main>
+          <nav className="app-bottom-nav md:hidden" aria-label="Navegacao principal">
+            {visibleNavItems.map((item) => {
+              const isActive = location.pathname === item.url || location.pathname.startsWith(`${item.url}/`);
+              return (
+                <button
+                  key={item.label}
+                  type="button"
+                  className={isActive ? "bottom-nav-item bottom-nav-active" : "bottom-nav-item"}
+                  onClick={() => navigate(item.url)}
+                  aria-current={isActive ? "page" : undefined}
+                >
+                  <item.icon className="bottom-nav-icon" />
+                  <span className="bottom-nav-label">{item.label}</span>
+                </button>
+              );
+            })}
+          </nav>
         </SidebarInset>
       </div>
     </SidebarProvider>

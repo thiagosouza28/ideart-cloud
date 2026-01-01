@@ -1,14 +1,13 @@
+import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { getCaktoConfig, createPlan as caktoCreatePlan } from "../_shared/cakto.ts";
 
+// Disable automatic JWT verification - we'll verify manually
 export const config = { verify_jwt: false };
 
 const defaultAllowedOrigins = [
   "http://192.168.0.221:8080",
   "http://localhost:8080",
-  "https://ideart-cloud.vercel.app",
-  "https://ideartcloud.com.br",
-  "https://www.ideartcloud.com.br"
 ];
 
 const getAppOrigin = () => {
@@ -25,12 +24,19 @@ const allowedOrigins = new Set(
   [...defaultAllowedOrigins, getAppOrigin()].filter(Boolean) as string[],
 );
 
-const getCorsHeaders = (origin: string | null) => {
+const getCorsHeaders = (req: Request) => {
+  const origin = req.headers.get("origin");
+  const requestHeaders = req.headers.get("access-control-request-headers");
+  const allowOrigin = origin && allowedOrigins.has(origin) ? origin : "*";
+
   return {
-    "Access-Control-Allow-Origin": origin || "*",
-    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-authorization",
+    "Access-Control-Allow-Origin": allowOrigin,
+    "Access-Control-Allow-Headers":
+      requestHeaders ??
+        "authorization, x-client-info, apikey, content-type, x-supabase-authorization",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Access-Control-Max-Age": "86400",
+    "Vary": "Origin",
   };
 };
 
@@ -58,11 +64,15 @@ type CreatePlanRequest = {
   price?: number;
   interval?: "month" | "year" | string;
   interval_count?: number;
+  billing_period?: "monthly" | "yearly" | string;
+  period_days?: number;
+  features?: string[] | null;
+  max_users?: number | null;
+  is_active?: boolean;
 };
 
-Deno.serve(async (req) => {
-  const origin = req.headers.get("origin");
-  const corsHeaders = getCorsHeaders(origin);
+serve(async (req) => {
+  const corsHeaders = getCorsHeaders(req);
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders, status: 204 });
   if (req.method !== "POST") return jsonResponse(corsHeaders, 405, { error: "Invalid method" });
 
@@ -73,8 +83,29 @@ Deno.serve(async (req) => {
       return jsonResponse(corsHeaders, 400, { error: "Missing Supabase config" });
     }
 
-    const authHeader = req.headers.get("x-supabase-authorization") ?? req.headers.get("Authorization");
-    if (!authHeader) return jsonResponse(corsHeaders, 401, { error: "No authorization header" });
+    // Log all headers for debugging (mask sensitive data)
+    const allHeaders: Record<string, string> = {};
+    req.headers.forEach((value, key) => {
+      allHeaders[key] = key.toLowerCase().includes('authorization') ? (value.slice(0, 20) + '...') : value;
+    });
+    log('Request headers', allHeaders);
+
+    // Try multiple header formats that Supabase Client might use
+    const authHeader = req.headers.get("authorization") ?? 
+                      req.headers.get("Authorization") ??
+                      req.headers.get("x-supabase-authorization") ??
+                      req.headers.get("X-Supabase-Authorization");
+    
+    log('Auth header check', {
+      hasAuth: !!authHeader,
+      authHeaderPrefix: authHeader ? authHeader.substring(0, 20) : 'none'
+    });
+    
+    if (!authHeader) {
+      log('ERROR: No authorization header found');
+      return jsonResponse(corsHeaders, 401, { error: "No authorization header" });
+    }
+    
     const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : authHeader;
 
     const supabase = getSupabaseClient();
@@ -99,10 +130,21 @@ Deno.serve(async (req) => {
     const price = Number(body.price);
     if (!Number.isFinite(price) || price < 0) return jsonResponse(corsHeaders, 400, { error: "Preco invalido" });
 
-    const interval = (body.interval || 'month').toString().toLowerCase();
+    const billingPeriodRaw = (body.billing_period || body.interval || 'month').toString().toLowerCase();
+    const billingPeriod = billingPeriodRaw === 'year' || billingPeriodRaw === 'yearly'
+      ? 'yearly'
+      : 'monthly';
     const intervalCount = Number(body.interval_count) || 1;
+    const providedPeriodDays = Number(body.period_days);
+    const periodDaysBase = billingPeriod === 'yearly' ? 365 : 30;
+    const periodDays = Number.isFinite(providedPeriodDays) && providedPeriodDays > 0
+      ? providedPeriodDays
+      : periodDaysBase * intervalCount;
+    const features = Array.isArray(body.features) ? body.features : [];
+    const maxUsers = Number.isFinite(Number(body.max_users)) ? Number(body.max_users) : null;
+    const isActive = body.is_active ?? true;
 
-    log('Plan payload', { name, price, interval, intervalCount });
+    log('Plan payload', { name, price, billingPeriod, intervalCount, periodDays });
 
     // Insert local plan record
     const { data: insertedPlan, error: insertError } = await supabase
@@ -111,9 +153,11 @@ Deno.serve(async (req) => {
         name,
         description: body.description ?? null,
         price,
-        billing_period: interval === 'year' || interval === 'yearly' ? 'yearly' : 'monthly',
-        period_days: interval === 'year' || interval === 'yearly' ? 365 : 30 * intervalCount,
-        is_active: true,
+        billing_period: billingPeriod,
+        period_days: periodDays,
+        features,
+        max_users: maxUsers,
+        is_active: isActive,
       })
       .select('*')
       .single();
@@ -125,20 +169,13 @@ Deno.serve(async (req) => {
     // Create plan in CAKTO
     try {
       const cfg = getCaktoConfig();
-      // Ensure interval is strictly 'month' or 'year' for Cakto
-      const caktoInterval = interval === 'yearly' || interval === 'year' ? 'year' : 'month';
-
-      const caktoPayload: Record<string, unknown> = {
+      const caktoPayload = {
         name,
         description: body.description ?? null,
-        price: Math.round(price * 100), // cents
-        interval: caktoInterval,
+        price: Math.round(price * 100), // cents if CAKTO expects integer
+        interval: billingPeriod === 'yearly' ? 'year' : 'month',
         interval_count: intervalCount,
-      };
-
-      if (body.trial_days && Number(body.trial_days) > 0) {
-        caktoPayload.trial_days = Number(body.trial_days);
-      }
+      } as Record<string, unknown>;
 
       const caktoResp = await caktoCreatePlan(cfg, caktoPayload);
       const caktoId = (caktoResp && (caktoResp.id || caktoResp.plan_id || caktoResp.cakto_id)) ?? null;

@@ -238,7 +238,7 @@ export default function PublicCatalog() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               {company?.logo_url ? (
-                <img src={company.logo_url} alt={company.name} className="w-12 h-12 object-cover rounded-lg bg-white/10" />
+                <img src={company.logo_url} alt={company.name} loading="lazy" className="w-12 h-12 object-cover rounded-lg bg-white/10" />
               ) : (
                 <div className="w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center">
                   <Building2 className="h-6 w-6" />
@@ -423,6 +423,7 @@ export default function PublicCatalog() {
                         <img
                           src={product.image_url}
                           alt={product.name}
+                          loading="lazy"
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                         />
                       ) : (
@@ -474,6 +475,7 @@ export default function PublicCatalog() {
                           <img
                             src={product.image_url}
                             alt={product.name}
+                            loading="lazy"
                             className="w-full h-full object-cover"
                           />
                         ) : (

@@ -1,7 +1,6 @@
+import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { getCaktoConfig, verifyWebhookSignature } from "../_shared/cakto.ts";
-
-export const config = { verify_jwt: false };
 
 const jsonResponse = (status: number, payload: unknown) =>
   new Response(JSON.stringify(payload), { status, headers: { 'Content-Type': 'application/json' } });
@@ -13,7 +12,7 @@ const getSupabaseClient = () =>
     { auth: { persistSession: false } },
   );
 
-Deno.serve(async (req) => {
+serve(async (req) => {
   if (req.method !== 'POST') return jsonResponse(405, { error: 'Invalid method' });
 
   const raw = await req.text().catch(() => '');
