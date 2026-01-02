@@ -1,5 +1,16 @@
-import { useEffect, useState } from 'react';
-import { Building2, Search, MoreHorizontal, ExternalLink, Users, KeyRound, Copy, Loader2, Mail } from 'lucide-react';
+﻿import { useEffect, useState } from 'react';
+import {
+  Building2,
+  Search,
+  MoreHorizontal,
+  ExternalLink,
+  Users,
+  KeyRound,
+  Copy,
+  Loader2,
+  Mail,
+  LayoutGrid
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -32,20 +43,20 @@ const statusLabels: Record<string, string> = {
   cancelled: 'Cancelado',
   canceled: 'Cancelado',
   expired: 'Expirado',
-  past_due: 'Pagamento Atrasado',
-  unpaid: 'Não Pago',
+  past_due: 'Pagamento atrasado',
+  unpaid: 'Nao pago',
   incomplete: 'Incompleto',
 };
 
 const statusColors: Record<string, string> = {
-  trial: 'bg-chart-4/10 text-chart-4 border-chart-4/20',
-  active: 'bg-chart-2/10 text-chart-2 border-chart-2/20',
-  cancelled: 'bg-destructive/10 text-destructive border-destructive/20',
-  canceled: 'bg-destructive/10 text-destructive border-destructive/20',
-  expired: 'bg-muted text-muted-foreground border-muted',
-  past_due: 'bg-yellow-500/10 text-yellow-600 border-yellow-500/20',
-  unpaid: 'bg-destructive/10 text-destructive border-destructive/20',
-  incomplete: 'bg-muted text-muted-foreground border-muted',
+  trial: 'bg-blue-100 text-blue-700 border-blue-200',
+  active: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+  cancelled: 'bg-rose-100 text-rose-700 border-rose-200',
+  canceled: 'bg-rose-100 text-rose-700 border-rose-200',
+  expired: 'bg-slate-100 text-slate-600 border-slate-200',
+  past_due: 'bg-yellow-100 text-yellow-700 border-yellow-200',
+  unpaid: 'bg-rose-100 text-rose-700 border-rose-200',
+  incomplete: 'bg-slate-100 text-slate-600 border-slate-200',
 };
 
 export default function SuperAdminCompanies() {
@@ -236,17 +247,18 @@ export default function SuperAdminCompanies() {
   };
 
   return (
-    <div className="page-container">
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Empresas SaaS</h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            Gerencie todas as empresas cadastradas no sistema
-          </p>
+    <div className="page-container space-y-6">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex items-center gap-3 text-slate-600">
+          <LayoutGrid className="h-5 w-5" />
+          <div>
+            <h1 className="text-2xl font-semibold text-slate-900">Empresas SaaS</h1>
+            <p className="text-sm text-slate-500">Gerencie todas as empresas cadastradas no sistema</p>
+          </div>
         </div>
       </div>
 
-      <Card>
+      <Card className="border-slate-200">
         <CardHeader>
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -272,12 +284,12 @@ export default function SuperAdminCompanies() {
                 </SelectContent>
               </Select>
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input 
-                  placeholder="Buscar empresas..." 
-                  value={search} 
-                  onChange={(e) => setSearch(e.target.value)} 
-                  className="pl-9 w-[200px]" 
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                <Input
+                  placeholder="Buscar empresas..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="pl-9 w-[220px]"
                 />
               </div>
             </div>
@@ -290,9 +302,9 @@ export default function SuperAdminCompanies() {
                 <TableHead>Empresa</TableHead>
                 <TableHead>Plano</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Usuários</TableHead>
+                <TableHead>Usuarios</TableHead>
                 <TableHead>Criada em</TableHead>
-                <TableHead className="w-[50px]"></TableHead>
+                <TableHead className="w-[50px]" />
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -304,12 +316,12 @@ export default function SuperAdminCompanies() {
                 </TableRow>
               ) : filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={6} className="text-center py-8 text-slate-500">
                     Nenhuma empresa encontrada
                   </TableCell>
                 </TableRow>
               ) : filtered.map((company) => (
-                <TableRow key={company.id} className={!company.is_active ? 'opacity-50' : ''}>
+                <TableRow key={company.id} className={!company.is_active ? 'opacity-60' : ''}>
                   <TableCell>
                     <div className="flex items-center gap-3">
                       <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
@@ -317,7 +329,7 @@ export default function SuperAdminCompanies() {
                       </div>
                       <div>
                         <p className="font-medium">{company.name}</p>
-                        <p className="text-sm text-muted-foreground">{company.slug}</p>
+                        <p className="text-sm text-slate-500">{company.slug}</p>
                       </div>
                     </div>
                   </TableCell>
@@ -325,29 +337,29 @@ export default function SuperAdminCompanies() {
                     {company.plan ? (
                       <div>
                         <p className="font-medium">{company.plan.name}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {formatCurrency(company.plan.price)}/{company.plan.billing_period === 'monthly' ? 'mês' : 'ano'}
+                        <p className="text-sm text-slate-500">
+                          {formatCurrency(company.plan.price)}/{company.plan.billing_period === 'monthly' ? 'mes' : 'ano'}
                         </p>
                       </div>
                     ) : (
-                      <span className="text-muted-foreground">Sem plano</span>
+                      <span className="text-slate-500">Sem plano</span>
                     )}
                   </TableCell>
                   <TableCell>
-                    <Badge 
-                      variant="outline" 
+                    <Badge
+                      variant="outline"
                       className={statusColors[(company.subscription_status as SubscriptionStatus) || 'trial']}
                     >
                       {statusLabels[(company.subscription_status as SubscriptionStatus) || 'trial']}
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <div className="flex items-center gap-1 text-muted-foreground">
+                    <div className="flex items-center gap-1 text-slate-500">
                       <Users className="h-4 w-4" />
                       {company.user_count || 0}
                     </div>
                   </TableCell>
-                  <TableCell className="text-muted-foreground">
+                  <TableCell className="text-slate-500">
                     {formatDate(company.created_at)}
                   </TableCell>
                   <TableCell>
@@ -359,7 +371,7 @@ export default function SuperAdminCompanies() {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem onClick={() => openEditDialog(company)}>
-                          Editar Assinatura
+                          Editar assinatura
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => openUsersDialog(company)}>
                           Usuarios
@@ -370,7 +382,7 @@ export default function SuperAdminCompanies() {
                         {company.slug && (
                           <DropdownMenuItem onClick={() => window.open(`/catalogo/${company.slug}`, '_blank')}>
                             <ExternalLink className="h-4 w-4 mr-2" />
-                            Ver Catálogo
+                            Ver catalogo
                           </DropdownMenuItem>
                         )}
                       </DropdownMenuContent>
@@ -386,13 +398,13 @@ export default function SuperAdminCompanies() {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent aria-describedby={undefined}>
           <DialogHeader>
-            <DialogTitle>Editar Assinatura - {selectedCompany?.name}</DialogTitle>
+            <DialogTitle>Editar assinatura - {selectedCompany?.name}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label>Plano</Label>
-              <Select 
-                value={formData.plan_id} 
+              <Select
+                value={formData.plan_id}
                 onValueChange={(value) => setFormData({ ...formData, plan_id: value })}
               >
                 <SelectTrigger>
@@ -401,16 +413,16 @@ export default function SuperAdminCompanies() {
                 <SelectContent>
                   {plans.map((plan) => (
                     <SelectItem key={plan.id} value={plan.id}>
-                      {plan.name} - {formatCurrency(plan.price)}/{plan.billing_period === 'monthly' ? 'mês' : 'ano'}
+                      {plan.name} - {formatCurrency(plan.price)}/{plan.billing_period === 'monthly' ? 'mes' : 'ano'}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Status da Assinatura</Label>
-              <Select 
-                value={formData.subscription_status} 
+              <Label>Status da assinatura</Label>
+              <Select
+                value={formData.subscription_status}
                 onValueChange={(value) => setFormData({ ...formData, subscription_status: value as SubscriptionStatus })}
               >
                 <SelectTrigger>
@@ -442,10 +454,10 @@ export default function SuperAdminCompanies() {
           </DialogHeader>
           {loadingUsers ? (
             <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              <Loader2 className="h-6 w-6 animate-spin text-slate-500" />
             </div>
           ) : companyUsers.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
+            <div className="text-center py-8 text-slate-500">
               Nenhum usuario encontrado para esta empresa.
             </div>
           ) : (
@@ -462,10 +474,10 @@ export default function SuperAdminCompanies() {
                 {companyUsers.map((user) => (
                   <TableRow key={user.id}>
                     <TableCell className="font-medium">{user.full_name}</TableCell>
-                    <TableCell className="text-muted-foreground">
+                    <TableCell className="text-slate-500">
                       {user.email || '-'}
                     </TableCell>
-                    <TableCell className="text-muted-foreground">
+                    <TableCell className="text-slate-500">
                       {formatDate(user.created_at)}
                     </TableCell>
                     <TableCell className="text-right">
@@ -475,7 +487,7 @@ export default function SuperAdminCompanies() {
                           size="sm"
                           onClick={() => handleSendResetEmail(user.id)}
                           disabled={!user.email || sendingResetEmail === user.id}
-                          title={!user.email ? 'Email não encontrado para este usuário' : undefined}
+                          title={!user.email ? 'Email nao encontrado para este usuario' : undefined}
                         >
                           {sendingResetEmail === user.id ? (
                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -498,7 +510,7 @@ export default function SuperAdminCompanies() {
                           size="sm"
                           onClick={() => handleResetPassword(user.id)}
                           disabled={!user.email || resettingUser === user.id}
-                          title={!user.email ? 'Email não encontrado para este usuário' : undefined}
+                          title={!user.email ? 'Email nao encontrado para este usuario' : undefined}
                         >
                           {resettingUser === user.id ? (
                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -524,5 +536,3 @@ export default function SuperAdminCompanies() {
     </div>
   );
 }
-
-

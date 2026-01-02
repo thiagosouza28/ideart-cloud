@@ -1,61 +1,43 @@
 import { useEffect, useMemo } from 'react';
-import { ArrowLeft, BarChart3, ClipboardList, Home, Package, User } from 'lucide-react';
+import { Bell, Menu, Moon } from 'lucide-react';
 import { SidebarProvider, SidebarTrigger, SidebarInset } from '@/components/ui/sidebar';
 import { AppSidebar } from './AppSidebar';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useOrderNotifications } from '@/hooks/useOrderNotifications';
 import { useAuth } from '@/contexts/AuthContext';
-import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { AppRole } from '@/types/database';
+import { ensurePublicStorageUrl } from '@/lib/storage';
 
 interface AppLayoutProps {
   children: React.ReactNode;
 }
 
-const pageTitles: Record<string, string> = {
-  '/dashboard': 'Dashboard',
-  '/pdv': 'PDV - Ponto de Venda',
-  '/pedidos': 'Pedidos',
-  '/pedidos/kanban': 'Kanban de Pedidos',
-  '/pedidos/novo': 'Novo Pedido',
-  '/producao': 'Painel de Produção',
-  '/produtos': 'Produtos',
-  '/produtos/novo': 'Novo Produto',
-  '/insumos': 'Gestão de Insumos',
-  '/estoque': 'Controle de Estoque',
-  '/clientes': 'Clientes',
-  '/clientes/novo': 'Novo Cliente',
-  '/relatorios': 'Relatórios',
-  '/configuracoes': 'Configurações',
-  '/assinatura': 'Assinatura e Catálogo',
-  '/banners': 'Gerenciamento de Banners',
-  '/perfil': 'Meu Perfil',
-  '/super-admin': 'Super Admin',
-  '/super-admin/empresas': 'Empresas SaaS',
-  '/super-admin/planos': 'Planos de Assinatura',
-  '/empresas/nova': 'Nova Empresa',
+const roleLabels: Record<AppRole, string> = {
+  super_admin: 'SUPER ADMIN',
+  admin: 'ADMIN',
+  atendente: 'ATENDENTE',
+  caixa: 'CAIXA',
+  producao: 'PRODUCAO',
 };
 
 export function AppLayout({ children }: AppLayoutProps) {
   const location = useLocation();
   const navigate = useNavigate();
-  const { subscription, refreshCompany, role, hasPermission } = useAuth();
-  let pageTitle = pageTitles[location.pathname];
-  if (!pageTitle) {
-    if (location.pathname.startsWith('/clientes/') && location.pathname.endsWith('/historico')) {
-      pageTitle = 'Histórico do Cliente';
-    } else if (location.pathname.startsWith('/clientes/')) {
-      pageTitle = 'Editar Cliente';
-    } else if (location.pathname.startsWith('/empresas/') && location.pathname.endsWith('/editar')) {
-      pageTitle = 'Editar Empresa';
-    } else if (location.pathname.startsWith('/pedidos/')) {
-      pageTitle = 'Detalhes do Pedido';
-    } else {
-      pageTitle = 'Página';
-    }
-  }
+  const { subscription, refreshCompany, role, hasPermission, user, getLoggedCompany } = useAuth();
+  const company = getLoggedCompany();
+  const logoFromCompany = ensurePublicStorageUrl('product-images', company?.logo_url);
+  const logoFromUser = user?.user_metadata?.company_logo as string | undefined;
+  const logoUrl = logoFromCompany || logoFromUser || null;
+  const fallbackText = (company?.name || user?.user_metadata?.full_name || user?.email || 'Empresa')
+    .toString()
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part: string) => part[0])
+    .join('')
+    .toUpperCase();
 
   // Enable real-time order notifications
   useOrderNotifications();
@@ -71,69 +53,19 @@ export function AppLayout({ children }: AppLayoutProps) {
   }, []);
 
   const navItems = useMemo(() => ([
-    { label: 'Inicio', url: '/dashboard', icon: Home, roles: ['super_admin', 'admin', 'atendente', 'caixa', 'producao'] as AppRole[] },
-    { label: 'Pedidos', url: '/pedidos', icon: ClipboardList, roles: ['admin', 'atendente', 'caixa'] as AppRole[] },
-    { label: 'Catalogo', url: '/produtos', icon: Package, roles: ['admin', 'atendente'] as AppRole[] },
-    { label: 'Financeiro', url: '/relatorios', icon: BarChart3, roles: ['admin'] as AppRole[] },
-    { label: 'Perfil', url: '/perfil', icon: User, roles: ['super_admin', 'admin', 'atendente', 'caixa', 'producao'] as AppRole[] },
+    { label: 'Inicio', url: '/dashboard', roles: ['super_admin', 'admin', 'atendente', 'caixa', 'producao'] as AppRole[] },
+    { label: 'Pedidos', url: '/pedidos', roles: ['admin', 'atendente', 'caixa'] as AppRole[] },
+    { label: 'Catalogo', url: '/catalogo-admin', roles: ['admin'] as AppRole[] },
+    { label: 'Financeiro', url: '/relatorios', roles: ['admin'] as AppRole[] },
+    { label: 'Perfil', url: '/perfil', roles: ['super_admin', 'admin', 'atendente', 'caixa', 'producao'] as AppRole[] },
   ]), []);
 
   const visibleNavItems = navItems.filter((item) => hasPermission(item.roles));
-
-  const showBack = useMemo(() => {
-    const topLevelRoutes = new Set([
-      '/dashboard',
-      '/pdv',
-      '/pedidos',
-      '/pedidos/kanban',
-      '/producao',
-      '/produtos',
-      '/insumos',
-      '/categorias',
-      '/atributos',
-      '/estoque',
-      '/clientes',
-      '/relatorios',
-      '/usuarios',
-      '/banners',
-      '/empresas',
-      '/configuracoes',
-      '/assinatura',
-      '/super-admin',
-      '/super-admin/empresas',
-      '/super-admin/planos',
-      '/perfil',
-    ]);
-
-    return !topLevelRoutes.has(location.pathname);
-  }, [location.pathname]);
 
   const formatDays = (value: number | null) => {
     if (value === null) return null;
     return `${value} ${value === 1 ? 'dia' : 'dias'}`;
   };
-
-  const subscriptionLabel = (() => {
-    if (!subscription || role === 'super_admin') return null;
-    if (subscription.status === 'active') {
-      const daysLabel = formatDays(subscription.daysRemaining);
-      return daysLabel
-        ? `Plano ativo: ${daysLabel}`
-        : 'Plano ativo';
-    }
-    if (subscription.status === 'trial') {
-      const daysLabel = formatDays(subscription.daysRemaining);
-      return daysLabel
-        ? `Período de teste: ${daysLabel} restantes`
-        : 'Período de teste ativo';
-    }
-    if (subscription.status === 'expired') {
-      return 'Plano expirado';
-    }
-    return null;
-  })();
-
-  const subscriptionVariant = subscription?.status === 'expired' ? 'destructive' : subscription?.status === 'active' ? 'outline' : 'secondary';
 
   const subscriptionBanner = (() => {
     if (!subscription || subscription.warningLevel === 'none' || role === 'super_admin') return null;
@@ -143,16 +75,16 @@ export function AppLayout({ children }: AppLayoutProps) {
     const title = isExpired
       ? 'Plano expirado'
       : subscription.warningReason === 'trial_ending'
-        ? 'Período de teste terminando'
+        ? 'Periodo de teste terminando'
         : 'Plano perto de vencer';
     const description = isExpired
       ? 'Seu acesso expirou. Escolha um plano para voltar a usar o sistema.'
       : days !== null
-        ? `Restam ${days} ${dayLabel} para o fim do período.`
-        : 'Seu plano está perto de vencer.';
+        ? `Restam ${days} ${dayLabel} para o fim do periodo.`
+        : 'Seu plano esta perto de vencer.';
 
     return (
-      <div className="px-4 pt-4">
+      <div className="px-6 pt-6">
         <Alert variant={isExpired ? 'destructive' : 'default'} className={!isExpired ? 'border-amber-300 text-amber-900' : undefined}>
           <AlertTitle>{title}</AlertTitle>
           <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -174,21 +106,35 @@ export function AppLayout({ children }: AppLayoutProps) {
           <header className="app-header">
             <div className="flex items-center gap-2">
               <SidebarTrigger className="-ml-1" />
-              {showBack && (
-                <Button variant="ghost" size="icon" onClick={() => navigate(-1)} aria-label="Voltar">
-                  <ArrowLeft className="h-5 w-5" />
-                </Button>
-              )}
-              <div className="flex flex-col">
-                <span className="app-title">{pageTitle}</span>
-                <span className="text-xs text-muted-foreground sm:hidden">GraficaERP</span>
-              </div>
+              <Menu className="hidden h-5 w-5 text-slate-500" />
             </div>
-            {subscriptionLabel && (
-              <div className="ml-auto hidden sm:flex">
-                <Badge variant={subscriptionVariant}>{subscriptionLabel}</Badge>
+            <div className="ml-auto flex items-center gap-4">
+              <div className="hidden items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 sm:flex">
+                <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                Plano ativo
               </div>
-            )}
+              <button className="hidden h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 sm:flex">
+                <Moon className="h-4 w-4" />
+              </button>
+              <button className="hidden h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 sm:flex">
+                <Bell className="h-4 w-4" />
+              </button>
+              <div className="hidden flex-col items-end leading-tight sm:flex">
+                <span className="text-sm font-semibold text-slate-900">{company?.name || 'Ideart Grafica'}</span>
+                <span className="text-[11px] font-semibold text-slate-400">{role ? roleLabels[role] : 'ADMIN'}</span>
+              </div>
+              {logoUrl ? (
+                <img
+                  src={logoUrl}
+                  alt={company?.name || 'Logo da empresa'}
+                  className="h-9 w-9 rounded-full object-cover border border-slate-200"
+                />
+              ) : (
+                <div className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-slate-100 text-xs font-semibold text-slate-500">
+                  {fallbackText || 'LG'}
+                </div>
+              )}
+            </div>
           </header>
           <main className="app-content">
             {subscriptionBanner}
@@ -201,11 +147,10 @@ export function AppLayout({ children }: AppLayoutProps) {
                 <button
                   key={item.label}
                   type="button"
-                  className={isActive ? "bottom-nav-item bottom-nav-active" : "bottom-nav-item"}
+                  className={isActive ? 'bottom-nav-item bottom-nav-active' : 'bottom-nav-item'}
                   onClick={() => navigate(item.url)}
-                  aria-current={isActive ? "page" : undefined}
+                  aria-current={isActive ? 'page' : undefined}
                 >
-                  <item.icon className="bottom-nav-icon" />
                   <span className="bottom-nav-label">{item.label}</span>
                 </button>
               );

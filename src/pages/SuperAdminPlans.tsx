@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { CreditCard, Plus, Pencil, Trash2, Check, X } from 'lucide-react';
+﻿import { useEffect, useState } from 'react';
+import { CreditCard, Plus, Pencil, Trash2, Check, X, LayoutGrid } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { CurrencyInput } from '@/components/ui/currency-input';
@@ -73,7 +73,7 @@ export default function SuperAdminPlans() {
       max_users: plan.max_users,
       is_active: plan.is_active,
       ['interval_count' as any]: intervalCount,
-      ['trial_days' as any]: 0, // Fallback as it's not in DB yet
+      ['trial_days' as any]: 0,
     });
     setDialogOpen(true);
   };
@@ -101,7 +101,7 @@ export default function SuperAdminPlans() {
 
   const handleSave = async () => {
     if (!formData.name) {
-      toast.error('Nome é obrigatório');
+      toast.error('Nome e obrigatorio');
       return;
     }
 
@@ -173,7 +173,7 @@ export default function SuperAdminPlans() {
       return;
     }
 
-    toast.success('Plano excluído com sucesso');
+    toast.success('Plano excluido com sucesso');
     setDeleteDialogOpen(false);
     loadPlans();
   };
@@ -186,20 +186,21 @@ export default function SuperAdminPlans() {
     return (
       <div className="page-container">
         <div className="flex items-center justify-center h-64">
-          <p className="text-muted-foreground">Carregando...</p>
+          <p className="text-slate-500">Carregando...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="page-container">
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Planos de Assinatura</h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            Configure os planos disponíveis para as empresas
-          </p>
+    <div className="page-container space-y-6">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex items-center gap-3 text-slate-600">
+          <LayoutGrid className="h-5 w-5" />
+          <div>
+            <h1 className="text-2xl font-semibold text-slate-900">Planos de Assinatura</h1>
+            <p className="text-sm text-slate-500">Configure os planos disponiveis para as empresas</p>
+          </div>
         </div>
         <Button onClick={openCreateDialog}>
           <Plus className="h-4 w-4 mr-2" />
@@ -208,11 +209,11 @@ export default function SuperAdminPlans() {
       </div>
 
       {plans.length === 0 ? (
-        <Card>
+        <Card className="border-slate-200">
           <CardContent className="py-12 text-center">
-            <CreditCard className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+            <CreditCard className="h-12 w-12 mx-auto text-slate-400 mb-4" />
             <h3 className="text-lg font-medium mb-2">Nenhum plano cadastrado</h3>
-            <p className="text-muted-foreground mb-4">
+            <p className="text-slate-500 mb-4">
               Crie seu primeiro plano de assinatura para as empresas
             </p>
             <Button onClick={openCreateDialog}>
@@ -224,14 +225,14 @@ export default function SuperAdminPlans() {
       ) : (
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {plans.map((plan) => (
-            <Card key={plan.id} className={!plan.is_active ? 'opacity-60' : ''}>
+            <Card key={plan.id} className={`border-slate-200 ${!plan.is_active ? 'opacity-60' : ''}`}>
               <CardHeader>
                 <div className="flex items-start justify-between">
                   <div>
                     <CardTitle className="flex items-center gap-2">
                       {plan.name}
                       {!plan.is_active && (
-                        <Badge variant="outline" className="bg-muted">Inativo</Badge>
+                        <Badge variant="outline" className="bg-slate-100">Inativo</Badge>
                       )}
                     </CardTitle>
                     <CardDescription className="mt-1">{plan.description}</CardDescription>
@@ -249,14 +250,14 @@ export default function SuperAdminPlans() {
               <CardContent>
                 <div className="mb-4">
                   <span className="text-3xl font-bold">{formatCurrency(plan.price)}</span>
-                  <span className="text-muted-foreground">
-                    /{plan.billing_period === 'monthly' ? 'mês' : 'ano'}
+                  <span className="text-slate-500">
+                    /{plan.billing_period === 'monthly' ? 'mes' : 'ano'}
                   </span>
                 </div>
 
                 {plan.max_users && (
-                  <p className="text-sm text-muted-foreground mb-3">
-                    Até {plan.max_users} usuário{plan.max_users > 1 ? 's' : ''}
+                  <p className="text-sm text-slate-500 mb-3">
+                    Ate {plan.max_users} usuario{plan.max_users > 1 ? 's' : ''}
                   </p>
                 )}
 
@@ -264,7 +265,7 @@ export default function SuperAdminPlans() {
                   <ul className="space-y-2">
                     {plan.features.map((feature, index) => (
                       <li key={index} className="flex items-center gap-2 text-sm">
-                        <Check className="h-4 w-4 text-chart-2" />
+                        <Check className="h-4 w-4 text-emerald-500" />
                         {feature}
                       </li>
                     ))}
@@ -289,30 +290,30 @@ export default function SuperAdminPlans() {
               <Input
                 value={formData.name || ''}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="Ex: Básico, Profissional, Empresarial"
+                placeholder="Ex: Basico, Profissional, Empresarial"
               />
             </div>
 
             <div className="space-y-2">
-              <Label>Descrição</Label>
+              <Label>Descricao</Label>
               <Textarea
                 value={formData.description || ''}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                placeholder="Descrição breve do plano"
+                placeholder="Descricao breve do plano"
                 rows={2}
               />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Preço *</Label>
+                <Label>Preco *</Label>
                 <CurrencyInput
                   value={formData.price || 0}
                   onChange={(value) => setFormData({ ...formData, price: value })}
                 />
               </div>
               <div className="space-y-2">
-                <Label>Duração do Ciclo</Label>
+                <Label>Duracao do Ciclo</Label>
                 <div className="flex gap-2">
                   <Input
                     type="number"
@@ -329,7 +330,7 @@ export default function SuperAdminPlans() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="monthly">Mês(es)</SelectItem>
+                      <SelectItem value="monthly">Mes(es)</SelectItem>
                       <SelectItem value="yearly">Ano(s)</SelectItem>
                     </SelectContent>
                   </Select>
@@ -349,7 +350,7 @@ export default function SuperAdminPlans() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Máximo de Usuários</Label>
+                <Label>Maximo de Usuarios</Label>
                 <Input
                   type="number"
                   min="1"
@@ -376,8 +377,8 @@ export default function SuperAdminPlans() {
               {formData.features && formData.features.length > 0 && (
                 <div className="space-y-2 mt-2">
                   {formData.features.map((feature, index) => (
-                    <div key={index} className="flex items-center gap-2 bg-muted/50 rounded-lg px-3 py-2">
-                      <Check className="h-4 w-4 text-chart-2 shrink-0" />
+                    <div key={index} className="flex items-center gap-2 bg-slate-50 rounded-lg px-3 py-2">
+                      <Check className="h-4 w-4 text-emerald-500 shrink-0" />
                       <span className="flex-1 text-sm">{feature}</span>
                       <Button
                         type="button"
@@ -416,7 +417,7 @@ export default function SuperAdminPlans() {
           </DialogHeader>
           <p className="py-4">
             Tem certeza que deseja excluir o plano <strong>{selectedPlan?.name}</strong>?
-            Esta ação não pode ser desfeita.
+            Esta acao nao pode ser desfeita.
           </p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>Cancelar</Button>
@@ -427,6 +428,3 @@ export default function SuperAdminPlans() {
     </div>
   );
 }
-
-
-

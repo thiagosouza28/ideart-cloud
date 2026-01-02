@@ -17,6 +17,7 @@ import { Category, Supply, Attribute, AttributeValue, ProductType } from '@/type
 import { ArrowLeft, Plus, Trash2, Calculator, Save, Loader2, Upload, Image, Globe, Package, FolderPlus, Tag } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useAuth } from '@/contexts/AuthContext';
+import { generateProductDescription } from '@/services/ai';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { ensurePublicStorageUrl, getStoragePathFromUrl } from '@/lib/storage';
 
@@ -41,6 +42,15 @@ const productSchema = z.object({
   promo_start_at: z.string().optional().nullable(),
   promo_end_at: z.string().optional().nullable(),
 });
+
+function generateSlug(name: string): string {
+  return name
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+}
 
 interface ProductSupplyItem {
   supply_id: string;
@@ -76,11 +86,18 @@ export default function ProductForm() {
   const [name, setName] = useState('');
   const [sku, setSku] = useState('');
   const [description, setDescription] = useState('');
+  const [productSlug, setProductSlug] = useState('');
+  const [slugTouched, setSlugTouched] = useState(false);
   const [productType, setProductType] = useState<ProductType>('produto');
   const [categoryId, setCategoryId] = useState<string>('');
   const [unit, setUnit] = useState('un');
   const [isActive, setIsActive] = useState(true);
   const [showInCatalog, setShowInCatalog] = useState(false);
+  const [catalogFeatured, setCatalogFeatured] = useState(false);
+  const [catalogPrice, setCatalogPrice] = useState<number | null>(null);
+  const [catalogShortDescription, setCatalogShortDescription] = useState('');
+  const [catalogLongDescription, setCatalogLongDescription] = useState('');
+  const [generatingDescription, setGeneratingDescription] = useState(false);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [baseCost, setBaseCost] = useState(0);
   const [laborCost, setLaborCost] = useState(0);
@@ -217,13 +234,19 @@ export default function ProductForm() {
 
       // Set form data
       setName(product.name);
+      setProductSlug(product.slug || generateSlug(product.name));
+      setSlugTouched(false);
       setSku(product.sku || '');
       setDescription(product.description || '');
       setProductType(product.product_type as ProductType);
       setCategoryId(product.category_id || '');
       setUnit(product.unit);
       setIsActive(product.is_active);
-      setShowInCatalog(product.show_in_catalog);
+      setShowInCatalog(product.catalog_enabled ?? product.show_in_catalog ?? false);
+      setCatalogFeatured(product.catalog_featured ?? false);
+      setCatalogPrice(product.catalog_price !== null && product.catalog_price !== undefined ? Number(product.catalog_price) : null);
+      setCatalogShortDescription(product.catalog_short_description || '');
+      setCatalogLongDescription(product.catalog_long_description || '');
       setImageUrl(ensurePublicStorageUrl('product-images', product.image_url));
       setBaseCost(Number(product.base_cost));
       setLaborCost(Number(product.labor_cost));
@@ -238,7 +261,7 @@ export default function ProductForm() {
       }
       setStockQuantity(Number(product.stock_quantity));
       setMinStock(Number(product.min_stock));
-      setMinOrderQuantity(Number(product.min_order_quantity ?? 1));
+      setMinOrderQuantity(Number(product.catalog_min_order ?? product.min_order_quantity ?? 1));
       setTrackStock(product.track_stock ?? true);
       setPromoPrice(product.promo_price !== null ? Number(product.promo_price) : null);
       setPromoStartAt(product.promo_start_at ? new Date(product.promo_start_at).toISOString().slice(0, 16) : '');
@@ -407,6 +430,29 @@ export default function ProductForm() {
     setPriceTiers(priceTiers.filter((_, i) => i !== index));
   };
 
+  const handleGenerateDescription = async () => {
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      toast({ title: 'Informe o nome do produto antes', variant: 'destructive' });
+      return;
+    }
+
+    setGeneratingDescription(true);
+    try {
+      const resp = await generateProductDescription(trimmedName);
+      setCatalogShortDescription(resp.short_description || '');
+      setCatalogLongDescription(resp.long_description || '');
+      if (!description.trim()) {
+        setDescription(resp.long_description || '');
+      }
+      toast({ title: 'DescriÇõÇœo gerada com sucesso' });
+    } catch (error: any) {
+      toast({ title: 'Erro ao gerar descriÇõÇœo', description: error?.message, variant: 'destructive' });
+    } finally {
+      setGeneratingDescription(false);
+    }
+  };
+
   // Attribute selection
   const toggleAttributeValue = (attrIndex: number, valueIndex: number) => {
     const updated = [...productAttributes];
@@ -513,15 +559,23 @@ export default function ProductForm() {
 
     const normalizedSku = normalizeSku(sku);
 
+    const normalizedSlug = generateSlug((slugTouched ? productSlug : name).trim() || name.trim());
     const formData = {
       name: name.trim(),
       sku: normalizedSku || null,
       description: description.trim() || null,
+      slug: normalizedSlug || null,
       product_type: productType,
       category_id: categoryId || null,
       company_id: profile?.company_id || null,
       image_url: imageUrl,
       show_in_catalog: showInCatalog,
+      catalog_enabled: showInCatalog,
+      catalog_featured: catalogFeatured,
+      catalog_price: catalogPrice ?? null,
+      catalog_short_description: catalogShortDescription.trim() || null,
+      catalog_long_description: catalogLongDescription.trim() || null,
+      catalog_min_order: minOrderQuantity,
       unit,
       is_active: isActive,
       base_cost: baseCost,
@@ -692,7 +746,13 @@ export default function ProductForm() {
               <Input
                 id="name"
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setName(value);
+                  if (!slugTouched) {
+                    setProductSlug(generateSlug(value));
+                  }
+                }}
                 placeholder="Nome do produto"
                 className={errors?.name ? 'border-destructive' : ''}
               />
@@ -819,14 +879,81 @@ export default function ProductForm() {
               </Label>
             </div>
 
+            <div className="flex items-center gap-3 pt-4">
+              <Switch checked={catalogFeatured} onCheckedChange={setCatalogFeatured} />
+              <Label className="flex items-center gap-2">
+                <Tag className="h-4 w-4" />
+                Destacar no catÇ­logo
+              </Label>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="catalogPrice">PreÇõo para catÇ­logo</Label>
+              <CurrencyInput
+                id="catalogPrice"
+                value={catalogPrice ?? 0}
+                onChange={(value) => setCatalogPrice(value)}
+              />
+              <p className="text-xs text-muted-foreground">Deixe em branco para usar o preÇõo padrÇœo.</p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="productSlug">Slug do produto</Label>
+              <Input
+                id="productSlug"
+                value={productSlug}
+                onChange={(e) => {
+                  setSlugTouched(true);
+                  setProductSlug(generateSlug(e.target.value));
+                }}
+                placeholder="slug-do-produto"
+              />
+              <p className="text-xs text-muted-foreground">/catalogo/produto/{productSlug || 'slug-do-produto'}</p>
+            </div>
+
             <div className="md:col-span-2 space-y-2">
               <Label htmlFor="description">Descrição</Label>
+              <div className="flex justify-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleGenerateDescription}
+                  disabled={generatingDescription}
+                >
+                  {generatingDescription ? 'Gerando...' : 'Gerar descriÇõÇœo com IA'}
+                </Button>
+              </div>
               <Textarea
                 id="description"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Descrição do produto..."
                 rows={3}
+              />
+            </div>
+            <div className="md:col-span-2 space-y-2">
+              <Label htmlFor="catalogShortDescription">DescriÇõÇœo curta (catÇ­logo)</Label>
+              <Textarea
+                id="catalogShortDescription"
+                value={catalogShortDescription}
+                onChange={(e) => setCatalogShortDescription(e.target.value)}
+                placeholder="Resumo curto para o catÇ­logo (atÇ¸ 140 caracteres)"
+                rows={2}
+                maxLength={140}
+              />
+              <p className="text-xs text-muted-foreground">
+                {catalogShortDescription.length}/140 caracteres
+              </p>
+            </div>
+            <div className="md:col-span-2 space-y-2">
+              <Label htmlFor="catalogLongDescription">DescriÇõÇœo longa (catÇ­logo)</Label>
+              <Textarea
+                id="catalogLongDescription"
+                value={catalogLongDescription}
+                onChange={(e) => setCatalogLongDescription(e.target.value)}
+                placeholder="DescriÇõÇœo completa para o catÇ­logo"
+                rows={4}
               />
             </div>
           </CardContent>
@@ -1382,7 +1509,3 @@ export default function ProductForm() {
     </div>
   );
 }
-
-
-
-

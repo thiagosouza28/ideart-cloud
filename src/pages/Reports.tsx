@@ -27,9 +27,9 @@ import { OrderStatus } from '@/types/database';
 
 const statusOptions: Array<{ value: OrderStatus | 'all'; label: string }> = [
   { value: 'all', label: 'Todos' },
-  { value: 'orcamento', label: 'Orçamento' },
+  { value: 'orcamento', label: 'Orcamento' },
   { value: 'pendente', label: 'Pendente' },
-  { value: 'em_producao', label: 'Em produção' },
+  { value: 'em_producao', label: 'Em Producao' },
   { value: 'pronto', label: 'Pronto' },
   { value: 'aguardando_retirada', label: 'Aguardando retirada' },
   { value: 'entregue', label: 'Entregue' },
@@ -168,8 +168,8 @@ export default function Reports() {
 
   const exportRows = useMemo(() => buildExportRows(activeTab, reportData), [activeTab, reportData]);
   const exportTitle = useMemo(() => {
-    const tabLabel = reportTabs.find((tab) => tab.value === activeTab)?.label || 'Relatório';
-    return `Relatório - ${tabLabel}`;
+    const tabLabel = reportTabs.find((tab) => tab.value === activeTab)?.label || 'Relatorio';
+    return `Relatorio - ${tabLabel}`;
   }, [activeTab]);
 
   const loadData = async (nextFilters: ReportFilters) => {
@@ -205,18 +205,22 @@ export default function Reports() {
   }, [reportData, salesPeriod]);
 
   return (
-    <div className="page-container w-full max-w-none space-y-6">
-      <div className="page-header">
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="page-title">Relatórios</h1>
-          <p className="text-muted-foreground">Central de indicadores e financeiro</p>
+          <h1 className="text-3xl font-bold text-slate-900">Relatorios</h1>
+          <p className="text-sm text-slate-500">Central de indicadores e financeiro.</p>
         </div>
-        <Button variant="outline" onClick={() => setExportOpen(true)} disabled={!reportData}>
+        <Button
+          className="rounded-2xl bg-sky-500 shadow-sm hover:bg-sky-600"
+          onClick={() => setExportOpen(true)}
+          disabled={!reportData}
+        >
           Exportar
         </Button>
       </div>
 
-      <Card>
+      <Card className="border-slate-200 shadow-sm">
         <CardContent className="pt-6">
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-6">
             <div className="space-y-2 lg:col-span-2">

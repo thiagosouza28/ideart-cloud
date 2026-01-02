@@ -24,7 +24,9 @@ import Stock from "./pages/Stock";
 import Supplies from "./pages/Supplies";
 import Categories from "./pages/Categories";
 import Attributes from "./pages/Attributes";
-import PDV from "./pages/PDV";
+import GraphPOSPDV from "./pages/GraphPOSPDV";
+import GraphPOSPagamento from "./pages/GraphPOSPagamento";
+import GraphPOSConfirmacao from "./pages/GraphPOSConfirmacao";
 import Settings from "./pages/Settings";
 import UserManagement from "./pages/UserManagement";
 import Companies from "./pages/Companies";
@@ -43,6 +45,8 @@ import SuperAdminPlans from "./pages/SuperAdminPlans";
 import Profile from "./pages/Profile";
 import Reports from "./pages/Reports";
 import BannerManagement from "./pages/BannerManagement";
+import CatalogManager from "./pages/CatalogManager";
+import Landing from "./pages/Landing";
 
 const queryClient = new QueryClient();
 
@@ -61,7 +65,7 @@ const App = () => (
                 <Onboarding />
               </ProtectedRoute>
             } />
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/" element={<Landing />} />
 
             <Route path="/dashboard" element={
               <ProtectedRoute>
@@ -71,7 +75,19 @@ const App = () => (
 
             <Route path="/pdv" element={
               <ProtectedRoute allowedRoles={['admin', 'caixa']}>
-                <AppLayout><PDV /></AppLayout>
+                <AppLayout><GraphPOSPDV /></AppLayout>
+              </ProtectedRoute>
+            } />
+
+            <Route path="/pagamento" element={
+              <ProtectedRoute allowedRoles={['admin', 'caixa']}>
+                <AppLayout><GraphPOSPagamento /></AppLayout>
+              </ProtectedRoute>
+            } />
+
+            <Route path="/confirmacao" element={
+              <ProtectedRoute allowedRoles={['admin', 'caixa']}>
+                <AppLayout><GraphPOSConfirmacao /></AppLayout>
               </ProtectedRoute>
             } />
 
@@ -120,6 +136,12 @@ const App = () => (
             <Route path="/produtos/:id" element={
               <ProtectedRoute allowedRoles={['admin', 'atendente']}>
                 <AppLayout><ProductForm /></AppLayout>
+              </ProtectedRoute>
+            } />
+
+            <Route path="/catalogo-admin" element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <AppLayout><CatalogManager /></AppLayout>
               </ProtectedRoute>
             } />
 
@@ -258,7 +280,8 @@ const App = () => (
             } />
             {/* Public Catalog - No auth required */}
             <Route path="/catalogo/:slug" element={<PublicCatalog />} />
-            <Route path="/catalogo/:slug/produto/:productId" element={<PublicProductDetails />} />
+            <Route path="/catalogo/:slug/produto/:productSlug" element={<PublicProductDetails />} />
+            <Route path="/catalogo/produto/:productSlug" element={<PublicProductDetails />} />
             <Route path="/pedido/:token" element={<PublicOrder />} />
 
             <Route path="*" element={<NotFound />} />

@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Search, Shield, UserPlus, Loader2, Mail, UserMinus, UserCheck, Users } from 'lucide-react';
+﻿import { useEffect, useState } from 'react';
+import { Search, Shield, UserPlus, Loader2, Mail, UserMinus, UserCheck, Users, LayoutGrid } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -40,15 +40,15 @@ const roleLabels: Record<AppRole, string> = {
   admin: 'Administrador',
   atendente: 'Atendente',
   caixa: 'Caixa',
-  producao: 'Produção',
+  producao: 'Producao',
 };
 
 const roleBadgeColors: Record<AppRole, string> = {
-  super_admin: 'bg-chart-5/10 text-chart-5 border-chart-5/20',
-  admin: 'bg-destructive/10 text-destructive border-destructive/20',
-  atendente: 'bg-primary/10 text-primary border-primary/20',
-  caixa: 'bg-chart-2/10 text-chart-2 border-chart-2/20',
-  producao: 'bg-chart-4/10 text-chart-4 border-chart-4/20',
+  super_admin: 'bg-slate-200 text-slate-700 border-slate-200',
+  admin: 'bg-rose-100 text-rose-700 border-rose-200',
+  atendente: 'bg-blue-100 text-blue-700 border-blue-200',
+  caixa: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+  producao: 'bg-yellow-100 text-yellow-700 border-yellow-200',
 };
 
 export default function UserManagement() {
@@ -62,7 +62,6 @@ export default function UserManagement() {
   const isSuperAdmin = role === 'super_admin';
   const canCreateUsers = hasPermission(['admin', 'super_admin']);
 
-  // Add user state
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [addingUser, setAddingUser] = useState(false);
   const [newUserData, setNewUserData] = useState({
@@ -73,25 +72,21 @@ export default function UserManagement() {
     companyId: '',
   });
 
-  // Remove user state
   const [removeUserId, setRemoveUserId] = useState<string | null>(null);
   const [removeUserName, setRemoveUserName] = useState<string>('');
   const [removing, setRemoving] = useState(false);
 
-  // Inactive users state
   const [inactiveUsers, setInactiveUsers] = useState<UserWithRole[]>([]);
   const [showInactiveDialog, setShowInactiveDialog] = useState(false);
   const [loadingInactive, setLoadingInactive] = useState(false);
   const [reactivating, setReactivating] = useState<string | null>(null);
 
   const loadUsers = async () => {
-    // If not super admin and no company, return
     if (!profile?.company_id && !isSuperAdmin) {
       setLoading(false);
       return;
     }
 
-    // Fetch profiles - all if super admin, otherwise just for the company
     let query = supabase.from('profiles').select('*');
     if (!isSuperAdmin) {
       query = query.eq('company_id', profile?.company_id as string);
@@ -100,12 +95,11 @@ export default function UserManagement() {
     const { data: profiles, error: profilesError } = await query.order('full_name');
 
     if (profilesError) {
-      toast.error('Erro ao carregar usuários');
+      toast.error('Erro ao carregar usuarios');
       setLoading(false);
       return;
     }
 
-    // Fetch roles for these users
     const userIds = profiles?.map(p => p.id) || [];
     if (userIds.length === 0) {
       setUsers([]);
@@ -124,7 +118,6 @@ export default function UserManagement() {
       return;
     }
 
-    // Combine data
     const usersWithRoles: UserWithRole[] = (profiles || []).map(p => {
       const userRole = roles?.find(r => r.user_id === p.id);
       return {
@@ -133,7 +126,7 @@ export default function UserManagement() {
         avatar_url: p.avatar_url,
         created_at: p.created_at,
         company_id: p.company_id,
-        role: userRole?.role as AppRole || null,
+        role: (userRole?.role as AppRole) || null,
         role_id: userRole?.id || null,
       };
     });
@@ -166,7 +159,6 @@ export default function UserManagement() {
   const loadInactiveUsers = async () => {
     setLoadingInactive(true);
 
-    // Fetch profiles without company (removed users)
     const { data: profiles, error: profilesError } = await supabase
       .from('profiles')
       .select('*')
@@ -174,12 +166,11 @@ export default function UserManagement() {
       .order('full_name');
 
     if (profilesError) {
-      toast.error('Erro ao carregar usuários inativos');
+      toast.error('Erro ao carregar usuarios inativos');
       setLoadingInactive(false);
       return;
     }
 
-    // Fetch roles for these users
     const userIds = profiles?.map(p => p.id) || [];
     if (userIds.length === 0) {
       setInactiveUsers([]);
@@ -192,7 +183,6 @@ export default function UserManagement() {
       .select('*')
       .in('user_id', userIds);
 
-    // Combine data
     const usersWithRoles: UserWithRole[] = (profiles || []).map(p => {
       const userRole = roles?.find(r => r.user_id === p.id);
       return {
@@ -201,7 +191,7 @@ export default function UserManagement() {
         avatar_url: p.avatar_url,
         created_at: p.created_at,
         company_id: p.company_id,
-        role: userRole?.role as AppRole || null,
+        role: (userRole?.role as AppRole) || null,
         role_id: userRole?.id || null,
       };
     });
@@ -217,18 +207,16 @@ export default function UserManagement() {
 
   const handleReactivateUser = async (userId: string) => {
     if (!profile?.company_id && !isSuperAdmin) {
-      toast.error('Você não está vinculado a uma empresa');
+      toast.error('Voce nao esta vinculado a uma empresa');
       return;
     }
 
     setReactivating(userId);
 
     try {
-      // If super admin reactivates without a company context, we can't really "reactivate" into nothing.
-      // But typically they'd reactivate into THEIR company if they have one.
       const targetCompanyId = profile?.company_id;
       if (!targetCompanyId) {
-        toast.error('Defina uma empresa para o usuário primeiro');
+        toast.error('Defina uma empresa para o usuario primeiro');
         setReactivating(null);
         return;
       }
@@ -240,12 +228,12 @@ export default function UserManagement() {
 
       if (error) throw error;
 
-      toast.success('Usuário reativado com sucesso!');
+      toast.success('Usuario reativado com sucesso');
       await loadInactiveUsers();
       await loadUsers();
     } catch (error: any) {
       console.error('Reactivate user error:', error);
-      toast.error('Erro ao reativar usuário');
+      toast.error('Erro ao reativar usuario');
     } finally {
       setReactivating(null);
     }
@@ -257,14 +245,13 @@ export default function UserManagement() {
 
   const handleRoleChange = async (userId: string, roleId: string | null, newRole: AppRole) => {
     if (userId === user?.id) {
-      toast.error('Você não pode alterar seu próprio perfil');
+      toast.error('Voce nao pode alterar seu proprio perfil');
       return;
     }
 
     setUpdating(userId);
 
     if (roleId) {
-      // Update existing role
       const { error } = await supabase
         .from('user_roles')
         .update({ role: newRole })
@@ -276,7 +263,6 @@ export default function UserManagement() {
         return;
       }
     } else {
-      // Insert new role
       const { error } = await supabase
         .from('user_roles')
         .insert({ user_id: userId, role: newRole });
@@ -295,17 +281,17 @@ export default function UserManagement() {
 
   const handleAddUser = async () => {
     if (!canCreateUsers) {
-      toast.error('Apenas administradores podem criar usuários');
+      toast.error('Apenas administradores podem criar usuarios');
       return;
     }
 
     if (!profile?.company_id && !isSuperAdmin) {
-      toast.error('Empresa não encontrada para o usuário logado');
+      toast.error('Empresa nao encontrada para o usuario logado');
       return;
     }
 
     if (!newUserData.email || !newUserData.fullName || !newUserData.password) {
-      toast.error('Preencha todos os campos obrigatórios');
+      toast.error('Preencha todos os campos obrigatorios');
       return;
     }
 
@@ -315,19 +301,17 @@ export default function UserManagement() {
     }
 
     if (!newUserData.role) {
-      toast.error('Selecione o cargo do usuário');
+      toast.error('Selecione o cargo do usuario');
       return;
     }
 
     setAddingUser(true);
 
     try {
-      // If super admin is adding a user, we might need a company_id. 
-      // For now, assume they add it to THEIR company if they have one.
       const targetCompanyId = isSuperAdmin ? newUserData.companyId : (profile?.company_id || null);
 
       if (isSuperAdmin && !targetCompanyId) {
-        toast.error('Selecione uma empresa para o usuário');
+        toast.error('Selecione uma empresa para o usuario');
         setAddingUser(false);
         return;
       }
@@ -340,7 +324,7 @@ export default function UserManagement() {
         company_id: targetCompanyId,
       });
 
-      toast.success('Usuário adicionado com sucesso!');
+      toast.success('Usuario adicionado com sucesso');
       setAddDialogOpen(false);
       setNewUserData({ email: '', fullName: '', password: '', role: '', companyId: '' });
       await loadUsers();
@@ -350,9 +334,9 @@ export default function UserManagement() {
       if (payloadMessage) {
         toast.error(payloadMessage);
       } else if (error.message?.includes('already registered')) {
-        toast.error('Este email já está cadastrado');
+        toast.error('Este email ja esta cadastrado');
       } else {
-        toast.error(error.message || 'Erro ao adicionar usuário');
+        toast.error(error.message || 'Erro ao adicionar usuario');
       }
     } finally {
       setAddingUser(false);
@@ -365,7 +349,6 @@ export default function UserManagement() {
     setRemoving(true);
 
     try {
-      // Remove user from company by setting company_id to null
       const { error } = await supabase
         .from('profiles')
         .update({ company_id: null })
@@ -373,13 +356,13 @@ export default function UserManagement() {
 
       if (error) throw error;
 
-      toast.success('Usuário removido da empresa');
+      toast.success('Usuario removido da empresa');
       setRemoveUserId(null);
       setRemoveUserName('');
       await loadUsers();
     } catch (error: any) {
       console.error('Remove user error:', error);
-      toast.error('Erro ao remover usuário');
+      toast.error('Erro ao remover usuario');
     } finally {
       setRemoving(false);
     }
@@ -404,46 +387,49 @@ export default function UserManagement() {
   };
 
   return (
-    <div className="page-container">
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Gestão de Usuários</h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            {isSuperAdmin ? 'Gerencie todos os usuários do sistema' : 'Gerencie os usuários e permissões da sua empresa'}
-          </p>
+    <div className="page-container space-y-6">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex items-center gap-3 text-slate-600">
+          <LayoutGrid className="h-5 w-5" />
+          <div>
+            <h1 className="text-2xl font-semibold text-slate-900">Gestao de Usuarios</h1>
+            <p className="text-sm text-slate-500">
+              {isSuperAdmin ? 'Gerencie todos os usuarios do sistema' : 'Gerencie os usuarios e permissoes da sua empresa'}
+            </p>
+          </div>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={handleOpenInactiveDialog}>
             <Users className="mr-2 h-4 w-4" />
-            Usuários Inativos
+            Usuarios Inativos
           </Button>
           <Button
             onClick={() => setAddDialogOpen(true)}
             disabled={!canCreateUsers}
-            title={!canCreateUsers ? 'Apenas administradores podem criar usuários' : undefined}
+            title={!canCreateUsers ? 'Apenas administradores podem criar usuarios' : undefined}
           >
             <UserPlus className="mr-2 h-4 w-4" />
-            Adicionar Usuário
+            Adicionar Usuario
           </Button>
         </div>
       </div>
 
-      <Card>
+      <Card className="border-slate-200">
         <CardHeader>
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <CardTitle className="flex items-center gap-2">
                 <Shield className="h-5 w-5" />
-                {isSuperAdmin ? 'Todos os Usuários' : 'Usuários da Empresa'}
+                {isSuperAdmin ? 'Todos os Usuarios' : 'Usuarios da Empresa'}
               </CardTitle>
               <CardDescription>
-                {users.length} usuário{users.length !== 1 ? 's' : ''} cadastrado{users.length !== 1 ? 's' : ''}
+                {users.length} usuario{users.length !== 1 ? 's' : ''} cadastrado{users.length !== 1 ? 's' : ''}
               </CardDescription>
             </div>
             <div className="relative max-w-sm">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
               <Input
-                placeholder="Buscar usuários..."
+                placeholder="Buscar usuarios..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="pl-9"
@@ -455,11 +441,11 @@ export default function UserManagement() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Usuário</TableHead>
+                <TableHead>Usuario</TableHead>
                 <TableHead>Cargo Atual</TableHead>
                 <TableHead>Cadastrado em</TableHead>
                 <TableHead className="w-[200px]">Alterar Cargo</TableHead>
-                <TableHead className="w-[80px]">Ações</TableHead>
+                <TableHead className="w-[80px]">Acoes</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -471,8 +457,8 @@ export default function UserManagement() {
                 </TableRow>
               ) : filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                    Nenhum usuário encontrado
+                  <TableCell colSpan={5} className="text-center py-8 text-slate-500">
+                    Nenhum usuario encontrado
                   </TableCell>
                 </TableRow>
               ) : filtered.map((u) => (
@@ -487,7 +473,7 @@ export default function UserManagement() {
                       <div>
                         <p className="font-medium">{u.full_name}</p>
                         {u.id === user?.id && (
-                          <p className="text-xs text-muted-foreground">(você)</p>
+                          <p className="text-xs text-slate-500">(voce)</p>
                         )}
                       </div>
                     </div>
@@ -498,17 +484,17 @@ export default function UserManagement() {
                         {roleLabels[u.role]}
                       </Badge>
                     ) : (
-                      <Badge variant="outline" className="bg-muted/50 text-muted-foreground">
+                      <Badge variant="outline" className="bg-slate-100 text-slate-500">
                         Sem cargo
                       </Badge>
                     )}
                   </TableCell>
-                  <TableCell className="text-muted-foreground">
+                  <TableCell className="text-slate-500">
                     {formatDate(u.created_at)}
                   </TableCell>
                   <TableCell>
                     {u.id === user?.id ? (
-                      <span className="text-sm text-muted-foreground">-</span>
+                      <span className="text-sm text-slate-500">-</span>
                     ) : (
                       <Select
                         value={u.role || ''}
@@ -523,14 +509,14 @@ export default function UserManagement() {
                           <SelectItem value="admin">Administrador</SelectItem>
                           <SelectItem value="atendente">Atendente</SelectItem>
                           <SelectItem value="caixa">Caixa</SelectItem>
-                          <SelectItem value="producao">Produção</SelectItem>
+                          <SelectItem value="producao">Producao</SelectItem>
                         </SelectContent>
                       </Select>
                     )}
                   </TableCell>
                   <TableCell>
                     {u.id === user?.id ? (
-                      <span className="text-sm text-muted-foreground">-</span>
+                      <span className="text-sm text-slate-500">-</span>
                     ) : (
                       <Button
                         variant="ghost"
@@ -549,50 +535,49 @@ export default function UserManagement() {
         </CardContent>
       </Card>
 
-      <Card className="mt-6">
+      <Card className="border-slate-200">
         <CardHeader>
-          <CardTitle className="text-base">Descrição dos Cargos</CardTitle>
+          <CardTitle className="text-base">Descricao dos Cargos</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 md:grid-cols-2">
-            <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/30">
+            <div className="flex items-start gap-3 p-3 rounded-lg bg-slate-50">
               <Badge variant="outline" className={roleBadgeColors.admin}>Admin</Badge>
-              <p className="text-sm text-muted-foreground">
-                Acesso total ao sistema, incluindo gestão de usuários, configurações e todos os módulos.
+              <p className="text-sm text-slate-500">
+                Acesso total ao sistema, incluindo gestao de usuarios, configuracoes e todos os modulos.
               </p>
             </div>
-            <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/30">
+            <div className="flex items-start gap-3 p-3 rounded-lg bg-slate-50">
               <Badge variant="outline" className={roleBadgeColors.atendente}>Atendente</Badge>
-              <p className="text-sm text-muted-foreground">
-                Gerencia pedidos, produtos, estoque e clientes. Não acessa PDV ou produção.
+              <p className="text-sm text-slate-500">
+                Gerencia pedidos, produtos, estoque e clientes. Nao acessa PDV ou producao.
               </p>
             </div>
-            <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/30">
+            <div className="flex items-start gap-3 p-3 rounded-lg bg-slate-50">
               <Badge variant="outline" className={roleBadgeColors.caixa}>Caixa</Badge>
-              <p className="text-sm text-muted-foreground">
-                Opera o PDV e visualiza pedidos. Não gerencia produtos ou configurações.
+              <p className="text-sm text-slate-500">
+                Opera o PDV e visualiza pedidos. Nao gerencia produtos ou configuracoes.
               </p>
             </div>
-            <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/30">
-              <Badge variant="outline" className={roleBadgeColors.producao}>Produção</Badge>
-              <p className="text-sm text-muted-foreground">
-                Acessa o painel de produção e detalhes dos pedidos em andamento.
+            <div className="flex items-start gap-3 p-3 rounded-lg bg-slate-50">
+              <Badge variant="outline" className={roleBadgeColors.producao}>Producao</Badge>
+              <p className="text-sm text-slate-500">
+                Acessa o painel de producao e detalhes dos pedidos em andamento.
               </p>
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Add User Dialog */}
       <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <UserPlus className="h-5 w-5" />
-              Adicionar Novo Usuário
+              Adicionar Novo Usuario
             </DialogTitle>
             <DialogDescription>
-              Cadastre um novo usuário para o sistema.
+              Cadastre um novo usuario para o sistema.
             </DialogDescription>
           </DialogHeader>
 
@@ -601,7 +586,7 @@ export default function UserManagement() {
               <Label htmlFor="fullName">Nome Completo *</Label>
               <Input
                 id="fullName"
-                placeholder="João da Silva"
+                placeholder="Joao da Silva"
                 value={newUserData.fullName}
                 onChange={(e) => setNewUserData({ ...newUserData, fullName: e.target.value })}
               />
@@ -626,7 +611,7 @@ export default function UserManagement() {
               <Input
                 id="password"
                 type="password"
-                placeholder="Mínimo 6 caracteres"
+                placeholder="Minimo 6 caracteres"
                 value={newUserData.password}
                 onChange={(e) => setNewUserData({ ...newUserData, password: e.target.value })}
               />
@@ -667,7 +652,7 @@ export default function UserManagement() {
                   <SelectItem value="admin">Administrador</SelectItem>
                   <SelectItem value="atendente">Atendente</SelectItem>
                   <SelectItem value="caixa">Caixa</SelectItem>
-                  <SelectItem value="producao">Produção</SelectItem>
+                  <SelectItem value="producao">Producao</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -679,20 +664,19 @@ export default function UserManagement() {
             </Button>
             <Button onClick={handleAddUser} disabled={addingUser}>
               {addingUser && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Adicionar Usuário
+              Adicionar Usuario
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Remove User Dialog */}
       <AlertDialog open={!!removeUserId} onOpenChange={() => setRemoveUserId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Remover usuário da empresa</AlertDialogTitle>
+            <AlertDialogTitle>Remover usuario da empresa</AlertDialogTitle>
             <AlertDialogDescription>
               Tem certeza que deseja remover <strong>{removeUserName}</strong> da empresa?
-              O usuário perderá acesso ao sistema, mas a conta continuará existindo.
+              O usuario perdera acesso ao sistema, mas a conta continuara existindo.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -709,41 +693,40 @@ export default function UserManagement() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Inactive Users Dialog */}
       <Dialog open={showInactiveDialog} onOpenChange={setShowInactiveDialog}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Users className="h-5 w-5" />
-              Usuários Inativos
+              Usuarios Inativos
             </DialogTitle>
             <DialogDescription>
-              Usuários que foram removidos de uma empresa e podem ser reativados.
+              Usuarios que foram removidos de uma empresa e podem ser reativados.
             </DialogDescription>
           </DialogHeader>
 
           {loadingInactive ? (
             <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              <Loader2 className="h-6 w-6 animate-spin text-slate-500" />
             </div>
           ) : inactiveUsers.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              Nenhum usuário inativo encontrado
+            <div className="text-center py-8 text-slate-500">
+              Nenhum usuario inativo encontrado
             </div>
           ) : (
             <div className="space-y-2 max-h-[400px] overflow-y-auto">
               {inactiveUsers.map((u) => (
-                <div key={u.id} className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
+                <div key={u.id} className="flex items-center justify-between p-3 rounded-lg border border-slate-200 bg-white">
                   <div className="flex items-center gap-3">
                     <Avatar className="h-9 w-9">
-                      <AvatarFallback className="bg-muted text-muted-foreground text-xs">
+                      <AvatarFallback className="bg-slate-100 text-slate-500 text-xs">
                         {getInitials(u.full_name)}
                       </AvatarFallback>
                     </Avatar>
                     <div>
                       <p className="font-medium">{u.full_name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {u.role ? roleLabels[u.role] : 'Sem cargo'} • Criado em {formatDate(u.created_at)}
+                      <p className="text-xs text-slate-500">
+                        {u.role ? roleLabels[u.role] : 'Sem cargo'} - Criado em {formatDate(u.created_at)}
                       </p>
                     </div>
                   </div>

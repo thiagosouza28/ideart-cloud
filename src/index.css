@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -8,7 +8,7 @@
 
 @layer base {
   :root {
-    --background: 210 20% 98%;
+    --background: 225 33% 98%;
     --foreground: 222 47% 11%;
 
     --card: 0 0% 100%;
@@ -45,16 +45,16 @@
     --input: 214 32% 91%;
     --ring: 217 91% 60%;
 
-    --radius: 0.5rem;
+    --radius: 1rem;
 
-    /* Sidebar escura estilo ERP */
-    --sidebar-background: 222 47% 11%;
-    --sidebar-foreground: 210 40% 98%;
+    /* Sidebar clara estilo SaaS */
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 222 47% 11%;
     --sidebar-primary: 262 83% 58%;
     --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 262 83% 58%;
     --sidebar-accent-foreground: 0 0% 100%;
-    --sidebar-border: 217 33% 17%;
+    --sidebar-border: 214 32% 91%;
     --sidebar-ring: 262 83% 58%;
     --sidebar-muted: 215 16% 47%;
   }
@@ -116,7 +116,7 @@
 
   body {
     @apply bg-background text-foreground font-sans antialiased;
-    font-family: 'Manrope', ui-sans-serif, system-ui, sans-serif;
+    font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
     overscroll-behavior-y: none;
   }
 
@@ -135,11 +135,11 @@
 @layer components {
   .app-shell {
     @apply flex h-svh flex-col bg-background;
-    background: radial-gradient(circle at top, hsl(var(--background)) 0%, hsl(var(--background)) 40%, hsl(var(--muted)) 100%);
+    background: #f7f9fc;
   }
 
   .app-header {
-    @apply sticky top-0 z-40 flex h-14 shrink-0 items-center justify-between gap-2 border-b bg-card/95 px-3 backdrop-blur sm:h-16 sm:px-6;
+    @apply sticky top-0 z-40 flex h-16 shrink-0 items-center justify-between gap-2 border-b bg-card px-6;
     padding-top: env(safe-area-inset-top);
   }
 
@@ -148,7 +148,7 @@
   }
 
   .app-content {
-    @apply min-h-0 flex-1 overflow-y-auto px-4 py-4 pb-24 sm:px-6 sm:py-6 sm:pb-6;
+    @apply min-h-0 flex-1 overflow-y-auto px-6 py-6 pb-24 sm:px-8 sm:py-8 sm:pb-8;
     -webkit-overflow-scrolling: touch;
   }
 
@@ -175,6 +175,17 @@
 
   .bottom-nav-label {
     @apply text-[11px] font-medium;
+  }
+
+  .catalog-grid {
+    @apply grid gap-6;
+    grid-template-columns: repeat(var(--catalog-cols-mobile, 2), minmax(0, 1fr));
+  }
+
+  @media (min-width: 1024px) {
+    .catalog-grid {
+      grid-template-columns: repeat(var(--catalog-cols-desktop, 4), minmax(0, 1fr));
+    }
   }
 
   .kanban-board {

@@ -1,0 +1,340 @@
+import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { CreditCard, Banknote, Smartphone, Wallet, ChevronRight } from 'lucide-react';
+import GraphPOSBreadcrumb from '@/components/graphpos/GraphPOSBreadcrumb';
+import GraphPOSCard from '@/components/graphpos/GraphPOSCard';
+import GraphPOSSidebarResumo from '@/components/graphpos/GraphPOSSidebarResumo';
+import { BotaoPrimario, BotaoSecundario } from '@/components/graphpos/GraphPOSButtons';
+import { getGraphPOSCheckoutState, setGraphPOSCheckoutState } from '@/lib/graphposCheckout';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/hooks/use-toast';
+import { PaymentMethod } from '@/types/database';
+
+const formatCurrency = (v: number) =>
+  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
+
+export default function GraphPOSPagamento() {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const { toast } = useToast();
+  // Keep navigation flow aligned with the 3-screen demo.
+  const checkout = useMemo(() => getGraphPOSCheckoutState(), []);
+  const [paymentMethod, setPaymentMethod] = useState(
+    checkout?.paymentMethod || 'dinheiro',
+  );
+  const [amountPaid, setAmountPaid] = useState(
+    checkout?.amountPaid || checkout?.total || 0,
+  );
+  const [saving, setSaving] = useState(false);
+
+  const items = checkout?.items || [];
+  const subtotal = checkout?.subtotal || 0;
+  const discount = checkout?.discount || 0;
+  const total = checkout?.total || 0;
+  const change = paymentMethod === 'dinheiro' ? Math.max(0, amountPaid - total) : 0;
+  const customer = checkout?.customer;
+
+  const mapPaymentMethod = (): PaymentMethod => {
+    if (paymentMethod === 'dinheiro') return 'dinheiro';
+    if (paymentMethod === 'pix') return 'pix';
+    if (paymentMethod === 'outros') return 'outro';
+    return 'cartao';
+  };
+
+  return (
+    <div className="w-full bg-transparent font-sans text-slate-900">
+      <main className="mx-auto w-full px-auto pb-12 pt-auto">
+        <GraphPOSBreadcrumb
+          backLabel="Voltar para Vendas"
+          backTo="/pdv"
+          currentLabel="Finalizar Venda #10234"
+        />
+
+        <div className="mt-6">
+          <h1 className="text-[32px] font-bold">Pagamento</h1>
+          <p className="text-sm text-slate-500">Selecione a forma de pagamento e confirme os dados da venda.</p>
+        </div>
+
+        <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+          <div className="space-y-6">
+            <GraphPOSCard>
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">Dados do Cliente</p>
+                  <p className="text-xs text-slate-400">Nome</p>
+                  <p className="text-sm font-medium text-slate-700">{customer?.name || 'Consumidor Final'}</p>
+                </div>
+                <button
+                  className="text-sm font-semibold text-sky-600"
+                  onClick={() => {
+                    if (checkout) {
+                      setGraphPOSCheckoutState({
+                        ...checkout,
+                        editingCustomer: true,
+                      });
+                    }
+                    navigate('/pdv');
+                  }}
+                >
+                  Alterar
+                </button>
+              </div>
+              <div className="mt-4 grid gap-4 text-sm text-slate-600 sm:grid-cols-2">
+                <div>
+                  <p className="text-xs uppercase text-slate-400">CPF/CNPJ</p>
+                  <p className="font-medium text-slate-700">{customer?.document}</p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase text-slate-400">Telefone</p>
+                  <p className="font-medium text-slate-700">{customer?.phone}</p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase text-slate-400">E-mail</p>
+                  <p className="font-medium text-slate-700">{customer?.email}</p>
+                </div>
+              </div>
+            </GraphPOSCard>
+
+            <GraphPOSCard>
+              <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-slate-900">
+                <Wallet className="h-4 w-4 text-sky-500" />
+                Forma de Pagamento
+              </div>
+              <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-5">
+                {[
+                  { label: 'Dinheiro', icon: Banknote },
+                  { label: 'Credito', icon: CreditCard },
+                  { label: 'Debito', icon: CreditCard },
+                  { label: 'Pix', icon: Smartphone },
+                  { label: 'Outros', icon: Wallet },
+                ].map((option) => (
+                  <button
+                    key={option.label}
+                    type="button"
+                    onClick={() => {
+                      const value = option.label.toLowerCase();
+                      const map: Record<string, typeof paymentMethod> = {
+                        dinheiro: 'dinheiro',
+                        credito: 'credito',
+                        debito: 'debito',
+                        pix: 'pix',
+                        outros: 'outros',
+                      };
+                      setPaymentMethod(map[value] || 'dinheiro');
+                    }}
+                    className={`flex h-20 flex-col items-center justify-center gap-2 rounded-2xl border bg-white text-sm shadow-sm hover:border-sky-300 ${
+                      paymentMethod === option.label.toLowerCase()
+                        ? 'border-sky-400 text-sky-600'
+                        : 'border-slate-200 text-slate-600'
+                    }`}
+                  >
+                    <option.icon className="h-5 w-5 text-sky-500" />
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="mt-6 grid gap-4 lg:grid-cols-[1fr_220px]">
+                <div>
+                  <p className="text-sm font-semibold text-slate-700">Valor Recebido (R$)</p>
+                  <input
+                    className="mt-2 h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-lg font-semibold text-slate-900"
+                    value={amountPaid.toFixed(2)}
+                    onChange={(e) => {
+                      const parsed = Number(e.target.value);
+                      setAmountPaid(Number.isNaN(parsed) ? 0 : parsed);
+                    }}
+                  />
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <BotaoSecundario className="h-9 w-auto px-4 text-xs" onClick={() => setAmountPaid(total)}>
+                      Exato
+                    </BotaoSecundario>
+                    <BotaoSecundario className="h-9 w-auto px-4 text-xs" onClick={() => setAmountPaid(total + 10)}>
+                      + R$ 10
+                    </BotaoSecundario>
+                    <BotaoSecundario className="h-9 w-auto px-4 text-xs" onClick={() => setAmountPaid(total + 50)}>
+                      + R$ 50
+                    </BotaoSecundario>
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-emerald-700">
+                  <p className="text-xs font-semibold uppercase">Troco a devolver</p>
+                  <p className="mt-2 text-2xl font-bold">{formatCurrency(change)}</p>
+                </div>
+              </div>
+            </GraphPOSCard>
+          </div>
+
+          <div className="lg:sticky lg:top-8">
+            <GraphPOSSidebarResumo title="Resumo do Pedido">
+              <p className="text-xs text-slate-500">{items.length} itens adicionados</p>
+              <div className="mt-4 space-y-4">
+                {items.map((item) => (
+                  <div key={item.id} className="flex items-start justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-800">{item.name}</p>
+                      <p className="text-xs text-slate-500">
+                        {item.quantity} un x {formatCurrency(item.unitPrice)}
+                      </p>
+                    </div>
+                    <span className="text-sm font-semibold text-slate-800">
+                      {formatCurrency(item.unitPrice * item.quantity)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 border-t border-slate-200 pt-4 text-sm text-slate-600">
+                <div className="flex items-center justify-between">
+                  <span>Subtotal</span>
+                  <span className="font-semibold text-slate-800">{formatCurrency(subtotal)}</span>
+                </div>
+                <div className="flex items-center justify-between text-slate-500">
+                  <span>Desconto</span>
+                  <span>- {formatCurrency(discount)}</span>
+                </div>
+                <div className="mt-3 flex items-center justify-between text-lg font-semibold text-slate-900">
+                  <span>Total a Pagar</span>
+                  <span>{formatCurrency(total)}</span>
+                </div>
+              </div>
+
+              <div className="mt-6 space-y-3">
+                <BotaoPrimario
+                  onClick={async () => {
+                    if (!checkout || items.length === 0) {
+                      toast({ title: 'Carrinho vazio', variant: 'destructive' });
+                      return;
+                    }
+                    if (!user?.id) {
+                      toast({ title: 'Sessao invalida. Faca login novamente.', variant: 'destructive' });
+                      return;
+                    }
+
+                    setSaving(true);
+                    const payment = mapPaymentMethod();
+                    const paidAmount = payment === 'dinheiro' ? amountPaid : total;
+                    const changeAmount = payment === 'dinheiro' ? Math.max(0, amountPaid - total) : 0;
+
+                    const { data: sale, error: saleError } = await supabase
+                      .from('sales')
+                      .insert({
+                        user_id: user.id,
+                        customer_id: customer?.id || null,
+                        subtotal,
+                        discount,
+                        total,
+                        payment_method: payment,
+                        amount_paid: paidAmount,
+                        change_amount: changeAmount,
+                      })
+                      .select()
+                      .single();
+
+                    if (saleError || !sale) {
+                      toast({ title: 'Erro ao finalizar venda', variant: 'destructive' });
+                      setSaving(false);
+                      return;
+                    }
+
+                    await Promise.all(items.map((item) =>
+                      supabase.from('sale_items').insert({
+                        sale_id: sale.id,
+                        product_id: item.id,
+                        product_name: item.name,
+                        quantity: item.quantity,
+                        unit_price: item.unitPrice,
+                        discount: 0,
+                        total: item.unitPrice * item.quantity,
+                      })
+                    ));
+
+                    const productIds = items.map((item) => item.id);
+                    const { data: productsData } = await supabase
+                      .from('products')
+                      .select('id, track_stock, stock_quantity')
+                      .in('id', productIds);
+
+                    const trackedProducts = (productsData || []).filter((p) => p.track_stock);
+                    if (trackedProducts.length > 0) {
+                      await Promise.all(trackedProducts.map((product) => {
+                        const item = items.find((i) => i.id === product.id);
+                        if (!item) return Promise.resolve();
+                        const newStock = Number(product.stock_quantity) - item.quantity;
+                        return supabase.from('products').update({ stock_quantity: newStock }).eq('id', product.id);
+                      }));
+
+                      await Promise.all(trackedProducts.map((product) => {
+                        const item = items.find((i) => i.id === product.id);
+                        if (!item) return Promise.resolve();
+                        return supabase.from('stock_movements').insert({
+                          product_id: product.id,
+                          movement_type: 'saida',
+                          quantity: item.quantity,
+                          reason: `Venda PDV #${sale.id.slice(0, 8)}`,
+                          user_id: user.id,
+                        });
+                      }));
+                    }
+
+                    const { data: productSupplies } = await supabase
+                      .from('product_supplies')
+                      .select('product_id, supply_id, quantity')
+                      .in('product_id', productIds);
+
+                    if (productSupplies && productSupplies.length > 0) {
+                      const quantitiesByProduct = new Map(items.map((item) => [item.id, item.quantity]));
+                      const usageBySupply: Record<string, number> = {};
+
+                      productSupplies.forEach((ps: any) => {
+                        const qty = quantitiesByProduct.get(ps.product_id);
+                        if (!qty) return;
+                        const usage = Number(ps.quantity) * qty;
+                        if (usage <= 0) return;
+                        usageBySupply[ps.supply_id] = (usageBySupply[ps.supply_id] || 0) + usage;
+                      });
+
+                      const supplyIds = Object.keys(usageBySupply);
+                      if (supplyIds.length > 0) {
+                        const { data: suppliesData } = await supabase
+                          .from('supplies')
+                          .select('id, stock_quantity')
+                          .in('id', supplyIds);
+
+                        if (suppliesData && suppliesData.length > 0) {
+                          await Promise.all(suppliesData.map((supply: any) => {
+                            const usage = usageBySupply[supply.id] || 0;
+                            const newStock = Number(supply.stock_quantity) - usage;
+                            return supabase.from('supplies').update({ stock_quantity: newStock }).eq('id', supply.id);
+                          }));
+                        }
+                      }
+                    }
+
+                    setGraphPOSCheckoutState({
+                      ...checkout,
+                      paymentMethod,
+                      amountPaid,
+                      saleId: sale.id,
+                      createdAt: sale.created_at,
+                    });
+
+                    setSaving(false);
+                    navigate('/confirmacao');
+                  }}
+                  disabled={saving}
+                >
+                  <span className="flex items-center justify-center gap-2">
+                    {saving ? 'Confirmando...' : 'Confirmar Pagamento'}
+                    <ChevronRight className="h-4 w-4" />
+                  </span>
+                </BotaoPrimario>
+                <button className="w-full text-xs font-semibold text-red-500">Cancelar Venda</button>
+              </div>
+            </GraphPOSSidebarResumo>
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+}

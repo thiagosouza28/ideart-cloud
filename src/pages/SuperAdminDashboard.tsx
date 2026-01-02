@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react';
-import { Building2, Users, CreditCard, TrendingUp, AlertTriangle } from 'lucide-react';
+﻿import { useEffect, useState } from 'react';
+import { Building2, CreditCard, LayoutGrid, TrendingUp, AlertTriangle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
-import type { Company, Plan, SubscriptionStatus } from '@/types/database';
+import type { Company, SubscriptionStatus } from '@/types/database';
 
 interface Stats {
   totalCompanies: number;
@@ -19,20 +19,20 @@ const statusLabels: Record<string, string> = {
   cancelled: 'Cancelado',
   canceled: 'Cancelado',
   expired: 'Expirado',
-  past_due: 'Pagamento Atrasado',
-  unpaid: 'Não Pago',
+  past_due: 'Pagamento atrasado',
+  unpaid: 'Nao pago',
   incomplete: 'Incompleto',
 };
 
 const statusColors: Record<string, string> = {
-  trial: 'bg-chart-4/10 text-chart-4 border-chart-4/20',
-  active: 'bg-chart-2/10 text-chart-2 border-chart-2/20',
-  cancelled: 'bg-destructive/10 text-destructive border-destructive/20',
-  canceled: 'bg-destructive/10 text-destructive border-destructive/20',
-  expired: 'bg-muted text-muted-foreground border-muted',
-  past_due: 'bg-yellow-500/10 text-yellow-600 border-yellow-500/20',
-  unpaid: 'bg-destructive/10 text-destructive border-destructive/20',
-  incomplete: 'bg-muted text-muted-foreground border-muted',
+  trial: 'bg-blue-100 text-blue-700 border-blue-200',
+  active: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+  cancelled: 'bg-rose-100 text-rose-700 border-rose-200',
+  canceled: 'bg-rose-100 text-rose-700 border-rose-200',
+  expired: 'bg-slate-100 text-slate-600 border-slate-200',
+  past_due: 'bg-yellow-100 text-yellow-700 border-yellow-200',
+  unpaid: 'bg-rose-100 text-rose-700 border-rose-200',
+  incomplete: 'bg-slate-100 text-slate-600 border-slate-200',
 };
 
 export default function SuperAdminDashboard() {
@@ -78,89 +78,98 @@ export default function SuperAdminDashboard() {
     return (
       <div className="page-container">
         <div className="flex items-center justify-center h-64">
-          <p className="text-muted-foreground">Carregando...</p>
+          <p className="text-slate-500">Carregando...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="page-container">
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Painel Super Admin</h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            Gerencie todas as empresas e planos do SaaS
-          </p>
+    <div className="page-container space-y-6">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex items-center gap-3 text-slate-600">
+          <LayoutGrid className="h-5 w-5" />
+          <div>
+            <h1 className="text-2xl font-semibold text-slate-900">Painel Super Admin</h1>
+            <p className="text-sm text-slate-500">Gerencie todas as empresas e planos do SaaS</p>
+          </div>
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-6">
-        <Card 
-          className="cursor-pointer hover:border-primary/50 transition-colors"
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Card
+          className="border-slate-200 cursor-pointer hover:shadow-sm transition-shadow"
           onClick={() => navigate('/super-admin/empresas')}
         >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Empresas</CardTitle>
-            <Building2 className="h-4 w-4 text-muted-foreground" />
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-slate-500">Total Empresas</CardTitle>
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100">
+              <Building2 className="h-4 w-4 text-slate-600" />
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.totalCompanies}</div>
-            <p className="text-xs text-muted-foreground">empresas cadastradas</p>
+            <div className="text-2xl font-semibold text-slate-900">{stats.totalCompanies}</div>
+            <p className="text-xs text-slate-500">empresas cadastradas</p>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Assinaturas Ativas</CardTitle>
-            <TrendingUp className="h-4 w-4 text-chart-2" />
+        <Card className="border-slate-200">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-slate-500">Assinaturas Ativas</CardTitle>
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-100">
+              <TrendingUp className="h-4 w-4 text-emerald-600" />
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-chart-2">{stats.activeCompanies}</div>
-            <p className="text-xs text-muted-foreground">pagando mensalmente</p>
+            <div className="text-2xl font-semibold text-emerald-700">{stats.activeCompanies}</div>
+            <p className="text-xs text-slate-500">pagando mensalmente</p>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Em Trial</CardTitle>
-            <AlertTriangle className="h-4 w-4 text-chart-4" />
+        <Card className="border-slate-200">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-slate-500">Em Trial</CardTitle>
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-100">
+              <AlertTriangle className="h-4 w-4 text-blue-600" />
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-chart-4">{stats.trialCompanies}</div>
-            <p className="text-xs text-muted-foreground">período de avaliação</p>
+            <div className="text-2xl font-semibold text-blue-700">{stats.trialCompanies}</div>
+            <p className="text-xs text-slate-500">periodo de avaliacao</p>
           </CardContent>
         </Card>
 
-        <Card 
-          className="cursor-pointer hover:border-primary/50 transition-colors"
+        <Card
+          className="border-slate-200 cursor-pointer hover:shadow-sm transition-shadow"
           onClick={() => navigate('/super-admin/planos')}
         >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Planos</CardTitle>
-            <CreditCard className="h-4 w-4 text-muted-foreground" />
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-slate-500">Planos</CardTitle>
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100">
+              <CreditCard className="h-4 w-4 text-slate-600" />
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.totalPlans}</div>
-            <p className="text-xs text-muted-foreground">planos configurados</p>
+            <div className="text-2xl font-semibold text-slate-900">{stats.totalPlans}</div>
+            <p className="text-xs text-slate-500">planos configurados</p>
           </CardContent>
         </Card>
       </div>
 
-      <Card>
+      <Card className="border-slate-200">
         <CardHeader>
-          <CardTitle>Empresas Recentes</CardTitle>
-          <CardDescription>Últimas empresas cadastradas no sistema</CardDescription>
+          <CardTitle className="text-base">Empresas Recentes</CardTitle>
+          <CardDescription>Ultimas empresas cadastradas no sistema</CardDescription>
         </CardHeader>
         <CardContent>
           {recentCompanies.length === 0 ? (
-            <p className="text-muted-foreground text-center py-8">Nenhuma empresa cadastrada</p>
+            <p className="text-slate-500 text-center py-8">Nenhuma empresa cadastrada</p>
           ) : (
             <div className="space-y-4">
               {recentCompanies.map((company) => (
-                <div 
-                  key={company.id} 
-                  className="flex items-center justify-between p-3 rounded-lg bg-muted/30 hover:bg-muted/50 cursor-pointer transition-colors"
+                <div
+                  key={company.id}
+                  className="flex items-center justify-between p-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 cursor-pointer transition-colors"
                   onClick={() => navigate('/super-admin/empresas')}
                 >
                   <div className="flex items-center gap-3">
@@ -168,18 +177,18 @@ export default function SuperAdminDashboard() {
                       <Building2 className="h-5 w-5 text-primary" />
                     </div>
                     <div>
-                      <p className="font-medium">{company.name}</p>
-                      <p className="text-sm text-muted-foreground">{company.slug}</p>
+                      <p className="font-medium text-slate-900">{company.name}</p>
+                      <p className="text-sm text-slate-500">{company.slug}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
-                    <Badge 
-                      variant="outline" 
+                    <Badge
+                      variant="outline"
                       className={statusColors[company.subscription_status as SubscriptionStatus || 'trial']}
                     >
                       {statusLabels[company.subscription_status as SubscriptionStatus || 'trial']}
                     </Badge>
-                    <span className="text-sm text-muted-foreground">
+                    <span className="text-sm text-slate-500">
                       {formatDate(company.created_at)}
                     </span>
                   </div>

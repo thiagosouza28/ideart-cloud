@@ -18,6 +18,7 @@ interface AuthContextType {
   signOut: () => Promise<void>;
   hasPermission: (allowedRoles: AppRole[]) => boolean;
   refreshCompany: () => Promise<void>;
+  getLoggedCompany: () => Company | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -182,6 +183,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return allowedRoles.includes(role);
   };
 
+  const getLoggedCompany = () => company;
+
   return (
     <AuthContext.Provider value={{
       user,
@@ -196,7 +199,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       hasPermission,
       company,
       subscription,
-      refreshCompany
+      refreshCompany,
+      getLoggedCompany
     }}>
       {children}
     </AuthContext.Provider>

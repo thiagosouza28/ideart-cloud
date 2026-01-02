@@ -44,14 +44,14 @@ export default function Production() {
       .select('*')
       .in('status', ['pendente', 'em_producao'])
       .order('created_at');
-    setOrders(data as Order[] || []);
+    setOrders((data as Order[]) || []);
     setLoading(false);
   };
 
   const startProduction = async (orderId: string) => {
     try {
       await updateOrderStatus({ orderId, status: 'em_producao', userId: user?.id });
-      toast({ title: 'Pedido iniciado na produção!' });
+      toast({ title: 'Pedido iniciado na producao!' });
       fetchOrders();
     } catch (error: any) {
       toast({ title: 'Erro ao atualizar pedido', description: error?.message, variant: 'destructive' });
@@ -77,11 +77,11 @@ export default function Production() {
     const validFiles: File[] = [];
     files.forEach((file) => {
       if (!file.type.startsWith('image/')) {
-        toast({ title: 'Arquivo inválido', description: 'Selecione apenas imagens.', variant: 'destructive' });
+        toast({ title: 'Arquivo invalido', description: 'Selecione apenas imagens.', variant: 'destructive' });
         return;
       }
       if (file.size > 5 * 1024 * 1024) {
-        toast({ title: 'Imagem muito grande', description: 'Cada imagem deve ter até 5MB.', variant: 'destructive' });
+        toast({ title: 'Imagem muito grande', description: 'Cada imagem deve ter ate 5MB.', variant: 'destructive' });
         return;
       }
       validFiles.push(file);
@@ -128,7 +128,7 @@ export default function Production() {
         order_id: orderId,
         storage_path: path,
         created_by: user?.id || null,
-      }))
+      })),
     );
 
     if (insertError) {
@@ -153,7 +153,8 @@ export default function Production() {
       fetchOrders();
     } catch (error: any) {
       if (uploadedPaths.length > 0) {
-        await supabase.from('order_final_photos' as any)
+        await supabase
+          .from('order_final_photos' as any)
           .delete()
           .eq('order_id', readyOrder.id)
           .in('storage_path', uploadedPaths);
@@ -165,26 +166,33 @@ export default function Production() {
     }
   };
 
-  const formatCurrency = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
+  const formatCurrency = (value: number) =>
+    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
   const pendingOrders = orders.filter((order) => order.status === 'pendente');
   const inProductionOrders = orders.filter((order) => order.status === 'em_producao');
 
   return (
-    <div className="page-container">
-      <div className="page-header">
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="page-title">Painel de Produção</h1>
-          <p className="text-muted-foreground">Pedidos pendentes e em produção aguardando avanços</p>
+          <h1 className="text-3xl font-bold text-slate-900">Painel de Producao</h1>
+          <p className="text-sm text-slate-500">Pedidos pendentes e em producao aguardando avancos</p>
         </div>
-        <Badge variant="outline" className="text-lg px-3 py-1">
-          <Clock className="mr-2 h-4 w-4" />{orders.length} {orders.length === 1 ? 'pedido' : 'pedidos'}
+        <Badge variant="outline" className="text-sm px-3 py-1 rounded-full">
+          <Clock className="mr-2 h-4 w-4" />
+          {orders.length} {orders.length === 1 ? 'pedido' : 'pedidos'}
         </Badge>
       </div>
 
       {loading ? (
         <div className="text-center py-12 text-muted-foreground">Carregando...</div>
       ) : orders.length === 0 ? (
-        <Card><CardContent className="py-12 text-center text-muted-foreground"><Package className="mx-auto h-12 w-12 mb-4 opacity-50" />Nenhum pedido pendente ou em produção</CardContent></Card>
+        <Card className="border-slate-200 shadow-sm">
+          <CardContent className="py-12 text-center text-muted-foreground">
+            <Package className="mx-auto h-12 w-12 mb-4 opacity-50" />
+            Nenhum pedido pendente ou em producao
+          </CardContent>
+        </Card>
       ) : (
         <div className="space-y-6">
           {pendingOrders.length > 0 && (
@@ -192,7 +200,7 @@ export default function Production() {
               <h2 className="text-lg font-semibold">Pendentes</h2>
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                 {pendingOrders.map((order) => (
-                  <Card key={order.id} className="hover:shadow-md transition-shadow">
+                  <Card key={order.id} className="border-slate-200 shadow-sm">
                     <CardHeader className="pb-3">
                       <div className="flex items-center justify-between">
                         <CardTitle className="text-lg">Pedido #{formatOrderNumber(order.order_number)}</CardTitle>
@@ -211,11 +219,18 @@ export default function Production() {
                             {order.customer_name || 'Cliente'}
                           </Button>
                         ) : (
-                          <span className="font-medium">{order.customer_name || 'Não informado'}</span>
+                          <span className="font-medium">{order.customer_name || 'Nao informado'}</span>
                         )}
                       </div>
-                      <div className="text-sm"><span className="text-muted-foreground">Total:</span> <span className="font-medium">{formatCurrency(Number(order.total))}</span></div>
-                      {order.notes && <div className="text-sm bg-muted p-2 rounded"><span className="text-muted-foreground">Obs:</span> {order.notes}</div>}
+                      <div className="text-sm">
+                        <span className="text-muted-foreground">Total:</span>{' '}
+                        <span className="font-medium">{formatCurrency(Number(order.total))}</span>
+                      </div>
+                      {order.notes && (
+                        <div className="text-sm bg-muted p-2 rounded">
+                          <span className="text-muted-foreground">Obs:</span> {order.notes}
+                        </div>
+                      )}
                       <div className="grid gap-2">
                         <Button variant="outline" className="w-full" onClick={() => navigate(`/pedidos/${order.id}`)}>
                           <Eye className="mr-2 h-4 w-4" />
@@ -223,7 +238,7 @@ export default function Production() {
                         </Button>
                         <Button className="w-full" onClick={() => startProduction(order.id)}>
                           <Clock className="mr-2 h-4 w-4" />
-                          Iniciar Produção
+                          Iniciar Producao
                         </Button>
                       </div>
                     </CardContent>
@@ -234,14 +249,14 @@ export default function Production() {
           )}
           {inProductionOrders.length > 0 && (
             <div className="space-y-3">
-              <h2 className="text-lg font-semibold">Em Produção</h2>
+              <h2 className="text-lg font-semibold">Em Producao</h2>
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                 {inProductionOrders.map((order) => (
-                  <Card key={order.id} className="hover:shadow-md transition-shadow">
+                  <Card key={order.id} className="border-slate-200 shadow-sm">
                     <CardHeader className="pb-3">
                       <div className="flex items-center justify-between">
                         <CardTitle className="text-lg">Pedido #{formatOrderNumber(order.order_number)}</CardTitle>
-                        <span className="status-badge status-em_producao">Em Produção</span>
+                        <span className="status-badge status-em_producao">Em Producao</span>
                       </div>
                     </CardHeader>
                     <CardContent className="space-y-3">
@@ -256,11 +271,18 @@ export default function Production() {
                             {order.customer_name || 'Cliente'}
                           </Button>
                         ) : (
-                          <span className="font-medium">{order.customer_name || 'Não informado'}</span>
+                          <span className="font-medium">{order.customer_name || 'Nao informado'}</span>
                         )}
                       </div>
-                      <div className="text-sm"><span className="text-muted-foreground">Total:</span> <span className="font-medium">{formatCurrency(Number(order.total))}</span></div>
-                      {order.notes && <div className="text-sm bg-muted p-2 rounded"><span className="text-muted-foreground">Obs:</span> {order.notes}</div>}
+                      <div className="text-sm">
+                        <span className="text-muted-foreground">Total:</span>{' '}
+                        <span className="font-medium">{formatCurrency(Number(order.total))}</span>
+                      </div>
+                      {order.notes && (
+                        <div className="text-sm bg-muted p-2 rounded">
+                          <span className="text-muted-foreground">Obs:</span> {order.notes}
+                        </div>
+                      )}
                       <div className="grid gap-2">
                         <Button variant="outline" className="w-full" onClick={() => navigate(`/pedidos/${order.id}`)}>
                           <Eye className="mr-2 h-4 w-4" />
@@ -283,7 +305,7 @@ export default function Production() {
       <Dialog open={readyDialogOpen} onOpenChange={(open) => !open && closeReadyDialog()}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Finalizar produção</DialogTitle>
+            <DialogTitle>Finalizar producao</DialogTitle>
             <DialogDescription>
               Confirme o status e anexe fotos do produto final para registrar no pedido.
             </DialogDescription>
@@ -298,11 +320,11 @@ export default function Production() {
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Cliente</p>
-                    <p className="font-semibold">{readyOrder.customer_name || 'Não informado'}</p>
+                    <p className="font-semibold">{readyOrder.customer_name || 'Nao informado'}</p>
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Status atual</p>
-                    <p className="font-semibold">Em produção</p>
+                    <p className="font-semibold">Em producao</p>
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Total</p>
@@ -325,7 +347,7 @@ export default function Production() {
                   Selecionar fotos
                 </Button>
                 <p className="text-xs text-muted-foreground">
-                  Envie uma ou mais imagens JPG ou PNG (até 5MB cada).
+                  Envie uma ou mais imagens JPG ou PNG (ate 5MB cada).
                 </p>
               </div>
               <input

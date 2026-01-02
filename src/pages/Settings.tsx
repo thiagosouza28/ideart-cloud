@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { Checkbox } from '@/components/ui/checkbox';
 import { supabase } from '@/integrations/supabase/client';
 import { Category, Supply, Attribute, AttributeValue, Company } from '@/types/database';
 import { useToast } from '@/hooks/use-toast';
@@ -28,7 +29,7 @@ const attributeSchema = z.object({ name: z.string().min(2).max(50) });
 
 export default function Settings() {
   const { toast } = useToast();
-  const { profile } = useAuth();
+  const { profile, user, hasPermission } = useAuth();
   const [categories, setCategories] = useState<Category[]>([]);
   const [supplies, setSupplies] = useState<Supply[]>([]);
   const [attributes, setAttributes] = useState<Attribute[]>([]);
@@ -78,6 +79,12 @@ export default function Settings() {
   const [originalForm, setOriginalForm] = useState<typeof companyForm | null>(null);
   const [isSaved, setIsSaved] = useState(true);
   const companyFetchRef = useRef<string | null>(null);
+  const [dangerOpen, setDangerOpen] = useState(false);
+  const [resetPassword, setResetPassword] = useState('');
+  const [resetConfirmText, setResetConfirmText] = useState('');
+  const [resetChecked, setResetChecked] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetError, setResetError] = useState<string | null>(null);
   // Controla a aba por estado para evitar reload e manter o estado dos formulários.
   const [activeTab, setActiveTab] = useState<'company' | 'catalog'>('company');
 
@@ -353,6 +360,66 @@ export default function Settings() {
   };
 
   const formatCurrency = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
+  const isAdmin = hasPermission(['admin', 'super_admin']);
+  const resetReady = isAdmin
+    && !!profile?.company_id
+    && resetChecked
+    && resetPassword.trim().length > 0
+    && resetConfirmText.trim().toUpperCase() === 'RESETAR';
+
+  const handleResetCompany = async () => {
+    if (!profile?.company_id) {
+      setResetError('Empresa nao encontrada.');
+      return;
+    }
+    if (!user?.email) {
+      setResetError('Email do usuario nao encontrado.');
+      return;
+    }
+
+    setResetLoading(true);
+    setResetError(null);
+
+    const { error: authError } = await supabase.auth.signInWithPassword({
+      email: user.email,
+      password: resetPassword,
+    });
+
+    if (authError) {
+      setResetLoading(false);
+      setResetError('Senha invalida.');
+      return;
+    }
+
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+    const accessToken = sessionData?.session?.access_token;
+    if (sessionError || !accessToken) {
+      setResetLoading(false);
+      setResetError('Sessao invalida. Faca login novamente.');
+      return;
+    }
+
+    const { error: resetInvokeError } = await supabase.functions.invoke('reset-company-data', {
+      body: { company_id: profile.company_id },
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+
+    if (resetInvokeError) {
+      setResetLoading(false);
+      setResetError(resetInvokeError.message || 'Falha ao zerar dados.');
+      return;
+    }
+
+    toast({ title: 'Dados da empresa zerados com sucesso.' });
+    setDangerOpen(false);
+    setResetPassword('');
+    setResetConfirmText('');
+    setResetChecked(false);
+    setResetLoading(false);
+    window.location.assign('/dashboard');
+  };
 
   // Categories
   const saveCategory = async () => {
@@ -1170,6 +1237,90 @@ export default function Settings() {
         </TabsContent>
       </Tabs>
 
+      {isAdmin && (
+        <Card className="mt-8 border-red-200 bg-red-50/50">
+          <CardHeader>
+            <CardTitle className="text-red-700">Area de perigo</CardTitle>
+            <CardDescription className="text-red-600">
+              Acoes irreversiveis para dados da empresa.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="font-medium">Zerar dados da empresa</p>
+                <p className="text-sm text-muted-foreground">
+                  Remove pedidos, produtos, clientes e movimentacoes da empresa.
+                </p>
+              </div>
+              <Button variant="destructive" onClick={() => setDangerOpen(true)}>
+                Zerar dados
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <Dialog open={dangerOpen} onOpenChange={setDangerOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Zerar dados da empresa</DialogTitle>
+            <DialogDescription>
+              Confirme sua senha e os campos abaixo para continuar.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              Esta ação é irreversível. Todos os pedidos, produtos e clientes serão apagados permanentemente.
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="reset-password">Senha atual do admin</Label>
+              <Input
+                id="reset-password"
+                type="password"
+                value={resetPassword}
+                onChange={(event) => setResetPassword(event.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="reset-word">Digite RESETAR</Label>
+              <Input
+                id="reset-word"
+                value={resetConfirmText}
+                onChange={(event) => setResetConfirmText(event.target.value)}
+              />
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="reset-confirm"
+                checked={resetChecked}
+                onCheckedChange={(checked) => setResetChecked(checked === true)}
+              />
+              <Label htmlFor="reset-confirm">Eu entendo que isso é irreversível</Label>
+            </div>
+
+            {resetError && <p className="text-sm text-red-600">{resetError}</p>}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDangerOpen(false)} disabled={resetLoading}>
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleResetCompany}
+              disabled={!resetReady || resetLoading}
+            >
+              {resetLoading ? 'Zerando...' : 'Confirmar e Zerar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Status Badge */}
       <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50">
         <div className="inline-flex items-center gap-2 rounded-full border bg-background/95 px-3 py-1.5 shadow-sm">
@@ -1220,6 +1371,3 @@ export default function Settings() {
     </div>
   );
 }
-
-
-

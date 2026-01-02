@@ -1,16 +1,28 @@
-import { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { Package, Search, Filter, ArrowUpDown, ChevronRight, MessageCircle, LayoutGrid, List, Tag, Phone, Mail, MapPin, Building2, Instagram } from 'lucide-react';
+﻿import { useEffect, useMemo, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import {
+  ArrowLeft,
+  ArrowUpDown,
+  Building2,
+  LayoutGrid,
+  List,
+  Mail,
+  MapPin,
+  MessageCircle,
+  Package,
+  Phone,
+  Tag
+} from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { supabase } from '@/integrations/supabase/client';
-import { Company, Product, Category } from '@/types/database';
-import { ensurePublicStorageUrl } from '@/lib/storage';
-import { resolveSuggestedPrice, isPromotionActive, getBasePrice } from '@/lib/pricing';
+import { Separator } from '@/components/ui/separator';
 import { BannerCarousel } from '@/components/BannerCarousel';
+import { supabase } from '@/integrations/supabase/client';
+import { ensurePublicStorageUrl } from '@/lib/storage';
+import { getBasePrice, isPromotionActive, resolveSuggestedPrice } from '@/lib/pricing';
+import { Category, Company, Product } from '@/types/database';
 
 interface CompanyWithColors extends Company {
   catalog_primary_color?: string;
@@ -32,6 +44,16 @@ interface CompanyWithColors extends Company {
   catalog_filter_bg_color?: string;
   catalog_filter_text_color?: string;
   catalog_layout?: 'grid' | 'list';
+  catalog_title?: string | null;
+  catalog_description?: string | null;
+  catalog_share_image_url?: string | null;
+  catalog_button_text?: string | null;
+  catalog_show_prices?: boolean | null;
+  catalog_show_contact?: boolean | null;
+  catalog_contact_url?: string | null;
+  catalog_font?: string | null;
+  catalog_columns_mobile?: number | null;
+  catalog_columns_desktop?: number | null;
 }
 
 interface ProductWithCategory extends Omit<Product, 'category'> {
@@ -40,6 +62,7 @@ interface ProductWithCategory extends Omit<Product, 'category'> {
 
 export default function PublicCatalog() {
   const { slug } = useParams<{ slug: string }>();
+  const navigate = useNavigate();
   const [company, setCompany] = useState<CompanyWithColors | null>(null);
   const [products, setProducts] = useState<ProductWithCategory[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -53,7 +76,6 @@ export default function PublicCatalog() {
     const loadCatalog = async () => {
       if (!slug) return;
 
-      // Load company
       const { data: companyData, error } = await supabase
         .from('companies')
         .select('*')
@@ -71,25 +93,26 @@ export default function PublicCatalog() {
         ...(companyData as CompanyWithColors),
         logo_url: ensurePublicStorageUrl('product-images', companyData.logo_url),
       };
+
       setCompany(normalizedCompany);
       setViewMode(normalizedCompany.catalog_layout || 'grid');
 
-      // Load products for this company that are in catalog
       const { data: productsData } = await supabase
         .from('products')
         .select('*, category:categories(name)')
         .eq('company_id', companyData.id)
-        .eq('show_in_catalog', true)
+        .or('catalog_enabled.is.true,show_in_catalog.is.true')
         .eq('is_active', true)
+        .order('catalog_sort_order', { ascending: true })
         .order('name');
 
       const mappedProducts = (productsData as unknown as ProductWithCategory[] || []).map((product) => ({
         ...product,
         image_url: ensurePublicStorageUrl('product-images', product.image_url),
       }));
+
       setProducts(mappedProducts);
 
-      // Get unique categories from products
       const uniqueCategoryIds = [...new Set(mappedProducts.map(p => p.category_id).filter(Boolean))];
       if (uniqueCategoryIds.length > 0) {
         const { data: categoriesData } = await supabase
@@ -106,63 +129,93 @@ export default function PublicCatalog() {
     loadCatalog();
   }, [slug]);
 
-  const getProductPrice = (product: ProductWithCategory) =>
-    resolveSuggestedPrice(product as unknown as Product, 1, [], 0);
-
-  const filteredProducts = (selectedCategory
-    ? products.filter(p => p.category_id === selectedCategory)
-    : products
-  ).sort((a, b) => {
-    switch (sortBy) {
-      case 'name_asc':
-        return a.name.localeCompare(b.name);
-      case 'name_desc':
-        return b.name.localeCompare(a.name);
-      case 'price_asc':
-        return getProductPrice(a) - getProductPrice(b);
-      case 'price_desc':
-        return getProductPrice(b) - getProductPrice(a);
-      default:
-        return 0;
+  useEffect(() => {
+    if (!company) return;
+    const title = company.catalog_title || company.name || 'Catalogo';
+    const description = company.catalog_description || `Catalogo de ${company.name}`;
+    document.title = title;
+    const metaDescription = document.querySelector('meta[name="description"]');
+    if (metaDescription) metaDescription.setAttribute('content', description);
+    const ogTitle = document.querySelector('meta[property="og:title"]');
+    if (ogTitle) ogTitle.setAttribute('content', title);
+    const ogDesc = document.querySelector('meta[property="og:description"]');
+    if (ogDesc) ogDesc.setAttribute('content', description);
+    const ogImage = document.querySelector('meta[property="og:image"]');
+    if (ogImage && company.catalog_share_image_url) {
+      ogImage.setAttribute('content', company.catalog_share_image_url);
     }
-  });
+  }, [company]);
+
+  const getProductPrice = (product: ProductWithCategory) =>
+    product.catalog_price ?? resolveSuggestedPrice(product as unknown as Product, 1, [], 0);
+
+  const filteredProducts = useMemo(() => {
+    const scoped = selectedCategory
+      ? products.filter(p => p.category_id === selectedCategory)
+      : products;
+
+    return [...scoped].sort((a, b) => {
+      switch (sortBy) {
+        case 'name_asc':
+          return a.name.localeCompare(b.name);
+        case 'name_desc':
+          return b.name.localeCompare(a.name);
+        case 'price_asc':
+          return getProductPrice(a) - getProductPrice(b);
+        case 'price_desc':
+          return getProductPrice(b) - getProductPrice(a);
+        default:
+          return 0;
+      }
+    });
+  }, [products, selectedCategory, sortBy]);
 
   const formatCurrency = (value: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 
-  const openWhatsApp = (product?: ProductWithCategory) => {
+  const openContact = (product?: ProductWithCategory) => {
+    if (company?.catalog_contact_url) {
+      const link = company.catalog_contact_url.replace('{produto}', product?.name || '');
+      window.open(link, '_blank');
+      return;
+    }
     if (!company?.whatsapp) return;
     const phone = company.whatsapp.replace(/\D/g, '');
     const message = product
-      ? `Olá! Gostaria de saber mais sobre o produto: ${product.name}`
-      : `Olá! Vim pelo catálogo online e gostaria de mais informações.`;
+      ? `Ola! Gostaria de saber mais sobre o produto: ${product.name}`
+      : 'Ola! Vim pelo catalogo online e gostaria de mais informacoes.';
     window.open(`https://wa.me/55${phone}?text=${encodeURIComponent(message)}`, '_blank');
   };
 
-  // Custom colors
   const baseButtonColor = company?.catalog_primary_color || '#3b82f6';
   const baseSurfaceColor = company?.catalog_secondary_color || '#1e40af';
   const baseHighlightColor = company?.catalog_accent_color || '#f59e0b';
   const textColor = company?.catalog_text_color || '#111827';
   const headerBgColor = company?.catalog_header_bg_color || baseSurfaceColor;
-  const headerTextColor = company?.catalog_header_text_color || textColor;
-  const footerBgColor = company?.catalog_footer_bg_color || headerBgColor;
-  const footerTextColor = company?.catalog_footer_text_color || headerTextColor;
-  const priceColor = company?.catalog_price_color || baseHighlightColor;
+  const headerTextColor = company?.catalog_header_text_color || '#ffffff';
+  const footerBgColor = company?.catalog_footer_bg_color || '#ffffff';
+  const footerTextColor = company?.catalog_footer_text_color || '#0f172a';
+  const priceColor = company?.catalog_price_color || baseButtonColor;
   const badgeBgColor = company?.catalog_badge_bg_color || baseHighlightColor;
-  const badgeTextColor = company?.catalog_badge_text_color || textColor;
-  const buttonBgColor = company?.catalog_button_bg_color || baseButtonColor;
+  const badgeTextColor = company?.catalog_badge_text_color || '#ffffff';
+  const buttonBgColor = company?.catalog_button_bg_color || '#0f172a';
   const buttonTextColor = company?.catalog_button_text_color || '#ffffff';
   const buttonOutlineColor = company?.catalog_button_outline_color || baseButtonColor;
   const cardBgColor = company?.catalog_card_bg_color || '#ffffff';
-  const cardBorderColor = company?.catalog_card_border_color || '#e5e7eb';
+  const cardBorderColor = company?.catalog_card_border_color || '#e2e8f0';
   const filterBgColor = company?.catalog_filter_bg_color || baseButtonColor;
   const filterTextColor = company?.catalog_filter_text_color || '#ffffff';
+  const showPrices = company?.catalog_show_prices ?? true;
+  const showContact = company?.catalog_show_contact ?? true;
+  const buttonText = company?.catalog_button_text || 'Fazer Pedido';
+  const catalogFont = company?.catalog_font || 'Inter, ui-sans-serif, system-ui, sans-serif';
+  const columnsMobile = company?.catalog_columns_mobile || 1;
+  const columnsDesktop = company?.catalog_columns_desktop || 4;
 
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="animate-pulse text-muted-foreground">Carregando catálogo...</div>
+        <div className="animate-pulse text-muted-foreground">Carregando catalogo...</div>
       </div>
     );
   }
@@ -171,10 +224,10 @@ export default function PublicCatalog() {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-foreground mb-2">Catálogo não encontrado</h1>
-          <p className="text-muted-foreground mb-4">Este catálogo não existe ou não está disponível.</p>
+          <h1 className="text-2xl font-bold text-foreground mb-2">Catalogo nao encontrado</h1>
+          <p className="text-muted-foreground mb-4">Este catalogo nao existe ou nao esta disponivel.</p>
           <Link to="/">
-            <Button>Voltar ao início</Button>
+            <Button>Voltar ao inicio</Button>
           </Link>
         </div>
       </div>
@@ -182,295 +235,256 @@ export default function PublicCatalog() {
   }
 
   return (
-    <div className="min-h-screen bg-background catalog-text">
-      {/* Custom CSS Variables */}
+    <div
+      className="min-h-screen bg-slate-50 catalog-text"
+      style={{
+        fontFamily: catalogFont,
+        ['--catalog-cols-mobile' as any]: String(columnsMobile),
+        ['--catalog-cols-desktop' as any]: String(columnsDesktop),
+      }}
+    >
       <style>{`
-        .catalog-primary { color: ${buttonBgColor}; }
-        .catalog-primary-bg { background-color: ${buttonBgColor}; }
-        .catalog-primary-border { border-color: ${buttonBgColor}; }
-        .catalog-secondary { color: ${headerBgColor}; }
-        .catalog-secondary-bg { background-color: ${headerBgColor}; }
-        .catalog-accent { color: ${priceColor}; }
-        .catalog-accent-bg { background-color: ${priceColor}; }
         .catalog-text { color: ${textColor}; }
-        .catalog-text .text-foreground,
-        .catalog-text .text-muted-foreground { color: ${textColor}; }
-        .catalog-btn {
-          background-color: ${buttonBgColor};
-          color: ${buttonTextColor};
-        }
-        .catalog-btn:hover {
-          filter: brightness(0.92);
-        }
-        .catalog-btn-outline {
-          border-color: ${buttonOutlineColor};
-          color: ${buttonOutlineColor};
-        }
-        .catalog-btn-outline:hover {
-          background-color: ${buttonOutlineColor};
-          color: ${buttonTextColor};
-        }
-        .catalog-filter {
-          background-color: ${filterBgColor};
-          color: ${filterTextColor};
-        }
-        .catalog-filter-outline {
-          border-color: ${filterBgColor};
-          color: ${filterBgColor};
-        }
-        .catalog-filter-outline:hover {
-          background-color: ${filterBgColor};
-          color: ${filterTextColor};
-        }
-        .catalog-card {
-          background-color: ${cardBgColor};
-          border-color: ${cardBorderColor};
-        }
-        .catalog-badge {
-          background-color: ${badgeBgColor};
-          color: ${badgeTextColor};
-        }
+        .catalog-primary { color: ${baseButtonColor}; }
+        .catalog-btn { background-color: ${buttonBgColor}; color: ${buttonTextColor}; }
+        .catalog-btn:hover { filter: brightness(0.92); }
+        .catalog-btn-outline { border-color: ${buttonOutlineColor}; color: ${buttonOutlineColor}; }
+        .catalog-btn-outline:hover { background-color: ${buttonOutlineColor}; color: ${buttonTextColor}; }
+        .catalog-card { background-color: ${cardBgColor}; border-color: ${cardBorderColor}; }
+        .catalog-filter { background-color: ${filterBgColor}; color: ${filterTextColor}; }
+        .catalog-filter-outline { border-color: ${filterBgColor}; color: ${filterBgColor}; }
+        .catalog-filter-outline:hover { background-color: ${filterBgColor}; color: ${filterTextColor}; }
+        .catalog-price { color: ${priceColor}; }
+        .catalog-badge { background-color: ${badgeBgColor}; color: ${badgeTextColor}; }
       `}</style>
 
-      {/* Header */}
-      <header className="border-b sticky top-0 z-10" style={{ backgroundColor: headerBgColor, color: headerTextColor }}>
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
+      <header className="sticky top-0 z-40 border-b shadow-sm" style={{ backgroundColor: headerBgColor, color: headerTextColor }}>
+        <div className="container mx-auto px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/'))}
+              className="gap-2 text-xs text-white/90 hover:text-white"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Voltar
+            </Button>
+            <div className="flex items-center gap-3">
               {company?.logo_url ? (
-                <img src={company.logo_url} alt={company.name} loading="lazy" className="w-12 h-12 object-cover rounded-lg bg-white/10" />
+                <img
+                  src={company.logo_url}
+                  alt={company?.name || 'Logo'}
+                  className="w-8 h-8 rounded-full bg-white/20 object-cover"
+                />
               ) : (
-                <div className="w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center">
-                  <Building2 className="h-6 w-6" />
+                <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
+                  <Building2 className="h-4 w-4" />
                 </div>
               )}
-              <div>
-                <h1 className="text-xl font-bold">{company?.name}</h1>
+              <div className="leading-tight">
+                <h1 className="font-bold text-sm">{company?.catalog_title || company?.name}</h1>
                 {company?.city && company?.state && (
-                  <p className="text-sm opacity-80">{company.city}, {company.state}</p>
+                  <p className="text-xs text-white/70">{company.city}, {company.state}</p>
                 )}
               </div>
             </div>
-            <div className="flex items-center gap-3">
-              {/* Product Counter */}
-              <Badge
-                variant="secondary"
-                className="hidden sm:flex bg-white/20 border-0"
-                style={{ color: headerTextColor }}
+          </div>
+          <div className="flex items-center gap-4 text-xs">
+            <Badge className="hidden sm:flex bg-white/15 text-white border-0">
+              <Package className="h-3 w-3 mr-1" />
+              {products.length} {products.length === 1 ? 'produto' : 'produtos'}
+            </Badge>
+            {showContact && (company?.catalog_contact_url || company?.whatsapp) && (
+              <Button
+                onClick={() => openContact()}
+                size="sm"
+                className="gap-2 bg-white/15 hover:bg-white/25 text-white"
               >
-                <Package className="h-3 w-3 mr-1" />
-                {products.length} {products.length === 1 ? 'produto' : 'produtos'}
-              </Badge>
-              {company?.whatsapp && (
-                <Button
-                  onClick={() => openWhatsApp()}
-                  className="gap-2 bg-white/20 hover:bg-white/30 border-0"
-                  style={{ color: headerTextColor }}
-                >
-                  <MessageCircle className="h-4 w-4" />
-                  <span className="hidden sm:inline">WhatsApp</span>
-                </Button>
-              )}
-            </div>
+                <MessageCircle className="h-4 w-4" />
+                <span className="hidden sm:inline">WhatsApp</span>
+              </Button>
+            )}
           </div>
         </div>
       </header>
 
-      <main className="container mx-auto px-4 py-8">
-        {company && <BannerCarousel companyId={company.id} position="catalog" />}
-        {/* Company Info */}
-        {company?.description && (
+      <main className="container mx-auto px-4 py-6 max-w-7xl">
+        {company && (
           <div className="mb-8">
-            <p className="text-muted-foreground max-w-2xl">{company.description}</p>
-          </div>
-        )}
-
-        {/* Contact Info */}
-        <div className="flex flex-wrap gap-4 mb-8">
-          {company?.phone && (
-            <a href={`tel:${company.phone}`} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
-              <Phone className="h-4 w-4" />
-              {company.phone}
-            </a>
-          )}
-          {company?.email && (
-            <a href={`mailto:${company.email}`} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
-              <Mail className="h-4 w-4" />
-              {company.email}
-            </a>
-          )}
-          {company?.address && (
-            <span className="flex items-center gap-2 text-sm text-muted-foreground">
-              <MapPin className="h-4 w-4" />
-              {company.address}
-            </span>
-          )}
-          {company?.instagram && (
-            <a href={`https://instagram.com/${company.instagram.replace('@', '')}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
-              <Instagram className="h-4 w-4" />
-              {company.instagram}
-            </a>
-          )}
-        </div>
-
-        <Separator className="mb-8" />
-
-        {/* Product Counter Mobile + Category Filter + Layout Toggle */}
-        <div className="flex flex-wrap items-center gap-4 mb-6">
-          <Badge
-            variant="outline"
-            className="sm:hidden"
-            style={{ color: filterBgColor, borderColor: filterBgColor }}
-          >
-            <Package className="h-3 w-3 mr-1" />
-            {products.length} {products.length === 1 ? 'produto' : 'produtos'}
-          </Badge>
-
-          {categories.length > 0 && (
-            <div className="flex flex-wrap gap-2 flex-1">
-              <Button
-                variant={selectedCategory === null ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setSelectedCategory(null)}
-                className={selectedCategory === null ? 'catalog-filter' : 'catalog-filter-outline'}
-              >
-                Todos ({products.length})
-              </Button>
-              {categories.map(cat => {
-                const count = products.filter(p => p.category_id === cat.id).length;
-                return (
-                  <Button
-                    key={cat.id}
-                    variant={selectedCategory === cat.id ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setSelectedCategory(cat.id)}
-                    className={selectedCategory === cat.id ? 'catalog-filter' : 'catalog-filter-outline'}
-                  >
-                    {cat.name} ({count})
-                  </Button>
-                );
-              })}
+            <div className="rounded-2xl overflow-hidden shadow-lg">
+              <BannerCarousel companyId={company.id} position="catalog" />
             </div>
-          )}
+          </div>
+        )}
 
-          {/* Sort Select */}
-          <Select value={sortBy} onValueChange={(value: any) => setSortBy(value)}>
-            <SelectTrigger className="w-auto min-w-[140px] catalog-filter-outline">
-              <ArrowUpDown className="h-4 w-4 mr-2" />
-              <SelectValue placeholder="Ordenar" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="name_asc">Nome A-Z</SelectItem>
-              <SelectItem value="name_desc">Nome Z-A</SelectItem>
-              <SelectItem value="price_asc">Menor preço</SelectItem>
-              <SelectItem value="price_desc">Maior preço</SelectItem>
-            </SelectContent>
-          </Select>
-
-          {/* Layout Toggle */}
-          <div className="flex items-center gap-1 border rounded-md p-1">
-            <Button
-              variant={viewMode === 'grid' ? 'default' : 'ghost'}
-              size="sm"
-              onClick={() => setViewMode('grid')}
-              className={`h-8 w-8 p-0 ${viewMode === 'grid' ? 'catalog-filter' : 'catalog-filter-outline'}`}
-            >
-              <LayoutGrid className="h-4 w-4" />
-            </Button>
-            <Button
-              variant={viewMode === 'list' ? 'default' : 'ghost'}
-              size="sm"
-              onClick={() => setViewMode('list')}
-              className={`h-8 w-8 p-0 ${viewMode === 'list' ? 'catalog-filter' : 'catalog-filter-outline'}`}
-            >
-              <List className="h-4 w-4" />
-            </Button>
+        <div className="mb-8 space-y-4">
+          <h2 className="text-lg font-semibold uppercase tracking-wide border-l-4 pl-3" style={{ borderColor: baseButtonColor }}>
+            {company?.description || 'Catalogo de produtos'}
+          </h2>
+          <div className="flex flex-col sm:flex-row gap-4 sm:gap-8 text-sm text-slate-500">
+            {company?.phone && (
+              <div className="flex items-center gap-2">
+                <Phone className="h-4 w-4 catalog-primary" />
+                {company.phone}
+              </div>
+            )}
+            {company?.email && (
+              <div className="flex items-center gap-2">
+                <Mail className="h-4 w-4 catalog-primary" />
+                {company.email}
+              </div>
+            )}
+            {company?.address && (
+              <div className="flex items-center gap-2">
+                <MapPin className="h-4 w-4 catalog-primary" />
+                {company.address}
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Filtered count */}
-        {selectedCategory && (
-          <p className="text-sm text-muted-foreground mb-4">
-            Mostrando {filteredProducts.length} de {products.length} produtos
-          </p>
-        )}
+        <Separator className="mb-4" />
 
-        {/* Products Grid */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8 sticky top-[64px] z-30 bg-slate-50/90 backdrop-blur border-b border-slate-200 py-4">
+          <div className="flex gap-2 overflow-x-auto w-full sm:w-auto no-scrollbar">
+            {categories.length > 0 ? (
+              <>
+                <Button
+                  size="sm"
+                  onClick={() => setSelectedCategory(null)}
+                  className={selectedCategory === null ? 'catalog-filter' : 'catalog-filter-outline'}
+                >
+                  Todos ({products.length})
+                </Button>
+                {categories.map(cat => {
+                  const count = products.filter(p => p.category_id === cat.id).length;
+                  return (
+                    <Button
+                      key={cat.id}
+                      size="sm"
+                      onClick={() => setSelectedCategory(cat.id)}
+                      className={selectedCategory === cat.id ? 'catalog-filter' : 'catalog-filter-outline'}
+                    >
+                      {cat.name} ({count})
+                    </Button>
+                  );
+                })}
+              </>
+            ) : (
+              <Button size="sm" className="catalog-filter">Todos ({products.length})</Button>
+            )}
+          </div>
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <Select value={sortBy} onValueChange={(value: any) => setSortBy(value)}>
+              <SelectTrigger className="w-full sm:w-auto min-w-[140px] catalog-filter-outline">
+                <ArrowUpDown className="h-4 w-4 mr-2" />
+                <SelectValue placeholder="Ordenar" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="name_asc">Nome A-Z</SelectItem>
+                <SelectItem value="name_desc">Nome Z-A</SelectItem>
+                <SelectItem value="price_asc">Menor preco</SelectItem>
+                <SelectItem value="price_desc">Maior preco</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <div className="flex border rounded-lg overflow-hidden bg-white">
+              <Button
+                size="sm"
+                onClick={() => setViewMode('grid')}
+                className={viewMode === 'grid' ? 'catalog-filter' : 'catalog-filter-outline'}
+              >
+                <LayoutGrid className="h-4 w-4" />
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => setViewMode('list')}
+                className={viewMode === 'list' ? 'catalog-filter' : 'catalog-filter-outline'}
+              >
+                <List className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        </div>
+
         {filteredProducts.length === 0 ? (
           <div className="text-center py-12">
-            <Package className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            <p className="text-muted-foreground">Nenhum produto disponível no catálogo.</p>
+            <Package className="h-12 w-12 text-slate-300 mx-auto mb-4" />
+            <p className="text-slate-500">Nenhum produto disponivel no catalogo.</p>
           </div>
         ) : (
-          <div className={viewMode === 'grid'
-            ? "grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
-            : "flex flex-col gap-4"
-          }>
+          <div className={viewMode === 'grid' ? 'catalog-grid' : 'flex flex-col gap-4'}>
             {filteredProducts.map(product => (
               viewMode === 'grid' ? (
-                <Link key={product.id} to={`/catalogo/${slug}/produto/${product.id}`}>
-                  <Card className="relative overflow-hidden group hover:shadow-lg transition-shadow cursor-pointer h-full catalog-card flex flex-col">
-                    <div className="aspect-square bg-muted relative overflow-hidden">
+                <Link key={product.id} to={`/catalogo/${slug}/produto/${product.slug ?? product.id}`}>
+                  <Card className="relative overflow-hidden group hover:shadow-md transition-shadow flex flex-col h-full catalog-card border">
+                    <div className="relative aspect-square overflow-hidden bg-slate-100">
                       {isPromotionActive(product as unknown as Product) && (
-                        <div className="absolute top-2 left-2 z-10">
-                          <Badge className="bg-amber-500 text-white border-none gap-1 py-1 px-2 font-bold shadow-sm">
-                            <Tag className="h-3 w-3" />
-                            OFERTA
-                          </Badge>
-                        </div>
+                        <span className="absolute top-3 left-3 z-10 text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-wider flex items-center gap-1 catalog-badge">
+                          <Tag className="h-3 w-3" /> Oferta
+                        </span>
+                      )}
+                      {showContact && (company?.catalog_contact_url || company?.whatsapp) && (
+                        <button
+                          onClick={(e) => {
+                            e.preventDefault();
+                            openContact(product);
+                          }}
+                          className="absolute top-3 right-3 z-10 p-1.5 rounded-full bg-white/80 text-slate-500 hover:text-primary"
+                          aria-label="Contato"
+                        >
+                          <MessageCircle className="h-4 w-4" />
+                        </button>
                       )}
                       {product.image_url ? (
                         <img
                           src={product.image_url}
                           alt={product.name}
                           loading="lazy"
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                         />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center">
-                          <Package className="h-16 w-16 text-muted-foreground/30" />
+                          <Package className="h-16 w-16 text-slate-300" />
                         </div>
                       )}
                     </div>
-                    <CardContent className="p-4 flex-1 flex flex-col">
-                      <h3 className="font-semibold text-foreground mb-2 line-clamp-2 flex-grow">{product.name}</h3>
+                    <CardContent className="p-4 flex flex-col flex-grow">
+                      <h3 className="font-semibold mb-1 line-clamp-2">{product.name}</h3>
+                      {product.catalog_short_description && (
+                        <p className="text-sm text-slate-500 line-clamp-2 mb-2">
+                          {product.catalog_short_description}
+                        </p>
+                      )}
                       <div className="mt-auto">
-                        <div className="flex flex-col mb-3">
-                          {isPromotionActive(product as unknown as Product) && (
-                            <span className="text-sm text-muted-foreground line-through">
-                              {formatCurrency(getBasePrice(product as unknown as Product))}
+                        {showPrices ? (
+                          <div className="flex items-baseline gap-2 mb-3">
+                            {isPromotionActive(product as unknown as Product) && (
+                              <span className="text-xs text-slate-400 line-through">
+                                {formatCurrency(getBasePrice(product as unknown as Product))}
+                              </span>
+                            )}
+                            <span className="text-lg font-bold catalog-price">
+                              {formatCurrency(getProductPrice(product))}
                             </span>
-                          )}
-                          <span className="text-lg font-bold" style={{ color: priceColor }}>
-                            {formatCurrency(getProductPrice(product))}
-                          </span>
-                        </div>
+                          </div>
+                        ) : (
+                          <div className="text-sm text-slate-500 mb-3">Preco sob consulta</div>
+                        )}
                         <Button className="w-full catalog-btn gap-2">
                           <Package className="h-4 w-4" />
-                          Fazer Pedido
+                          {buttonText}
                         </Button>
                       </div>
                     </CardContent>
-                    {company?.whatsapp && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          openWhatsApp(product);
-                        }}
-                        className="absolute top-2 right-2 catalog-btn-outline bg-background/80 backdrop-blur-sm"
-                      >
-                        <MessageCircle className="h-4 w-4" />
-                      </Button>
-                    )}
                   </Card>
                 </Link>
               ) : (
-                <Link key={product.id} to={`/catalogo/${slug}/produto/${product.id}`}>
-                  <Card className="relative overflow-hidden group hover:shadow-lg transition-shadow cursor-pointer catalog-card">
+                <Link key={product.id} to={`/catalogo/${slug}/produto/${product.slug ?? product.id}`}>
+                  <Card className="relative overflow-hidden group hover:shadow-md transition-shadow catalog-card border">
                     <div className="flex">
-                      <div className="w-24 h-24 sm:w-32 sm:h-32 bg-muted relative overflow-hidden flex-shrink-0">
+                      <div className="w-24 h-24 sm:w-32 sm:h-32 bg-slate-100 overflow-hidden flex-shrink-0">
                         {product.image_url ? (
                           <img
                             src={product.image_url}
@@ -480,39 +494,47 @@ export default function PublicCatalog() {
                           />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center">
-                            <Package className="h-8 w-8 text-muted-foreground/30" />
+                            <Package className="h-8 w-8 text-slate-300" />
                           </div>
                         )}
                       </div>
                       <CardContent className="flex-1 p-4 flex flex-col justify-between">
                         <div>
-                          <h3 className="font-semibold text-foreground mb-1">{product.name}</h3>
-                          <span className="text-lg font-bold" style={{ color: priceColor }}>
-                            {formatCurrency(getProductPrice(product))}
-                          </span>
+                          <h3 className="font-semibold mb-1">{product.name}</h3>
+                          {product.catalog_short_description && (
+                            <p className="text-sm text-slate-500 line-clamp-2 mb-2">
+                              {product.catalog_short_description}
+                            </p>
+                          )}
+                          {showPrices ? (
+                            <span className="text-lg font-bold catalog-price">
+                              {formatCurrency(getProductPrice(product))}
+                            </span>
+                          ) : (
+                            <span className="text-sm text-slate-500">Preco sob consulta</span>
+                          )}
                         </div>
-
                         <div className="flex items-center gap-2 mt-2">
                           <Button className="catalog-btn gap-2" size="sm">
                             <Package className="h-4 w-4" />
-                            Fazer Pedido
+                            {buttonText}
                           </Button>
+                          {showContact && (company?.catalog_contact_url || company?.whatsapp) && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                openContact(product);
+                              }}
+                              className="catalog-btn-outline"
+                            >
+                              <MessageCircle className="h-4 w-4" />
+                            </Button>
+                          )}
                         </div>
                       </CardContent>
                     </div>
-                    {company?.whatsapp && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          openWhatsApp(product);
-                        }}
-                        className="absolute top-2 right-2 catalog-btn-outline bg-background/80 backdrop-blur-sm"
-                      >
-                        <MessageCircle className="h-4 w-4" />
-                      </Button>
-                    )}
                   </Card>
                 </Link>
               )
@@ -521,10 +543,58 @@ export default function PublicCatalog() {
         )}
       </main>
 
-      {/* Footer */}
-      <footer className="border-t mt-12" style={{ backgroundColor: footerBgColor, color: footerTextColor }}>
-        <div className="container mx-auto px-4 py-6 text-center text-sm opacity-80">
-          <p>© {new Date().getFullYear()} {company?.name}. Todos os direitos reservados.</p>
+      <footer className="border-t" style={{ backgroundColor: footerBgColor, color: footerTextColor }}>
+        <div className="container mx-auto px-4 py-8 max-w-7xl">
+          <div className="flex flex-col md:flex-row justify-between items-center gap-6">
+            <div className="flex items-center gap-3">
+              {company?.logo_url ? (
+                <img
+                  src={company.logo_url}
+                  alt={company?.name || 'Logo'}
+                  className="w-10 h-10 rounded-full bg-slate-200 object-cover"
+                />
+              ) : (
+                <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center">
+                  <Building2 className="h-5 w-5" />
+                </div>
+              )}
+              <div>
+                <h4 className="font-bold">{company?.name}</h4>
+                {company?.city && company?.state && (
+                  <p className="text-xs text-slate-500">{company.city}, {company.state}</p>
+                )}
+              </div>
+            </div>
+            <div className="flex gap-3">
+              {company?.phone && (
+                <a
+                  href={`tel:${company.phone}`}
+                  className="px-4 py-2 border rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors flex items-center gap-2"
+                >
+                  <Phone className="h-4 w-4" />
+                  Ligar
+                </a>
+              )}
+              {company?.email && (
+                <a
+                  href={`mailto:${company.email}`}
+                  className="px-4 py-2 border rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors flex items-center gap-2"
+                >
+                  <Mail className="h-4 w-4" />
+                  Email
+                </a>
+              )}
+              <Link
+                to={`/catalogo/${slug}`}
+                className="px-4 py-2 bg-black text-white rounded-lg text-sm font-medium hover:bg-slate-800 transition-colors"
+              >
+                Ver Catalogo Completo
+              </Link>
+            </div>
+          </div>
+          <div className="border-t mt-8 pt-6 text-center text-xs text-slate-500">
+            © {new Date().getFullYear()} {company?.name}. Todos os direitos reservados.
+          </div>
         </div>
       </footer>
     </div>

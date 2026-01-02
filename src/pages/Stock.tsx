@@ -416,7 +416,7 @@ export default function Stock() {
                     <TableHead>Estoque Atual</TableHead>
                     <TableHead>Estoque Mínimo</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead className="w-[260px]">Ações</TableHead>
+                    <TableHead className="w-[360px]">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>

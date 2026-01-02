@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { formatOrderNumber } from '@/lib/utils';
 import { Plus, Search, Eye } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -6,19 +6,18 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { Order, OrderStatus } from '@/types/database';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 const statusLabels: Record<OrderStatus, string> = {
-  orcamento: 'Orçamento',
+  orcamento: 'Orcamento',
   pendente: 'Pendente',
-  em_producao: 'Em Produção',
+  em_producao: 'Em Producao',
   pronto: 'Pronto',
   aguardando_retirada: 'Aguardando retirada',
   entregue: 'Entregue',
-  cancelado: 'Cancelado'
+  cancelado: 'Cancelado',
 };
 
 const statusColors: Record<OrderStatus, string> = {
@@ -39,26 +38,32 @@ export default function Orders() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    supabase.from('orders').select('*').order('created_at', { ascending: false }).then(({ data }) => {
-      setOrders(data as Order[] || []);
-      setLoading(false);
-    });
+    supabase
+      .from('orders')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .then(({ data }) => {
+        setOrders((data as Order[]) || []);
+        setLoading(false);
+      });
   }, []);
 
-  const filtered = orders.filter(o => {
-    const matchesSearch = o.order_number.toString().includes(search) ||
-      o.customer_name?.toLowerCase().includes(search.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || o.status === statusFilter;
+  const filtered = orders.filter((order) => {
+    const matchesSearch =
+      order.order_number.toString().includes(search) ||
+      order.customer_name?.toLowerCase().includes(search.toLowerCase());
+    const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
 
-  const formatCurrency = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
-  const formatDate = (d: string) => new Date(d).toLocaleDateString('pt-BR');
+  const formatCurrency = (value: number) =>
+    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+  const formatDate = (value: string) => new Date(value).toLocaleDateString('pt-BR');
 
   const getStatusCounts = () => {
     const counts: Record<string, number> = { all: orders.length };
-    orders.forEach(o => {
-      counts[o.status] = (counts[o.status] || 0) + 1;
+    orders.forEach((order) => {
+      counts[order.status] = (counts[order.status] || 0) + 1;
     });
     return counts;
   };
@@ -66,29 +71,31 @@ export default function Orders() {
   const counts = getStatusCounts();
 
   return (
-    <div className="page-container">
-      <div className="page-header">
-        <h1 className="page-title">Pedidos</h1>
-        <Button onClick={() => navigate('/pedidos/novo')}>
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-slate-900">Pedidos</h1>
+          <p className="text-sm text-slate-500">Gerencie pedidos e acompanhe o status.</p>
+        </div>
+        <Button className="rounded-2xl bg-sky-500 shadow-sm hover:bg-sky-600" onClick={() => navigate('/pedidos/novo')}>
           <Plus className="mr-2 h-4 w-4" />
           Novo Pedido
         </Button>
       </div>
 
-      {/* Status Tabs */}
       <Tabs value={statusFilter} onValueChange={setStatusFilter} className="mb-4">
         <TabsList>
           <TabsTrigger value="all">
             Todos <span className="ml-1 text-xs opacity-70">({counts.all || 0})</span>
           </TabsTrigger>
           <TabsTrigger value="orcamento">
-            Orçamentos <span className="ml-1 text-xs opacity-70">({counts.orcamento || 0})</span>
+            Orcamentos <span className="ml-1 text-xs opacity-70">({counts.orcamento || 0})</span>
           </TabsTrigger>
           <TabsTrigger value="pendente">
             Pendentes <span className="ml-1 text-xs opacity-70">({counts.pendente || 0})</span>
           </TabsTrigger>
           <TabsTrigger value="em_producao">
-            Em Produção <span className="ml-1 text-xs opacity-70">({counts.em_producao || 0})</span>
+            Em Producao <span className="ml-1 text-xs opacity-70">({counts.em_producao || 0})</span>
           </TabsTrigger>
           <TabsTrigger value="pronto">
             Prontos <span className="ml-1 text-xs opacity-70">({counts.pronto || 0})</span>
@@ -99,7 +106,7 @@ export default function Orders() {
         </TabsList>
       </Tabs>
 
-      <Card>
+      <Card className="border-slate-200 shadow-sm">
         <CardHeader>
           <div className="relative max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -127,7 +134,9 @@ export default function Orders() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8">Carregando...</TableCell>
+                  <TableCell colSpan={7} className="text-center py-8">
+                    Carregando...
+                  </TableCell>
                 </TableRow>
               ) : filtered.length === 0 ? (
                 <TableRow>
@@ -135,51 +144,71 @@ export default function Orders() {
                     Nenhum pedido encontrado
                   </TableCell>
                 </TableRow>
-              ) : filtered.map((o) => (
-                <TableRow
-                  key={o.id}
-                  className="cursor-pointer hover:bg-muted/50"
-                  onClick={() => navigate(`/pedidos/${o.id}`)}
-                >
-                  <TableCell className="font-medium">#{formatOrderNumber(o.order_number)}</TableCell>
-                  <TableCell>
-                    {o.customer_id ? (
+              ) : (
+                filtered.map((order) => (
+                  <TableRow
+                    key={order.id}
+                    className="cursor-pointer hover:bg-muted/50"
+                    onClick={() => navigate(`/pedidos/${order.id}`)}
+                  >
+                    <TableCell className="font-medium">#{formatOrderNumber(order.order_number)}</TableCell>
+                    <TableCell>
+                      {order.customer_id ? (
+                        <Button
+                          variant="link"
+                          className="h-auto p-0 text-primary"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            navigate(`/clientes/${order.customer_id}/historico`);
+                          }}
+                        >
+                          {order.customer_name || 'Cliente'}
+                        </Button>
+                      ) : (
+                        <span>{order.customer_name || 'Nao informado'}</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <span className={`status-badge ${statusColors[order.status]}`}>
+                        {statusLabels[order.status]}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <span
+                        className={`text-xs px-2 py-1 rounded ${
+                          order.payment_status === 'pago'
+                            ? 'bg-green-100 text-green-800'
+                            : order.payment_status === 'parcial'
+                              ? 'bg-yellow-100 text-yellow-800'
+                              : 'bg-gray-100 text-gray-800'
+                        }`}
+                      >
+                        {order.payment_status === 'pago'
+                          ? 'Pago'
+                          : order.payment_status === 'parcial'
+                            ? 'Pagamento parcial'
+                            : 'Pendente'}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right font-medium">
+                      {formatCurrency(Number(order.total))}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{formatDate(order.created_at)}</TableCell>
+                    <TableCell>
                       <Button
-                        variant="link"
-                        className="h-auto p-0 text-primary"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          navigate(`/clientes/${o.customer_id}/historico`);
+                        variant="ghost"
+                        size="icon"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          navigate(`/pedidos/${order.id}`);
                         }}
                       >
-                        {o.customer_name || 'Cliente'}
+                        <Eye className="h-4 w-4" />
                       </Button>
-                    ) : (
-                      <span>{o.customer_name || 'Nao informado'}</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <span className={`status-badge ${statusColors[o.status]}`}>
-                      {statusLabels[o.status]}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    <span className={`text-xs px-2 py-1 rounded ${o.payment_status === 'pago' ? 'bg-green-100 text-green-800' :
-                      o.payment_status === 'parcial' ? 'bg-yellow-100 text-yellow-800' :
-                        'bg-gray-100 text-gray-800'
-                      }`}>
-                      {o.payment_status === 'pago' ? 'Pago' : o.payment_status === 'parcial' ? 'Pagamento parcial' : 'Pendente'}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-right font-medium">{formatCurrency(Number(o.total))}</TableCell>
-                  <TableCell className="text-muted-foreground">{formatDate(o.created_at)}</TableCell>
-                  <TableCell>
-                    <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); navigate(`/pedidos/${o.id}`); }}>
-                      <Eye className="h-4 w-4" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
             </TableBody>
           </Table>
         </CardContent>
@@ -187,7 +216,3 @@ export default function Orders() {
     </div>
   );
 }
-
-
-
-

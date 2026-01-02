@@ -43,6 +43,16 @@ export interface Company {
   catalog_card_border_color?: string | null;
   catalog_filter_bg_color?: string | null;
   catalog_filter_text_color?: string | null;
+  catalog_title?: string | null;
+  catalog_description?: string | null;
+  catalog_share_image_url?: string | null;
+  catalog_button_text?: string | null;
+  catalog_show_prices?: boolean | null;
+  catalog_show_contact?: boolean | null;
+  catalog_contact_url?: string | null;
+  catalog_font?: string | null;
+  catalog_columns_mobile?: number | null;
+  catalog_columns_desktop?: number | null;
   catalog_layout?: "grid" | "list" | null;
   plan_id: string | null;
   subscription_status: SubscriptionStatus | string | null;
@@ -128,6 +138,7 @@ export interface Plan {
 }
 
 export interface Product {
+  track_stock: unknown;
   id: string;
   name: string;
   sku: string | null;
@@ -139,6 +150,14 @@ export interface Product {
   unit: string;
   is_active: boolean;
   show_in_catalog: boolean;
+  catalog_enabled?: boolean | null;
+  catalog_featured?: boolean | null;
+  catalog_min_order?: number | null;
+  catalog_price?: number | null;
+  catalog_short_description?: string | null;
+  catalog_long_description?: string | null;
+  catalog_sort_order?: number | null;
+  slug?: string | null;
   base_cost: number;
   labor_cost: number;
   waste_percentage: number;
