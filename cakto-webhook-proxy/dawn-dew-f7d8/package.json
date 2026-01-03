@@ -1,0 +1,13 @@
+{
+	"name": "dawn-dew-f7d8",
+	"version": "0.0.0",
+	"private": true,
+	"scripts": {
+		"deploy": "wrangler deploy",
+		"dev": "wrangler dev",
+		"start": "wrangler dev"
+	},
+	"devDependencies": {
+		"wrangler": "^3.101.0"
+	}
+}
