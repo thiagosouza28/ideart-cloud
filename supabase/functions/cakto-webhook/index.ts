@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { getCaktoConfig, verifyWebhookSignature } from "../_shared/cakto.ts";
+import { sendSmtpEmail } from "../_shared/email.ts";
 
 export const config = { verify_jwt: false };
 
@@ -85,13 +86,6 @@ const sendAccessEmail = async (params: {
   appUrl: string;
   companyName?: string | null;
 }) => {
-  const apiKey = Deno.env.get('RESEND_API_KEY');
-  const fromEmail = Deno.env.get('EMAIL_FROM');
-  if (!apiKey || !fromEmail) {
-    console.warn('Email provider not configured. Skipping access email.');
-    return false;
-  }
-
   const loginUrl = `${params.appUrl.replace(/\/$/, '')}/auth`;
   const name = params.fullName ?? params.email;
   const companyLabel = params.companyName ? `Empresa: ${params.companyName}` : null;
@@ -123,27 +117,12 @@ const sendAccessEmail = async (params: {
     </div>
   `;
 
-  const resp = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      from: fromEmail,
-      to: params.email,
-      subject: 'Acesso liberado - GraficaERP',
-      text,
-      html,
-    }),
+  return await sendSmtpEmail({
+    to: params.email,
+    subject: 'Acesso liberado - IdeartCloud',
+    text,
+    html,
   });
-
-  if (!resp.ok) {
-    const errorText = await resp.text().catch(() => '');
-    console.error('Failed to send access email', resp.status, errorText);
-    return false;
-  }
-  return true;
 };
 
 serve(async (req) => {

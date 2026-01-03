@@ -59,7 +59,7 @@ export default function ChangePassword() {
       await refreshUserData();
       clearPasswordRecovery();
       setNotice('Senha atualizada com sucesso.');
-      navigate('/dashboard', { replace: true });
+      navigate(passwordRecovery ? '/auth' : '/dashboard', { replace: true });
     } catch {
       setError('Nao foi possivel atualizar a senha. Tente novamente.');
     } finally {
