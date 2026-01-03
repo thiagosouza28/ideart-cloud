@@ -13,6 +13,7 @@ interface AuthContextType {
   role: AppRole | null;
   loading: boolean;
   needsOnboarding: boolean;
+  passwordRecovery: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signUp: (email: string, password: string, fullName: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
@@ -20,6 +21,7 @@ interface AuthContextType {
   refreshUserData: () => Promise<void>;
   refreshCompany: () => Promise<void>;
   getLoggedCompany: () => Company | null;
+  clearPasswordRecovery: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -33,12 +35,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [role, setRole] = useState<AppRole | null>(null);
   const [loading, setLoading] = useState(true);
   const [needsOnboarding, setNeedsOnboarding] = useState(false);
+  const [passwordRecovery, setPasswordRecovery] = useState(false);
 
   useEffect(() => {
+    const url = window.location.href;
+    const search = window.location.search;
+    const hash = window.location.hash;
+    const isRecovery =
+      search.includes("type=recovery") ||
+      hash.includes("type=recovery") ||
+      hash.includes("access_token=");
+
+    if (isRecovery) {
+      supabase.auth.exchangeCodeForSession(url).catch((error) => {
+        console.error("Failed to exchange recovery code", error);
+      }).finally(() => {
+        setPasswordRecovery(true);
+        if (window.location.pathname !== "/alterar-senha") {
+          window.location.href = "/alterar-senha";
+        }
+      });
+    }
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
+
+        if (event === 'PASSWORD_RECOVERY') {
+          setPasswordRecovery(true);
+          if (window.location.pathname !== '/alterar-senha') {
+            window.location.href = '/alterar-senha';
+          }
+        }
 
         if (session?.user) {
           setTimeout(() => {
@@ -50,6 +79,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setSubscription(null);
           setRole(null);
           setNeedsOnboarding(false);
+          setPasswordRecovery(false);
           setLoading(false);
         }
       }
@@ -64,6 +94,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else {
         setCompany(null);
         setSubscription(null);
+        setPasswordRecovery(false);
         setLoading(false);
       }
     });
@@ -182,6 +213,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     await supabase.auth.signOut();
+    setPasswordRecovery(false);
   };
 
   const hasPermission = (allowedRoles: AppRole[]) => {
@@ -190,6 +222,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const getLoggedCompany = () => company;
+  const clearPasswordRecovery = () => setPasswordRecovery(false);
 
   return (
     <AuthContext.Provider value={{
@@ -199,6 +232,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       role,
       loading,
       needsOnboarding,
+      passwordRecovery,
       signIn,
       signUp,
       signOut,
@@ -207,7 +241,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       company,
       subscription,
       refreshCompany,
-      getLoggedCompany
+      getLoggedCompany,
+      clearPasswordRecovery
     }}>
       {children}
     </AuthContext.Provider>

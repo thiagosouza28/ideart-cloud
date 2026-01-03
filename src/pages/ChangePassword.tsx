@@ -11,7 +11,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 
 export default function ChangePassword() {
   const navigate = useNavigate();
-  const { user, refreshUserData } = useAuth();
+  const { user, refreshUserData, passwordRecovery, clearPasswordRecovery } = useAuth();
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -57,6 +57,7 @@ export default function ChangePassword() {
       }
 
       await refreshUserData();
+      clearPasswordRecovery();
       setNotice('Senha atualizada com sucesso.');
       navigate('/dashboard', { replace: true });
     } catch {
@@ -74,7 +75,7 @@ export default function ChangePassword() {
           <CardDescription>Por seguranca, altere sua senha no primeiro acesso.</CardDescription>
         </CardHeader>
         <CardContent>
-          {!user && (
+          {!user && !passwordRecovery && (
             <div className="space-y-4 text-sm text-slate-600">
               <p>Para trocar a senha, abra o link de recuperacao enviado por email.</p>
               <div className="text-center">
@@ -82,7 +83,7 @@ export default function ChangePassword() {
               </div>
             </div>
           )}
-          {user && (
+          {(user || passwordRecovery) && (
           <form onSubmit={handleSubmit} className="space-y-4">
             {notice && (
               <Alert className="border-success bg-success/10 text-success">
