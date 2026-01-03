@@ -17,6 +17,7 @@ interface AuthContextType {
   signUp: (email: string, password: string, fullName: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   hasPermission: (allowedRoles: AppRole[]) => boolean;
+  refreshUserData: () => Promise<void>;
   refreshCompany: () => Promise<void>;
   getLoggedCompany: () => Company | null;
 }
@@ -95,10 +96,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setSubscription(computeSubscriptionState(companyData));
   }, []);
 
-  const refreshCompany = useCallback(async () => {
-    await loadCompany(profile?.company_id);
-  }, [loadCompany, profile?.company_id]);
-
   const fetchUserData = async (userId: string) => {
     setLoading(true);
     try {
@@ -157,6 +154,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const refreshCompany = useCallback(async () => {
+    await loadCompany(profile?.company_id);
+  }, [loadCompany, profile?.company_id]);
+
+  const refreshUserData = useCallback(async () => {
+    if (!user) return;
+    await fetchUserData(user.id);
+  }, [user]);
+
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     return { error };
@@ -197,6 +203,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       signUp,
       signOut,
       hasPermission,
+      refreshUserData,
       company,
       subscription,
       refreshCompany,

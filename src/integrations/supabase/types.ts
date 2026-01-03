@@ -719,6 +719,7 @@ export type Database = {
       plans: {
         Row: {
           billing_period: string
+          cakto_plan_id: string | null
           created_at: string
           description: string | null
           features: Json
@@ -737,6 +738,7 @@ export type Database = {
         }
         Insert: {
           billing_period?: string
+          cakto_plan_id?: string | null
           created_at?: string
           description?: string | null
           features?: Json
@@ -755,6 +757,7 @@ export type Database = {
         }
         Update: {
           billing_period?: string
+          cakto_plan_id?: string | null
           created_at?: string
           description?: string | null
           features?: Json
@@ -993,6 +996,7 @@ export type Database = {
           avatar_url: string | null
           company_id: string | null
           created_at: string
+          force_password_change: boolean
           full_name: string
           id: string
           updated_at: string
@@ -1001,6 +1005,7 @@ export type Database = {
           avatar_url?: string | null
           company_id?: string | null
           created_at?: string
+          force_password_change?: boolean
           full_name: string
           id: string
           updated_at?: string
@@ -1009,6 +1014,7 @@ export type Database = {
           avatar_url?: string | null
           company_id?: string | null
           created_at?: string
+          force_password_change?: boolean
           full_name?: string
           id?: string
           updated_at?: string

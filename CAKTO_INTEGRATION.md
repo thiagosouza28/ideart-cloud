@@ -13,6 +13,7 @@ Environment (set as Supabase Secrets, never expose in frontend)
 
 Key pieces
 - Database migration: `supabase/migrations/20251228120000_add_cakto_plans_subscriptions.sql`
+- Database migration: `supabase/migrations/20260203000000_add_subscription_checkouts.sql`
 - Edge Functions:
   - `create-plan` — create plan locally and in CAKTO
   - `create-subscription` — create customer and subscription at CAKTO and save local subscription

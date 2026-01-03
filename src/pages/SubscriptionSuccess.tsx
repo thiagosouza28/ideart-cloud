@@ -5,21 +5,64 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { completeCaktoSuccess } from "@/services/cakto";
 
 const SubscriptionSuccess = () => {
   const [searchParams] = useSearchParams();
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
+  const [retryCount, setRetryCount] = useState(0);
+  const [manualRetrying, setManualRetrying] = useState(false);
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [planName, setPlanName] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const sessionId = searchParams.get("session_id");
+  const token = searchParams.get("token");
+
+  useEffect(() => {
+    if (!token) return;
+
+    let timeout: number | undefined;
+    setLoading(true);
+
+    const run = async () => {
+      try {
+        const resp = await completeCaktoSuccess(token);
+        const redirectUrl = (resp as any)?.redirect_url;
+        if (redirectUrl) {
+          window.location.href = redirectUrl;
+          return;
+        }
+
+        const error = (resp as any)?.error;
+        if (error) {
+          setStatusMessage("Finalizando sua assinatura...");
+          timeout = window.setTimeout(run, 3000);
+        }
+      } catch (error: any) {
+        console.error("Error finishing checkout:", error);
+        setStatusMessage(error?.message || "Falha ao validar assinatura.");
+      } finally {
+        setLoading(false);
+        setManualRetrying(false);
+      }
+    };
+
+    run();
+
+    return () => {
+      if (timeout) window.clearTimeout(timeout);
+    };
+  }, [token, retryCount]);
 
   useEffect(() => {
     const fetchDetails = async () => {
-      if (!user) return;
+      if (!user) {
+        setLoading(false);
+        return;
+      }
 
       try {
-        // Get company and plan info
         const { data: profile } = await supabase
           .from("profiles")
           .select("company_id")
@@ -35,7 +78,7 @@ const SubscriptionSuccess = () => {
 
           if (company) {
             setCompanyName(company.name);
-            if (company.plans && typeof company.plans === 'object' && 'name' in company.plans) {
+            if (company.plans && typeof company.plans === "object" && "name" in company.plans) {
               setPlanName((company.plans as { name: string }).name);
             }
           }
@@ -49,6 +92,37 @@ const SubscriptionSuccess = () => {
 
     fetchDetails();
   }, [user]);
+
+  if (!user && token) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-center space-y-3 max-w-sm">
+          <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto" />
+          <p className="text-sm text-muted-foreground">
+            {statusMessage || "Finalizando sua assinatura..."}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Se o pagamento acabou de ser aprovado, pode levar alguns segundos para ativar.
+          </p>
+          <div className="flex flex-col gap-2 pt-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setManualRetrying(true);
+                setRetryCount((prev) => prev + 1);
+              }}
+              disabled={manualRetrying || loading}
+            >
+              {manualRetrying || loading ? "Verificando..." : "Tentar novamente"}
+            </Button>
+            <Button asChild variant="ghost">
+              <Link to="/assinatura">Voltar para os planos</Link>
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (

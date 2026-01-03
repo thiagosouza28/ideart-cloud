@@ -1,13 +1,36 @@
 ﻿import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import type { FormEvent } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
-import { CheckCircle2, Sparkles } from "lucide-react";
+import { CheckCircle2, Loader2, Sparkles } from "lucide-react";
 import type { Plan } from "@/types/database";
+import { createCaktoCheckout, listCaktoOffers } from "@/services/cakto";
+import { toast } from "sonner";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
-const fallbackPlans: Plan[] = [
+type PlanWithCakto = Plan & { cakto_plan_id?: string | null };
+type CaktoOffer = {
+  id: string;
+  name?: string | null;
+  price?: number | null;
+  intervalType?: string | null;
+  interval?: number | null;
+  status?: string | null;
+};
+
+const fallbackPlans: PlanWithCakto[] = [
   {
     id: "fallback-monthly",
     name: "Plano Mensal",
@@ -22,21 +45,122 @@ const fallbackPlans: Plan[] = [
 ];
 
 export default function Landing() {
-  const [plans, setPlans] = useState<Plan[]>([]);
+  const [plans, setPlans] = useState<PlanWithCakto[]>([]);
+  const [offers, setOffers] = useState<CaktoOffer[]>([]);
+  const [offersLoading, setOffersLoading] = useState(false);
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [selectedPlan, setSelectedPlan] = useState<PlanWithCakto | null>(null);
+  const [checkoutForm, setCheckoutForm] = useState({
+    email: "",
+    fullName: "",
+    companyName: "",
+  });
 
   useEffect(() => {
     const loadPlans = async () => {
       const { data } = await supabase
         .from("plans")
-        .select("*")
+        .select("id,name,description,price,billing_period,features,is_active,cakto_plan_id")
         .eq("is_active", true)
         .order("price", { ascending: true });
-      setPlans((data || []) as Plan[]);
+      setPlans((data || []) as PlanWithCakto[]);
     };
     loadPlans();
   }, []);
 
-  const displayPlans = useMemo(() => (plans.length ? plans : fallbackPlans), [plans]);
+  useEffect(() => {
+    const loadOffers = async () => {
+      setOffersLoading(true);
+      try {
+        const resp = await listCaktoOffers();
+        const mapped = (resp?.offers || []).map((offer) => ({
+          id: String(offer.id),
+          name: offer.name ? String(offer.name) : null,
+          price: typeof offer.price === "number" ? offer.price : Number(offer.price ?? 0),
+          intervalType: offer.intervalType ? String(offer.intervalType) : null,
+          interval: offer.interval ? Number(offer.interval) : null,
+          status: offer.status ? String(offer.status) : null,
+        }));
+        setOffers(mapped.filter((offer) => offer.id));
+      } catch (error) {
+        console.error("Failed to load CAKTO offers", error);
+      } finally {
+        setOffersLoading(false);
+      }
+    };
+    loadOffers();
+  }, []);
+
+  const normalizeOfferId = (value?: string | null) => {
+    if (!value) return null;
+    if (value.startsWith("http")) {
+      return value.split("/").pop() ?? null;
+    }
+    return value;
+  };
+
+  const displayPlans = useMemo(() => {
+    const basePlans = plans.length ? plans : fallbackPlans;
+    if (!offers.length) return basePlans;
+
+    const offersById = new Map(offers.map((offer) => [offer.id, offer]));
+    const merged = basePlans
+      .map((plan) => {
+        const offerId = normalizeOfferId(plan.cakto_plan_id ?? undefined);
+        const offer = offerId ? offersById.get(offerId) : undefined;
+        if (!offer) return null;
+        const billing =
+          offer.intervalType === "year" || offer.intervalType === "yearly"
+            ? "yearly"
+            : plan.billing_period;
+        return {
+          ...plan,
+          price: typeof offer.price === "number" ? offer.price : plan.price,
+          billing_period: billing,
+        };
+      })
+      .filter(Boolean) as PlanWithCakto[];
+    return merged.length ? merged : basePlans;
+  }, [plans, offers]);
+
+  const openCheckout = (plan: Plan) => {
+    setSelectedPlan(plan);
+    setCheckoutOpen(true);
+  };
+
+  const handleCheckout = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!selectedPlan) return;
+
+    const email = checkoutForm.email.trim();
+    if (!email) {
+      toast.error("Informe um email valido.");
+      return;
+    }
+
+    setCheckoutLoading(true);
+    try {
+      const payload = {
+        plan_id: selectedPlan.id,
+        email,
+        full_name: checkoutForm.fullName.trim() || undefined,
+        company_name: checkoutForm.companyName.trim() || undefined,
+      };
+      const resp = await createCaktoCheckout(payload);
+      const checkoutUrl = (resp as any)?.checkout_url;
+
+      if (!checkoutUrl) {
+        throw new Error("Checkout indisponivel no momento.");
+      }
+
+      window.location.href = checkoutUrl;
+    } catch (error: any) {
+      console.error(error);
+      toast.error(error?.message || "Erro ao iniciar o checkout.");
+      setCheckoutLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-white text-slate-900">
@@ -56,7 +180,7 @@ export default function Landing() {
               <Link to="/auth">Entrar</Link>
             </Button>
             <Button asChild className="text-sm">
-              <Link to="/auth">Adquirir Sistema</Link>
+              <a href="#planos">Adquirir Sistema</a>
             </Button>
           </div>
         </div>
@@ -76,7 +200,7 @@ export default function Landing() {
             </p>
             <div className="flex flex-col gap-3 sm:flex-row">
               <Button asChild size="lg">
-                <Link to="/auth">Adquirir Sistema</Link>
+                <a href="#planos">Adquirir Sistema</a>
               </Button>
               <Button asChild variant="outline" size="lg">
                 <Link to="/auth">Entrar</Link>
@@ -171,8 +295,11 @@ export default function Landing() {
         </div>
       </section>
 
-      <section className="mx-auto max-w-6xl px-4 py-12">
+      <section id="planos" className="mx-auto max-w-6xl px-4 py-12">
         <h2 className="text-2xl font-semibold mb-6">Planos e precos</h2>
+        {offersLoading && (
+          <p className="mb-4 text-sm text-slate-500">Carregando planos da Cakto...</p>
+        )}
         <div className="grid gap-6 md:grid-cols-3">
           {displayPlans.map((plan) => (
             <Card key={plan.id} className="border-slate-200 shadow-sm">
@@ -193,8 +320,8 @@ export default function Landing() {
                     </li>
                   ))}
                 </ul>
-                <Button asChild className="w-full">
-                  <Link to="/auth">Assinar Agora</Link>
+                <Button className="w-full" onClick={() => openCheckout(plan)}>
+                  Assinar Agora
                 </Button>
               </CardContent>
             </Card>
@@ -224,6 +351,60 @@ export default function Landing() {
           </div>
         </div>
       </footer>
+
+      <Dialog open={checkoutOpen} onOpenChange={setCheckoutOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Finalize sua assinatura</DialogTitle>
+            <DialogDescription>
+              Informe seus dados para gerar o checkout do plano selecionado.
+            </DialogDescription>
+          </DialogHeader>
+          <form className="space-y-4" onSubmit={handleCheckout}>
+            <div className="space-y-2">
+              <Label htmlFor="checkout-email">Email</Label>
+              <Input
+                id="checkout-email"
+                type="email"
+                value={checkoutForm.email}
+                onChange={(event) => setCheckoutForm((prev) => ({ ...prev, email: event.target.value }))}
+                placeholder="seu@email.com"
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="checkout-name">Nome</Label>
+              <Input
+                id="checkout-name"
+                value={checkoutForm.fullName}
+                onChange={(event) => setCheckoutForm((prev) => ({ ...prev, fullName: event.target.value }))}
+                placeholder="Seu nome completo"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="checkout-company">Empresa</Label>
+              <Input
+                id="checkout-company"
+                value={checkoutForm.companyName}
+                onChange={(event) => setCheckoutForm((prev) => ({ ...prev, companyName: event.target.value }))}
+                placeholder="Nome da empresa"
+              />
+            </div>
+            <DialogFooter>
+              <Button type="submit" disabled={checkoutLoading}>
+                {checkoutLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Gerando checkout...
+                  </>
+                ) : (
+                  "Continuar para pagamento"
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

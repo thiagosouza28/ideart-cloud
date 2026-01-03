@@ -172,9 +172,12 @@ serve(async (req) => {
       const caktoPayload = {
         name,
         description: body.description ?? null,
-        price: Math.round(price * 100), // cents if CAKTO expects integer
-        interval: billingPeriod === 'yearly' ? 'year' : 'month',
-        interval_count: intervalCount,
+        price: Math.round(price * 100),
+        status: isActive ? 'active' : 'inactive',
+        type: 'recurring',
+        intervalType: billingPeriod === 'yearly' ? 'year' : 'month',
+        interval: intervalCount,
+        recurrence_period: periodDays,
       } as Record<string, unknown>;
 
       const caktoResp = await caktoCreatePlan(cfg, caktoPayload);

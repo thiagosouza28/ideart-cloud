@@ -9,9 +9,10 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {
-  const { user, role, loading, hasPermission, needsOnboarding, subscription } = useAuth();
+  const { user, role, loading, hasPermission, needsOnboarding, subscription, profile } = useAuth();
   const location = useLocation();
   const isSubscriptionRoute = location.pathname.startsWith('/assinatura');
+  const isPasswordChangeRoute = location.pathname === '/alterar-senha';
 
   if (loading) {
     return (
@@ -23,6 +24,10 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
 
   if (!user) {
     return <Navigate to="/auth" replace />;
+  }
+
+  if (profile?.force_password_change && !isPasswordChangeRoute) {
+    return <Navigate to="/alterar-senha" replace />;
   }
 
   // Redirect to onboarding if needed (except if already on onboarding page)

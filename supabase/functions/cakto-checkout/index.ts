@@ -1,6 +1,8 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 
+export const config = { verify_jwt: false };
+
 const defaultAllowedOrigins = [
   "http://192.168.0.221:8080",
   "http://localhost:8080",
@@ -44,7 +46,7 @@ const jsonResponse = (headers: HeadersInit, status: number, payload: unknown) =>
 
 const log = (step: string, details?: unknown) => {
   const detailsStr = details ? ` - ${JSON.stringify(details)}` : "";
-  console.log(`[CAKTO/CREATE-SUB] ${step}${detailsStr}`);
+  console.log(`[CAKTO/CHECKOUT] ${step}${detailsStr}`);
 };
 
 const getSupabaseClient = () =>
@@ -61,16 +63,11 @@ const buildCheckoutUrl = (caktoPlanId: string) => {
   return `https://pay.cakto.com.br/${trimmed}`;
 };
 
-type CustomerPayload = {
-  name?: string;
-  email?: string;
-  cpf?: string;
-};
-
-type CreateSubscriptionRequest = {
+type CreateCheckoutRequest = {
   plan_id?: string;
-  company_id?: string;
-  customer?: CustomerPayload;
+  email?: string;
+  full_name?: string;
+  company_name?: string;
 };
 
 serve(async (req) => {
@@ -81,53 +78,84 @@ serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-    if (!supabaseUrl || !serviceKey) {
-      return jsonResponse(corsHeaders, 400, { error: "Missing Supabase config" });
+    const appUrl = Deno.env.get("APP_PUBLIC_URL") ?? "";
+
+    if (!supabaseUrl || !serviceKey || !appUrl) {
+      return jsonResponse(corsHeaders, 400, { error: "Missing environment configuration" });
     }
 
-    const authHeader = req.headers.get("x-supabase-authorization") ?? req.headers.get("Authorization");
-    if (!authHeader) return jsonResponse(corsHeaders, 401, { error: "No authorization header" });
-    const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : authHeader;
+    const body = (await req.json().catch(() => ({}))) as CreateCheckoutRequest;
+    const planId = body.plan_id?.trim();
+    const email = body.email?.trim().toLowerCase();
+    const fullName = body.full_name?.trim() ?? null;
+    const companyName = body.company_name?.trim() ?? null;
+
+    if (!planId || !email) {
+      return jsonResponse(corsHeaders, 400, { error: "Missing plan_id or email" });
+    }
 
     const supabase = getSupabaseClient();
-    const { data: authData, error: authError } = await supabase.auth.getUser(token);
-    if (authError || !authData.user) return jsonResponse(corsHeaders, 401, { error: "Invalid session" });
+    const { data: plan } = await supabase
+      .from("plans")
+      .select("id, cakto_plan_id, name")
+      .eq("id", planId)
+      .maybeSingle();
 
-    const body = (await req.json().catch(() => ({}))) as CreateSubscriptionRequest;
-    const planId = body.plan_id;
-    const companyId = body.company_id;
-    const customer = body.customer;
-
-    if (!planId || !companyId || !customer?.email) {
-      return jsonResponse(corsHeaders, 400, { error: 'Missing plan_id, company_id or customer.email' });
+    if (!plan?.cakto_plan_id) {
+      return jsonResponse(corsHeaders, 400, { error: "Plan not available for CAKTO" });
     }
 
-    // Fetch plan to get cakto_plan_id
-    const { data: plan } = await supabase.from('plans').select('*').eq('id', planId).maybeSingle();
-    if (!plan || !plan.cakto_plan_id) {
-      return jsonResponse(corsHeaders, 400, { error: 'Plano nao encontrado ou nao vinculado ao CAKTO' });
+    const { data: existingCheckout } = await supabase
+      .from("subscription_checkouts")
+      .select("id, status, created_at")
+      .eq("email", email)
+      .eq("plan_id", plan.id)
+      .in("status", ["created", "pending"])
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (existingCheckout) {
+      return jsonResponse(corsHeaders, 409, {
+        error: "Checkout already pending for this email and plan.",
+      });
     }
 
+    const token = crypto.randomUUID();
+    const { data: checkout, error: checkoutError } = await supabase
+      .from("subscription_checkouts")
+      .insert({
+        token,
+        plan_id: plan.id,
+        email,
+        full_name: fullName,
+        company_name: companyName,
+        status: "created",
+      })
+      .select("*")
+      .single();
+
+    if (checkoutError || !checkout) {
+      return jsonResponse(corsHeaders, 400, { error: checkoutError?.message || "Failed to create checkout" });
+    }
+
+    log("Building CAKTO checkout URL", { planId: plan.id });
     const checkoutUrl = buildCheckoutUrl(plan.cakto_plan_id);
-    if (!checkoutUrl) return jsonResponse(corsHeaders, 400, { error: 'Checkout URL indisponivel' });
 
-    const { data: inserted, error: insertError } = await supabase.from('subscriptions').insert({
-      company_id: companyId,
-      user_id: authData.user.id,
-      plan_id: planId,
-      status: 'pending',
-      gateway: 'cakto',
-      gateway_subscription_id: null,
-    }).select('*').single();
-
-    if (insertError) {
-      log('Failed to save subscription locally', { message: insertError.message });
+    if (!checkoutUrl) {
+      return jsonResponse(corsHeaders, 400, { error: "Checkout URL missing" });
     }
 
-    return jsonResponse(corsHeaders, 200, { subscription: inserted ?? null, checkout_url: checkoutUrl });
+    await supabase.from("subscription_checkouts").update({
+      status: "pending",
+    }).eq("id", checkout.id);
+
+    return jsonResponse(corsHeaders, 200, {
+      checkout_url: checkoutUrl,
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    log('ERROR', { message });
+    log("ERROR", { message });
     return jsonResponse(corsHeaders, 400, { error: message });
   }
 });

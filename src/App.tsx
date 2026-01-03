@@ -9,6 +9,8 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { ProtectedRoute } from "@/components/layout/ProtectedRoute";
 
 import Auth from "./pages/Auth";
+import ChangePassword from "./pages/ChangePassword";
+import ForgotPassword from "./pages/ForgotPassword";
 import Dashboard from "./pages/Dashboard";
 import Products from "./pages/Products";
 import ProductForm from "./pages/ProductForm";
@@ -60,6 +62,8 @@ const App = () => (
           <CookieConsent />
           <Routes>
             <Route path="/auth" element={<Auth />} />
+            <Route path="/alterar-senha" element={<ChangePassword />} />
+            <Route path="/recuperar-senha" element={<ForgotPassword />} />
             <Route path="/onboarding" element={
               <ProtectedRoute>
                 <Onboarding />

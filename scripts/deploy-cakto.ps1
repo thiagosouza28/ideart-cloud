@@ -22,9 +22,11 @@ if (-not $SkipSecrets) {
   supabase secrets set CAKTO_CLIENT_ID="$env:CAKTO_CLIENT_ID" CAKTO_CLIENT_SECRET="$env:CAKTO_CLIENT_SECRET" CAKTO_API_BASE="$env:CAKTO_API_BASE" CAKTO_WEBHOOK_SECRET="$env:CAKTO_WEBHOOK_SECRET"
 }
 
-Write-Host "Deploying Edge Functions: create-plan, create-subscription, cakto-webhook"
+Write-Host "Deploying Edge Functions: create-plan, create-subscription, cakto-checkout, cakto-success, cakto-webhook"
 supabase functions deploy create-plan
 supabase functions deploy create-subscription
+supabase functions deploy cakto-checkout
+supabase functions deploy cakto-success
 supabase functions deploy cakto-webhook
 
 Write-Host "(Optional) Applying DB migrations via supabase db push"

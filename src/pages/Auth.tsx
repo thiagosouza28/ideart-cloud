@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -46,13 +46,15 @@ export default function Auth() {
 
   useEffect(() => {
     if (user && !authLoading) {
-      if (needsOnboarding) {
+      if (profile?.force_password_change) {
+        navigate('/alterar-senha');
+      } else if (needsOnboarding) {
         navigate('/onboarding');
       } else {
         navigate('/dashboard');
       }
     }
-  }, [user, authLoading, needsOnboarding, navigate]);
+  }, [user, authLoading, needsOnboarding, profile?.force_password_change, navigate]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -217,6 +219,11 @@ export default function Auth() {
                   {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   Entrar
                 </Button>
+                <div className="text-center text-sm text-slate-500">
+                  <Link to="/recuperar-senha" className="underline underline-offset-4">
+                    Esqueci minha senha
+                  </Link>
+                </div>
               </form>
             </TabsContent>
 

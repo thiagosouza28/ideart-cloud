@@ -70,6 +70,7 @@ export interface Profile {
   full_name: string;
   avatar_url: string | null;
   company_id: string | null;
+  force_password_change?: boolean | null;
   created_at: string;
   updated_at: string;
   company?: Company;
@@ -128,6 +129,7 @@ export interface Plan {
   features: string[];
   max_users: number | null;
   is_active: boolean;
+  cakto_plan_id?: string | null;
   stripe_price_id?: string | null;
   stripe_product_id?: string | null;
   yampi_sku_id?: string | null;
