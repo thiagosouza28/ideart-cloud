@@ -168,10 +168,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setProfile(profileData);
       setRole(userRole ?? null);
 
-      // Check if user needs onboarding (no company associated and not super_admin)
-      // Strict check: Must have company_id OR be super_admin.
-      if (!profileData?.company_id && userRole !== 'super_admin') {
-        console.log('User needs onboarding: No company_id and not super_admin');
+      const requiresOnboarding = Boolean(profileData?.must_complete_onboarding);
+      const missingCompany = !profileData?.company_id && userRole !== 'super_admin';
+      if (requiresOnboarding || missingCompany) {
+        console.log('User needs onboarding', { requiresOnboarding, missingCompany });
         setNeedsOnboarding(true);
       } else {
         setNeedsOnboarding(false);

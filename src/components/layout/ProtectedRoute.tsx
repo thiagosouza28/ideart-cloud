@@ -13,6 +13,7 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
   const location = useLocation();
   const isSubscriptionRoute = location.pathname.startsWith('/assinatura');
   const isPasswordChangeRoute = location.pathname === '/alterar-senha';
+  const mustChangePassword = Boolean(profile?.must_change_password || profile?.force_password_change);
 
   if (loading) {
     return (
@@ -26,13 +27,13 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
     return <Navigate to="/auth" replace />;
   }
 
-  if (profile?.force_password_change && !isPasswordChangeRoute) {
-    return <Navigate to="/alterar-senha" replace />;
-  }
-
   // Redirect to onboarding if needed (except if already on onboarding page)
   if (needsOnboarding && location.pathname !== '/onboarding') {
     return <Navigate to="/onboarding" replace />;
+  }
+
+  if (mustChangePassword && !isPasswordChangeRoute) {
+    return <Navigate to="/alterar-senha" replace />;
   }
 
   if (role !== 'super_admin' && subscription && !subscription.hasAccess && !isSubscriptionRoute) {

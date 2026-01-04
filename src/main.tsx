@@ -20,10 +20,11 @@ const redirectToRecovery = () => {
 };
 
 if (!redirectToRecovery()) {
-  createRoot(document.getElementById("root")!).render(<App />);
+  const root = document.getElementById("root");
+  if (root) {
+    createRoot(root).render(<App />);
+  }
 }
-
-createRoot(document.getElementById("root")!).render(<App />);
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {

@@ -71,6 +71,8 @@ export interface Profile {
   avatar_url: string | null;
   company_id: string | null;
   force_password_change?: boolean | null;
+  must_change_password?: boolean | null;
+  must_complete_onboarding?: boolean | null;
   created_at: string;
   updated_at: string;
   company?: Company;

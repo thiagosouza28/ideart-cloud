@@ -83,10 +83,10 @@ export function AppSidebar() {
   const collapsed = state === 'collapsed';
 
   const filterByRole = (items: MenuItem[]) => items.filter((item) => hasPermission(item.roles));
-  const primaryItems = filterByRole(primaryMenu);
-  const secondaryItems = filterByRole(secondaryMenu);
-  const superAdminItems = filterByRole(superAdminMenu);
   const isSuperAdmin = role === 'super_admin';
+  const primaryItems = isSuperAdmin ? [] : filterByRole(primaryMenu);
+  const secondaryItems = isSuperAdmin ? [] : filterByRole(secondaryMenu);
+  const superAdminItems = filterByRole(superAdminMenu);
 
   const handleSignOut = async () => {
     await signOut();
@@ -222,27 +222,29 @@ export function AppSidebar() {
 
       <SidebarFooter className="border-t border-sidebar-border px-4 py-4">
         <SidebarMenu className={collapsed ? 'gap-1' : ''}>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              asChild
-              tooltip="Configuracoes"
-              className={
-                'h-11 rounded-2xl px-3 text-sm font-medium text-slate-600 hover:bg-slate-100 data-[active=true]:bg-purple-600 data-[active=true]:text-white'
-              }
-              isActive={location.pathname === '/configuracoes'}
-            >
-              <a
-                href="/configuracoes"
-                onClick={(event) => {
-                  event.preventDefault();
-                  navigate('/configuracoes');
-                }}
+          {!isSuperAdmin && (
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                tooltip="Configuracoes"
+                className={
+                  'h-11 rounded-2xl px-3 text-sm font-medium text-slate-600 hover:bg-slate-100 data-[active=true]:bg-purple-600 data-[active=true]:text-white'
+                }
+                isActive={location.pathname === '/configuracoes'}
               >
-                <Settings className="h-5 w-5" />
-                {!collapsed && <span>Configuracoes</span>}
-              </a>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
+                <a
+                  href="/configuracoes"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    navigate('/configuracoes');
+                  }}
+                >
+                  <Settings className="h-5 w-5" />
+                  {!collapsed && <span>Configuracoes</span>}
+                </a>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          )}
           <SidebarMenuItem>
             <SidebarMenuButton
               onClick={handleSignOut}

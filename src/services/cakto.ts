@@ -14,4 +14,4 @@ export const completeCaktoSuccess = async (token: string) =>
   invokePublicFunction('cakto-success', { token });
 
 export const listCaktoOffers = async () =>
-  invokePublicFunction<{ offers: Array<Record<string, unknown>> }>('cakto-offers');
+  invokePublicFunction<{ offers: Array<Record<string, unknown>> }>('cakto-offers', undefined, { method: "GET" });

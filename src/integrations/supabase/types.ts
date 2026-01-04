@@ -992,33 +992,39 @@ export type Database = {
         ]
       }
       profiles: {
-        Row: {
-          avatar_url: string | null
-          company_id: string | null
-          created_at: string
-          force_password_change: boolean
-          full_name: string
-          id: string
-          updated_at: string
-        }
-        Insert: {
-          avatar_url?: string | null
-          company_id?: string | null
-          created_at?: string
-          force_password_change?: boolean
-          full_name: string
-          id: string
-          updated_at?: string
-        }
-        Update: {
-          avatar_url?: string | null
-          company_id?: string | null
-          created_at?: string
-          force_password_change?: boolean
-          full_name?: string
-          id?: string
-          updated_at?: string
-        }
+          Row: {
+            avatar_url: string | null
+            company_id: string | null
+            created_at: string
+            force_password_change: boolean
+            full_name: string
+            id: string
+            must_change_password: boolean
+            must_complete_onboarding: boolean
+            updated_at: string
+          }
+          Insert: {
+            avatar_url?: string | null
+            company_id?: string | null
+            created_at?: string
+            force_password_change?: boolean
+            full_name: string
+            id: string
+            must_change_password?: boolean
+            must_complete_onboarding?: boolean
+            updated_at?: string
+          }
+          Update: {
+            avatar_url?: string | null
+            company_id?: string | null
+            created_at?: string
+            force_password_change?: boolean
+            full_name?: string
+            id?: string
+            must_change_password?: boolean
+            must_complete_onboarding?: boolean
+            updated_at?: string
+          }
         Relationships: [
           {
             foreignKeyName: "profiles_company_id_fkey"

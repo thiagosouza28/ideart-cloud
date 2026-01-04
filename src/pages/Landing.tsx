@@ -28,6 +28,18 @@ type CaktoOffer = {
   intervalType?: string | null;
   interval?: number | null;
   status?: string | null;
+  checkoutUrl?: string | null;
+};
+
+type DisplayPlan = {
+  id: string;
+  name: string;
+  description: string | null;
+  price: number;
+  billing_period: string;
+  features: string[];
+  planId: string | null;
+  checkoutUrl: string | null;
 };
 
 const fallbackPlans: PlanWithCakto[] = [
@@ -81,6 +93,7 @@ export default function Landing() {
           intervalType: offer.intervalType ? String(offer.intervalType) : null,
           interval: offer.interval ? Number(offer.interval) : null,
           status: offer.status ? String(offer.status) : null,
+          checkoutUrl: offer.checkout_url ? String(offer.checkout_url) : null,
         }));
         setOffers(mapped.filter((offer) => offer.id));
       } catch (error) {
@@ -100,31 +113,56 @@ export default function Landing() {
     return value;
   };
 
-  const displayPlans = useMemo(() => {
-    const basePlans = plans.length ? plans : fallbackPlans;
-    if (!offers.length) return basePlans;
-
-    const offersById = new Map(offers.map((offer) => [offer.id, offer]));
-    const merged = basePlans
-      .map((plan) => {
-        const offerId = normalizeOfferId(plan.cakto_plan_id ?? undefined);
-        const offer = offerId ? offersById.get(offerId) : undefined;
-        if (!offer) return null;
+  const displayPlans = useMemo<DisplayPlan[]>(() => {
+    if (offers.length) {
+      return offers.filter((offer) => offer.status !== 'inactive' && offer.status !== 'disabled').map((offer) => {
+        const matchingPlan = plans.find(
+          (plan) => normalizeOfferId(plan.cakto_plan_id ?? undefined) === offer.id
+        );
         const billing =
           offer.intervalType === "year" || offer.intervalType === "yearly"
             ? "yearly"
-            : plan.billing_period;
+            : "monthly";
         return {
-          ...plan,
-          price: typeof offer.price === "number" ? offer.price : plan.price,
+          id: offer.id,
+          name: matchingPlan?.name ?? offer.name ?? "Plano Cakto",
+          description: matchingPlan?.description ?? null,
+          price: typeof offer.price === "number" ? offer.price : 0,
           billing_period: billing,
+          features: matchingPlan?.features ?? [],
+          planId: matchingPlan?.id ?? null,
+          checkoutUrl: offer.checkoutUrl ?? `https://pay.cakto.com.br/${offer.id}`,
         };
-      })
-      .filter(Boolean) as PlanWithCakto[];
-    return merged.length ? merged : basePlans;
+      });
+    }
+
+    const basePlans = plans.length ? plans : fallbackPlans;
+    return basePlans.map((plan) => ({
+      id: plan.id,
+      name: plan.name,
+      description: plan.description ?? null,
+      price: plan.price,
+      billing_period: plan.billing_period,
+      features: plan.features ?? [],
+      planId: plan.id,
+      checkoutUrl: null,
+    }));
   }, [plans, offers]);
 
-  const openCheckout = (plan: Plan) => {
+  const openCheckout = (planId: string | null, checkoutUrl: string | null) => {
+    if (!planId) {
+      if (checkoutUrl) {
+        window.location.href = checkoutUrl;
+        return;
+      }
+      toast.error("Plano ainda nao configurado para checkout.");
+      return;
+    }
+    const plan = plans.find((item) => item.id === planId) ?? null;
+    if (!plan) {
+      toast.error("Plano nao encontrado no sistema.");
+      return;
+    }
     setSelectedPlan(plan);
     setCheckoutOpen(true);
   };
@@ -306,7 +344,11 @@ export default function Landing() {
               <CardContent className="p-6 space-y-4">
                 <div>
                   <h3 className="text-base font-semibold">{plan.name}</h3>
-                  <p className="text-sm text-slate-500">{plan.description}</p>
+                  {plan.description ? (
+                    <p className="text-sm text-slate-500">{plan.description}</p>
+                  ) : (
+                    <p className="text-sm text-slate-500">Plano cadastrado na Cakto.</p>
+                  )}
                 </div>
                 <div className="text-3xl font-bold">
                   {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(plan.price)}
@@ -320,8 +362,12 @@ export default function Landing() {
                     </li>
                   ))}
                 </ul>
-                <Button className="w-full" onClick={() => openCheckout(plan)}>
-                  Assinar Agora
+                <Button
+                  className="w-full"
+                  onClick={() => openCheckout(plan.planId, plan.checkoutUrl)}
+                  disabled={!plan.planId && !plan.checkoutUrl}
+                >
+                  {!plan.planId && plan.checkoutUrl ? "Assinar Agora" : plan.planId ? "Assinar Agora" : "Em configuracao"}
                 </Button>
               </CardContent>
             </Card>

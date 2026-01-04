@@ -96,30 +96,84 @@ const sendAccessEmail = async (params: {
   const text = [
     `Ola ${name},`,
     '',
-    'Sua assinatura foi ativada.',
+    'Sua assinatura foi aprovada e seu acesso esta liberado no IDEARTCLOUD.',
     companyLabel,
-    `Acesse o sistema: ${loginUrl}`,
-    `Email de acesso: ${params.email}`,
+    `Login: ${params.email}`,
     passwordLine,
+    `Acesse: ${loginUrl}`,
     '',
-    'No primeiro login, altere sua senha.',
+    'No primeiro acesso voce devera:',
+    '1) Preencher os dados da empresa',
+    '2) Criar uma nova senha',
   ].filter(Boolean).join('\n');
 
   const html = `
-    <div>
-      <p>Ola ${name},</p>
-      <p>Sua assinatura foi ativada.</p>
-      ${params.companyName ? `<p><strong>Empresa:</strong> ${params.companyName}</p>` : ''}
-      <p><strong>Login:</strong> <a href="${loginUrl}">${loginUrl}</a></p>
-      <p><strong>Email de acesso:</strong> ${params.email}</p>
-      <p><strong>${params.password ? 'Senha temporaria' : 'Aviso'}:</strong> ${params.password ?? 'Sua conta ja existe. Use sua senha atual.'}</p>
-      <p>No primeiro login, altere sua senha.</p>
-    </div>
+    <!DOCTYPE html>
+    <html lang="pt-BR">
+      <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>IDEARTCLOUD</title>
+      </head>
+      <body style="margin:0;padding:0;background-color:#f5f7fb;color:#0f172a;font-family:Arial, sans-serif;">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#f5f7fb;padding:24px;">
+          <tr>
+            <td align="center">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;background:#ffffff;border-radius:16px;box-shadow:0 12px 30px rgba(15,23,42,0.08);overflow:hidden;">
+                <tr>
+                  <td style="padding:28px 32px 8px 32px;">
+                    <div style="font-size:14px;letter-spacing:2px;text-transform:uppercase;color:#64748b;font-weight:700;">
+                      IDEARTCLOUD
+                    </div>
+                    <h1 style="margin:16px 0 8px 0;font-size:24px;line-height:1.3;color:#0f172a;">
+                      Acesso liberado
+                    </h1>
+                    <p style="margin:0 0 16px 0;color:#334155;font-size:15px;line-height:1.6;">
+                      Ola ${name}, sua assinatura foi aprovada e seu acesso esta liberado.
+                    </p>
+                    ${params.companyName ? `<p style="margin:0 0 12px 0;color:#0f172a;font-size:14px;"><strong>Empresa:</strong> ${params.companyName}</p>` : ''}
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:0 32px 8px 32px;">
+                    <div style="background:#f8fafc;border-radius:12px;padding:16px;">
+                      <p style="margin:0 0 8px 0;color:#334155;font-size:14px;"><strong>Login:</strong> ${params.email}</p>
+                      <p style="margin:0;color:#334155;font-size:14px;"><strong>${params.password ? 'Senha temporaria' : 'Aviso'}:</strong> ${params.password ?? 'Sua conta ja existe. Use sua senha atual.'}</p>
+                    </div>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:16px 32px 8px 32px;">
+                    <a href="${loginUrl}" style="display:inline-block;background:#0f172a;color:#ffffff;text-decoration:none;padding:14px 22px;border-radius:10px;font-size:15px;font-weight:700;">
+                      Acessar Plataforma
+                    </a>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:8px 32px 24px 32px;">
+                    <p style="margin:0 0 8px 0;color:#334155;font-size:14px;">
+                      No primeiro acesso voce devera:
+                    </p>
+                    <ol style="margin:0;padding-left:18px;color:#334155;font-size:14px;line-height:1.6;">
+                      <li>Preencher os dados da empresa</li>
+                      <li>Criar uma nova senha</li>
+                    </ol>
+                    <p style="margin:16px 0 0 0;color:#94a3b8;font-size:12px;">
+                      Se precisar de ajuda, fale com nosso suporte.
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+      </body>
+    </html>
   `;
 
   return await sendSmtpEmail({
     to: params.email,
-    subject: 'Acesso liberado - IdeartCloud',
+    subject: 'Acesso liberado - IDEARTCLOUD',
     text,
     html,
   });
@@ -385,20 +439,30 @@ serve(async (req) => {
         id: userId,
         full_name: checkout?.full_name ?? customerName ?? email,
         company_id: companyId,
+        must_complete_onboarding: true,
       };
       if (tempPassword) {
+        profilePayload.must_change_password = true;
         profilePayload.force_password_change = true;
       }
       await supabase.from('profiles').upsert(profilePayload);
 
-      const roleResp = await supabase.from('user_roles').insert({ user_id: userId, role: 'admin' });
+      const roleResp = await supabase.from('user_roles').upsert({ user_id: userId, role: 'admin' }, { onConflict: 'user_id' });
       if (roleResp.error) {
         console.error('Failed to set user role', roleResp.error.message);
       }
 
-      const linkResp = await supabase.from('company_users').insert({ company_id: companyId, user_id: userId });
-      if (linkResp.error) {
-        console.error('Failed to link user to company', linkResp.error.message);
+      const { data: existingLink } = await supabase
+        .from('company_users')
+        .select('company_id')
+        .eq('company_id', companyId)
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (!existingLink) {
+        const linkResp = await supabase.from('company_users').insert({ company_id: companyId, user_id: userId });
+        if (linkResp.error) {
+          console.error('Failed to link user to company', linkResp.error.message);
+        }
       }
     }
 
@@ -439,7 +503,7 @@ serve(async (req) => {
       await supabase.from('companies').update(companyUpdate).eq('id', companyId);
     }
 
-    let shouldSendEmail = false;
+    let shouldSendEmail = true;
     if (checkout?.id) {
       shouldSendEmail = checkout?.status !== 'completed';
       await supabase.from('subscription_checkouts').update({
@@ -450,7 +514,11 @@ serve(async (req) => {
       }).eq('id', checkout.id);
     }
 
-    const appUrl = Deno.env.get('APP_PUBLIC_URL') ?? '';
+    const appUrl =
+      Deno.env.get('APP_PUBLIC_URL') ??
+      metadata?.app_url ??
+      data?.app_url ??
+      'https://ideartcloud.com.br';
     if (appUrl && shouldSendEmail) {
       await sendAccessEmail({
         email,

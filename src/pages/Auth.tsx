@@ -5,56 +5,38 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Package, Loader2, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { z } from 'zod';
 
 const loginSchema = z.object({
-  email: z.string().email('Email inválido'),
-  password: z.string().min(6, 'Senha deve ter no mínimo 6 caracteres'),
-});
-
-const signupSchema = z.object({
-  fullName: z.string().min(2, 'Nome deve ter no mínimo 2 caracteres'),
-  email: z.string().email('Email inválido'),
-  password: z.string().min(6, 'Senha deve ter no mínimo 6 caracteres'),
-  confirmPassword: z.string(),
-}).refine((data) => data.password === data.confirmPassword, {
-  message: 'As senhas não conferem',
-  path: ['confirmPassword'],
+  email: z.string().email('Email invalido'),
+  password: z.string().min(6, 'Senha deve ter no minimo 6 caracteres'),
 });
 
 export default function Auth() {
   const navigate = useNavigate();
-  const { user, profile, needsOnboarding, signIn, signUp, loading: authLoading } = useAuth();
+  const { user, profile, needsOnboarding, signIn, loading: authLoading } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'login' | 'signup'>('login');
 
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [showLoginPassword, setShowLoginPassword] = useState(false);
-  const [showSignupPassword, setShowSignupPassword] = useState(false);
-  const [showSignupConfirmPassword, setShowSignupConfirmPassword] = useState(false);
-
-  const [signupName, setSignupName] = useState('');
-  const [signupEmail, setSignupEmail] = useState('');
-  const [signupPassword, setSignupPassword] = useState('');
-  const [signupConfirmPassword, setSignupConfirmPassword] = useState('');
+  const mustChangePassword = Boolean(profile?.must_change_password || profile?.force_password_change);
 
   useEffect(() => {
     if (user && !authLoading) {
-      if (profile?.force_password_change) {
-        navigate('/alterar-senha');
-      } else if (needsOnboarding) {
+      if (needsOnboarding) {
         navigate('/onboarding');
+      } else if (mustChangePassword) {
+        navigate('/alterar-senha');
       } else {
         navigate('/dashboard');
       }
     }
-  }, [user, authLoading, needsOnboarding, profile?.force_password_change, navigate]);
+  }, [user, authLoading, needsOnboarding, mustChangePassword, navigate]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -77,54 +59,8 @@ export default function Auth() {
           setError(error.message);
         }
       }
-    } catch (err) {
+    } catch {
       setError('Erro ao fazer login. Tente novamente.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleSignup = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setNotice(null);
-    setIsLoading(true);
-
-    try {
-      const email = signupEmail.trim();
-      const password = signupPassword;
-      const result = signupSchema.safeParse({
-        fullName: signupName,
-        email,
-        password,
-        confirmPassword: signupConfirmPassword,
-      });
-
-      if (!result.success) {
-        setError(result.error.errors[0].message);
-        setIsLoading(false);
-        return;
-      }
-
-      const { error } = await signUp(email, password, signupName);
-      if (error) {
-        if (error.message.includes('User already registered')) {
-          setError('Este email já está cadastrado');
-        } else {
-          setError(error.message);
-        }
-      } else {
-        setNotice('Conta criada com sucesso! Verifique seu email para confirmar o cadastro. Depois, clique em Entrar.');
-        setLoginEmail(email);
-        setLoginPassword(password);
-        setActiveTab('login');
-        setSignupName('');
-        setSignupEmail('');
-        setSignupPassword('');
-        setSignupConfirmPassword('');
-      }
-    } catch (err) {
-      setError('Erro ao criar conta. Tente novamente.');
     } finally {
       setIsLoading(false);
     }
@@ -141,194 +77,82 @@ export default function Auth() {
           </div>
           <div className="space-y-2">
             <CardTitle className="text-3xl font-bold tracking-tight">GraficaERP</CardTitle>
-            <CardDescription className="text-base">Sistema de Gestão para Gráfica</CardDescription>
+            <CardDescription className="text-base">Sistema de Gestao para Grafica</CardDescription>
           </div>
         </CardHeader>
         <CardContent className="space-y-6">
-          <Tabs
-            value={activeTab}
-            onValueChange={(value) => setActiveTab(value as 'login' | 'signup')}
-            className="w-full"
-          >
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="login">Entrar</TabsTrigger>
-              <TabsTrigger value="signup">Cadastrar</TabsTrigger>
-            </TabsList>
+          <form onSubmit={handleLogin} className="space-y-5">
+            {notice && (
+              <Alert className="border-success bg-success/10 text-success">
+                <AlertDescription>{notice}</AlertDescription>
+              </Alert>
+            )}
 
-            <TabsContent value="login" className="mt-2">
-              <form onSubmit={handleLogin} className="space-y-5">
-                {notice && (
-                  <Alert className="border-success bg-success/10 text-success">
-                    <AlertDescription>{notice}</AlertDescription>
-                  </Alert>
-                )}
+            {error && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
 
-                {error && (
-                  <Alert variant="destructive">
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertDescription>{error}</AlertDescription>
-                  </Alert>
-                )}
+            <div className="space-y-2.5">
+              <Label htmlFor="login-email" className="text-sm font-medium">Email</Label>
+              <Input
+                id="login-email"
+                type="email"
+                placeholder="seu@email.com"
+                value={loginEmail}
+                onChange={(e) => setLoginEmail(e.target.value)}
+                className="h-11 transition-all focus-visible:ring-2 focus-visible:ring-primary/20"
+                required
+              />
+            </div>
 
-                <div className="space-y-2.5">
-                  <Label htmlFor="login-email" className="text-sm font-medium">Email</Label>
-                  <Input
-                    id="login-email"
-                    type="email"
-                    placeholder="seu@email.com"
-                    value={loginEmail}
-                    onChange={(e) => setLoginEmail(e.target.value)}
-                    className="h-11 transition-all focus-visible:ring-2 focus-visible:ring-primary/20"
-                    required
-                  />
-                </div>
-
-                <div className="space-y-2.5">
-                  <Label htmlFor="login-password" className="text-sm font-medium">Senha</Label>
-                  <div className="relative">
-                    <Input
-                      id="login-password"
-                      type={showLoginPassword ? "text" : "password"}
-                      placeholder="••••••"
-                      value={loginPassword}
-                      onChange={(e) => setLoginPassword(e.target.value)}
-                      className="pr-10 h-11 transition-all focus-visible:ring-2 focus-visible:ring-primary/20"
-                      required
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowLoginPassword(!showLoginPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm p-1"
-                      tabIndex={-1}
-                      aria-label={showLoginPassword ? "Ocultar senha" : "Mostrar senha"}
-                    >
-                      {showLoginPassword ? (
-                        <EyeOff className="h-4 w-4" />
-                      ) : (
-                        <Eye className="h-4 w-4" />
-                      )}
-                    </button>
-                  </div>
-                </div>
-
-                <Button 
-                  type="submit" 
-                  className="w-full h-11 text-base font-medium shadow-sm hover:shadow-md transition-shadow" 
-                  disabled={isLoading}
+            <div className="space-y-2.5">
+              <Label htmlFor="login-password" className="text-sm font-medium">Senha</Label>
+              <div className="relative">
+                <Input
+                  id="login-password"
+                  type={showLoginPassword ? "text" : "password"}
+                  placeholder="********"
+                  value={loginPassword}
+                  onChange={(e) => setLoginPassword(e.target.value)}
+                  className="pr-10 h-11 transition-all focus-visible:ring-2 focus-visible:ring-primary/20"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowLoginPassword(!showLoginPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm p-1"
+                  tabIndex={-1}
+                  aria-label={showLoginPassword ? "Ocultar senha" : "Mostrar senha"}
                 >
-                  {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Entrar
-                </Button>
-                <div className="text-center text-sm text-slate-500">
-                  <Link to="/recuperar-senha" className="underline underline-offset-4">
-                    Esqueci minha senha
-                  </Link>
-                </div>
-              </form>
-            </TabsContent>
+                  {showLoginPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
+            </div>
 
-            <TabsContent value="signup" className="mt-2">
-              <form onSubmit={handleSignup} className="space-y-5">
-                {error && (
-                  <Alert variant="destructive">
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertDescription>{error}</AlertDescription>
-                  </Alert>
-                )}
-
-                <div className="space-y-2.5">
-                  <Label htmlFor="signup-name" className="text-sm font-medium">Nome Completo</Label>
-                  <Input
-                    id="signup-name"
-                    type="text"
-                    placeholder="Seu nome"
-                    value={signupName}
-                    onChange={(e) => setSignupName(e.target.value)}
-                    className="h-11 transition-all focus-visible:ring-2 focus-visible:ring-primary/20"
-                    required
-                  />
-                </div>
-
-                <div className="space-y-2.5">
-                  <Label htmlFor="signup-email" className="text-sm font-medium">Email</Label>
-                  <Input
-                    id="signup-email"
-                    type="email"
-                    placeholder="seu@email.com"
-                    value={signupEmail}
-                    onChange={(e) => setSignupEmail(e.target.value)}
-                    className="h-11 transition-all focus-visible:ring-2 focus-visible:ring-primary/20"
-                    required
-                  />
-                </div>
-
-                <div className="space-y-2.5">
-                  <Label htmlFor="signup-password" className="text-sm font-medium">Senha</Label>
-                  <div className="relative">
-                    <Input
-                      id="signup-password"
-                      type={showSignupPassword ? "text" : "password"}
-                      placeholder="••••••"
-                      value={signupPassword}
-                      onChange={(e) => setSignupPassword(e.target.value)}
-                      className="pr-10 h-11 transition-all focus-visible:ring-2 focus-visible:ring-primary/20"
-                      required
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowSignupPassword(!showSignupPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm p-1"
-                      tabIndex={-1}
-                      aria-label={showSignupPassword ? "Ocultar senha" : "Mostrar senha"}
-                    >
-                      {showSignupPassword ? (
-                        <EyeOff className="h-4 w-4" />
-                      ) : (
-                        <Eye className="h-4 w-4" />
-                      )}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="space-y-2.5">
-                  <Label htmlFor="signup-confirm" className="text-sm font-medium">Confirmar Senha</Label>
-                  <div className="relative">
-                    <Input
-                      id="signup-confirm"
-                      type={showSignupConfirmPassword ? "text" : "password"}
-                      placeholder="••••••"
-                      value={signupConfirmPassword}
-                      onChange={(e) => setSignupConfirmPassword(e.target.value)}
-                      className="pr-10 h-11 transition-all focus-visible:ring-2 focus-visible:ring-primary/20"
-                      required
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowSignupConfirmPassword(!showSignupConfirmPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm p-1"
-                      tabIndex={-1}
-                      aria-label={showSignupConfirmPassword ? "Ocultar senha" : "Mostrar senha"}
-                    >
-                      {showSignupConfirmPassword ? (
-                        <EyeOff className="h-4 w-4" />
-                      ) : (
-                        <Eye className="h-4 w-4" />
-                      )}
-                    </button>
-                  </div>
-                </div>
-
-                <Button 
-                  type="submit" 
-                  className="w-full h-11 text-base font-medium shadow-sm hover:shadow-md transition-shadow" 
-                  disabled={isLoading}
-                >
-                  {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Criar Conta
-                </Button>
-              </form>
-            </TabsContent>
-          </Tabs>
+            <Button
+              type="submit"
+              className="w-full h-11 text-base font-medium shadow-sm hover:shadow-md transition-shadow"
+              disabled={isLoading}
+            >
+              {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Entrar
+            </Button>
+            <div className="text-center text-sm text-slate-500">
+              <Link to="/recuperar-senha" className="underline underline-offset-4">
+                Esqueci minha senha
+              </Link>
+            </div>
+            <p className="text-center text-xs text-slate-500">
+              O cadastro e liberado somente apos o pagamento aprovado.
+            </p>
+          </form>
         </CardContent>
       </Card>
     </div>

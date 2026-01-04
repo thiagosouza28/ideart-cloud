@@ -15,7 +15,7 @@ const getSmtpConfig = () => {
     pass: Deno.env.get("SMTP_PASS") ?? "",
     emailFrom: Deno.env.get("EMAIL_FROM") ?? "",
     senderName: Deno.env.get("SMTP_SENDER_NAME") ?? "IdeartCloud",
-    senderEmail: Deno.env.get("SMTP_SENDER_EMAIL") ?? "suporte@ideartcloud.com.br",
+    senderEmail: "suporte@ideartcloud.com.br",
   };
 };
 
@@ -28,9 +28,10 @@ export const sendSmtpEmail = async (payload: EmailPayload) => {
 
   const client = new SmtpClient();
   try {
-    const from = cfg.emailFrom.trim().length
+    const supportEmail = "suporte@ideartcloud.com.br";
+    const from = cfg.emailFrom.trim().length && cfg.emailFrom.includes(supportEmail)
       ? cfg.emailFrom.trim()
-      : `${cfg.senderName} <${cfg.senderEmail}>`;
+      : `${cfg.senderName} <${supportEmail}>`;
     await client.connectTLS({
       hostname: cfg.host,
       port: cfg.port,

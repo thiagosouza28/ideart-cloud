@@ -48,7 +48,11 @@ export default function ChangePassword() {
 
       const { error: profileError } = await supabase
         .from('profiles')
-        .update({ force_password_change: false })
+        .update({
+          force_password_change: false,
+          must_change_password: false,
+          must_complete_onboarding: false,
+        })
         .eq('id', user.id);
 
       if (profileError) {
