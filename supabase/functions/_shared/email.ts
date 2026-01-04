@@ -32,12 +32,21 @@ export const sendSmtpEmail = async (payload: EmailPayload) => {
     const from = cfg.emailFrom.trim().length
       ? cfg.emailFrom.trim()
       : `${cfg.senderName} <${supportEmail}>`;
-    await client.connectTLS({
-      hostname: cfg.host,
-      port: cfg.port,
-      username: cfg.user,
-      password: cfg.pass,
-    });
+    if (cfg.port === 587) {
+      await client.connect({
+        hostname: cfg.host,
+        port: cfg.port,
+        username: cfg.user,
+        password: cfg.pass,
+      });
+    } else {
+      await client.connectTLS({
+        hostname: cfg.host,
+        port: cfg.port,
+        username: cfg.user,
+        password: cfg.pass,
+      });
+    }
 
     await client.send({
       from,
