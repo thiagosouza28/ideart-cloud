@@ -48,14 +48,14 @@ interface MenuItem {
 const primaryMenu: MenuItem[] = [
   { title: 'Dashboard', url: '/dashboard', icon: LayoutDashboard, roles: ['super_admin', 'admin', 'atendente', 'caixa', 'producao'] },
   { title: 'Pedidos', url: '/pedidos', icon: ClipboardList, roles: ['admin', 'atendente', 'caixa'] },
-  { title: 'Producao', url: '/producao', icon: Factory, roles: ['admin', 'producao'] },
-  { title: 'Relatorios', url: '/relatorios', icon: BarChart3, roles: ['admin'] },
+  { title: 'Produção', url: '/producao', icon: Factory, roles: ['admin', 'producao'] },
+  { title: 'Relatórios', url: '/relatorios', icon: BarChart3, roles: ['admin'] },
 ];
 
 const secondaryMenu: MenuItem[] = [
   { title: 'PDV', url: '/pdv', icon: ShoppingCart, roles: ['admin', 'caixa'] },
   { title: 'Kanban de Pedidos', url: '/pedidos/kanban', icon: Kanban, roles: ['admin', 'atendente', 'caixa', 'producao'] },
-  { title: 'Catalogo', url: '/catalogo-admin', icon: LayoutGrid, roles: ['admin'] },
+  { title: 'Catálogo', url: '/catalogo-admin', icon: LayoutGrid, roles: ['admin'] },
   { title: 'Produtos', url: '/produtos', icon: Package, roles: ['admin', 'atendente'] },
   { title: 'Categorias', url: '/categorias', icon: FolderTree, roles: ['admin', 'atendente'] },
   { title: 'Insumos', url: '/insumos', icon: Layers, roles: ['admin', 'atendente'] },
@@ -64,7 +64,7 @@ const secondaryMenu: MenuItem[] = [
   { title: 'Clientes', url: '/clientes', icon: Users, roles: ['admin', 'atendente'] },
   { title: 'Empresas', url: '/empresas', icon: Building2, roles: ['admin'] },
   { title: 'Banners', url: '/banners', icon: ImageIcon, roles: ['admin'] },
-  { title: 'Usuarios', url: '/usuarios', icon: User, roles: ['admin'] },
+  { title: 'Usuários', url: '/usuarios', icon: User, roles: ['admin'] },
   { title: 'Assinatura', url: '/assinatura', icon: Crown, roles: ['admin'] },
 ];
 
@@ -72,7 +72,7 @@ const superAdminMenu: MenuItem[] = [
   { title: 'Painel', url: '/super-admin', icon: LayoutDashboard, roles: ['super_admin'] },
   { title: 'Empresas SaaS', url: '/super-admin/empresas', icon: Building2, roles: ['super_admin'] },
   { title: 'Planos', url: '/super-admin/planos', icon: CreditCard, roles: ['super_admin'] },
-  { title: 'Usuarios', url: '/usuarios', icon: Users, roles: ['super_admin'] },
+  { title: 'Usuários', url: '/usuarios', icon: Users, roles: ['super_admin'] },
 ];
 
 export function AppSidebar() {
@@ -102,8 +102,8 @@ export function AppSidebar() {
           </div>
           {!collapsed && (
             <div className="flex flex-col leading-tight">
-              <span className="text-base font-semibold text-slate-900">GraficaERP</span>
-              <span className="text-[11px] font-medium tracking-wide text-slate-400">SISTEMA DE GESTAO</span>
+              <span className="text-base font-semibold text-slate-900">GráficaERP</span>
+              <span className="text-[11px] font-medium tracking-wide text-slate-400">SISTEMA DE GESTÃO</span>
             </div>
           )}
         </div>
@@ -226,7 +226,7 @@ export function AppSidebar() {
             <SidebarMenuItem>
               <SidebarMenuButton
                 asChild
-                tooltip="Configuracoes"
+                tooltip="Configurações"
                 className={
                   'h-11 rounded-2xl px-3 text-sm font-medium text-slate-600 hover:bg-slate-100 data-[active=true]:bg-purple-600 data-[active=true]:text-white'
                 }
@@ -240,7 +240,7 @@ export function AppSidebar() {
                   }}
                 >
                   <Settings className="h-5 w-5" />
-                  {!collapsed && <span>Configuracoes</span>}
+                  {!collapsed && <span>Configurações</span>}
                 </a>
               </SidebarMenuButton>
             </SidebarMenuItem>

@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Check,
   Crown,
@@ -7,6 +7,8 @@ import {
   ExternalLink,
   Copy,
   CreditCard,
+  AlertTriangle,
+  CalendarClock,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -25,10 +27,11 @@ import { toast } from 'sonner';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { computeSubscriptionState } from '@/services/subscription';
 import { invokeEdgeFunction } from '@/services/edgeFunctions';
+import { listCaktoOffers } from '@/services/cakto';
 import { Plan, Company } from '@/types/database';
 
 /* ======================================================
-   TIPOS DE LEITURA (DTOs) — NÃO use tipos crus do banco
+   TIPOS DE LEITURA (DTOs) - NAO use tipos crus do banco
 ====================================================== */
 
 type SubscriptionRow = {
@@ -39,10 +42,42 @@ type SubscriptionRow = {
   payment_link_url?: string | null;
   created_at: string;
   current_period_ends_at?: string | null;
+  plan_id?: string | null;
+  plan?: Plan | null;
 };
 
 type CompanyWithPlan = Company & {
   plan?: Plan | null;
+};
+
+type CaktoOffer = {
+  id: string;
+  name: string | null;
+  price: number | null;
+  intervalType: string | null;
+  interval: number | null;
+  status: string | null;
+  checkout_url: string | null;
+};
+
+const formatCurrency = (v: number) =>
+  new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  }).format(v);
+
+const formatDate = (value?: string | Date | null) => {
+  if (!value) return '—';
+  const date = typeof value === 'string' ? new Date(value) : value;
+  if (Number.isNaN(date.getTime())) return '—';
+  return new Intl.DateTimeFormat('pt-BR').format(date);
+};
+
+const getPeriodLabel = (period?: string | null) => {
+  if (!period) return 'Mensal';
+  if (period === 'yearly') return 'Anual';
+  if (period === 'monthly') return 'Mensal';
+  return period;
 };
 
 export default function Subscription() {
@@ -51,6 +86,7 @@ export default function Subscription() {
   const [searchParams] = useSearchParams();
 
   const [plans, setPlans] = useState<Plan[]>([]);
+  const [offers, setOffers] = useState<CaktoOffer[]>([]);
   const [company, setCompany] = useState<CompanyWithPlan | null>(null);
   const [latestSubscription, setLatestSubscription] =
     useState<SubscriptionRow | null>(null);
@@ -70,6 +106,17 @@ export default function Subscription() {
   ====================================================== */
   const loadData = useCallback(async () => {
     setLoading(true);
+
+    /* ---------- OFERTAS CAKTO ---------- */
+    try {
+      const { offers: offersData } = await listCaktoOffers();
+      setOffers(
+        (offersData as CaktoOffer[]).filter((offer) => Boolean(offer?.id))
+      );
+    } catch (error) {
+      console.error('Erro ao carregar ofertas Cakto', error);
+      setOffers([]);
+    }
 
     /* ---------- PLANOS ---------- */
     const { data: plansData, error: plansError } = await supabase
@@ -114,7 +161,7 @@ export default function Subscription() {
       if (user?.id) {
         const { data, error } = await supabase
           .from('subscriptions' as any)
-          .select('*')
+          .select('*, plan:plans(*)')
           .eq('user_id', user.id)
           .order('created_at', { ascending: false })
           .limit(1)
@@ -125,7 +172,7 @@ export default function Subscription() {
       } else {
         const { data, error } = await supabase
           .from('subscriptions' as any)
-          .select('*')
+          .select('*, plan:plans(*)')
           .eq('company_id', profile.company_id)
           .order('created_at', { ascending: false })
           .limit(1)
@@ -165,15 +212,6 @@ export default function Subscription() {
     loadData();
   }, [loadData]);
 
-  /* ======================================================
-     HELPERS
-  ====================================================== */
-  const formatCurrency = (v: number) =>
-    new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL',
-    }).format(v);
-
   const handleSubscribe = async (planId: string) => {
     if (!company) {
       toast.error('Você precisa ter uma empresa cadastrada');
@@ -186,7 +224,14 @@ export default function Subscription() {
       const data = await invokeEdgeFunction<{
         checkout_url?: string;
         url?: string;
-      }>('create-subscription', { plan_id: planId });
+      }>('create-subscription', {
+        plan_id: planId,
+        company_id: company?.id,
+        customer: {
+          email: user?.email ?? '',
+          name: profile?.full_name ?? user?.email ?? '',
+        },
+      });
 
       const redirectUrl = data?.checkout_url ?? data?.url;
 
@@ -248,6 +293,52 @@ export default function Subscription() {
     }
   };
 
+  const getOfferPeriodLabel = (offer: CaktoOffer) => {
+    const intervalType = (offer.intervalType ?? '').toLowerCase();
+    if (intervalType.includes('year') || intervalType.includes('ano')) return 'ano';
+    if (intervalType.includes('month') || intervalType.includes('mes')) return 'mes';
+    if (intervalType.includes('week') || intervalType.includes('semana')) return 'semana';
+    if (intervalType.includes('day') || intervalType.includes('dia')) return 'dia';
+    return 'mes';
+  };
+
+  const activeOffer = useMemo(() => {
+    if (!latestSubscription?.payment_link_url || offers.length === 0) return null;
+    const link = latestSubscription.payment_link_url;
+    return (
+      offers.find((offerItem) => link.includes(offerItem.id)) ??
+      offers.find((offerItem) => offerItem.checkout_url === link) ??
+      null
+    );
+  }, [latestSubscription?.payment_link_url, offers]);
+
+  const activePlan =
+    company?.plan ??
+    latestSubscription?.plan ??
+    plans.find((planItem) => planItem.id === company?.plan_id) ??
+    plans.find((planItem) => planItem.id === latestSubscription?.plan_id) ??
+    null;
+  const activePlanId =
+    activePlan?.id ??
+    company?.plan_id ??
+    latestSubscription?.plan_id ??
+    null;
+  const activeOfferId = activeOffer?.id ?? null;
+  const planName = activePlan?.name ?? activeOffer?.name ?? 'Sem plano ativo';
+  const planPrice = activePlan?.price ?? activeOffer?.price ?? null;
+  const planPeriod = activePlan
+    ? getPeriodLabel(activePlan?.billing_period ?? null)
+    : activeOffer
+      ? (getOfferPeriodLabel(activeOffer) === 'ano'
+        ? 'Anual'
+        : getOfferPeriodLabel(activeOffer) === 'mes'
+          ? 'Mensal'
+          : getOfferPeriodLabel(activeOffer))
+      : '—';
+
+  const planStartLabel = formatDate(company?.subscription_start_date ?? null);
+  const planEndLabel = formatDate(subscriptionState.expiresAt);
+
   /* ======================================================
      RENDER
   ====================================================== */
@@ -270,93 +361,164 @@ export default function Subscription() {
         </div>
       </div>
 
+      {!subscriptionState.hasAccess && (
+        <Card className="mb-6 border-destructive/40 bg-destructive/5">
+          <CardContent className="flex items-center gap-3 p-4 text-sm text-destructive">
+            <AlertTriangle className="h-5 w-5" />
+            Seu acesso está bloqueado até a assinatura ser aprovada. Escolha um plano e conclua o pagamento.
+          </CardContent>
+        </Card>
+      )}
+
       {company && (
-        <Card className="mb-8">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Building2 className="h-5 w-5" />
-              {company.name}
-            </CardTitle>
+        <>
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Building2 className="h-5 w-5" />
+                {company.name}
+              </CardTitle>
 
-            <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-              {getStatusBadge()}
+              <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                {getStatusBadge()}
 
-              {isPendingPayment && subscriptionState.status !== 'active' && (
-                <Badge variant="outline">Pagamento pendente</Badge>
-              )}
+                {isPendingPayment && subscriptionState.status !== 'active' && (
+                  <Badge variant="outline">Pagamento pendente</Badge>
+                )}
 
-              {subscriptionState.status === 'active' && company.plan && (
-                <>
+                {subscriptionState.status === 'active' && company.plan && (
                   <Badge variant="outline" className="gap-1">
                     <Crown className="h-3 w-3" />
                     {company.plan.name}
                   </Badge>
-                </>
-              )}
-            </div>
-          </CardHeader>
-
-          <CardContent className="space-y-4">
-            {paymentLinkUrl && (
-              <div className="space-y-2">
-                <p className="text-sm font-medium">Link de pagamento:</p>
-                <div className="flex items-center gap-2 p-3 bg-muted rounded-lg">
-                  <code className="flex-1 break-all text-sm font-mono">
-                    {paymentLinkUrl}
-                  </code>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => copyText(paymentLinkUrl, setCopiedPaymentLink)}
-                  >
-                    {copiedPaymentLink ? (
-                      <Check className="h-4 w-4 text-chart-2" />
-                    ) : (
-                      <Copy className="h-4 w-4" />
-                    )}
-                  </Button>
-                  <Button variant="ghost" size="icon" asChild>
-                    <a href={paymentLinkUrl} target="_blank" rel="noreferrer">
-                      <ExternalLink className="h-4 w-4" />
-                    </a>
-                  </Button>
-                </div>
+                )}
               </div>
-            )}
+            </CardHeader>
 
-            {company.slug && (
-              <>
-                <Separator />
+            <CardContent className="space-y-4">
+              {paymentLinkUrl && (
                 <div className="space-y-2">
-                  <p className="text-sm font-medium">
-                    Link do seu Catálogo Público:
-                  </p>
+                  <p className="text-sm font-medium">Link de pagamento:</p>
                   <div className="flex items-center gap-2 p-3 bg-muted rounded-lg">
                     <code className="flex-1 break-all text-sm font-mono">
-                      {catalogUrl}
+                      {paymentLinkUrl}
                     </code>
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={() => copyText(catalogUrl, setCopied)}
+                      onClick={() => copyText(paymentLinkUrl, setCopiedPaymentLink)}
                     >
-                      {copied ? (
+                      {copiedPaymentLink ? (
                         <Check className="h-4 w-4 text-chart-2" />
                       ) : (
                         <Copy className="h-4 w-4" />
                       )}
                     </Button>
                     <Button variant="ghost" size="icon" asChild>
-                      <a href={catalogUrl} target="_blank" rel="noreferrer">
+                      <a href={paymentLinkUrl} target="_blank" rel="noreferrer">
                         <ExternalLink className="h-4 w-4" />
                       </a>
                     </Button>
                   </div>
                 </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
+              )}
+
+              {company.slug && (
+                <>
+                  <Separator />
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium">
+                      Link do seu Catálogo Público:
+                    </p>
+                    <div className="flex items-center gap-2 p-3 bg-muted rounded-lg">
+                      <code className="flex-1 break-all text-sm font-mono">
+                        {catalogUrl}
+                      </code>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => copyText(catalogUrl, setCopied)}
+                      >
+                        {copied ? (
+                          <Check className="h-4 w-4 text-chart-2" />
+                        ) : (
+                          <Copy className="h-4 w-4" />
+                        )}
+                      </Button>
+                      <Button variant="ghost" size="icon" asChild>
+                        <a href={catalogUrl} target="_blank" rel="noreferrer">
+                          <ExternalLink className="h-4 w-4" />
+                        </a>
+                      </Button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className={`mb-8 ${subscriptionState.status === 'active' && activePlan ? 'border-primary/40 shadow-md bg-primary/5' : ''}`}>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <CalendarClock className={`h-5 w-5 ${subscriptionState.status === 'active' && activePlan ? 'text-primary' : 'text-muted-foreground'}`} />
+                Plano Atual
+                {subscriptionState.status === 'active' && activePlan && (
+                  <Badge className="bg-primary/10 text-primary hover:bg-primary/15">
+                    Plano ativo
+                  </Badge>
+                )}
+              </CardTitle>
+              <CardDescription>
+                Status do plano e datas de vigência
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-1 text-sm">
+                <p className="text-muted-foreground">Plano</p>
+                <p className="font-medium">{planName}</p>
+              </div>
+              <div className="space-y-1 text-sm">
+                <p className="text-muted-foreground">Valor</p>
+                <p className={`font-medium ${subscriptionState.status === 'active' && planPrice !== null ? 'text-primary' : ''}`}>
+                  {planPrice !== null ? formatCurrency(planPrice) : '—'}
+                </p>
+              </div>
+              <div className="space-y-1 text-sm">
+                <p className="text-muted-foreground">Periodicidade</p>
+                <p className={`font-medium ${subscriptionState.status === 'active' && activePlan ? 'text-primary' : ''}`}>
+                  {planPeriod}
+                </p>
+              </div>
+              <div className="space-y-1 text-sm">
+                <p className="text-muted-foreground">Status</p>
+                <div className="flex items-center gap-2">
+                  {getStatusBadge()}
+                  {subscriptionState.isTrial && (
+                    <Badge variant="secondary">Período de teste</Badge>
+                  )}
+                </div>
+              </div>
+              <div className="space-y-1 text-sm">
+                <p className="text-muted-foreground">Início</p>
+                <p className="font-medium">{planStartLabel}</p>
+              </div>
+              <div className="space-y-1 text-sm">
+                <p className="text-muted-foreground">Vencimento</p>
+                <p className={`font-medium ${subscriptionState.status === 'active' && subscriptionState.expiresAt ? 'text-primary' : ''}`}>
+                  {planEndLabel}
+                </p>
+              </div>
+              <div className="space-y-1 text-sm">
+                <p className="text-muted-foreground">Dias restantes</p>
+                <p className="font-medium">
+                  {subscriptionState.daysRemaining !== null
+                    ? `${subscriptionState.daysRemaining} dia${subscriptionState.daysRemaining === 1 ? '' : 's'}`
+                    : '—'}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </>
       )}
 
       <div className="mb-4">
@@ -367,44 +529,82 @@ export default function Subscription() {
       </div>
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {plans.map((plan) => {
-          const isSamePlan = company?.plan_id === plan.id;
-          const isActivePlan =
-            isSamePlan && subscriptionState.status === 'active';
+        {(offers.length > 0 ? offers : plans).map((item) => {
+          const isOffer = (item as CaktoOffer).checkout_url !== undefined;
+          const offer = item as CaktoOffer;
+          const plan = item as Plan;
+          const matchedPlan = isOffer
+            ? plans.find((planItem) => planItem.cakto_plan_id === offer.id)
+            : plan;
+          const isSamePlan = matchedPlan?.id
+            ? activePlanId === matchedPlan.id
+            : false;
+          const isActivePlan = subscriptionState.status === 'active' && (
+            (isOffer && activeOfferId ? offer.id === activeOfferId : false) ||
+            (!isOffer && isSamePlan)
+          );
+          const checkoutUrl = isOffer ? offer.checkout_url : null;
+          const canCheckout = Boolean(checkoutUrl || matchedPlan?.id);
+          const isProcessing = Boolean(
+            subscribing && subscribing === (matchedPlan?.id ?? plan.id)
+          );
+          const priceValue = isOffer ? offer.price ?? 0 : plan.price;
+          const periodLabel = isOffer
+            ? getOfferPeriodLabel(offer)
+            : plan.billing_period === 'monthly'
+              ? 'mes'
+              : 'ano';
 
           return (
-            <Card key={plan.id}>
-              <CardHeader>
+            <Card key={isOffer ? offer.id : plan.id} className={isActivePlan ? "border-primary/50 shadow-md" : undefined}>
+              <CardHeader className="relative">
+                {isActivePlan && (
+                  <div className="absolute right-4 top-4 rounded-full bg-primary px-3 py-1 text-[11px] font-semibold text-primary-foreground">
+                    Plano atual
+                  </div>
+                )}
                 <CardTitle className="flex items-center justify-between">
-                  {plan.name}
-                  {plan.name.toLowerCase().includes('pro') && (
+                  {isOffer ? offer.name : plan.name}
+                  {(isOffer ? offer.name : plan.name)?.toLowerCase().includes('pro') && (
                     <Crown className="h-5 w-5 text-yellow-500" />
                   )}
                 </CardTitle>
-                {plan.description && (
+                {isActivePlan && subscriptionState.daysRemaining !== null && subscriptionState.daysRemaining <= 7 && (
+                  <Badge variant="secondary">Vence em {subscriptionState.daysRemaining} {subscriptionState.daysRemaining === 1 ? "dia" : "dias"}</Badge>
+                )}
+                {!isOffer && plan.description && (
                   <CardDescription>{plan.description}</CardDescription>
+                )}
+                {isOffer && (
+                  <CardDescription>Plano cadastrado na Cakto.</CardDescription>
                 )}
               </CardHeader>
 
               <CardContent className="space-y-4">
                 <div className="flex items-baseline gap-1">
                   <span className="text-3xl font-bold">
-                    {formatCurrency(plan.price)}
+                    {formatCurrency(priceValue)}
                   </span>
-                  <span className="text-muted-foreground">
-                    /{plan.billing_period === 'monthly' ? 'mês' : 'ano'}
-                  </span>
+                  <span className="text-muted-foreground">/{periodLabel}</span>
                 </div>
               </CardContent>
 
               <CardFooter>
                 <Button
-                  className="w-full gap-2"
+                  className={`w-full gap-2 ${!subscriptionState.hasAccess ? 'ring-2 ring-primary/40' : ''}`}
                   variant={isActivePlan ? 'outline' : 'default'}
-                  disabled={isActivePlan || subscribing === plan.id}
-                  onClick={() => handleSubscribe(plan.id)}
+                  disabled={!canCheckout || isActivePlan || isProcessing}
+                  onClick={() => {
+                    if (checkoutUrl) {
+                      window.location.href = checkoutUrl;
+                      return;
+                    }
+                    if (matchedPlan?.id) {
+                      handleSubscribe(matchedPlan.id);
+                    }
+                  }}
                 >
-                  {subscribing === plan.id ? (
+                  {isProcessing ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" />
                       Processando...
@@ -412,7 +612,11 @@ export default function Subscription() {
                   ) : (
                     <>
                       <CreditCard className="h-4 w-4" />
-                      {isActivePlan ? 'Plano Atual' : 'Assinar este plano'}
+                      {isActivePlan
+                        ? 'Plano Atual'
+                        : canCheckout
+                          ? 'Assinar este plano'
+                          : 'Em configuração'}
                     </>
                   )}
                 </Button>

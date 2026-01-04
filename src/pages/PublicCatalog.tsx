@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -131,8 +131,8 @@ export default function PublicCatalog() {
 
   useEffect(() => {
     if (!company) return;
-    const title = company.catalog_title || company.name || 'Catalogo';
-    const description = company.catalog_description || `Catalogo de ${company.name}`;
+    const title = company.catalog_title || company.name || 'Catálogo';
+    const description = company.catalog_description || `Catálogo de ${company.name}`;
     document.title = title;
     const metaDescription = document.querySelector('meta[name="description"]');
     if (metaDescription) metaDescription.setAttribute('content', description);
@@ -182,8 +182,8 @@ export default function PublicCatalog() {
     if (!company?.whatsapp) return;
     const phone = company.whatsapp.replace(/\D/g, '');
     const message = product
-      ? `Ola! Gostaria de saber mais sobre o produto: ${product.name}`
-      : 'Ola! Vim pelo catalogo online e gostaria de mais informacoes.';
+      ? `Olá! Gostaria de saber mais sobre o produto: ${product.name}`
+      : 'Olá! Vim pelo catálogo online e gostaria de mais informações.';
     window.open(`https://wa.me/55${phone}?text=${encodeURIComponent(message)}`, '_blank');
   };
 
@@ -224,8 +224,8 @@ export default function PublicCatalog() {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-foreground mb-2">Catalogo nao encontrado</h1>
-          <p className="text-muted-foreground mb-4">Este catalogo nao existe ou nao esta disponivel.</p>
+          <h1 className="text-2xl font-bold text-foreground mb-2">Catálogo não encontrado</h1>
+          <p className="text-muted-foreground mb-4">Este catálogo não existe ou não está disponível.</p>
           <Link to="/">
             <Button>Voltar ao inicio</Button>
           </Link>
@@ -320,7 +320,7 @@ export default function PublicCatalog() {
 
         <div className="mb-8 space-y-4">
           <h2 className="text-lg font-semibold uppercase tracking-wide border-l-4 pl-3" style={{ borderColor: baseButtonColor }}>
-            {company?.description || 'Catalogo de produtos'}
+            {company?.description || 'Catálogo de produtos'}
           </h2>
           <div className="flex flex-col sm:flex-row gap-4 sm:gap-8 text-sm text-slate-500">
             {company?.phone && (
@@ -581,14 +581,14 @@ export default function PublicCatalog() {
                   className="px-4 py-2 border rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors flex items-center gap-2"
                 >
                   <Mail className="h-4 w-4" />
-                  Email
+                  E-mail
                 </a>
               )}
               <Link
                 to={`/catalogo/${slug}`}
                 className="px-4 py-2 bg-black text-white rounded-lg text-sm font-medium hover:bg-slate-800 transition-colors"
               >
-                Ver Catalogo Completo
+                Ver Catálogo Completo
               </Link>
             </div>
           </div>

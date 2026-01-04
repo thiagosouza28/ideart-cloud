@@ -12,7 +12,10 @@ const getAppOrigin = () => {
   const appUrl = Deno.env.get("APP_PUBLIC_URL");
   if (!appUrl) return null;
   try {
-    return new URL(appUrl).origin;
+    const normalized = appUrl.startsWith("http://") || appUrl.startsWith("https://")
+      ? appUrl
+      : `https://${appUrl}`;
+    return new URL(normalized).origin;
   } catch {
     return null;
   }
@@ -62,16 +65,24 @@ serve(async (req) => {
         ? raw
         : [];
 
-    const normalized = offers.map((offer: any) => ({
-      id: offer?.id ?? offer?.short_id ?? offer?.offer_id ?? null,
+    const normalized = offers.map((offer: any) => {
+      const id = offer?.id ?? offer?.short_id ?? offer?.offer_id ?? null;
+      const checkoutUrl =
+        offer?.checkoutUrl ??
+        offer?.checkout_url ??
+        offer?.salesPage ??
+        (id ? `https://pay.cakto.com.br/${id}` : null);
+      return ({
+        id,
       name: offer?.name ?? null,
       price: typeof offer?.price === "string" ? Number(offer.price) : offer?.price ?? null,
       intervalType: offer?.intervalType ?? offer?.interval_type ?? null,
       interval: offer?.interval ?? offer?.interval_count ?? null,
       status: offer?.status ?? null,
       type: offer?.type ?? null,
-      checkout_url: offer?.checkoutUrl ?? offer?.checkout_url ?? offer?.salesPage ?? null,
-    })).filter((offer: any) => !!offer.id);
+      checkout_url: checkoutUrl,
+      });
+    }).filter((offer: any) => !!offer.id);
 
     return jsonResponse(corsHeaders, 200, { offers: normalized });
   } catch (error) {

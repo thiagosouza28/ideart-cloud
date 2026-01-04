@@ -124,6 +124,21 @@ serve(async (req) => {
       log('Failed to save subscription locally', { message: insertError.message });
     }
 
+    const token = crypto.randomUUID();
+    const { error: checkoutError } = await supabase.from('subscription_checkouts').insert({
+      token,
+      plan_id: planId,
+      email: customer.email,
+      full_name: customer.name ?? null,
+      company_name: null,
+      status: 'pending',
+      user_id: authData.user.id,
+      company_id: companyId,
+    });
+    if (checkoutError) {
+      log('Failed to create checkout record', { message: checkoutError.message });
+    }
+
     return jsonResponse(corsHeaders, 200, { subscription: inserted ?? null, checkout_url: checkoutUrl });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

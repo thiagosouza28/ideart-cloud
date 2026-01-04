@@ -29,7 +29,7 @@ const statusOptions: Array<{ value: OrderStatus | 'all'; label: string }> = [
   { value: 'all', label: 'Todos' },
   { value: 'orcamento', label: 'Orcamento' },
   { value: 'pendente', label: 'Pendente' },
-  { value: 'em_producao', label: 'Em Producao' },
+  { value: 'em_producao', label: 'Em Produção' },
   { value: 'pronto', label: 'Pronto' },
   { value: 'aguardando_retirada', label: 'Aguardando retirada' },
   { value: 'entregue', label: 'Entregue' },
@@ -168,8 +168,8 @@ export default function Reports() {
 
   const exportRows = useMemo(() => buildExportRows(activeTab, reportData), [activeTab, reportData]);
   const exportTitle = useMemo(() => {
-    const tabLabel = reportTabs.find((tab) => tab.value === activeTab)?.label || 'Relatorio';
-    return `Relatorio - ${tabLabel}`;
+    const tabLabel = reportTabs.find((tab) => tab.value === activeTab)?.label || 'Relatório';
+    return `Relatório - ${tabLabel}`;
   }, [activeTab]);
 
   const loadData = async (nextFilters: ReportFilters) => {
@@ -208,7 +208,7 @@ export default function Reports() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900">Relatorios</h1>
+          <h1 className="text-3xl font-bold text-slate-900">Relatórios</h1>
           <p className="text-sm text-slate-500">Central de indicadores e financeiro.</p>
         </div>
         <Button

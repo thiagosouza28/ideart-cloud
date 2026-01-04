@@ -209,7 +209,7 @@ export default function SuperAdminPlans() {
 
   const handleSave = async () => {
     if (!formData.name) {
-      toast.error('Nome e obrigatorio');
+      toast.error('Nome é obrigatório');
       return;
     }
 
@@ -609,7 +609,7 @@ export default function SuperAdminPlans() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Maximo de Usuarios</Label>
+                <Label>Máximo de Usuários</Label>
                 <Input
                   type="number"
                   min="1"
@@ -684,7 +684,7 @@ export default function SuperAdminPlans() {
           </DialogHeader>
           <p className="py-4">
             Tem certeza que deseja excluir o plano <strong>{selectedPlan?.name}</strong>?
-            Esta acao nao pode ser desfeita.
+            Esta ação não pode ser desfeita.
           </p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>Cancelar</Button>

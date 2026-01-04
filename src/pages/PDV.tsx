@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Search,
   Plus,
@@ -129,7 +129,7 @@ export default function PDV() {
       .maybeSingle();
 
     if (error || !data) {
-      toast({ title: 'Produto nao encontrado', description: `Codigo: ${barcodeInput}`, variant: 'destructive' });
+      toast({ title: 'Produto não encontrado', description: `Código: ${barcodeInput}`, variant: 'destructive' });
       barcodeInputRef.current?.focus();
       return;
     }

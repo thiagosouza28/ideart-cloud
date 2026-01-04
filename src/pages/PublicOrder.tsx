@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
+import { useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
 import { formatOrderNumber } from '@/lib/utils';
 import { useParams } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
@@ -197,7 +197,7 @@ export default function PublicOrder() {
                     <p className="text-sm text-muted-foreground">Tel: {payload.customer.phone}</p>
                   )}
                   {payload.customer.email && (
-                    <p className="text-sm text-muted-foreground">Email: {payload.customer.email}</p>
+                    <p className="text-sm text-muted-foreground">E-mail: {payload.customer.email}</p>
                   )}
                 </div>
               </CardContent>
@@ -373,7 +373,7 @@ export default function PublicOrder() {
                   <p className="text-sm text-muted-foreground">WhatsApp: {payload.company.whatsapp}</p>
                 )}
                 {payload.company.email && (
-                  <p className="text-sm text-muted-foreground">Email: {payload.company.email}</p>
+                  <p className="text-sm text-muted-foreground">E-mail: {payload.company.email}</p>
                 )}
               </CardContent>
             </Card>

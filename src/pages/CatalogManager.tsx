@@ -67,7 +67,7 @@ export default function CatalogManager() {
       .order("name", { ascending: true });
 
     if (error) {
-      toast.error("Erro ao carregar produtos do catÁlogo");
+      toast.error("Erro ao carregar produtos do catálogo");
       setLoading(false);
       return;
     }
@@ -85,7 +85,7 @@ export default function CatalogManager() {
       .maybeSingle();
 
     if (error) {
-      toast.error("Erro ao carregar personalizaÓÐo do catÁlogo");
+      toast.error("Erro ao carregar personalização do catálogo");
       return;
     }
 
@@ -131,7 +131,7 @@ export default function CatalogManager() {
       .eq("id", productId);
 
     if (error) {
-      toast.error("Erro ao atualizar produto do catÁlogo");
+      toast.error("Erro ao atualizar produto do catálogo");
       return;
     }
 
@@ -162,14 +162,14 @@ export default function CatalogManager() {
     }));
     const { error } = await supabase.from("products").upsert(updates, { onConflict: "id" });
     if (error) {
-      toast.error("Erro ao salvar a ordem do catÁlogo");
+      toast.error("Erro ao salvar a ordem do catálogo");
       setSavingOrder(false);
       return;
     }
     setProducts((prev) =>
       prev.map((item, index) => ({ ...item, catalog_sort_order: index + 1 }))
     );
-    toast.success("Ordem do catÁlogo atualizada");
+    toast.success("Ordem do catálogo atualizada");
     setSavingOrder(false);
   };
 
@@ -181,11 +181,11 @@ export default function CatalogManager() {
       .update(settings)
       .eq("id", profile.company_id);
     if (error) {
-      toast.error("Erro ao salvar personalizaÓÐo");
+      toast.error("Erro ao salvar personalização");
       setSavingSettings(false);
       return;
     }
-    toast.success("PersonalizaÓÐo salva");
+    toast.success("Personalização salva");
     setSavingSettings(false);
   };
 
@@ -195,13 +195,13 @@ export default function CatalogManager() {
     <div className="page-container">
       <div className="page-header">
         <div>
-          <h1 className="page-title">CatÁlogo</h1>
-          <p className="text-muted-foreground text-sm">Gerencie produtos e personalizaÓÐo do catÁlogo</p>
+          <h1 className="page-title">Catálogo</h1>
+          <p className="text-muted-foreground text-sm">Gerencie produtos e personalização do catálogo</p>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row">
           {catalogUrl && (
             <Button variant="outline" onClick={() => window.open(catalogUrl, "_blank")}>
-              Ver catÁlogo
+              Ver catálogo
               <ExternalLink className="h-4 w-4 ml-2" />
             </Button>
           )}
@@ -215,7 +215,7 @@ export default function CatalogManager() {
       <Tabs defaultValue="produtos" className="space-y-6">
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="produtos">Produtos</TabsTrigger>
-          <TabsTrigger value="personalizacao">PersonalizaÓÐo</TabsTrigger>
+          <TabsTrigger value="personalizacao">Personalização</TabsTrigger>
         </TabsList>
 
         <TabsContent value="produtos" className="space-y-4">
@@ -256,13 +256,13 @@ export default function CatalogManager() {
                         <span className="text-base font-semibold">{product.name}</span>
                         {!product.is_active && <Badge variant="outline">Inativo</Badge>}
                         {(product.catalog_enabled ?? product.show_in_catalog) && (
-                          <Badge variant="secondary">CatÁlogo ativo</Badge>
+                          <Badge variant="secondary">Catálogo ativo</Badge>
                         )}
                         {product.catalog_featured && <Badge variant="default">Destaque</Badge>}
                       </div>
                       <div className="grid gap-3 sm:grid-cols-3">
                         <div className="space-y-1">
-                          <Label>PreÓo catÁlogo</Label>
+                          <Label>Preço catálogo</Label>
                           <Input
                             type="number"
                             min="0"
@@ -275,7 +275,7 @@ export default function CatalogManager() {
                           />
                         </div>
                         <div className="space-y-1">
-                          <Label>Pedido mÝnimo</Label>
+                          <Label>Pedido mínimo</Label>
                           <Input
                             type="number"
                             min="1"
@@ -309,7 +309,7 @@ export default function CatalogManager() {
                             })
                           }
                         />
-                        <span className="text-sm">No catÁlogo</span>
+                        <span className="text-sm">No catálogo</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <Switch
@@ -331,11 +331,11 @@ export default function CatalogManager() {
         <TabsContent value="personalizacao" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Identidade do catÁlogo</CardTitle>
+              <CardTitle>Identidade do catálogo</CardTitle>
             </CardHeader>
             <CardContent className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
-                <Label>TÝtulo do catÁlogo</Label>
+                <Label>Título do catálogo</Label>
                 <Input
                   value={settings.catalog_title ?? ""}
                   onChange={(event) => setSettings({ ...settings, catalog_title: event.target.value })}
@@ -349,7 +349,7 @@ export default function CatalogManager() {
                 />
               </div>
               <div className="space-y-2 md:col-span-2">
-                <Label>DescriÓÐo SEO</Label>
+                <Label>Descrição SEO</Label>
                 <Textarea
                   rows={3}
                   value={settings.catalog_description ?? ""}
@@ -373,7 +373,7 @@ export default function CatalogManager() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Texto do botÐo</Label>
+                <Label>Texto do botão</Label>
                 <Input
                   value={settings.catalog_button_text ?? ""}
                   onChange={(event) => setSettings({ ...settings, catalog_button_text: event.target.value })}
@@ -427,14 +427,14 @@ export default function CatalogManager() {
                   checked={settings.catalog_show_prices ?? true}
                   onCheckedChange={(checked) => setSettings({ ...settings, catalog_show_prices: checked })}
                 />
-                <span className="text-sm">Exibir preÓos</span>
+                <span className="text-sm">Exibir preços</span>
               </div>
               <div className="flex items-center gap-2">
                 <Switch
                   checked={settings.catalog_show_contact ?? true}
                   onCheckedChange={(checked) => setSettings({ ...settings, catalog_show_contact: checked })}
                 />
-                <span className="text-sm">Exibir botÐo de contato</span>
+                <span className="text-sm">Exibir botão de contato</span>
               </div>
               <div className="space-y-2 md:col-span-2">
                 <Label>Link de contato</Label>
@@ -453,7 +453,7 @@ export default function CatalogManager() {
             </CardHeader>
             <CardContent className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
-                <Label>Cor primÁria</Label>
+                <Label>Cor primária</Label>
                 <Input
                   type="color"
                   value={settings.catalog_primary_color ?? "#3b82f6"}
@@ -461,7 +461,7 @@ export default function CatalogManager() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Cor secundÁria</Label>
+                <Label>Cor secundária</Label>
                 <Input
                   type="color"
                   value={settings.catalog_secondary_color ?? "#1e40af"}
@@ -477,7 +477,7 @@ export default function CatalogManager() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Cor do botÐo</Label>
+                <Label>Cor do botão</Label>
                 <Input
                   type="color"
                   value={settings.catalog_button_bg_color ?? "#3b82f6"}
@@ -489,7 +489,7 @@ export default function CatalogManager() {
 
           <div className="flex justify-end">
             <Button onClick={saveSettings} disabled={savingSettings}>
-              {savingSettings ? "Salvando..." : "Salvar personalizaÓÐo"}
+              {savingSettings ? "Salvando..." : "Salvar personalização"}
             </Button>
           </div>
         </TabsContent>

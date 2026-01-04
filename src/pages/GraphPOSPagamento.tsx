@@ -207,7 +207,7 @@ export default function GraphPOSPagamento() {
                       return;
                     }
                     if (!user?.id) {
-                      toast({ title: 'Sessao invalida. Faca login novamente.', variant: 'destructive' });
+                      toast({ title: 'Sessão inválida. Faça login novamente.', variant: 'destructive' });
                       return;
                     }
 

@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Building2,
   Search,
@@ -44,7 +44,7 @@ const statusLabels: Record<string, string> = {
   canceled: 'Cancelado',
   expired: 'Expirado',
   past_due: 'Pagamento atrasado',
-  unpaid: 'Nao pago',
+  unpaid: 'Não pago',
   incomplete: 'Incompleto',
 };
 
@@ -218,9 +218,9 @@ export default function SuperAdminCompanies() {
         companyId: selectedCompanyUsers.id,
         userId,
       });
-      toast.success('Email de reset enviado');
+      toast.success('E-mail de reset enviado');
     } catch (error: any) {
-      toast.error(error?.message || 'Erro ao enviar email de reset');
+      toast.error(error?.message || 'Erro ao enviar e-mail de reset');
     } finally {
       setSendingResetEmail(null);
     }
@@ -233,7 +233,7 @@ export default function SuperAdminCompanies() {
       await navigator.clipboard.writeText(link);
       toast.success('Link copiado');
     } catch {
-      toast.error('Nao foi possivel copiar');
+      toast.error('Não foi possível copiar');
     }
   };
 
@@ -302,7 +302,7 @@ export default function SuperAdminCompanies() {
                 <TableHead>Empresa</TableHead>
                 <TableHead>Plano</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Usuarios</TableHead>
+                <TableHead>Usuários</TableHead>
                 <TableHead>Criada em</TableHead>
                 <TableHead className="w-[50px]" />
               </TableRow>
@@ -374,7 +374,7 @@ export default function SuperAdminCompanies() {
                           Editar assinatura
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => openUsersDialog(company)}>
-                          Usuarios
+                          Usuários
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => toggleCompanyStatus(company)}>
                           {company.is_active ? 'Desativar' : 'Ativar'}
@@ -447,7 +447,7 @@ export default function SuperAdminCompanies() {
       <Dialog open={usersDialogOpen} onOpenChange={setUsersDialogOpen}>
         <DialogContent aria-describedby={undefined} className="max-w-3xl">
           <DialogHeader>
-            <DialogTitle>Usuarios - {selectedCompanyUsers?.name}</DialogTitle>
+            <DialogTitle>Usuários - {selectedCompanyUsers?.name}</DialogTitle>
             <DialogDescription>
               Gere um link de reset de senha para enviar ao usuario.
             </DialogDescription>
@@ -458,14 +458,14 @@ export default function SuperAdminCompanies() {
             </div>
           ) : companyUsers.length === 0 ? (
             <div className="text-center py-8 text-slate-500">
-              Nenhum usuario encontrado para esta empresa.
+              Nenhum usuário encontrado para esta empresa.
             </div>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Usuario</TableHead>
-                  <TableHead>Email</TableHead>
+                  <TableHead>Usuário</TableHead>
+                  <TableHead>E-mail</TableHead>
                   <TableHead>Criado em</TableHead>
                   <TableHead className="text-right">Acoes</TableHead>
                 </TableRow>
@@ -487,14 +487,14 @@ export default function SuperAdminCompanies() {
                           size="sm"
                           onClick={() => handleSendResetEmail(user.id)}
                           disabled={!user.email || sendingResetEmail === user.id}
-                          title={!user.email ? 'Email nao encontrado para este usuario' : undefined}
+                          title={!user.email ? 'E-mail não encontrado para este usuário' : undefined}
                         >
                           {sendingResetEmail === user.id ? (
                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                           ) : (
                             <Mail className="mr-2 h-4 w-4" />
                           )}
-                          Enviar email
+                          Enviar e-mail
                         </Button>
                         {resetLinks[user.id] && (
                           <Button
@@ -510,7 +510,7 @@ export default function SuperAdminCompanies() {
                           size="sm"
                           onClick={() => handleResetPassword(user.id)}
                           disabled={!user.email || resettingUser === user.id}
-                          title={!user.email ? 'Email nao encontrado para este usuario' : undefined}
+                          title={!user.email ? 'E-mail não encontrado para este usuário' : undefined}
                         >
                           {resettingUser === user.id ? (
                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />

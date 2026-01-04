@@ -7,6 +7,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { CookieConsent } from "@/components/CookieConsent";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { ProtectedRoute } from "@/components/layout/ProtectedRoute";
+import { ThemeProvider } from "next-themes";
 
 import Auth from "./pages/Auth";
 import ChangePassword from "./pages/ChangePassword";
@@ -54,13 +55,14 @@ const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-        <AuthProvider>
-          <CookieConsent />
-          <Routes>
+    <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+          <AuthProvider>
+            <CookieConsent />
+            <Routes>
             <Route path="/auth" element={<Auth />} />
             <Route path="/alterar-senha" element={<ChangePassword />} />
             <Route path="/recuperar-senha" element={<ForgotPassword />} />
@@ -289,10 +291,11 @@ const App = () => (
             <Route path="/pedido/:token" element={<PublicOrder />} />
 
             <Route path="*" element={<NotFound />} />
-          </Routes>
-        </AuthProvider>
-      </BrowserRouter>
-    </TooltipProvider>
+            </Routes>
+          </AuthProvider>
+        </BrowserRouter>
+      </TooltipProvider>
+    </ThemeProvider>
   </QueryClientProvider>
 );
 

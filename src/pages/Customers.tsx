@@ -62,7 +62,7 @@ export default function Customers() {
                 <TableHead>Nome</TableHead>
                 <TableHead>CPF/CNPJ</TableHead>
                 <TableHead>Telefone</TableHead>
-                <TableHead>Email</TableHead>
+                <TableHead>E-mail</TableHead>
                 <TableHead>Cidade</TableHead>
                 <TableHead className="w-[100px]">Ações</TableHead>
               </TableRow>

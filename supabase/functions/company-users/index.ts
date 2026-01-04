@@ -134,7 +134,7 @@ Deno.serve(async (req) => {
         email,
         password,
         email_confirm: true,
-        user_metadata: { full_name: fullName },
+        user_metadata: { full_name: fullName, role },
       });
 
     if (createError || !createdUser.user?.id) {
@@ -162,7 +162,7 @@ Deno.serve(async (req) => {
     // 2. Set role
     const { error: roleError } = await supabase
       .from("user_roles")
-      .insert({ user_id: newUserId, role });
+      .upsert({ user_id: newUserId, role }, { onConflict: "user_id,role" });
 
     if (roleError) {
       await supabase.auth.admin.deleteUser(newUserId);

@@ -150,7 +150,7 @@ const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
               <p className="font-semibold">{order.customer?.name || order.customer_name}</p>
               {order.customer?.document && <p>CPF/CNPJ: {order.customer.document}</p>}
               {order.customer?.phone && <p>Tel: {order.customer.phone}</p>}
-              {order.customer?.email && <p>Email: {order.customer.email}</p>}
+              {order.customer?.email && <p>E-mail: {order.customer.email}</p>}
             </div>
           )}
 

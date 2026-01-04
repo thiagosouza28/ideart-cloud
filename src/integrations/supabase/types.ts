@@ -118,7 +118,9 @@ export type Database = {
           city: string | null
           created_at: string
           description: string | null
+          document: string | null
           email: string | null
+          completed: boolean
           facebook: string | null
           id: string
           instagram: string | null
@@ -126,6 +128,7 @@ export type Database = {
           logo_url: string | null
           minimum_order_value: number | null
           name: string
+          owner_user_id: string | null
           phone: string | null
           plan_id: string | null
           slug: string
@@ -135,6 +138,8 @@ export type Database = {
           subscription_end_date: string | null
           subscription_start_date: string | null
           subscription_status: string | null
+          trial_active: boolean
+          trial_ends_at: string | null
           updated_at: string
           whatsapp: string | null
         }
@@ -162,7 +167,9 @@ export type Database = {
           city?: string | null
           created_at?: string
           description?: string | null
+          document?: string | null
           email?: string | null
+          completed?: boolean
           facebook?: string | null
           id?: string
           instagram?: string | null
@@ -170,6 +177,7 @@ export type Database = {
           logo_url?: string | null
           minimum_order_value?: number | null
           name: string
+          owner_user_id?: string | null
           phone?: string | null
           plan_id?: string | null
           slug: string
@@ -179,6 +187,8 @@ export type Database = {
           subscription_end_date?: string | null
           subscription_start_date?: string | null
           subscription_status?: string | null
+          trial_active?: boolean
+          trial_ends_at?: string | null
           updated_at?: string
           whatsapp?: string | null
         }
@@ -206,7 +216,9 @@ export type Database = {
           city?: string | null
           created_at?: string
           description?: string | null
+          document?: string | null
           email?: string | null
+          completed?: boolean
           facebook?: string | null
           id?: string
           instagram?: string | null
@@ -214,6 +226,7 @@ export type Database = {
           logo_url?: string | null
           minimum_order_value?: number | null
           name?: string
+          owner_user_id?: string | null
           phone?: string | null
           plan_id?: string | null
           slug?: string
@@ -223,6 +236,8 @@ export type Database = {
           subscription_end_date?: string | null
           subscription_start_date?: string | null
           subscription_status?: string | null
+          trial_active?: boolean
+          trial_ends_at?: string | null
           updated_at?: string
           whatsapp?: string | null
         }
@@ -992,38 +1007,47 @@ export type Database = {
         ]
       }
       profiles: {
-          Row: {
-            avatar_url: string | null
-            company_id: string | null
-            created_at: string
-            force_password_change: boolean
-            full_name: string
-            id: string
-            must_change_password: boolean
-            must_complete_onboarding: boolean
-            updated_at: string
+        Row: {
+          avatar_url: string | null
+          cpf: string | null
+          company_id: string | null
+          created_at: string
+          force_password_change: boolean
+          full_name: string
+          id: string
+          must_change_password: boolean
+          must_complete_company: boolean
+          must_complete_onboarding: boolean
+          password_defined: boolean
+          updated_at: string
           }
-          Insert: {
-            avatar_url?: string | null
-            company_id?: string | null
-            created_at?: string
-            force_password_change?: boolean
-            full_name: string
-            id: string
-            must_change_password?: boolean
-            must_complete_onboarding?: boolean
-            updated_at?: string
+        Insert: {
+          avatar_url?: string | null
+          cpf?: string | null
+          company_id?: string | null
+          created_at?: string
+          force_password_change?: boolean
+          full_name: string
+          id: string
+          must_change_password?: boolean
+          must_complete_company?: boolean
+          must_complete_onboarding?: boolean
+          password_defined?: boolean
+          updated_at?: string
           }
-          Update: {
-            avatar_url?: string | null
-            company_id?: string | null
-            created_at?: string
-            force_password_change?: boolean
-            full_name?: string
-            id?: string
-            must_change_password?: boolean
-            must_complete_onboarding?: boolean
-            updated_at?: string
+        Update: {
+          avatar_url?: string | null
+          cpf?: string | null
+          company_id?: string | null
+          created_at?: string
+          force_password_change?: boolean
+          full_name?: string
+          id?: string
+          must_change_password?: boolean
+          must_complete_company?: boolean
+          must_complete_onboarding?: boolean
+          password_defined?: boolean
+          updated_at?: string
           }
         Relationships: [
           {

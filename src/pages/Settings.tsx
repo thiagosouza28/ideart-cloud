@@ -369,11 +369,11 @@ export default function Settings() {
 
   const handleResetCompany = async () => {
     if (!profile?.company_id) {
-      setResetError('Empresa nao encontrada.');
+      setResetError('Empresa não encontrada.');
       return;
     }
     if (!user?.email) {
-      setResetError('Email do usuario nao encontrado.');
+      setResetError('E-mail do usuário não encontrado.');
       return;
     }
 
@@ -395,7 +395,7 @@ export default function Settings() {
     const accessToken = sessionData?.session?.access_token;
     if (sessionError || !accessToken) {
       setResetLoading(false);
-      setResetError('Sessao invalida. Faca login novamente.');
+      setResetError('Sessão inválida. Faça login novamente.');
       return;
     }
 
@@ -614,7 +614,7 @@ export default function Settings() {
                 <div className="space-y-2">
                   <Label htmlFor="company-email" className="flex items-center gap-2">
                     <Mail className="h-4 w-4" />
-                    Email
+                    E-mail
                   </Label>
                   <Input
                     id="company-email"

@@ -18,6 +18,7 @@ export interface Company {
   phone: string | null;
   whatsapp: string | null;
   email: string | null;
+  document?: string | null;
   address: string | null;
   city: string | null;
   state: string | null;
@@ -60,6 +61,10 @@ export interface Company {
   subscription_end_date: string | null;
   stripe_customer_id?: string | null;
   stripe_subscription_id?: string | null;
+  owner_user_id?: string | null;
+  trial_active?: boolean | null;
+  trial_ends_at?: string | null;
+  completed?: boolean | null;
   created_at: string;
   updated_at: string;
   plan?: Plan;
@@ -68,11 +73,14 @@ export interface Company {
 export interface Profile {
   id: string;
   full_name: string;
+  cpf?: string | null;
   avatar_url: string | null;
   company_id: string | null;
   force_password_change?: boolean | null;
   must_change_password?: boolean | null;
   must_complete_onboarding?: boolean | null;
+  must_complete_company?: boolean | null;
+  password_defined?: boolean | null;
   created_at: string;
   updated_at: string;
   company?: Company;

@@ -8,6 +8,17 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { DEFAULT_TRIAL_DAYS } from "@/services/subscription";
+
+const slugify = (value: string) =>
+  value
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60);
+
+const randomSuffix = () => Math.random().toString(36).slice(2, 8);
 
 export default function Onboarding() {
   const navigate = useNavigate();
@@ -23,6 +34,7 @@ export default function Onboarding() {
     city: "",
     state: "",
     email: "",
+    document: "",
   });
 
   useEffect(() => {
@@ -35,9 +47,21 @@ export default function Onboarding() {
         city: company.city ?? "",
         state: company.state ?? "",
         email: company.email ?? "",
+        document: (company as { document?: string | null }).document ?? "",
       });
     }
   }, [company]);
+
+  useEffect(() => {
+    if (!company?.completed) return;
+
+    if (profile?.password_defined || profile?.must_change_password === false) {
+      navigate("/dashboard", { replace: true });
+      return;
+    }
+
+    navigate("/alterar-senha", { replace: true });
+  }, [company?.completed, navigate, profile?.must_change_password, profile?.password_defined]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,12 +73,13 @@ export default function Onboarding() {
       "address",
       "city",
       "state",
+      "email",
     ];
 
     const hasMissing = requiredFields.some((key) => !formData[key].trim());
     if (hasMissing) {
       toast({
-        title: "Campos obrigatorios",
+        title: "Campos obrigatórios",
         description: "Preencha todos os campos para continuar.",
         variant: "destructive",
       });
@@ -64,17 +89,7 @@ export default function Onboarding() {
     if (!user) {
       toast({
         title: "Erro",
-        description: "Usuario nao autenticado.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    const companyId = profile?.company_id ?? company?.id ?? null;
-    if (!companyId) {
-      toast({
-        title: "Empresa nao encontrada",
-        description: "Entre em contato com o suporte para liberar o acesso.",
+        description: "Usuário não autenticado.",
         variant: "destructive",
       });
       return;
@@ -83,26 +98,90 @@ export default function Onboarding() {
     setLoading(true);
 
     try {
-      const { error: companyError } = await supabase
-        .from("companies")
-        .update({
-          name: formData.name.trim(),
-          phone: formData.phone.trim(),
-          whatsapp: formData.whatsapp.trim(),
-          address: formData.address.trim(),
-          city: formData.city.trim(),
-          state: formData.state.trim(),
-          email: formData.email.trim() || null,
-        })
-        .eq("id", companyId);
+      const now = new Date();
+      const trialEnd = new Date(now);
+      trialEnd.setDate(trialEnd.getDate() + DEFAULT_TRIAL_DAYS);
+      const trialEndIso = trialEnd.toISOString();
 
-      if (companyError) {
-        throw companyError;
+      let companyId = profile?.company_id ?? company?.id ?? null;
+      if (companyId) {
+        const { error: companyError } = await supabase
+          .from("companies")
+          .update({
+            name: formData.name.trim(),
+            phone: formData.phone.trim(),
+            whatsapp: formData.whatsapp.trim(),
+            address: formData.address.trim(),
+            city: formData.city.trim(),
+            state: formData.state.trim(),
+            email: formData.email.trim() || null,
+            document: formData.document.trim() || null,
+            completed: true,
+          })
+          .eq("id", companyId);
+
+        if (companyError) {
+          throw companyError;
+        }
+      } else {
+        const baseSlug = slugify(formData.name.trim() || "empresa") || "empresa";
+        const slug = `${baseSlug}-${randomSuffix()}`;
+        const { data: createdCompany, error: createError } = await supabase
+          .from("companies")
+          .insert({
+            name: formData.name.trim(),
+            slug,
+            phone: formData.phone.trim(),
+            whatsapp: formData.whatsapp.trim(),
+            address: formData.address.trim(),
+            city: formData.city.trim(),
+            state: formData.state.trim(),
+            email: formData.email.trim() || null,
+            document: formData.document.trim() || null,
+            completed: true,
+            is_active: true,
+            subscription_status: "trial",
+            subscription_start_date: now.toISOString(),
+            subscription_end_date: trialEndIso,
+            trial_active: true,
+            trial_ends_at: trialEndIso,
+            owner_user_id: user.id,
+          })
+          .select("id")
+          .single();
+
+        if (createError || !createdCompany?.id) {
+          throw createError ?? new Error("Falha ao criar empresa");
+        }
+        companyId = createdCompany.id;
+
+        await supabase
+          .from("profiles")
+          .update({ company_id: companyId })
+          .eq("id", user.id);
+
+        const { data: existingSubscription } = await supabase
+          .from("subscriptions")
+          .select("id")
+          .eq("company_id", companyId)
+          .maybeSingle();
+
+        if (!existingSubscription?.id) {
+          await supabase.from("subscriptions").insert({
+            user_id: user.id,
+            company_id: companyId,
+            plan_id: null,
+            status: "trial",
+            trial_ends_at: trialEndIso,
+            current_period_ends_at: trialEndIso,
+            gateway: "trial",
+          });
+        }
       }
 
       const { error: profileError } = await supabase
         .from("profiles")
-        .update({ must_complete_onboarding: false })
+        .update({ must_complete_onboarding: false, must_complete_company: false })
         .eq("id", user.id);
 
       if (profileError) {
@@ -114,10 +193,14 @@ export default function Onboarding() {
 
       toast({
         title: "Dados salvos",
-        description: "Agora defina sua nova senha.",
+        description: "Cadastro da empresa concluído.",
       });
 
-      navigate("/alterar-senha", { replace: true });
+      if (profile?.password_defined || profile?.must_change_password === false) {
+        navigate("/dashboard", { replace: true });
+      } else {
+        navigate("/alterar-senha", { replace: true });
+      }
     } catch (error) {
       console.error("Onboarding error:", error);
       toast({
@@ -139,7 +222,7 @@ export default function Onboarding() {
           </div>
           <CardTitle className="text-2xl font-bold">Configure sua Empresa</CardTitle>
           <CardDescription>
-            Preencha os dados obrigatorios para liberar o sistema.
+            Preencha os dados obrigatórios para liberar o sistema.
           </CardDescription>
         </CardHeader>
 
@@ -188,7 +271,7 @@ export default function Onboarding() {
               <div className="space-y-2">
                 <Label htmlFor="email" className="flex items-center gap-2">
                   <Mail className="h-4 w-4" />
-                  Email comercial
+                  E-mail comercial *
                 </Label>
                 <Input
                   id="email"
@@ -196,6 +279,17 @@ export default function Onboarding() {
                   placeholder="contato@empresa.com"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="document">CNPJ ou CPF (opcional)</Label>
+                <Input
+                  id="document"
+                  placeholder="00.000.000/0000-00"
+                  value={formData.document}
+                  onChange={(e) => setFormData({ ...formData, document: e.target.value })}
                 />
               </div>
             </div>
@@ -203,7 +297,7 @@ export default function Onboarding() {
             <div className="space-y-4">
               <Label className="flex items-center gap-2">
                 <MapPin className="h-4 w-4" />
-                Endereco *
+                Endereço *
               </Label>
               <Input
                 placeholder="Rua, numero, bairro"

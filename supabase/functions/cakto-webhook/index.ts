@@ -51,6 +51,23 @@ const buildSlug = (value: string) =>
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '') || 'empresa';
 
+const addDays = (date: Date, days: number) => {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+};
+
+const resolvePeriodDays = (planPeriodDays?: number | null, intervalType?: string | null, intervalCount?: number | null) => {
+  if (planPeriodDays && planPeriodDays > 0) return planPeriodDays;
+  const count = intervalCount && intervalCount > 0 ? intervalCount : 1;
+  const normalized = (intervalType ?? 'month').toLowerCase();
+  if (normalized.includes('year')) return 365 * count;
+  if (normalized.includes('month') || normalized.includes('mes')) return 30 * count;
+  if (normalized.includes('week') || normalized.includes('semana')) return 7 * count;
+  if (normalized.includes('day') || normalized.includes('dia')) return count;
+  return 30 * count;
+};
+
 const generatePassword = () => {
   const lower = 'abcdefghjkmnpqrstuvwxyz';
   const upper = 'ABCDEFGHJKMNPQRSTUVWXYZ';
@@ -261,13 +278,6 @@ serve(async (req) => {
       return jsonResponse(200, { ok: true, duplicate: true });
     }
 
-    if (!isAllowedEvent(event.toString())) {
-      await supabase.from('webhook_events')
-        .update({ processed_at: new Date().toISOString() })
-        .eq('event_id', eventId);
-      return jsonResponse(200, { ok: true, ignored: true });
-    }
-
     const caktoSubId =
       data?.subscription?.id ??
       data?.subscription?.subscription_id ??
@@ -305,12 +315,22 @@ serve(async (req) => {
     const metadata = data?.metadata ?? data?.meta ?? payload?.metadata ?? {};
     const checkoutToken = metadata?.checkout_token ?? metadata?.token ?? data?.checkout_token ?? null;
 
+    const allowByEvent = isAllowedEvent(event.toString());
+    const allowByStatus = normalizedStatus === 'active';
+    if (!allowByEvent && !allowByStatus) {
+      await supabase.from('webhook_events')
+        .update({ processed_at: new Date().toISOString() })
+        .eq('event_id', eventId);
+      return jsonResponse(200, { ok: true, ignored: true });
+    }
+
     console.log('[CAKTO/WEBHOOK] Event', {
       event_id: eventId,
       event_type: event?.toString() ?? null,
       payment_status: data?.payment_status ?? data?.status ?? null,
       subscription_id: caktoSubId,
       checkout_token: checkoutToken,
+      normalized_status: normalizedStatus,
     });
 
     const customerEmail =
@@ -359,6 +379,11 @@ serve(async (req) => {
       data?.offer_id ??
       data?.offerId ??
       data?.plan_id ??
+      data?.product?.id ??
+      data?.product_id ??
+      metadata?.plan_id ??
+      metadata?.offer_id ??
+      metadata?.offerId ??
       null;
     if (!planId && offerId) {
       const offerUrl = /^https?:\/\//i.test(offerId)
@@ -381,13 +406,18 @@ serve(async (req) => {
           typeof data?.offer?.price === 'number'
             ? data.offer.price
             : Number(data?.offer?.price ?? 0);
-        const intervalType =
+        const rawIntervalType =
           data?.offer?.intervalType ??
           data?.offer?.interval_type ??
+          data?.offer?.interval_unit ??
           data?.offer?.interval ??
           'month';
-        const isYearly = intervalType === 'year' || intervalType === 'yearly';
-        const periodDays = isYearly ? 365 : 30;
+        const intervalType = typeof rawIntervalType === 'string' ? rawIntervalType : 'month';
+        const intervalCount = typeof rawIntervalType === 'number'
+          ? rawIntervalType
+          : Number(data?.offer?.interval ?? data?.offer?.interval_count ?? data?.offer?.intervalCount ?? 1);
+        const isYearly = intervalType.toLowerCase().includes('year');
+        const periodDays = resolvePeriodDays(null, intervalType, intervalCount);
 
         const { data: createdPlan } = await supabase
           .from('plans')
@@ -428,6 +458,18 @@ serve(async (req) => {
         .maybeSingle();
       checkout = fallbackCheckout;
     }
+    if (!checkout && email && !planId) {
+      const { data: fallbackCheckout } = await supabase
+        .from('subscription_checkouts')
+        .select('*')
+        .eq('email', email)
+        .in('status', ['created', 'pending', 'paid', 'active', 'completed'])
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      checkout = fallbackCheckout;
+      planId = checkout?.plan_id ?? planId;
+    }
     if (!email || !caktoSubId || !normalizedStatus) {
       await supabase.from('webhook_events')
         .update({ processed_at: new Date().toISOString() })
@@ -451,7 +493,12 @@ serve(async (req) => {
         email,
         password,
         email_confirm: true,
-        user_metadata: { full_name: checkout?.full_name ?? customerName ?? email },
+        user_metadata: {
+          full_name: checkout?.full_name ?? customerName ?? email,
+          role: 'admin',
+          must_change_password: true,
+          must_complete_company: true,
+        },
       });
       if (createError || !createdUser.user?.id) {
         throw new Error(createError?.message || 'Failed to create user');
@@ -460,7 +507,62 @@ serve(async (req) => {
       tempPassword = password;
     }
 
-    let companyId = checkout?.company_id ?? null;
+    let createdCompany = false;
+    let companyId =
+      checkout?.company_id ??
+      metadata?.company_id ??
+      data?.company_id ??
+      data?.companyId ??
+      null;
+    if (!companyId && caktoSubId) {
+      const { data: subscriptionCompany } = await supabase
+        .from('subscriptions')
+        .select('company_id')
+        .eq('gateway_subscription_id', caktoSubId)
+        .maybeSingle();
+      companyId = subscriptionCompany?.company_id ?? null;
+    }
+    if (!companyId && userId) {
+      const { data: profileRow } = await supabase
+        .from('profiles')
+        .select('company_id')
+        .eq('id', userId)
+        .maybeSingle();
+      companyId = profileRow?.company_id ?? null;
+    }
+
+    if (!companyId && email) {
+      const { data: emailCompany } = await supabase
+        .from('companies')
+        .select('id')
+        .eq('email', email)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      companyId = emailCompany?.id ?? null;
+    }
+
+    if (!companyId && userId) {
+      const { data: ownedCompany } = await supabase
+        .from('companies')
+        .select('id')
+        .eq('owner_user_id', userId)
+        .maybeSingle();
+      companyId = ownedCompany?.id ?? null;
+    }
+
+    if (!companyId && userId) {
+      const { data: companyUserLink, error: companyUserError } = await supabase
+        .from('company_users')
+        .select('company_id')
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (companyUserError) {
+        console.warn('Failed to read company_users', companyUserError.message);
+      } else {
+        companyId = companyUserLink?.company_id ?? null;
+      }
+    }
     if (!companyId) {
       const baseName = (checkout?.company_name ?? companyName ?? customerName ?? email.split('@')[0] ?? 'Empresa').toString();
       const baseSlug = buildSlug(baseName);
@@ -492,6 +594,7 @@ serve(async (req) => {
           subscription_status: normalizedStatus,
           subscription_start_date: currentPeriodStartsAt ?? new Date().toISOString(),
           subscription_end_date: currentPeriodEndsAt,
+          completed: false,
         })
         .select('id')
         .single();
@@ -500,39 +603,130 @@ serve(async (req) => {
         throw new Error(companyError?.message || 'Failed to create company');
       }
       companyId = createdCompany.id;
+      createdCompany = true;
     }
 
+    const { data: planInfo } = planId
+      ? await supabase
+        .from('plans')
+        .select('id, name, period_days, billing_period')
+        .eq('id', planId)
+        .maybeSingle()
+      : { data: null };
+
+    const { data: companyData } = companyId
+      ? await supabase
+        .from('companies')
+        .select('id, subscription_status, subscription_start_date, subscription_end_date, trial_active, trial_ends_at, completed')
+        .eq('id', companyId)
+        .maybeSingle()
+      : { data: null };
+
+    if (!planId && companyData?.plan_id) {
+      planId = companyData.plan_id;
+    }
+
+    const now = new Date();
+    const rawIntervalType =
+      data?.offer?.intervalType ??
+      data?.offer?.interval_type ??
+      data?.offer?.interval_unit ??
+      data?.offer?.interval ??
+      null;
+    const intervalType = typeof rawIntervalType === 'string' ? rawIntervalType : null;
+    const intervalCount = typeof rawIntervalType === 'number'
+      ? rawIntervalType
+      : Number(data?.offer?.interval ?? data?.offer?.interval_count ?? data?.offer?.intervalCount ?? 1);
+    const periodDays = resolvePeriodDays(planInfo?.period_days ?? null, intervalType, intervalCount);
+
+    const isActiveNow =
+      !createdCompany &&
+      (companyData?.subscription_status ?? '').toLowerCase() === 'active' &&
+      Boolean(companyData?.subscription_end_date) &&
+      new Date(companyData.subscription_end_date ?? '').getTime() >= now.getTime();
+
+    const isTrialNow =
+      !createdCompany &&
+      (companyData?.subscription_status ?? '').toLowerCase() === 'trial' &&
+      Boolean(companyData?.trial_ends_at) &&
+      new Date(companyData.trial_ends_at ?? '').getTime() > now.getTime();
+
+    const baseStart = isActiveNow
+      ? new Date(companyData?.subscription_end_date ?? now.toISOString())
+      : isTrialNow
+        ? new Date(companyData?.trial_ends_at ?? now.toISOString())
+        : currentPeriodStartsAt
+          ? new Date(currentPeriodStartsAt)
+          : now;
+
+    const resolvedPeriodEndsAt = addDays(baseStart, periodDays).toISOString();
+
     if (userId && companyId) {
+      const { data: existingProfile } = await supabase
+        .from('profiles')
+        .select('id, password_defined')
+        .eq('id', userId)
+        .maybeSingle();
+
+      const requireCompanyCompletion = !(companyData?.completed ?? false);
       const profilePayload: Record<string, unknown> = {
         id: userId,
         full_name: checkout?.full_name ?? customerName ?? email,
         company_id: companyId,
-        must_complete_onboarding: true,
       };
+
+      if (requireCompanyCompletion) {
+        profilePayload.must_complete_onboarding = true;
+        profilePayload.must_complete_company = true;
+      } else {
+        profilePayload.must_complete_onboarding = false;
+        profilePayload.must_complete_company = false;
+      }
+
       if (tempPassword) {
         profilePayload.must_change_password = true;
         profilePayload.force_password_change = true;
+        profilePayload.password_defined = false;
+      } else if (existingProfile?.password_defined) {
+        profilePayload.password_defined = true;
       }
+
       await supabase.from('profiles').upsert(profilePayload);
 
-      const roleResp = await supabase.from('user_roles').upsert({ user_id: userId, role: 'admin' }, { onConflict: 'user_id' });
+      const roleResp = await supabase
+        .from('user_roles')
+        .upsert({ user_id: userId, role: 'admin' }, { onConflict: 'user_id,role' });
       if (roleResp.error) {
         console.error('Failed to set user role', roleResp.error.message);
       }
 
-      const { data: existingLink } = await supabase
+      const { data: existingLink, error: linkLookupError } = await supabase
         .from('company_users')
         .select('company_id')
         .eq('company_id', companyId)
         .eq('user_id', userId)
         .maybeSingle();
-      if (!existingLink) {
+
+      if (linkLookupError) {
+        console.warn('Failed to read company_users', linkLookupError.message);
+      } else if (!existingLink) {
         const linkResp = await supabase.from('company_users').insert({ company_id: companyId, user_id: userId });
         if (linkResp.error) {
           console.error('Failed to link user to company', linkResp.error.message);
         }
       }
     }
+
+    const { data: priorPaidSubscription } = companyId
+      ? await supabase
+        .from('subscriptions')
+        .select('id')
+        .eq('company_id', companyId)
+        .neq('gateway', 'trial')
+        .limit(1)
+        .maybeSingle()
+      : { data: null };
+    const hadPaidSubscription = Boolean(priorPaidSubscription?.id);
 
     const subscriptionPayload: Record<string, unknown> = {
       user_id: userId,
@@ -541,7 +735,7 @@ serve(async (req) => {
       status: normalizedStatus,
       gateway: 'cakto',
       gateway_subscription_id: caktoSubId,
-      current_period_ends_at: currentPeriodEndsAt,
+      current_period_ends_at: resolvedPeriodEndsAt,
       trial_ends_at: null,
       payment_link_url: data?.payment_link_url ?? data?.checkout_url ?? data?.checkoutUrl ?? data?.payment_url ?? null,
       gateway_order_id: data?.order_id ?? data?.orderId ?? data?.id ?? data?.refId ?? null,
@@ -559,8 +753,21 @@ serve(async (req) => {
       .eq('gateway_subscription_id', caktoSubId)
       .maybeSingle();
 
-    if (existingSubscription?.id) {
-      await supabase.from('subscriptions').update(subscriptionPayload).eq('id', existingSubscription.id);
+    const { data: activeSubscription } = companyId
+      ? await supabase
+        .from('subscriptions')
+        .select('id')
+        .eq('company_id', companyId)
+        .eq('status', 'active')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      : { data: null };
+
+    const targetSubscriptionId = existingSubscription?.id ?? activeSubscription?.id ?? null;
+
+    if (targetSubscriptionId) {
+      await supabase.from('subscriptions').update(subscriptionPayload).eq('id', targetSubscriptionId);
     } else {
       await supabase.from('subscriptions').insert(subscriptionPayload);
     }
@@ -569,9 +776,13 @@ serve(async (req) => {
       const companyUpdate: Record<string, unknown> = {
         plan_id: planId,
         subscription_status: normalizedStatus,
-        subscription_start_date: currentPeriodStartsAt ?? new Date().toISOString(),
-        subscription_end_date: currentPeriodEndsAt,
+        subscription_end_date: resolvedPeriodEndsAt,
+        trial_active: false,
+        trial_ends_at: null,
       };
+      if (createdCompany || !companyData?.subscription_start_date || !isActiveNow) {
+        companyUpdate.subscription_start_date = currentPeriodStartsAt ?? new Date().toISOString();
+      }
       if (customerPhone) {
         companyUpdate.phone = customerPhone;
         companyUpdate.whatsapp = customerPhone;
@@ -582,9 +793,9 @@ serve(async (req) => {
       await supabase.from('companies').update(companyUpdate).eq('id', companyId);
     }
 
-    let shouldSendEmail = true;
+    let shouldSendEmail = !hadPaidSubscription;
     if (checkout?.id) {
-      shouldSendEmail = checkout?.status !== 'completed';
+      shouldSendEmail = shouldSendEmail && checkout?.status !== 'completed';
       await supabase.from('subscription_checkouts').update({
         status: 'completed',
         cakto_subscription_id: caktoSubId,
@@ -599,18 +810,21 @@ serve(async (req) => {
       data?.app_url ??
       'https://ideartcloud.com.br';
     if (appUrl && shouldSendEmail) {
-      const { data: planData } = await supabase
-        .from('plans')
-        .select('name')
-        .eq('id', planId)
-        .maybeSingle();
+      if (userId) {
+        await supabase.auth.admin.updateUserById(userId, {
+          user_metadata: {
+            has_active_subscription: true,
+            trial_active: false,
+          },
+        });
+      }
       await sendAccessEmail({
         email,
         fullName: checkout?.full_name ?? customerName ?? null,
         password: tempPassword,
         appUrl,
         companyName: checkout?.company_name ?? companyName ?? null,
-        planName: planData?.name ?? null,
+        planName: planInfo?.name ?? null,
       });
     }
 

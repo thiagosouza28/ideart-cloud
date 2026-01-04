@@ -22,9 +22,9 @@ export default function ForgotPassword() {
 
     try {
       await invokePublicFunction("password-recovery", { email: email.trim() });
-      setNotice("Se o email estiver cadastrado, enviamos um link de recuperacao.");
+      setNotice("Se o e-mail estiver cadastrado, enviamos um link de recuperação.");
     } catch {
-      setError("Nao foi possivel enviar o email de recuperacao.");
+      setError("Não foi possível enviar o e-mail de recuperação.");
     } finally {
       setLoading(false);
     }
@@ -51,7 +51,7 @@ export default function ForgotPassword() {
               </Alert>
             )}
             <div className="space-y-2">
-              <Label htmlFor="recovery-email">Email</Label>
+              <Label htmlFor="recovery-email">E-mail</Label>
               <Input
                 id="recovery-email"
                 type="email"

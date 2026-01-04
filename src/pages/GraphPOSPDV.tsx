@@ -181,7 +181,7 @@ export default function GraphPOSPDV() {
       .maybeSingle();
 
     if (error || !data) {
-      toast({ title: 'Produto nao encontrado', description: `Codigo: ${barcodeInput}`, variant: 'destructive' });
+      toast({ title: 'Produto não encontrado', description: `Código: ${barcodeInput}`, variant: 'destructive' });
       return;
     }
 

@@ -13,7 +13,7 @@ export type SubscriptionState = {
 };
 
 export const DEFAULT_TRIAL_DAYS = 3;
-export const WARNING_DAYS = 2;
+export const WARNING_DAYS = 7;
 
 const parseDate = (value?: string | null) => {
   if (!value) return null;
@@ -38,7 +38,7 @@ export const computeSubscriptionState = (company: Company | null, now = new Date
       isTrial: false,
       isActive: false,
       isExpired: false,
-      hasAccess: true,
+      hasAccess: false,
       warningLevel: 'none',
       warningReason: null,
     };
@@ -47,8 +47,9 @@ export const computeSubscriptionState = (company: Company | null, now = new Date
   const rawStatus = normalizeStatus(company.subscription_status);
   const startDate = parseDate(company.subscription_start_date) || parseDate(company.created_at);
   const endDateFromDb = parseDate(company.subscription_end_date);
+  const trialEndFromDb = parseDate(company.trial_ends_at ?? null);
   const computedTrialEnd = startDate ? addDays(startDate, DEFAULT_TRIAL_DAYS) : null;
-  const expiresAt = endDateFromDb || (rawStatus === 'trial' ? computedTrialEnd : null);
+  const expiresAt = endDateFromDb || trialEndFromDb || (rawStatus === 'trial' ? computedTrialEnd : null);
 
   const isTrialStatus = rawStatus === 'trial';
   const isActiveStatus = rawStatus === 'active';

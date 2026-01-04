@@ -26,6 +26,18 @@ export const sendSmtpEmail = async (payload: EmailPayload) => {
     return false;
   }
 
+  if (!(Deno as { writeAll?: unknown }).writeAll) {
+    (Deno as { writeAll?: (writer: { write: (p: Uint8Array) => Promise<number> }, data: Uint8Array) => Promise<void> }).writeAll =
+      async (writer, data) => {
+        let offset = 0;
+        while (offset < data.length) {
+          const written = await writer.write(data.subarray(offset));
+          if (!written) break;
+          offset += written;
+        }
+      };
+  }
+
   const client = new SmtpClient();
   try {
     const supportEmail = "suporte@ideartcloud.com.br";

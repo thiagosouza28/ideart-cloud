@@ -175,7 +175,7 @@ export default function Production() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900">Painel de Producao</h1>
+          <h1 className="text-3xl font-bold text-slate-900">Painel de Produção</h1>
           <p className="text-sm text-slate-500">Pedidos pendentes e em producao aguardando avancos</p>
         </div>
         <Badge variant="outline" className="text-sm px-3 py-1 rounded-full">
@@ -219,7 +219,7 @@ export default function Production() {
                             {order.customer_name || 'Cliente'}
                           </Button>
                         ) : (
-                          <span className="font-medium">{order.customer_name || 'Nao informado'}</span>
+                          <span className="font-medium">{order.customer_name || 'Não informado'}</span>
                         )}
                       </div>
                       <div className="text-sm">
@@ -238,7 +238,7 @@ export default function Production() {
                         </Button>
                         <Button className="w-full" onClick={() => startProduction(order.id)}>
                           <Clock className="mr-2 h-4 w-4" />
-                          Iniciar Producao
+                          Iniciar Produção
                         </Button>
                       </div>
                     </CardContent>
@@ -249,14 +249,14 @@ export default function Production() {
           )}
           {inProductionOrders.length > 0 && (
             <div className="space-y-3">
-              <h2 className="text-lg font-semibold">Em Producao</h2>
+              <h2 className="text-lg font-semibold">Em Produção</h2>
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                 {inProductionOrders.map((order) => (
                   <Card key={order.id} className="border-slate-200 shadow-sm">
                     <CardHeader className="pb-3">
                       <div className="flex items-center justify-between">
                         <CardTitle className="text-lg">Pedido #{formatOrderNumber(order.order_number)}</CardTitle>
-                        <span className="status-badge status-em_producao">Em Producao</span>
+                        <span className="status-badge status-em_producao">Em Produção</span>
                       </div>
                     </CardHeader>
                     <CardContent className="space-y-3">
@@ -271,7 +271,7 @@ export default function Production() {
                             {order.customer_name || 'Cliente'}
                           </Button>
                         ) : (
-                          <span className="font-medium">{order.customer_name || 'Nao informado'}</span>
+                          <span className="font-medium">{order.customer_name || 'Não informado'}</span>
                         )}
                       </div>
                       <div className="text-sm">
@@ -320,7 +320,7 @@ export default function Production() {
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Cliente</p>
-                    <p className="font-semibold">{readyOrder.customer_name || 'Nao informado'}</p>
+                    <p className="font-semibold">{readyOrder.customer_name || 'Não informado'}</p>
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Status atual</p>

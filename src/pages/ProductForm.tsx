@@ -445,9 +445,9 @@ export default function ProductForm() {
       if (!description.trim()) {
         setDescription(resp.long_description || '');
       }
-      toast({ title: 'DescriÇõÇœo gerada com sucesso' });
+      toast({ title: 'Descrição gerada com sucesso' });
     } catch (error: any) {
-      toast({ title: 'Erro ao gerar descriÇõÇœo', description: error?.message, variant: 'destructive' });
+      toast({ title: 'Erro ao gerar descrição', description: error?.message, variant: 'destructive' });
     } finally {
       setGeneratingDescription(false);
     }
@@ -883,18 +883,18 @@ export default function ProductForm() {
               <Switch checked={catalogFeatured} onCheckedChange={setCatalogFeatured} />
               <Label className="flex items-center gap-2">
                 <Tag className="h-4 w-4" />
-                Destacar no catÇ­logo
+                Destacar no catálogo
               </Label>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="catalogPrice">PreÇõo para catÇ­logo</Label>
+              <Label htmlFor="catalogPrice">Preço para catálogo</Label>
               <CurrencyInput
                 id="catalogPrice"
                 value={catalogPrice ?? 0}
                 onChange={(value) => setCatalogPrice(value)}
               />
-              <p className="text-xs text-muted-foreground">Deixe em branco para usar o preÇõo padrÇœo.</p>
+              <p className="text-xs text-muted-foreground">Deixe em branco para usar o preço padrão.</p>
             </div>
 
             <div className="space-y-2">
@@ -921,7 +921,7 @@ export default function ProductForm() {
                   onClick={handleGenerateDescription}
                   disabled={generatingDescription}
                 >
-                  {generatingDescription ? 'Gerando...' : 'Gerar descriÇõÇœo com IA'}
+                  {generatingDescription ? 'Gerando...' : 'Gerar descrição com IA'}
                 </Button>
               </div>
               <Textarea
@@ -933,12 +933,12 @@ export default function ProductForm() {
               />
             </div>
             <div className="md:col-span-2 space-y-2">
-              <Label htmlFor="catalogShortDescription">DescriÇõÇœo curta (catÇ­logo)</Label>
+              <Label htmlFor="catalogShortDescription">Descrição curta (catálogo)</Label>
               <Textarea
                 id="catalogShortDescription"
                 value={catalogShortDescription}
                 onChange={(e) => setCatalogShortDescription(e.target.value)}
-                placeholder="Resumo curto para o catÇ­logo (atÇ¸ 140 caracteres)"
+                placeholder="Resumo curto para o catálogo (até 140 caracteres)"
                 rows={2}
                 maxLength={140}
               />
@@ -947,12 +947,12 @@ export default function ProductForm() {
               </p>
             </div>
             <div className="md:col-span-2 space-y-2">
-              <Label htmlFor="catalogLongDescription">DescriÇõÇœo longa (catÇ­logo)</Label>
+              <Label htmlFor="catalogLongDescription">Descrição longa (catálogo)</Label>
               <Textarea
                 id="catalogLongDescription"
                 value={catalogLongDescription}
                 onChange={(e) => setCatalogLongDescription(e.target.value)}
-                placeholder="DescriÇõÇœo completa para o catÇ­logo"
+                placeholder="Descrição completa para o catálogo"
                 rows={4}
               />
             </div>

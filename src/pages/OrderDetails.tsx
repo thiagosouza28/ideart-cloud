@@ -353,7 +353,7 @@ export default function OrderDetails() {
     if (!token) return;
     const url = getPublicLinkUrl(token);
     const customerName = order.customer?.name || order.customer_name || 'cliente';
-    const message = `Ola ${customerName}, seu pedido #${formatOrderNumber(order.order_number)} esta pronto para acompanhamento. Acesse o link: ${url}`;
+    const message = `Olá ${customerName}, seu pedido #${formatOrderNumber(order.order_number)} está pronto para acompanhamento. Acesse o link: ${url}`;
     const copied = await copyToClipboard(message);
     if (!copied) {
       toast({ title: 'Falha ao copiar', description: 'Tente novamente.', variant: 'destructive' });
@@ -370,7 +370,7 @@ export default function OrderDetails() {
     if (!token) return;
     const url = getPublicLinkUrl(token);
     const customerName = order.customer?.name || order.customer_name || 'cliente';
-    const message = `Ola ${customerName}, seu pedido #${formatOrderNumber(order.order_number)} esta pronto para acompanhamento. Acesse o link: ${url}`;
+    const message = `Olá ${customerName}, seu pedido #${formatOrderNumber(order.order_number)} está pronto para acompanhamento. Acesse o link: ${url}`;
     sendWhatsAppMessage(message);
   };
 
@@ -389,7 +389,7 @@ export default function OrderDetails() {
     if (!order) return;
     const remaining = Math.max(0, Number(order.total) - Number(order.amount_paid));
     if (remaining <= 0) {
-      toast({ title: 'Pedido ja quitado', description: 'Nao ha saldo pendente.', variant: 'destructive' });
+      toast({ title: 'Pedido já quitado', description: 'Não há saldo pendente.', variant: 'destructive' });
       return;
     }
     setPaymentAmount(remaining);
@@ -572,7 +572,7 @@ export default function OrderDetails() {
   const publicLink = publicLinkToken ? getPublicLinkUrl(publicLinkToken) : '';
   const messageLink = publicLink || '[link]';
   const customerName = order.customer?.name || order.customer_name || 'cliente';
-  const clientMessage = `Ola ${customerName}, seu pedido #${formatOrderNumber(order.order_number)} esta pronto para acompanhamento. Acesse o link: ${messageLink}`;
+  const clientMessage = `Olá ${customerName}, seu pedido #${formatOrderNumber(order.order_number)} está pronto para acompanhamento. Acesse o link: ${messageLink}`;
   const canSendWhatsApp = Boolean(order?.customer?.phone);
   const publicLinkLabel = linkLoading
     ? 'Gerando...'
@@ -714,7 +714,7 @@ export default function OrderDetails() {
                     <p className="text-sm text-muted-foreground">Tel: {order.customer.phone}</p>
                   )}
                   {order.customer.email && (
-                    <p className="text-sm text-muted-foreground">Email: {order.customer.email}</p>
+                    <p className="text-sm text-muted-foreground">E-mail: {order.customer.email}</p>
                   )}
                 </div>
               ) : (
@@ -982,7 +982,7 @@ export default function OrderDetails() {
               <div className="flex flex-col gap-2">
                 {isOrderPaid && (
                   <p className="text-xs text-muted-foreground">
-                    Pedido quitado. Nao e possivel registrar novos pagamentos.
+                    Pedido quitado. Não é possível registrar novos pagamentos.
                   </p>
                 )}
                 <Button variant="outline" onClick={openPaymentDialog} disabled={isOrderPaid}>

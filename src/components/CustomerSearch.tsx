@@ -112,7 +112,7 @@ export default function CustomerSearch({ selectedCustomer, onSelect }: CustomerS
                 <div className="min-w-0">
                   <p className="font-medium text-sm truncate">{customer.name}</p>
                   <p className="text-xs text-muted-foreground truncate">
-                    {[customer.document, customer.phone, customer.email].filter(Boolean).join(' | ') || 'Sem informacoes adicionais'}
+                    {[customer.document, customer.phone, customer.email].filter(Boolean).join(' | ') || 'Sem informações adicionais'}
                   </p>
                 </div>
               </button>

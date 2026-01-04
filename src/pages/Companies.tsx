@@ -48,14 +48,30 @@ export default function Companies() {
     loadCompanies();
   };
 
-  const copyLink = (slug: string) => {
+  const copyLink = async (slug: string) => {
     const url = `${window.location.origin}/catalogo/${slug}`;
-    navigator.clipboard.writeText(url);
-    setCopiedSlug(slug);
-    setTimeout(() => setCopiedSlug(null), 2000);
-    toast.success('Link copiado!');
+    try {
+      if (navigator.clipboard?.writeText && window.isSecureContext) {
+        await navigator.clipboard.writeText(url);
+      } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = url;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+      }
+      setCopiedSlug(slug);
+      setTimeout(() => setCopiedSlug(null), 2000);
+      toast.success('Link copiado!');
+    } catch (error) {
+      console.error('Erro ao copiar link', error);
+      toast.error('Não foi possível copiar o link');
+    }
   };
-
   return (
     <div className="page-container">
       <div className="page-header">

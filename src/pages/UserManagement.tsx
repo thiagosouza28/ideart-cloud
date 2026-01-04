@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Search, Shield, UserPlus, Loader2, Mail, UserMinus, UserCheck, Users, LayoutGrid } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -40,7 +40,7 @@ const roleLabels: Record<AppRole, string> = {
   admin: 'Administrador',
   atendente: 'Atendente',
   caixa: 'Caixa',
-  producao: 'Producao',
+  producao: 'Produção',
 };
 
 const roleBadgeColors: Record<AppRole, string> = {
@@ -207,7 +207,7 @@ export default function UserManagement() {
 
   const handleReactivateUser = async (userId: string) => {
     if (!profile?.company_id && !isSuperAdmin) {
-      toast.error('Voce nao esta vinculado a uma empresa');
+      toast.error('Você não está vinculado a uma empresa');
       return;
     }
 
@@ -228,7 +228,7 @@ export default function UserManagement() {
 
       if (error) throw error;
 
-      toast.success('Usuario reativado com sucesso');
+      toast.success('Usuário reativado com sucesso');
       await loadInactiveUsers();
       await loadUsers();
     } catch (error: any) {
@@ -245,7 +245,7 @@ export default function UserManagement() {
 
   const handleRoleChange = async (userId: string, roleId: string | null, newRole: AppRole) => {
     if (userId === user?.id) {
-      toast.error('Voce nao pode alterar seu proprio perfil');
+      toast.error('Você não pode alterar seu próprio perfil');
       return;
     }
 
@@ -286,12 +286,12 @@ export default function UserManagement() {
     }
 
     if (!profile?.company_id && !isSuperAdmin) {
-      toast.error('Empresa nao encontrada para o usuario logado');
+      toast.error('Empresa não encontrada para o usuário logado');
       return;
     }
 
     if (!newUserData.email || !newUserData.fullName || !newUserData.password) {
-      toast.error('Preencha todos os campos obrigatorios');
+      toast.error('Preencha todos os campos obrigatórios');
       return;
     }
 
@@ -324,7 +324,7 @@ export default function UserManagement() {
         company_id: targetCompanyId,
       });
 
-      toast.success('Usuario adicionado com sucesso');
+      toast.success('Usuário adicionado com sucesso');
       setAddDialogOpen(false);
       setNewUserData({ email: '', fullName: '', password: '', role: '', companyId: '' });
       await loadUsers();
@@ -334,7 +334,7 @@ export default function UserManagement() {
       if (payloadMessage) {
         toast.error(payloadMessage);
       } else if (error.message?.includes('already registered')) {
-        toast.error('Este email ja esta cadastrado');
+        toast.error('Este e-mail já está cadastrado');
       } else {
         toast.error(error.message || 'Erro ao adicionar usuario');
       }
@@ -356,7 +356,7 @@ export default function UserManagement() {
 
       if (error) throw error;
 
-      toast.success('Usuario removido da empresa');
+      toast.success('Usuário removido da empresa');
       setRemoveUserId(null);
       setRemoveUserName('');
       await loadUsers();
@@ -392,16 +392,16 @@ export default function UserManagement() {
         <div className="flex items-center gap-3 text-slate-600">
           <LayoutGrid className="h-5 w-5" />
           <div>
-            <h1 className="text-2xl font-semibold text-slate-900">Gestao de Usuarios</h1>
+            <h1 className="text-2xl font-semibold text-slate-900">Gestão de Usuários</h1>
             <p className="text-sm text-slate-500">
-              {isSuperAdmin ? 'Gerencie todos os usuarios do sistema' : 'Gerencie os usuarios e permissoes da sua empresa'}
+              {isSuperAdmin ? 'Gerencie todos os usuários do sistema' : 'Gerencie os usuários e permissões da sua empresa'}
             </p>
           </div>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={handleOpenInactiveDialog}>
             <Users className="mr-2 h-4 w-4" />
-            Usuarios Inativos
+            Usuários Inativos
           </Button>
           <Button
             onClick={() => setAddDialogOpen(true)}
@@ -409,7 +409,7 @@ export default function UserManagement() {
             title={!canCreateUsers ? 'Apenas administradores podem criar usuarios' : undefined}
           >
             <UserPlus className="mr-2 h-4 w-4" />
-            Adicionar Usuario
+            Adicionar Usuário
           </Button>
         </div>
       </div>
@@ -420,7 +420,7 @@ export default function UserManagement() {
             <div>
               <CardTitle className="flex items-center gap-2">
                 <Shield className="h-5 w-5" />
-                {isSuperAdmin ? 'Todos os Usuarios' : 'Usuarios da Empresa'}
+                {isSuperAdmin ? 'Todos os Usuários' : 'Usuários da Empresa'}
               </CardTitle>
               <CardDescription>
                 {users.length} usuario{users.length !== 1 ? 's' : ''} cadastrado{users.length !== 1 ? 's' : ''}
@@ -441,7 +441,7 @@ export default function UserManagement() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Usuario</TableHead>
+                <TableHead>Usuário</TableHead>
                 <TableHead>Cargo Atual</TableHead>
                 <TableHead>Cadastrado em</TableHead>
                 <TableHead className="w-[200px]">Alterar Cargo</TableHead>
@@ -509,7 +509,7 @@ export default function UserManagement() {
                           <SelectItem value="admin">Administrador</SelectItem>
                           <SelectItem value="atendente">Atendente</SelectItem>
                           <SelectItem value="caixa">Caixa</SelectItem>
-                          <SelectItem value="producao">Producao</SelectItem>
+                          <SelectItem value="producao">Produção</SelectItem>
                         </SelectContent>
                       </Select>
                     )}
@@ -544,23 +544,23 @@ export default function UserManagement() {
             <div className="flex items-start gap-3 p-3 rounded-lg bg-slate-50">
               <Badge variant="outline" className={roleBadgeColors.admin}>Admin</Badge>
               <p className="text-sm text-slate-500">
-                Acesso total ao sistema, incluindo gestao de usuarios, configuracoes e todos os modulos.
+                Acesso total ao sistema, incluindo gestao de usuarios, configurações e todos os modulos.
               </p>
             </div>
             <div className="flex items-start gap-3 p-3 rounded-lg bg-slate-50">
               <Badge variant="outline" className={roleBadgeColors.atendente}>Atendente</Badge>
               <p className="text-sm text-slate-500">
-                Gerencia pedidos, produtos, estoque e clientes. Nao acessa PDV ou producao.
+                Gerencia pedidos, produtos, estoque e clientes. Não acessa PDV ou producao.
               </p>
             </div>
             <div className="flex items-start gap-3 p-3 rounded-lg bg-slate-50">
               <Badge variant="outline" className={roleBadgeColors.caixa}>Caixa</Badge>
               <p className="text-sm text-slate-500">
-                Opera o PDV e visualiza pedidos. Nao gerencia produtos ou configuracoes.
+                Opera o PDV e visualiza pedidos. Não gerencia produtos ou configurações.
               </p>
             </div>
             <div className="flex items-start gap-3 p-3 rounded-lg bg-slate-50">
-              <Badge variant="outline" className={roleBadgeColors.producao}>Producao</Badge>
+              <Badge variant="outline" className={roleBadgeColors.producao}>Produção</Badge>
               <p className="text-sm text-slate-500">
                 Acessa o painel de producao e detalhes dos pedidos em andamento.
               </p>
@@ -574,7 +574,7 @@ export default function UserManagement() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <UserPlus className="h-5 w-5" />
-              Adicionar Novo Usuario
+              Adicionar Novo Usuário
             </DialogTitle>
             <DialogDescription>
               Cadastre um novo usuario para o sistema.
@@ -595,7 +595,7 @@ export default function UserManagement() {
             <div className="space-y-2">
               <Label htmlFor="email" className="flex items-center gap-2">
                 <Mail className="h-4 w-4" />
-                Email *
+                E-mail *
               </Label>
               <Input
                 id="email"
@@ -611,7 +611,7 @@ export default function UserManagement() {
               <Input
                 id="password"
                 type="password"
-                placeholder="Minimo 6 caracteres"
+                placeholder="Mínimo 6 caracteres"
                 value={newUserData.password}
                 onChange={(e) => setNewUserData({ ...newUserData, password: e.target.value })}
               />
@@ -652,7 +652,7 @@ export default function UserManagement() {
                   <SelectItem value="admin">Administrador</SelectItem>
                   <SelectItem value="atendente">Atendente</SelectItem>
                   <SelectItem value="caixa">Caixa</SelectItem>
-                  <SelectItem value="producao">Producao</SelectItem>
+                  <SelectItem value="producao">Produção</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -664,7 +664,7 @@ export default function UserManagement() {
             </Button>
             <Button onClick={handleAddUser} disabled={addingUser}>
               {addingUser && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Adicionar Usuario
+              Adicionar Usuário
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -698,10 +698,10 @@ export default function UserManagement() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Users className="h-5 w-5" />
-              Usuarios Inativos
+              Usuários Inativos
             </DialogTitle>
             <DialogDescription>
-              Usuarios que foram removidos de uma empresa e podem ser reativados.
+              Usuários que foram removidos de uma empresa e podem ser reativados.
             </DialogDescription>
           </DialogHeader>
 

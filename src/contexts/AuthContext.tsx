@@ -3,6 +3,7 @@ import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { AppRole, Company, Profile } from '@/types/database';
 import { computeSubscriptionState, type SubscriptionState } from '@/services/subscription';
+import { invokePublicFunction } from '@/services/publicFunctions';
 
 interface AuthContextType {
   user: User | null;
@@ -15,7 +16,13 @@ interface AuthContextType {
   needsOnboarding: boolean;
   passwordRecovery: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
-  signUp: (email: string, password: string, fullName: string) => Promise<{ error: Error | null }>;
+  signUp: (payload: {
+    email: string;
+    password: string;
+    fullName: string;
+    cpf: string;
+    companyName?: string;
+  }) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   hasPermission: (allowedRoles: AppRole[]) => boolean;
   refreshUserData: () => Promise<void>;
@@ -105,7 +112,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const loadCompany = useCallback(async (companyId?: string | null) => {
     if (!companyId) {
       setCompany(null);
-      setSubscription(null);
+      setSubscription(computeSubscriptionState(null));
       return;
     }
 
@@ -168,7 +175,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setProfile(profileData);
       setRole(userRole ?? null);
 
-      const requiresOnboarding = Boolean(profileData?.must_complete_onboarding);
+      const requiresOnboarding =
+        Boolean(profileData?.must_complete_onboarding) || Boolean(profileData?.must_complete_company);
       const missingCompany = !profileData?.company_id && userRole !== 'super_admin';
       if (requiresOnboarding || missingCompany) {
         console.log('User needs onboarding', { requiresOnboarding, missingCompany });
@@ -199,16 +207,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { error };
   };
 
-  const signUp = async (email: string, password: string, fullName: string) => {
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: `${window.location.origin}/`,
-        data: { full_name: fullName }
-      }
-    });
-    return { error };
+  const signUp = async (payload: {
+    email: string;
+    password: string;
+    fullName: string;
+    cpf: string;
+    companyName?: string;
+  }) => {
+    try {
+      await invokePublicFunction("trial-signup", {
+        email: payload.email,
+        password: payload.password,
+        full_name: payload.fullName,
+        cpf: payload.cpf,
+        company_name: payload.companyName ?? null,
+      });
+      return { error: null };
+    } catch (error) {
+      return { error: error instanceof Error ? error : new Error("Erro ao criar conta.") };
+    }
   };
 
   const signOut = async () => {

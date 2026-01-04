@@ -90,7 +90,7 @@ export default function GraphPOSConfirmacao() {
         <GraphPOSBreadcrumb
           backLabel="Voltar para Vendas"
           backTo="/pdv"
-          currentLabel="Confirmacao de Pedido"
+          currentLabel="Confirmação de Pedido"
         />
 
         <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
@@ -113,7 +113,7 @@ export default function GraphPOSConfirmacao() {
                 <BotaoSecundario className="w-auto px-6">
                   <span className="flex items-center gap-2">
                     <Mail className="h-4 w-4" />
-                    Enviar por E-mail
+                    Enviar por e-mail
                   </span>
                 </BotaoSecundario>
               </div>

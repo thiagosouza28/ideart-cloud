@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Book } from 'lucide-react';
 import { invokeEdgeFunction } from '@/services/edgeFunctions';
@@ -45,7 +45,7 @@ export function BibleVerse() {
           book: { name: 'Joao', version: 'nvi', author: 'Joao' },
           chapter: 3,
           number: 16,
-          text: 'Porque Deus tanto amou o mundo que deu o seu Filho Unigenito, para que todo o que nele crer nao pereca, mas tenha a vida eterna.'
+          text: 'Porque Deus tanto amou o mundo que deu o seu Filho Unigênito, para que todo o que nele crer não pereça, mas tenha a vida eterna.'
         });
       } finally {
         setLoading(false);

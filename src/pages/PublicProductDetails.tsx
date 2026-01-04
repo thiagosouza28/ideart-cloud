@@ -1,4 +1,4 @@
-﻿import { FormEvent, useEffect, useRef, useState } from 'react';
+import { FormEvent, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -248,7 +248,7 @@ export default function PublicProductDetails() {
     }
     if (!company?.whatsapp) return;
     const phone = company.whatsapp.replace(/\D/g, '');
-    const message = `Ola! Gostaria de saber mais sobre o produto: ${product.name}`;
+    const message = `Olá! Gostaria de saber mais sobre o produto: ${product.name}`;
     window.open(`https://wa.me/55${phone}?text=${encodeURIComponent(message)}`, '_blank');
   };
 
@@ -470,8 +470,8 @@ export default function PublicProductDetails() {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-slate-900 mb-2">Produto nao encontrado</h1>
-          <p className="text-slate-500 mb-4">Este produto nao existe ou nao esta disponivel.</p>
+          <h1 className="text-2xl font-bold text-slate-900 mb-2">Produto não encontrado</h1>
+          <p className="text-slate-500 mb-4">Este produto não existe ou não está disponível.</p>
           <Link to={`/catalogo/${slug}`}>
             <Button>Voltar ao catalogo</Button>
           </Link>
@@ -521,7 +521,7 @@ export default function PublicProductDetails() {
             </div>
             <nav className="hidden md:flex items-center gap-6 text-xs text-slate-500">
               <Link to="/">Inicio</Link>
-              <Link to={`/catalogo/${slug}`}>Catalogo</Link>
+              <Link to={`/catalogo/${slug}`}>Catálogo</Link>
               <span>Servicos</span>
               <span>Contato</span>
             </nav>
@@ -551,7 +551,7 @@ export default function PublicProductDetails() {
         <div className="flex items-center gap-2 text-xs text-slate-400 mb-6">
           <Link to={`/catalogo/${slug}`} className="hover:text-slate-600">Inicio</Link>
           <ChevronRight className="h-3 w-3" />
-          <span>{product.category?.name || 'Catalogo'}</span>
+          <span>{product.category?.name || 'Catálogo'}</span>
           <ChevronRight className="h-3 w-3" />
           <span className="text-slate-600 font-medium">{product.name}</span>
         </div>
@@ -647,7 +647,7 @@ export default function PublicProductDetails() {
                     handleOrderFieldChange('customization', event.target.value.slice(0, 20))
                   }
                 />
-                <p className="mt-1 text-xs text-slate-400">Maximo de 20 caracteres.</p>
+                <p className="mt-1 text-xs text-slate-400">Máximo de 20 caracteres.</p>
               </div>
               <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
                 <div className="flex items-center border border-slate-200 rounded-lg bg-white h-10 w-28">
@@ -733,8 +733,8 @@ export default function PublicProductDetails() {
             )}
             {activeTab === 'especificacoes' && (
               <div className="space-y-2 text-sm text-slate-600">
-                <p><strong>SKU:</strong> {product.sku || 'Nao informado'}</p>
-                <p><strong>Unidade:</strong> {product.unit || 'Nao informada'}</p>
+                <p><strong>SKU:</strong> {product.sku || 'Não informado'}</p>
+                <p><strong>Unidade:</strong> {product.unit || 'Não informada'}</p>
                 <p><strong>Quantidade minima:</strong> {minimumOrderQuantity}</p>
               </div>
             )}
@@ -908,7 +908,7 @@ export default function PublicProductDetails() {
                   {orderSubmitting ? 'Enviando...' : 'Enviar pedido'}
                 </Button>
                 <p className="text-xs text-slate-400">
-                  O pagamento sera confirmado somente no PDV ou no painel administrativo.
+                  O pagamento será confirmado somente no PDV ou no painel administrativo.
                 </p>
               </form>
             </CardContent>
@@ -1000,7 +1000,7 @@ export default function PublicProductDetails() {
                   <Button variant="outline" size="sm" className="catalog-btn-outline" asChild>
                     <a href={`mailto:${company.email}`}>
                       <Mail className="h-4 w-4 mr-2" />
-                      Email
+                      E-mail
                     </a>
                   </Button>
                 )}
@@ -1034,7 +1034,7 @@ export default function PublicProductDetails() {
           <div className="space-y-2 text-xs text-slate-500">
             <p>Newsletter</p>
             <div className="flex gap-2">
-              <input className="flex-1 rounded-lg border border-slate-200 px-2 py-1" placeholder="Seu email" />
+              <input className="flex-1 rounded-lg border border-slate-200 px-2 py-1" placeholder="Seu e-mail" />
               <Button size="sm" className="catalog-btn">Enviar</Button>
             </div>
           </div>

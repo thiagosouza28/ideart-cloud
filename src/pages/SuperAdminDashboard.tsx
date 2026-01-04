@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Building2, CreditCard, LayoutGrid, TrendingUp, AlertTriangle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -20,7 +20,7 @@ const statusLabels: Record<string, string> = {
   canceled: 'Cancelado',
   expired: 'Expirado',
   past_due: 'Pagamento atrasado',
-  unpaid: 'Nao pago',
+  unpaid: 'Não pago',
   incomplete: 'Incompleto',
 };
 

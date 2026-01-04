@@ -1,4 +1,4 @@
-﻿import { forwardRef } from 'react';
+import { forwardRef } from 'react';
 import { CheckCircle2, CreditCard, Mail, Phone, User } from 'lucide-react';
 import { PaymentMethod, Customer } from '@/types/database';
 
@@ -129,7 +129,7 @@ const SaleReceipt = forwardRef<HTMLDivElement, SaleReceiptProps>(
             </div>
 
             <div className="rounded-xl border border-slate-200 bg-white p-4 text-xs text-slate-500 text-center">
-              Documento nao fiscal. {company?.name ? `Empresa: ${company.name}.` : ''}
+              Documento não fiscal. {company?.name ? `Empresa: ${company.name}.` : ''}
             </div>
           </div>
 

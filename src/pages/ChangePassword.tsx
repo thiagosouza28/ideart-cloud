@@ -24,17 +24,17 @@ export default function ChangePassword() {
     setNotice(null);
 
     if (!user) {
-      setError('Sessao expirada. Faca login novamente.');
+      setError('Sessão expirada. Faça login novamente.');
       return;
     }
 
     if (password.length < 8) {
-      setError('A nova senha deve ter no minimo 8 caracteres.');
+      setError('A nova senha deve ter no mínimo 8 caracteres.');
       return;
     }
 
     if (password !== confirmPassword) {
-      setError('As senhas nao conferem.');
+      setError('As senhas não conferem.');
       return;
     }
 
@@ -52,6 +52,7 @@ export default function ChangePassword() {
           force_password_change: false,
           must_change_password: false,
           must_complete_onboarding: false,
+          must_complete_company: false,
         })
         .eq('id', user.id);
 
@@ -65,7 +66,7 @@ export default function ChangePassword() {
       setNotice('Senha atualizada com sucesso.');
       navigate(passwordRecovery ? '/auth' : '/dashboard', { replace: true });
     } catch {
-      setError('Nao foi possivel atualizar a senha. Tente novamente.');
+      setError('Não foi possível atualizar a senha. Tente novamente.');
     } finally {
       setLoading(false);
     }
@@ -76,12 +77,12 @@ export default function ChangePassword() {
       <Card className="w-full max-w-md shadow-xl border-0 bg-background/95 backdrop-blur-sm">
         <CardHeader className="text-center space-y-2 pb-4">
           <CardTitle className="text-2xl font-bold">Defina uma nova senha</CardTitle>
-          <CardDescription>Por seguranca, altere sua senha no primeiro acesso.</CardDescription>
+          <CardDescription>Por segurança, altere sua senha no primeiro acesso.</CardDescription>
         </CardHeader>
         <CardContent>
           {!user && !passwordRecovery && (
             <div className="space-y-4 text-sm text-slate-600">
-              <p>Para trocar a senha, abra o link de recuperacao enviado por email.</p>
+              <p>Para trocar a senha, abra o link de recuperação enviado por e-mail.</p>
               <div className="text-center">
                 <Link to="/auth" className="underline underline-offset-4">Voltar ao login</Link>
               </div>

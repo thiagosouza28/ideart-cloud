@@ -11,9 +11,9 @@ import { Order, OrderStatus } from '@/types/database';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 const statusLabels: Record<OrderStatus, string> = {
-  orcamento: 'Orcamento',
+  orcamento: 'Orçamento',
   pendente: 'Pendente',
-  em_producao: 'Em Producao',
+  em_producao: 'Em Produção',
   pronto: 'Pronto',
   aguardando_retirada: 'Aguardando retirada',
   entregue: 'Entregue',
@@ -85,22 +85,22 @@ export default function Orders() {
 
       <Tabs value={statusFilter} onValueChange={setStatusFilter} className="mb-4">
         <TabsList>
-          <TabsTrigger value="all">
+          <TabsTrigger value="all" className="data-[state=active]:text-primary data-[state=active]:font-semibold">
             Todos <span className="ml-1 text-xs opacity-70">({counts.all || 0})</span>
           </TabsTrigger>
-          <TabsTrigger value="orcamento">
-            Orcamentos <span className="ml-1 text-xs opacity-70">({counts.orcamento || 0})</span>
+          <TabsTrigger value="orcamento" className="data-[state=active]:text-primary data-[state=active]:font-semibold">
+            Orçamentos <span className="ml-1 text-xs opacity-70">({counts.orcamento || 0})</span>
           </TabsTrigger>
-          <TabsTrigger value="pendente">
+          <TabsTrigger value="pendente" className="data-[state=active]:text-primary data-[state=active]:font-semibold">
             Pendentes <span className="ml-1 text-xs opacity-70">({counts.pendente || 0})</span>
           </TabsTrigger>
-          <TabsTrigger value="em_producao">
-            Em Producao <span className="ml-1 text-xs opacity-70">({counts.em_producao || 0})</span>
+          <TabsTrigger value="em_producao" className="data-[state=active]:text-primary data-[state=active]:font-semibold">
+            Em Produção <span className="ml-1 text-xs opacity-70">({counts.em_producao || 0})</span>
           </TabsTrigger>
-          <TabsTrigger value="pronto">
+          <TabsTrigger value="pronto" className="data-[state=active]:text-primary data-[state=active]:font-semibold">
             Prontos <span className="ml-1 text-xs opacity-70">({counts.pronto || 0})</span>
           </TabsTrigger>
-          <TabsTrigger value="entregue">
+          <TabsTrigger value="entregue" className="data-[state=active]:text-primary data-[state=active]:font-semibold">
             Entregues <span className="ml-1 text-xs opacity-70">({counts.entregue || 0})</span>
           </TabsTrigger>
         </TabsList>
@@ -111,7 +111,7 @@ export default function Orders() {
           <div className="relative max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Buscar por numero ou cliente..."
+              placeholder="Buscar por número ou cliente..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-9"
@@ -128,7 +128,7 @@ export default function Orders() {
                 <TableHead>Pagamento</TableHead>
                 <TableHead className="text-right">Total</TableHead>
                 <TableHead>Data</TableHead>
-                <TableHead className="w-[80px]">Acoes</TableHead>
+                <TableHead className="w-[80px]">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -165,7 +165,7 @@ export default function Orders() {
                           {order.customer_name || 'Cliente'}
                         </Button>
                       ) : (
-                        <span>{order.customer_name || 'Nao informado'}</span>
+                        <span>{order.customer_name || 'Não informado'}</span>
                       )}
                     </TableCell>
                     <TableCell>

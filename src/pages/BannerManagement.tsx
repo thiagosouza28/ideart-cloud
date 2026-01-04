@@ -30,14 +30,6 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from '@/components/ui/dialog';
-import {
     Select,
     SelectContent,
     SelectItem,
@@ -91,6 +83,7 @@ export default function BannerManagement() {
     const [saving, setSaving] = useState(false);
     const [uploading, setUploading] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const formRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         if (profile?.company_id) {
@@ -119,11 +112,13 @@ export default function BannerManagement() {
     const handleOpenCreate = () => {
         setCurrentBanner({ ...emptyBanner, company_id: profile?.company_id });
         setIsDialogOpen(true);
+        setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0);
     };
 
     const handleOpenEdit = (banner: Banner) => {
         setCurrentBanner(banner);
         setIsDialogOpen(true);
+        setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0);
     };
 
     const handleDelete = async (id: string) => {
@@ -254,187 +249,26 @@ export default function BannerManagement() {
                 </Button>
             </div>
 
-            <div className="flex flex-col md:flex-row gap-4 mb-6">
-                <div className="relative flex-1">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                        placeholder="Buscar banners..."
-                        className="pl-10"
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                    />
-                </div>
-                <div className="flex items-center gap-2 border rounded-md p-1 bg-muted/50">
-                    <Button
-                        variant={viewMode === 'grid' ? 'secondary' : 'ghost'}
-                        size="sm"
-                        className="px-2 h-8"
-                        onClick={() => setViewMode('grid')}
-                    >
-                        <LayoutGrid className="h-4 w-4" />
-                    </Button>
-                    <Button
-                        variant={viewMode === 'list' ? 'secondary' : 'ghost'}
-                        size="sm"
-                        className="px-2 h-8"
-                        onClick={() => setViewMode('list')}
-                    >
-                        <ListIcon className="h-4 w-4" />
-                    </Button>
-                </div>
-            </div>
-
-            {loading ? (
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                    {[1, 2, 3].map(i => (
-                        <Card key={i} className="animate-pulse">
-                            <div className="aspect-video bg-muted rounded-t-lg" />
-                            <CardHeader className="space-y-2">
-                                <div className="h-4 bg-muted rounded w-3/4" />
-                                <div className="h-3 bg-muted rounded w-1/2" />
-                            </CardHeader>
-                        </Card>
-                    ))}
-                </div>
-            ) : filteredBanners.length === 0 ? (
-                <div className="text-center py-20 bg-muted/30 rounded-lg border-2 border-dashed">
-                    <ImageIcon className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                    <h3 className="text-lg font-medium">Nenhum banner encontrado</h3>
-                    <p className="text-muted-foreground mb-6">Comece criando seu primeiro banner promocional.</p>
-                    <Button onClick={handleOpenCreate}>Criar Banner</Button>
-                </div>
-            ) : viewMode === 'grid' ? (
-                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                    {filteredBanners.map((banner) => (
-                        <Card key={banner.id} className="overflow-hidden group">
-                            <div className="relative aspect-[21/9] bg-muted overflow-hidden">
-                                <img
-                                    src={ensurePublicStorageUrl('product-images', banner.image_url) || ''}
-                                    alt={banner.title || 'Banner'}
-                                    className="w-full h-full object-cover transition-transform group-hover:scale-105"
-                                />
-                                <div className="absolute top-2 right-2 flex gap-2">
-                                    {getStatusBadge(banner)}
-                                </div>
-                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                                    <Button size="icon" variant="secondary" onClick={() => handleOpenEdit(banner)}>
-                                        <Edit className="h-4 w-4" />
-                                    </Button>
-                                    <Button size="icon" variant="destructive" onClick={() => handleDelete(banner.id)}>
-                                        <Trash2 className="h-4 w-4" />
-                                    </Button>
-                                </div>
+            {isDialogOpen && (
+                <Card ref={formRef} className="mb-6 border border-muted-foreground/10">
+                    <CardHeader>
+                        <div className="flex items-start justify-between gap-4">
+                            <div>
+                                <CardTitle>{currentBanner.id ? 'Editar Banner' : 'Novo Banner'}</CardTitle>
+                                <CardDescription>
+                                    Preencha os dados abaixo para configurar o banner.
+                                </CardDescription>
                             </div>
-                            <CardContent className="p-4">
-                                <div className="flex justify-between items-start mb-2">
-                                    <div>
-                                        <h3 className="font-semibold line-clamp-1">{banner.title || 'Sem título'}</h3>
-                                        <p className="text-xs text-muted-foreground flex items-center gap-1">
-                                            {banner.position === 'catalog' ? 'Catálogo' : 'Dashboard'} • Ordem: {banner.sort_order}
-                                        </p>
-                                    </div>
-                                    <Switch
-                                        checked={banner.is_active}
-                                        onCheckedChange={() => handleToggleActive(banner)}
-                                    />
-                                </div>
-
-                                {banner.link_url && (
-                                    <div className="flex items-center gap-1 mt-3 text-xs text-blue-500 truncate underline">
-                                        <ExternalLink className="h-3 w-3" />
-                                        {banner.link_url}
-                                    </div>
-                                )}
-
-                                {(banner.starts_at || banner.ends_at) && (
-                                    <div className="flex items-center gap-1 mt-2 text-[10px] text-muted-foreground">
-                                        <Calendar className="h-3 w-3" />
-                                        {banner.starts_at && format(new Date(banner.starts_at), 'dd/MM/yy')}
-                                        {banner.starts_at && banner.ends_at && ' até '}
-                                        {banner.ends_at && format(new Date(banner.ends_at), 'dd/MM/yy')}
-                                    </div>
-                                )}
-                            </CardContent>
-                        </Card>
-                    ))}
-                </div>
-            ) : (
-                <div className="border rounded-md overflow-hidden bg-white">
-                    <table className="w-full text-sm">
-                        <thead className="bg-muted/50 border-b">
-                            <tr>
-                                <th className="text-left py-3 px-4 font-medium">Banner</th>
-                                <th className="text-left py-3 px-4 font-medium">Título</th>
-                                <th className="text-left py-3 px-4 font-medium">Posição</th>
-                                <th className="text-left py-3 px-4 font-medium">Status</th>
-                                <th className="text-left py-3 px-4 font-medium">Agendamento</th>
-                                <th className="text-right py-3 px-4 font-medium">Ações</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {filteredBanners.map((banner) => (
-                                <tr key={banner.id} className="border-b last:border-0 hover:bg-muted/30">
-                                    <td className="py-3 px-4">
-                                        <div className="w-20 aspect-video rounded overflow-hidden bg-muted">
-                                            <img
-                                                src={ensurePublicStorageUrl('product-images', banner.image_url) || ''}
-                                                className="w-full h-full object-cover"
-                                            />
-                                        </div>
-                                    </td>
-                                    <td className="py-3 px-4">
-                                        <span className="font-medium">{banner.title || '-'}</span>
-                                    </td>
-                                    <td className="py-3 px-4">
-                                        {banner.position === 'catalog' ? 'Catálogo' : 'Dashboard'}
-                                    </td>
-                                    <td className="py-3 px-4">
-                                        {getStatusBadge(banner)}
-                                    </td>
-                                    <td className="py-3 px-4 text-xs text-muted-foreground">
-                                        {banner.starts_at ? format(new Date(banner.starts_at), 'dd/MM/yy') : '-'}
-                                        {' → '}
-                                        {banner.ends_at ? format(new Date(banner.ends_at), 'dd/MM/yy') : '-'}
-                                    </td>
-                                    <td className="py-3 px-4 text-right">
-                                        <DropdownMenu>
-                                            <DropdownMenuTrigger asChild>
-                                                <Button variant="ghost" size="icon">
-                                                    <MoreVertical className="h-4 w-4" />
-                                                </Button>
-                                            </DropdownMenuTrigger>
-                                            <DropdownMenuContent align="end">
-                                                <DropdownMenuItem onClick={() => handleOpenEdit(banner)}>
-                                                    <Edit className="h-4 w-4 mr-2" /> Editar
-                                                </DropdownMenuItem>
-                                                <DropdownMenuItem onClick={() => handleToggleActive(banner)}>
-                                                    {banner.is_active ? <XCircle className="h-4 w-4 mr-2 text-red-500" /> : <CheckCircle2 className="h-4 w-4 mr-2 text-emerald-500" />}
-                                                    {banner.is_active ? 'Desativar' : 'Ativar'}
-                                                </DropdownMenuItem>
-                                                <DropdownMenuItem className="text-red-600" onClick={() => handleDelete(banner.id)}>
-                                                    <Trash2 className="h-4 w-4 mr-2" /> Excluir
-                                                </DropdownMenuItem>
-                                            </DropdownMenuContent>
-                                        </DropdownMenu>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-            )}
-
-            {/* Create/Edit Dialog */}
-            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                <DialogContent className="max-w-xl">
-                    <DialogHeader>
-                        <DialogTitle>{currentBanner.id ? 'Editar Banner' : 'Novo Banner'}</DialogTitle>
-                        <DialogDescription>
-                            Preencha os dados abaixo para configurar o banner.
-                        </DialogDescription>
-                    </DialogHeader>
-
-                    <div className="grid gap-6 py-4">
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setIsDialogOpen(false)}
+                            >
+                                Fechar
+                            </Button>
+                        </div>
+                    </CardHeader>
+                    <CardContent className="grid gap-6">
                         <div className="grid gap-2">
                             <Label>Imagem do Banner *</Label>
                             <div
@@ -558,19 +392,189 @@ export default function BannerManagement() {
                                 Desative para ocultar o banner manualmente.
                             </p>
                         </div>
-                    </div>
 
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setIsDialogOpen(false)} disabled={saving}>
-                            Cancelar
-                        </Button>
-                        <Button onClick={handleSave} disabled={saving || uploading}>
-                            {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                            {currentBanner.id ? 'Salvar Alterações' : 'Criar Banner'}
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+                        <div className="flex items-center justify-end gap-2">
+                            <Button variant="outline" onClick={() => setIsDialogOpen(false)} disabled={saving}>
+                                Cancelar
+                            </Button>
+                            <Button onClick={handleSave} disabled={saving || uploading}>
+                                {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                {currentBanner.id ? 'Salvar Alterações' : 'Criar Banner'}
+                            </Button>
+                        </div>
+                    </CardContent>
+                </Card>
+            )}
+
+            <div className="flex flex-col md:flex-row gap-4 mb-6">
+                <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                        placeholder="Buscar banners..."
+                        className="pl-10"
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                    />
+                </div>
+                <div className="flex items-center gap-2 border rounded-md p-1 bg-muted/50">
+                    <Button
+                        variant={viewMode === 'grid' ? 'secondary' : 'ghost'}
+                        size="sm"
+                        className="px-2 h-8"
+                        onClick={() => setViewMode('grid')}
+                    >
+                        <LayoutGrid className="h-4 w-4" />
+                    </Button>
+                    <Button
+                        variant={viewMode === 'list' ? 'secondary' : 'ghost'}
+                        size="sm"
+                        className="px-2 h-8"
+                        onClick={() => setViewMode('list')}
+                    >
+                        <ListIcon className="h-4 w-4" />
+                    </Button>
+                </div>
+            </div>
+
+            {loading ? (
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                    {[1, 2, 3].map(i => (
+                        <Card key={i} className="animate-pulse">
+                            <div className="aspect-video bg-muted rounded-t-lg" />
+                            <CardHeader className="space-y-2">
+                                <div className="h-4 bg-muted rounded w-3/4" />
+                                <div className="h-3 bg-muted rounded w-1/2" />
+                            </CardHeader>
+                        </Card>
+                    ))}
+                </div>
+            ) : filteredBanners.length === 0 ? (
+                <div className="text-center py-20 bg-muted/30 rounded-lg border-2 border-dashed">
+                    <ImageIcon className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                    <h3 className="text-lg font-medium">Nenhum banner encontrado</h3>
+                    <p className="text-muted-foreground mb-6">Comece criando seu primeiro banner promocional.</p>
+                    <Button onClick={handleOpenCreate}>Criar Banner</Button>
+                </div>
+            ) : viewMode === 'grid' ? (
+                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                    {filteredBanners.map((banner) => (
+                        <Card key={banner.id} className="overflow-hidden group">
+                            <div className="relative aspect-[21/9] bg-muted overflow-hidden">
+                                <img
+                                    src={ensurePublicStorageUrl('product-images', banner.image_url) || ''}
+                                    alt={banner.title || 'Banner'}
+                                    className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                                />
+                                <div className="absolute top-2 right-2 flex gap-2">
+                                    {getStatusBadge(banner)}
+                                </div>
+                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                                    <Button size="icon" variant="secondary" onClick={() => handleOpenEdit(banner)}>
+                                        <Edit className="h-4 w-4" />
+                                    </Button>
+                                    <Button size="icon" variant="destructive" onClick={() => handleDelete(banner.id)}>
+                                        <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                </div>
+                            </div>
+                            <CardContent className="p-4">
+                                <div className="flex justify-between items-start mb-2">
+                                    <div>
+                                        <h3 className="font-semibold line-clamp-1">{banner.title || 'Sem título'}</h3>
+                                        <p className="text-xs text-muted-foreground flex items-center gap-1">
+                                            {banner.position === 'catalog' ? 'Catálogo' : 'Dashboard'} · Ordem: {banner.sort_order}
+                                        </p>
+                                    </div>
+                                    <Switch
+                                        checked={banner.is_active}
+                                        onCheckedChange={() => handleToggleActive(banner)}
+                                    />
+                                </div>
+
+                                {banner.link_url && (
+                                    <div className="flex items-center gap-1 mt-3 text-xs text-blue-500 truncate underline">
+                                        <ExternalLink className="h-3 w-3" />
+                                        {banner.link_url}
+                                    </div>
+                                )}
+
+                                {(banner.starts_at || banner.ends_at) && (
+                                    <div className="flex items-center gap-1 mt-2 text-[10px] text-muted-foreground">
+                                        <Calendar className="h-3 w-3" />
+                                        {banner.starts_at && format(new Date(banner.starts_at), 'dd/MM/yy')}
+                                        {banner.starts_at && banner.ends_at && ' até '}
+                                        {banner.ends_at && format(new Date(banner.ends_at), 'dd/MM/yy')}
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
+                    ))}
+                </div>
+            ) : (
+                <div className="border rounded-md overflow-hidden bg-white">
+                    <table className="w-full text-sm">
+                        <thead className="bg-muted/50 border-b">
+                            <tr>
+                                <th className="text-left py-3 px-4 font-medium">Banner</th>
+                                <th className="text-left py-3 px-4 font-medium">Título</th>
+                                <th className="text-left py-3 px-4 font-medium">Posição</th>
+                                <th className="text-left py-3 px-4 font-medium">Status</th>
+                                <th className="text-left py-3 px-4 font-medium">Agendamento</th>
+                                <th className="text-right py-3 px-4 font-medium">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {filteredBanners.map((banner) => (
+                                <tr key={banner.id} className="border-b last:border-0 hover:bg-muted/30">
+                                    <td className="py-3 px-4">
+                                        <div className="w-20 aspect-video rounded overflow-hidden bg-muted">
+                                            <img
+                                                src={ensurePublicStorageUrl('product-images', banner.image_url) || ''}
+                                                className="w-full h-full object-cover"
+                                            />
+                                        </div>
+                                    </td>
+                                    <td className="py-3 px-4">
+                                        <span className="font-medium">{banner.title || '-'}</span>
+                                    </td>
+                                    <td className="py-3 px-4">
+                                        {banner.position === 'catalog' ? 'Catálogo' : 'Dashboard'}
+                                    </td>
+                                    <td className="py-3 px-4">
+                                        {getStatusBadge(banner)}
+                                    </td>
+                                    <td className="py-3 px-4 text-xs text-muted-foreground">
+                                        {banner.starts_at ? format(new Date(banner.starts_at), 'dd/MM/yy') : '-'}
+                                        {' — '}
+                                        {banner.ends_at ? format(new Date(banner.ends_at), 'dd/MM/yy') : '-'}
+                                    </td>
+                                    <td className="py-3 px-4 text-right">
+                                        <DropdownMenu>
+                                            <DropdownMenuTrigger asChild>
+                                                <Button variant="ghost" size="icon">
+                                                    <MoreVertical className="h-4 w-4" />
+                                                </Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent align="end">
+                                                <DropdownMenuItem onClick={() => handleOpenEdit(banner)}>
+                                                    <Edit className="h-4 w-4 mr-2" /> Editar
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem onClick={() => handleToggleActive(banner)}>
+                                                    {banner.is_active ? <XCircle className="h-4 w-4 mr-2 text-red-500" /> : <CheckCircle2 className="h-4 w-4 mr-2 text-emerald-500" />}
+                                                    {banner.is_active ? 'Desativar' : 'Ativar'}
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem className="text-red-600" onClick={() => handleDelete(banner.id)}>
+                                                    <Trash2 className="h-4 w-4 mr-2" /> Excluir
+                                                </DropdownMenuItem>
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
         </div>
     );
 }
