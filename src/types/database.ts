@@ -359,6 +359,10 @@ export interface Subscription {
   gateway_payment_link_id: string | null;
   payment_link_url: string | null;
   last_payment_status: string | null;
+  customer_name?: string | null;
+  customer_email?: string | null;
+  customer_phone?: string | null;
+  customer_document?: string | null;
   created_at: string;
   updated_at: string;
 }

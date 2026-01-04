@@ -22,10 +22,13 @@ const isAllowedEvent = (eventName: string) => {
   if (!eventName) return false;
   const ev = normalizeEvent(eventName);
   if (ev.includes('purchase') && ev.includes('approved')) return true;
+  if (ev.includes('purchase') && ev.includes('paid')) return true;
   if (ev.includes('subscription') && (ev.includes('active') || ev.includes('renewed'))) {
     return true;
   }
   if (ev.includes('payment') && ev.includes('approved')) return true;
+  if (ev.includes('payment') && ev.includes('paid')) return true;
+  if (ev.includes('order') && ev.includes('paid')) return true;
   return false;
 };
 
@@ -49,8 +52,20 @@ const buildSlug = (value: string) =>
     .replace(/^-+|-+$/g, '') || 'empresa';
 
 const generatePassword = () => {
-  const bytes = crypto.getRandomValues(new Uint8Array(24));
-  return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+  const lower = 'abcdefghjkmnpqrstuvwxyz';
+  const upper = 'ABCDEFGHJKMNPQRSTUVWXYZ';
+  const digits = '23456789';
+  const all = `${lower}${upper}${digits}`;
+  const length = 12;
+  const pick = (chars: string) => chars[Math.floor(Math.random() * chars.length)];
+  const required = [pick(lower), pick(upper), pick(digits)];
+  const rest = Array.from({ length: length - required.length }, () => pick(all));
+  const combined = [...required, ...rest];
+  for (let i = combined.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [combined[i], combined[j]] = [combined[j], combined[i]];
+  }
+  return combined.join('');
 };
 
 const getAdminUserByEmail = async (supabase: ReturnType<typeof getSupabaseClient>, email: string) => {
@@ -85,10 +100,12 @@ const sendAccessEmail = async (params: {
   password?: string | null;
   appUrl: string;
   companyName?: string | null;
+  planName?: string | null;
 }) => {
   const loginUrl = `${params.appUrl.replace(/\/$/, '')}/auth`;
   const name = params.fullName ?? params.email;
   const companyLabel = params.companyName ? `Empresa: ${params.companyName}` : null;
+  const planLabel = params.planName ? `Plano: ${params.planName}` : null;
   const passwordLine = params.password
     ? `Senha temporaria: ${params.password}`
     : 'Sua conta ja existe. Use sua senha atual.';
@@ -98,13 +115,14 @@ const sendAccessEmail = async (params: {
     '',
     'Sua assinatura foi aprovada e seu acesso esta liberado no IDEARTCLOUD.',
     companyLabel,
+    planLabel,
     `Login: ${params.email}`,
     passwordLine,
     `Acesse: ${loginUrl}`,
     '',
-    'No primeiro acesso voce devera:',
-    '1) Preencher os dados da empresa',
-    '2) Criar uma nova senha',
+    'No primeiro acesso sera obrigatorio:',
+    '1) Criar uma nova senha',
+    '2) Preencher os dados da empresa',
   ].filter(Boolean).join('\n');
 
   const html = `
@@ -132,6 +150,7 @@ const sendAccessEmail = async (params: {
                       Ola ${name}, sua assinatura foi aprovada e seu acesso esta liberado.
                     </p>
                     ${params.companyName ? `<p style="margin:0 0 12px 0;color:#0f172a;font-size:14px;"><strong>Empresa:</strong> ${params.companyName}</p>` : ''}
+                    ${params.planName ? `<p style="margin:0 0 12px 0;color:#0f172a;font-size:14px;"><strong>Plano:</strong> ${params.planName}</p>` : ''}
                   </td>
                 </tr>
                 <tr>
@@ -152,11 +171,11 @@ const sendAccessEmail = async (params: {
                 <tr>
                   <td style="padding:8px 32px 24px 32px;">
                     <p style="margin:0 0 8px 0;color:#334155;font-size:14px;">
-                      No primeiro acesso voce devera:
+                      No primeiro acesso sera obrigatorio:
                     </p>
                     <ol style="margin:0;padding-left:18px;color:#334155;font-size:14px;line-height:1.6;">
-                      <li>Preencher os dados da empresa</li>
                       <li>Criar uma nova senha</li>
+                      <li>Preencher os dados da empresa</li>
                     </ol>
                     <p style="margin:16px 0 0 0;color:#94a3b8;font-size:12px;">
                       Se precisar de ajuda, fale com nosso suporte.
@@ -173,7 +192,7 @@ const sendAccessEmail = async (params: {
 
   return await sendSmtpEmail({
     to: params.email,
-    subject: 'Acesso liberado - IDEARTCLOUD',
+    subject: 'Seu acesso ao IDEARTCLOUD',
     text,
     html,
   });
@@ -306,6 +325,19 @@ serve(async (req) => {
       metadata?.full_name ??
       metadata?.name ??
       null;
+    const customerPhone =
+      data?.customer?.phone ??
+      data?.customer?.phone_number ??
+      data?.customer_phone ??
+      data?.phone ??
+      metadata?.phone ??
+      null;
+    const customerDocument =
+      data?.customer?.document ??
+      data?.customer?.document_number ??
+      data?.document ??
+      metadata?.document ??
+      null;
     const companyName =
       metadata?.company_name ??
       data?.company_name ??
@@ -338,6 +370,42 @@ serve(async (req) => {
         .in('cakto_plan_id', [offerId, offerUrl])
         .maybeSingle();
       planId = plan?.id ?? null;
+
+      if (!planId) {
+        const offerName =
+          data?.offer?.name ??
+          metadata?.plan_name ??
+          metadata?.offer_name ??
+          'Plano Cakto';
+        const offerPrice =
+          typeof data?.offer?.price === 'number'
+            ? data.offer.price
+            : Number(data?.offer?.price ?? 0);
+        const intervalType =
+          data?.offer?.intervalType ??
+          data?.offer?.interval_type ??
+          data?.offer?.interval ??
+          'month';
+        const isYearly = intervalType === 'year' || intervalType === 'yearly';
+        const periodDays = isYearly ? 365 : 30;
+
+        const { data: createdPlan } = await supabase
+          .from('plans')
+          .upsert({
+            name: offerName,
+            description: null,
+            price: offerPrice,
+            billing_period: isYearly ? 'yearly' : 'monthly',
+            period_days: periodDays,
+            features: [],
+            max_users: null,
+            is_active: true,
+            cakto_plan_id: offerId,
+          }, { onConflict: 'cakto_plan_id' })
+          .select('id')
+          .maybeSingle();
+        planId = createdPlan?.id ?? null;
+      }
     }
 
     if (checkout?.status === 'active' || checkout?.status === 'completed') {
@@ -360,7 +428,7 @@ serve(async (req) => {
         .maybeSingle();
       checkout = fallbackCheckout;
     }
-    if (!email || !planId || !caktoSubId || !normalizedStatus) {
+    if (!email || !caktoSubId || !normalizedStatus) {
       await supabase.from('webhook_events')
         .update({ processed_at: new Date().toISOString() })
         .eq('event_id', eventId);
@@ -479,6 +547,10 @@ serve(async (req) => {
       gateway_order_id: data?.order_id ?? data?.orderId ?? data?.id ?? data?.refId ?? null,
       gateway_payment_link_id: data?.payment_link_id ?? data?.paymentLinkId ?? null,
       last_payment_status: data?.payment_status ?? data?.status ?? null,
+      customer_name: checkout?.full_name ?? customerName ?? null,
+      customer_email: email ?? null,
+      customer_phone: customerPhone ?? null,
+      customer_document: customerDocument ?? null,
     };
 
     const { data: existingSubscription } = await supabase
@@ -500,6 +572,13 @@ serve(async (req) => {
         subscription_start_date: currentPeriodStartsAt ?? new Date().toISOString(),
         subscription_end_date: currentPeriodEndsAt,
       };
+      if (customerPhone) {
+        companyUpdate.phone = customerPhone;
+        companyUpdate.whatsapp = customerPhone;
+      }
+      if (email) {
+        companyUpdate.email = email;
+      }
       await supabase.from('companies').update(companyUpdate).eq('id', companyId);
     }
 
@@ -520,12 +599,18 @@ serve(async (req) => {
       data?.app_url ??
       'https://ideartcloud.com.br';
     if (appUrl && shouldSendEmail) {
+      const { data: planData } = await supabase
+        .from('plans')
+        .select('name')
+        .eq('id', planId)
+        .maybeSingle();
       await sendAccessEmail({
         email,
         fullName: checkout?.full_name ?? customerName ?? null,
         password: tempPassword,
         appUrl,
         companyName: checkout?.company_name ?? companyName ?? null,
+        planName: planData?.name ?? null,
       });
     }
 

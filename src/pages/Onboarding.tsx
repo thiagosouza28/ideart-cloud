@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Building2, Loader2, MapPin, Phone } from "lucide-react";
+import { Building2, Loader2, Mail, MapPin, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,6 +22,7 @@ export default function Onboarding() {
     address: "",
     city: "",
     state: "",
+    email: "",
   });
 
   useEffect(() => {
@@ -33,6 +34,7 @@ export default function Onboarding() {
         address: company.address ?? "",
         city: company.city ?? "",
         state: company.state ?? "",
+        email: company.email ?? "",
       });
     }
   }, [company]);
@@ -90,6 +92,7 @@ export default function Onboarding() {
           address: formData.address.trim(),
           city: formData.city.trim(),
           state: formData.state.trim(),
+          email: formData.email.trim() || null,
         })
         .eq("id", companyId);
 
@@ -179,6 +182,20 @@ export default function Onboarding() {
                   value={formData.whatsapp}
                   onChange={(e) => setFormData({ ...formData, whatsapp: e.target.value })}
                   required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="email" className="flex items-center gap-2">
+                  <Mail className="h-4 w-4" />
+                  Email comercial
+                </Label>
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="contato@empresa.com"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 />
               </div>
             </div>

@@ -1216,55 +1216,67 @@ export type Database = {
         }
         Relationships: []
       }
-      subscriptions: {
-        Row: {
-          company_id: string
-          created_at: string
-          current_period_ends_at: string | null
-          gateway: string
-          gateway_order_id: string | null
-          gateway_payment_link_id: string | null
-          gateway_subscription_id: string | null
-          id: string
+        subscriptions: {
+          Row: {
+            company_id: string
+            created_at: string
+            current_period_ends_at: string | null
+            customer_document: string | null
+            customer_email: string | null
+            customer_name: string | null
+            customer_phone: string | null
+            gateway: string
+            gateway_order_id: string | null
+            gateway_payment_link_id: string | null
+            gateway_subscription_id: string | null
+            id: string
           last_payment_status: string | null
-          payment_link_url: string | null
-          plan_id: string | null
-          status: string
-          trial_ends_at: string | null
-          updated_at: string
-        }
-        Insert: {
-          company_id: string
-          created_at?: string
-          current_period_ends_at?: string | null
-          gateway?: string
-          gateway_order_id?: string | null
-          gateway_payment_link_id?: string | null
-          gateway_subscription_id?: string | null
-          id?: string
+            payment_link_url: string | null
+            plan_id: string | null
+            status: string
+            trial_ends_at: string | null
+            updated_at: string
+          }
+          Insert: {
+            company_id: string
+            created_at?: string
+            current_period_ends_at?: string | null
+            customer_document?: string | null
+            customer_email?: string | null
+            customer_name?: string | null
+            customer_phone?: string | null
+            gateway?: string
+            gateway_order_id?: string | null
+            gateway_payment_link_id?: string | null
+            gateway_subscription_id?: string | null
+            id?: string
           last_payment_status?: string | null
-          payment_link_url?: string | null
-          plan_id?: string | null
-          status?: string
-          trial_ends_at?: string | null
-          updated_at?: string
-        }
-        Update: {
-          company_id?: string
-          created_at?: string
-          current_period_ends_at?: string | null
-          gateway?: string
-          gateway_order_id?: string | null
-          gateway_payment_link_id?: string | null
-          gateway_subscription_id?: string | null
-          id?: string
+            payment_link_url?: string | null
+            plan_id?: string | null
+            status?: string
+            trial_ends_at?: string | null
+            updated_at?: string
+          }
+          Update: {
+            company_id?: string
+            created_at?: string
+            current_period_ends_at?: string | null
+            customer_document?: string | null
+            customer_email?: string | null
+            customer_name?: string | null
+            customer_phone?: string | null
+            gateway?: string
+            gateway_order_id?: string | null
+            gateway_payment_link_id?: string | null
+            gateway_subscription_id?: string | null
+            id?: string
           last_payment_status?: string | null
-          payment_link_url?: string | null
-          plan_id?: string | null
-          status?: string
-          trial_ends_at?: string | null
-          updated_at?: string
-        }
+            payment_link_url?: string | null
+            plan_id?: string | null
+            status?: string
+            trial_ends_at?: string | null
+            updated_at?: string
+          }
         Relationships: [
           {
             foreignKeyName: "subscriptions_company_id_fkey"

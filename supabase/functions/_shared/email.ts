@@ -7,7 +7,7 @@ type EmailPayload = {
   text: string;
 };
 
-const getSmtpConfig = () => {
+  const getSmtpConfig = () => {
   return {
     host: Deno.env.get("SMTP_HOST") ?? "",
     port: Number(Deno.env.get("SMTP_PORT") ?? "465"),
@@ -29,7 +29,7 @@ export const sendSmtpEmail = async (payload: EmailPayload) => {
   const client = new SmtpClient();
   try {
     const supportEmail = "suporte@ideartcloud.com.br";
-    const from = cfg.emailFrom.trim().length && cfg.emailFrom.includes(supportEmail)
+    const from = cfg.emailFrom.trim().length
       ? cfg.emailFrom.trim()
       : `${cfg.senderName} <${supportEmail}>`;
     await client.connectTLS({
