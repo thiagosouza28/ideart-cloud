@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { AlertCircle, Loader2 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { invokePublicFunction } from "@/services/publicFunctions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,15 +21,7 @@ export default function ForgotPassword() {
     setLoading(true);
 
     try {
-      const redirectTo = `${window.location.origin}/alterar-senha`;
-      const { error: resetError } = await supabase.auth.resetPasswordForEmail(
-        email.trim(),
-        { redirectTo },
-      );
-      if (resetError) {
-        setError(resetError.message);
-        return;
-      }
+      await invokePublicFunction("password-recovery", { email: email.trim() });
       setNotice("Se o email estiver cadastrado, enviamos um link de recuperacao.");
     } catch {
       setError("Nao foi possivel enviar o email de recuperacao.");
