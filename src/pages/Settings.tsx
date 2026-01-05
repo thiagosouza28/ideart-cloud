@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Plus, Edit, Trash2, Building2, Upload, Loader2, MapPin, Phone, Mail, Globe, ExternalLink, Copy, Check, Palette, LayoutGrid, List, Settings as SettingsIcon } from 'lucide-react';
+import { Plus, Edit, Trash2, Building2, Upload, Loader2, MapPin, Phone, Mail, Globe, ExternalLink, Copy, Check, Palette, LayoutGrid, List, Settings as SettingsIcon, MessageCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { CurrencyInput } from '@/components/ui/currency-input';
@@ -47,6 +47,7 @@ export default function Settings() {
     email: "",
     phone: "",
     whatsapp: "",
+    whatsapp_message_template: "",
     address: "",
     city: "",
     state: "",
@@ -199,6 +200,7 @@ export default function Settings() {
           catalog_filter_bg_color: catalogFilterBg,
           catalog_filter_text_color: catalogFilterText,
           catalog_layout: (data as any).catalog_layout || "grid",
+          whatsapp_message_template: data.whatsapp_message_template || "",
         };
         setCompanyForm(formData);
         setOriginalForm(formData);
@@ -341,6 +343,7 @@ export default function Settings() {
           catalog_filter_bg_color: companyForm.catalog_filter_bg_color,
           catalog_filter_text_color: companyForm.catalog_filter_text_color,
           catalog_layout: companyForm.catalog_layout,
+          whatsapp_message_template: companyForm.whatsapp_message_template?.trim() || null,
         } as any)
         .eq('id', company.id)
         .select()
@@ -707,7 +710,33 @@ export default function Settings() {
                 </div>
               </div>
 
-              <Button onClick={saveCompany} disabled={savingCompany} className="w-full md:w-auto">
+                <div className="space-y-3">
+                  <Label htmlFor="whatsapp-template" className="flex items-center gap-2">
+                    <MessageCircle className="h-4 w-4" />
+                    Mensagem padrao do WhatsApp
+                  </Label>
+                  <Textarea
+                    id="whatsapp-template"
+                    value={companyForm.whatsapp_message_template}
+                    onChange={(e) => setCompanyForm({ ...companyForm, whatsapp_message_template: e.target.value })}
+                    placeholder="Ola {cliente_nome}, seu pedido #{pedido_numero} esta pronto! Acompanhe pelo link: {pedido_link}"
+                    className="min-h-[120px]"
+                  />
+                  <div className="text-xs text-muted-foreground">
+                    Variaveis disponiveis:
+                    <div className="mt-2 grid grid-cols-1 gap-1 sm:grid-cols-2">
+                      <span>{'{cliente_nome}'}</span>
+                      <span>{'{cliente_telefone}'}</span>
+                      <span>{'{pedido_numero}'}</span>
+                      <span>{'{pedido_status}'}</span>
+                      <span>{'{pedido_total}'}</span>
+                      <span>{'{pedido_link}'}</span>
+                      <span>{'{empresa_nome}'}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <Button onClick={saveCompany} disabled={savingCompany} className="w-full md:w-auto">
                 {savingCompany && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Salvar Alterações
               </Button>

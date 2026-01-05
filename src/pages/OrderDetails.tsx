@@ -1,4 +1,4 @@
-ï»¿import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { formatOrderNumber } from '@/lib/utils';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -36,7 +36,7 @@ import { resolveSuggestedPrice } from '@/lib/pricing';
 
 const statusConfig: Record<OrderStatus, { label: string; icon: React.ComponentType<any>; color: string; next: OrderStatus[] }> = {
   orcamento: {
-    label: 'OrÃ§amento',
+    label: 'Orçamento',
     icon: FileText,
     color: 'bg-blue-100 text-blue-800',
     next: ['pendente', 'cancelado']
@@ -48,7 +48,7 @@ const statusConfig: Record<OrderStatus, { label: string; icon: React.ComponentTy
     next: ['em_producao', 'cancelado']
   },
   em_producao: {
-    label: 'Em ProduÃ§Ã£o',
+    label: 'Em Produção',
     icon: Clock,
     color: 'bg-yellow-100 text-yellow-800',
     next: ['pronto', 'cancelado']
@@ -135,6 +135,8 @@ export default function OrderDetails() {
   const [publicLinkToken, setPublicLinkToken] = useState<string | null>(null);
   const [linkLoading, setLinkLoading] = useState(false);
   const [copiedLink, setCopiedLink] = useState<'public' | 'message' | null>(null);
+  const [messageText, setMessageText] = useState('');
+  const [messageDirty, setMessageDirty] = useState(false);
   const [isEditingItems, setIsEditingItems] = useState(false);
   const [editableItems, setEditableItems] = useState<OrderItem[]>([]);
   const [savingItems, setSavingItems] = useState(false);
@@ -307,10 +309,10 @@ export default function OrderDetails() {
       setOrder(updatedOrder);
       setItems(refreshedItems);
       setIsEditingItems(false);
-      toast({ title: 'OrÃ§amento atualizado com sucesso!' });
+      toast({ title: 'Orçamento atualizado com sucesso!' });
     } catch (error: any) {
       toast({
-        title: 'Erro ao salvar alteraÃ§Ãµes',
+        title: 'Erro ao salvar alterações',
         description: error?.message,
         variant: 'destructive',
       });
@@ -376,10 +378,11 @@ export default function OrderDetails() {
     if (!order) return '';
     const template =
       order.company?.whatsapp_message_template ||
-      'OlÃ¡ {cliente_nome}, seu pedido #{pedido_numero} estÃ¡ pronto! Acompanhe pelo link: {pedido_link}';
-    const replacements: Record<string, string> = {
-      '{cliente_nome}': order.customer?.name || order.customer_name || 'cliente',
-      '{pedido_numero}': formatOrderNumber(order.order_number),
+        'Ola {cliente_nome}, seu pedido #{pedido_numero} esta pronto! Acompanhe pelo link: {pedido_link}';
+      const replacements: Record<string, string> = {
+        '{cliente_nome}': order.customer?.name || order.customer_name || 'cliente',
+        '{cliente_telefone}': order.customer?.phone || order.customer_phone || '',
+        '{pedido_numero}': formatOrderNumber(order.order_number),
       '{pedido_status}': statusLabels[order.status] ?? order.status,
       '{pedido_total}': formatCurrency(Number(order.total || 0)),
       '{pedido_link}': link,
@@ -460,7 +463,7 @@ export default function OrderDetails() {
     ]) as any[];
 
     if (orderResult.error || !orderResult.data) {
-      toast({ title: 'Pedido nÃ£o encontrado', variant: 'destructive' });
+      toast({ title: 'Pedido não encontrado', variant: 'destructive' });
       navigate('/pedidos');
       return;
     }
@@ -515,8 +518,40 @@ export default function OrderDetails() {
   };
 
   const getPublicLinkUrl = (token: string) => `${window.location.origin}/pedido/${token}`;
+  const publicLink = publicLinkToken ? getPublicLinkUrl(publicLinkToken) : '';
+  const messageLink = publicLink || '[link]';
 
-  const ensurePublicLink = async () => {
+  useEffect(() => {
+    setMessageDirty(false);
+  }, [order?.id]);
+
+  useEffect(() => {
+    if (!messageDirty) {
+      setMessageText(buildWhatsAppMessage(messageLink));
+    }
+  }, [
+    messageLink,
+    messageDirty,
+    order?.id,
+    order?.status,
+    order?.total,
+    order?.customer?.name,
+    order?.customer_name,
+    order?.customer?.phone,
+    order?.customer_phone,
+    order?.company?.whatsapp_message_template,
+    order?.company?.name,
+  ]);
+
+  const resolveMessageForSend = (url: string) => {
+    if (!messageDirty) return buildWhatsAppMessage(url);
+    return messageText
+      .replaceAll('{pedido_link}', url)
+      .replaceAll('[link]', url);
+  };
+
+  const clientMessage = messageText || buildWhatsAppMessage(messageLink);
+const ensurePublicLink = async () => {
     if (!order) return null;
     if (publicLinkToken) return publicLinkToken;
     setLinkLoading(true);
@@ -551,7 +586,7 @@ export default function OrderDetails() {
     const token = await ensurePublicLink();
     if (!token) return;
     const url = getPublicLinkUrl(token);
-    const message = buildWhatsAppMessage(url);
+    const message = resolveMessageForSend(url);
     const copied = await copyToClipboard(message);
     if (!copied) {
       toast({ title: 'Falha ao copiar', description: 'Tente novamente.', variant: 'destructive' });
@@ -567,7 +602,7 @@ export default function OrderDetails() {
     const token = await ensurePublicLink();
     if (!token) return;
     const url = getPublicLinkUrl(token);
-    sendWhatsAppMessage(buildWhatsAppMessage(url));
+    sendWhatsAppMessage(resolveMessageForSend(url));
   };
 
   const handleCancelOrder = async () => {
@@ -596,7 +631,7 @@ export default function OrderDetails() {
     setDeleteLoading(true);
     try {
       await deleteOrder(order.id);
-      toast({ title: 'OrÃ§amento excluÃ­do com sucesso!' });
+      toast({ title: 'Orçamento excluído com sucesso!' });
       setDeleteDialogOpen(false);
       navigate('/pedidos');
     } catch (error: any) {
@@ -622,7 +657,7 @@ export default function OrderDetails() {
     if (!order) return;
     const remaining = Math.max(0, Number(order.total) - Number(order.amount_paid));
     if (remaining <= 0) {
-      toast({ title: 'Pedido jÃ¡ quitado', description: 'NÃ£o hÃ¡ saldo pendente.', variant: 'destructive' });
+      toast({ title: 'Pedido já quitado', description: 'Não há saldo pendente.', variant: 'destructive' });
       return;
     }
     setPaymentAmount(remaining);
@@ -679,8 +714,8 @@ export default function OrderDetails() {
 
     if (newStatus === 'pronto' && finalPhotos.length === 0) {
       toast({
-        title: 'Foto obrigatÂ¢ria',
-        description: 'Â necessÂ rio anexar pelo menos uma foto do produto pronto antes de alterar o status para "Pronto".',
+        title: 'Foto obrigat¢ria',
+        description: ' necess rio anexar pelo menos uma foto do produto pronto antes de alterar o status para "Pronto".',
         variant: 'destructive',
       });
       setStatusDialogOpen(false);
@@ -779,7 +814,7 @@ export default function OrderDetails() {
 
   const handleDeletePayment = async (paymentId: string) => {
     if (!order) return;
-    if (!window.confirm('Excluir este pagamento? Esta aÃ§Ã£o nÃ£o pode ser desfeita.')) return;
+    if (!window.confirm('Excluir este pagamento? Esta ação não pode ser desfeita.')) return;
     setPaymentActionId(paymentId);
     setPaymentActionType('delete');
     try {
@@ -811,10 +846,7 @@ export default function OrderDetails() {
 
   const config = statusConfig[order.status];
   const StatusIcon = config.icon;
-  const publicLink = publicLinkToken ? getPublicLinkUrl(publicLinkToken) : '';
-  const messageLink = publicLink || '[link]';
-  const clientMessage = buildWhatsAppMessage(messageLink);
-  const canSendWhatsApp = Boolean(order?.customer?.phone);
+const canSendWhatsApp = Boolean(order?.customer?.phone);
   const publicLinkLabel = linkLoading
     ? 'Gerando...'
     : publicLinkToken
@@ -921,11 +953,14 @@ export default function OrderDetails() {
           <div className="space-y-2">
             <Label>Mensagem para o cliente</Label>
             <div className="flex items-start gap-2">
-              <Textarea
-                readOnly
-                value={clientMessage}
-                className="min-h-[88px]"
-              />
+                <Textarea
+                  value={clientMessage}
+                  onChange={(event) => {
+                    setMessageDirty(true);
+                    setMessageText(event.target.value);
+                  }}
+                  className="min-h-[88px]"
+                />
               <div className="flex flex-col gap-2">
                 <Button
                   variant="outline"
@@ -977,7 +1012,7 @@ export default function OrderDetails() {
                   )}
                 </div>
               ) : (
-                <p className="text-muted-foreground">{order.customer_name || 'Cliente nÃ£o informado'}</p>
+                <p className="text-muted-foreground">{order.customer_name || 'Cliente não informado'}</p>
               )}
             </CardContent>
           </Card>
@@ -988,7 +1023,7 @@ export default function OrderDetails() {
               <CardTitle>Itens do Pedido</CardTitle>
               {isBudget && !isEditingItems && (
                 <Button variant="outline" size="sm" onClick={startEditingItems}>
-                  Editar orï¿½amento
+                  Editar or?amento
                 </Button>
               )}
               {isBudget && isEditingItems && (
@@ -998,7 +1033,7 @@ export default function OrderDetails() {
                   </Button>
                   <Button size="sm" onClick={handleSaveItems} disabled={savingItems}>
                     {savingItems && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Salvar alteraï¿½ï¿½es
+                    Salvar altera??es
                   </Button>
                 </div>
               )}
@@ -1009,9 +1044,9 @@ export default function OrderDetails() {
                   <TableRow>
                     <TableHead>Produto</TableHead>
                     <TableHead className="text-center">Qtd</TableHead>
-                    <TableHead className="text-right">Preï¿½ï¿½o Unit.</TableHead>
+                    <TableHead className="text-right">Pre??o Unit.</TableHead>
                     <TableHead className="text-right">Total</TableHead>
-                    {isEditingItems && <TableHead className="text-right">Aï¿½ï¿½oes</TableHead>}
+                    {isEditingItems && <TableHead className="text-right">A??oes</TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1182,7 +1217,7 @@ export default function OrderDetails() {
           {order.notes && (
             <Card>
               <CardHeader>
-                <CardTitle>ObservaÃ§Ãµes</CardTitle>
+                <CardTitle>Observações</CardTitle>
               </CardHeader>
               <CardContent>
                 <p className="text-muted-foreground">{order.notes}</p>
@@ -1332,7 +1367,7 @@ export default function OrderDetails() {
               <div className="flex flex-col gap-2">
                 {isOrderPaid && (
                   <p className="text-xs text-muted-foreground">
-                    Pedido quitado. NÃ£o Ã© possÃ­vel registrar novos pagamentos.
+                    Pedido quitado. Não é possível registrar novos pagamentos.
                   </p>
                 )}
                 <Button variant="outline" onClick={openPaymentDialog} disabled={isOrderPaid}>
@@ -1398,7 +1433,7 @@ export default function OrderDetails() {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>ObservaÃ§Ãµes</Label>
+              <Label>Observações</Label>
               <Textarea
                 value={paymentNotes}
                 onChange={(e) => setPaymentNotes(e.target.value)}
@@ -1478,12 +1513,12 @@ export default function OrderDetails() {
             </div>
             <div className="space-y-2">
               <Label>
-                {newStatus === 'cancelado' ? 'Motivo do cancelamento *' : 'ObservaÃ§Ãµes (opcional)'}
+                {newStatus === 'cancelado' ? 'Motivo do cancelamento *' : 'Observações (opcional)'}
               </Label>
               <Textarea
                 value={statusNotes}
                 onChange={(e) => setStatusNotes(e.target.value)}
-                placeholder={newStatus === 'cancelado' ? 'Informe o motivo...' : 'Adicione uma observaÃ§Ã£o...'}
+                placeholder={newStatus === 'cancelado' ? 'Informe o motivo...' : 'Adicione uma observação...'}
                 rows={3}
               />
             </div>
@@ -1581,10 +1616,10 @@ export default function OrderDetails() {
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <DialogContent aria-describedby={undefined} className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Excluir orÃ§amento</DialogTitle>
+            <DialogTitle>Excluir orçamento</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            Tem certeza que deseja excluir este orÃ§amento? Essa aÃ§Ã£o nÃ£o pode ser desfeita.
+            Tem certeza que deseja excluir este orçamento? Essa ação não pode ser desfeita.
           </p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteDialogOpen(false)} disabled={deleteLoading}>
@@ -1626,6 +1661,9 @@ export default function OrderDetails() {
     </div>
   );
 }
+
+
+
 
 
 
