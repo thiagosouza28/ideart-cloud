@@ -4,6 +4,7 @@ import { Building2, Loader2, Mail, MapPin, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { CpfCnpjInput, PhoneInput, formatCpfCnpj, formatPhone, normalizeDigits, validateCpfCnpj, validatePhone } from "@/components/ui/masked-input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
@@ -41,13 +42,15 @@ export default function Onboarding() {
     if (company) {
       setFormData({
         name: company.name ?? "",
-        phone: company.phone ?? "",
-        whatsapp: company.whatsapp ?? "",
+        phone: company.phone ? formatPhone(company.phone) : "",
+        whatsapp: company.whatsapp ? formatPhone(company.whatsapp) : "",
         address: company.address ?? "",
         city: company.city ?? "",
         state: company.state ?? "",
         email: company.email ?? "",
-        document: (company as { document?: string | null }).document ?? "",
+        document: (company as { document?: string | null }).document
+          ? formatCpfCnpj((company as { document?: string | null }).document ?? "")
+          : "",
       });
     }
   }, [company]);
@@ -86,6 +89,27 @@ export default function Onboarding() {
       return;
     }
 
+    if (!validatePhone(formData.phone) || !validatePhone(formData.whatsapp)) {
+      toast({
+        title: "Telefone inválido",
+        description: "Use um celular brasileiro válido.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (formData.document) {
+      const { valid } = validateCpfCnpj(formData.document);
+      if (!valid) {
+        toast({
+          title: "Documento inválido",
+          description: "Informe um CPF ou CNPJ válido.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
     if (!user) {
       toast({
         title: "Erro",
@@ -104,18 +128,21 @@ export default function Onboarding() {
       const trialEndIso = trialEnd.toISOString();
 
       let companyId = profile?.company_id ?? company?.id ?? null;
+      const documentDigits = formData.document ? normalizeDigits(formData.document) : null;
+      const phoneDigits = normalizeDigits(formData.phone);
+      const whatsappDigits = normalizeDigits(formData.whatsapp);
       if (companyId) {
         const { error: companyError } = await supabase
           .from("companies")
           .update({
             name: formData.name.trim(),
-            phone: formData.phone.trim(),
-            whatsapp: formData.whatsapp.trim(),
+            phone: phoneDigits,
+            whatsapp: whatsappDigits,
             address: formData.address.trim(),
             city: formData.city.trim(),
             state: formData.state.trim(),
             email: formData.email.trim() || null,
-            document: formData.document.trim() || null,
+            document: documentDigits,
             completed: true,
           })
           .eq("id", companyId);
@@ -131,13 +158,13 @@ export default function Onboarding() {
           .insert({
             name: formData.name.trim(),
             slug,
-            phone: formData.phone.trim(),
-            whatsapp: formData.whatsapp.trim(),
+            phone: phoneDigits,
+            whatsapp: whatsappDigits,
             address: formData.address.trim(),
             city: formData.city.trim(),
             state: formData.state.trim(),
             email: formData.email.trim() || null,
-            document: formData.document.trim() || null,
+            document: documentDigits,
             completed: true,
             is_active: true,
             subscription_status: "trial",
@@ -248,22 +275,22 @@ export default function Onboarding() {
                   <Phone className="h-4 w-4" />
                   Telefone *
                 </Label>
-                <Input
+                <PhoneInput
                   id="phone"
-                  placeholder="(11) 1234-5678"
+                  placeholder="(11) 12345-6789"
                   value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  onChange={(value) => setFormData({ ...formData, phone: value })}
                   required
                 />
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="whatsapp">WhatsApp *</Label>
-                <Input
+                <PhoneInput
                   id="whatsapp"
                   placeholder="(11) 91234-5678"
                   value={formData.whatsapp}
-                  onChange={(e) => setFormData({ ...formData, whatsapp: e.target.value })}
+                  onChange={(value) => setFormData({ ...formData, whatsapp: value })}
                   required
                 />
               </div>
@@ -285,11 +312,11 @@ export default function Onboarding() {
 
               <div className="space-y-2">
                 <Label htmlFor="document">CNPJ ou CPF (opcional)</Label>
-                <Input
+                <CpfCnpjInput
                   id="document"
                   placeholder="00.000.000/0000-00"
                   value={formData.document}
-                  onChange={(e) => setFormData({ ...formData, document: e.target.value })}
+                  onChange={(value) => setFormData({ ...formData, document: value })}
                 />
               </div>
             </div>

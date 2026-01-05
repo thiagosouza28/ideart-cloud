@@ -59,7 +59,23 @@ const getSupabaseClient = () =>
     { auth: { persistSession: false } },
   );
 
-const normalizeCpf = (value: string) => value.replace(/\D/g, "");
+const normalizeDigits = (value: string) => value.replace(/\D/g, "");
+const validateCpf = (value: string) => {
+  const digits = normalizeDigits(value);
+  if (digits.length !== 11 || /^(\d)\1+$/.test(digits)) return false;
+
+  let sum = 0;
+  for (let i = 0; i < 9; i += 1) sum += Number(digits[i]) * (10 - i);
+  let check = (sum * 10) % 11;
+  if (check === 10 || check === 11) check = 0;
+  if (check !== Number(digits[9])) return false;
+
+  sum = 0;
+  for (let i = 0; i < 10; i += 1) sum += Number(digits[i]) * (11 - i);
+  check = (sum * 10) % 11;
+  if (check === 10 || check === 11) check = 0;
+  return check === Number(digits[10]);
+};
 const slugify = (value: string) =>
   value
     .toLowerCase()
@@ -93,11 +109,15 @@ serve(async (req) => {
     const password = body.password ?? "";
     const fullName = body.full_name?.trim();
     const cpfRaw = body.cpf?.trim() ?? "";
-    const cpf = normalizeCpf(cpfRaw);
+    const cpf = normalizeDigits(cpfRaw);
     const companyName = body.company_name?.trim() ?? null;
 
     if (!email || !password || !fullName || !cpf) {
       return jsonResponse(corsHeaders, 400, { error: "Dados obrigatorios ausentes" });
+    }
+
+    if (!validateCpf(cpf)) {
+      return jsonResponse(corsHeaders, 400, { error: "CPF invalido" });
     }
 
     const supabase = getSupabaseClient();

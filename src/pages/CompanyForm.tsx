@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
-import { PhoneInput } from '@/components/ui/masked-input';
+import { PhoneInput, formatPhone, normalizeDigits, validatePhone } from '@/components/ui/masked-input';
 import { supabase } from '@/integrations/supabase/client';
 import type { Company } from '@/types/database';
 import { toast } from 'sonner';
@@ -100,8 +100,8 @@ export default function CompanyForm() {
       name: company.name,
       slug: company.slug,
       description: company.description || '',
-      phone: company.phone || '',
-      whatsapp: company.whatsapp || '',
+      phone: company.phone ? formatPhone(company.phone) : '',
+      whatsapp: company.whatsapp ? formatPhone(company.whatsapp) : '',
       email: company.email || '',
       address: company.address || '',
       city: company.city || '',
@@ -246,6 +246,16 @@ export default function CompanyForm() {
       return;
     }
 
+    if (form.phone.trim() && !validatePhone(form.phone)) {
+      toast.error('Telefone invケlido');
+      return;
+    }
+
+    if (form.whatsapp.trim() && !validatePhone(form.whatsapp)) {
+      toast.error('WhatsApp invケlido');
+      return;
+    }
+
     setSaving(true);
 
     try {
@@ -263,12 +273,14 @@ export default function CompanyForm() {
         setForm((prev) => ({ ...prev, slug: normalizedSlug }));
       }
 
+      const phoneDigits = form.phone.trim() ? normalizeDigits(form.phone) : null;
+      const whatsappDigits = form.whatsapp.trim() ? normalizeDigits(form.whatsapp) : null;
       const normalizedData = {
         name,
         slug: normalizedSlug,
         description: form.description.trim() || null,
-        phone: form.phone.trim() || null,
-        whatsapp: form.whatsapp.trim() || null,
+        phone: phoneDigits,
+        whatsapp: whatsappDigits,
         email: form.email.trim() || null,
         address: form.address.trim() || null,
         city: form.city.trim() || null,
@@ -286,8 +298,8 @@ export default function CompanyForm() {
             name: initialForm.name.trim(),
             slug: generateSlug(initialForm.slug.trim()),
             description: initialForm.description.trim() || null,
-            phone: initialForm.phone.trim() || null,
-            whatsapp: initialForm.whatsapp.trim() || null,
+            phone: initialForm.phone.trim() ? normalizeDigits(initialForm.phone) : null,
+            whatsapp: initialForm.whatsapp.trim() ? normalizeDigits(initialForm.whatsapp) : null,
             email: initialForm.email.trim() || null,
             address: initialForm.address.trim() || null,
             city: initialForm.city.trim() || null,

@@ -10,6 +10,7 @@ import { ensurePublicStorageUrl } from '@/lib/storage';
 import { resolveSuggestedPrice } from '@/lib/pricing';
 import { useToast } from '@/hooks/use-toast';
 import { getGraphPOSCheckoutState, setGraphPOSCheckoutState } from '@/lib/graphposCheckout';
+import { normalizeDigits } from '@/components/ui/masked-input';
 
 export default function GraphPOSPDV() {
   const navigate = useNavigate();
@@ -114,10 +115,15 @@ export default function GraphPOSPDV() {
 
     const timeout = setTimeout(async () => {
       setCustomerLoading(true);
+      const digits = normalizeDigits(term);
+      const filters = [`name.ilike.%${term}%`];
+      if (digits) {
+        filters.push(`document.ilike.%${digits}%`, `phone.ilike.%${digits}%`);
+      }
       const { data, error } = await supabase
         .from('customers')
         .select('*')
-        .or(`name.ilike.%${term}%,document.ilike.%${term}%,phone.ilike.%${term}%`)
+        .or(filters.join(','))
         .limit(10);
 
       if (error) {
@@ -228,22 +234,22 @@ export default function GraphPOSPDV() {
   };
 
   return (
-    <div className="w-full bg-transparent font-sans text-slate-900">
-      <main className="mx-auto w-full px-auto pb-12 pt-auto">
-        <div className="mb-6 flex items-center justify-between">
+    <div className="w-full bg-slate-50 font-sans text-slate-900">
+      <main className="mx-auto w-full max-w-[1400px] px-8 pb-14 pt-8">
+        <div className="mb-7 flex items-center justify-between">
           <div>
-            <h1 className="text-[32px] font-bold">PDV</h1>
+            <h1 className="text-3xl font-semibold tracking-tight">PDV</h1>
             <p className="text-sm text-slate-500">Ponto de venda</p>
           </div>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="grid gap-7 lg:grid-cols-[minmax(0,1fr)_30%]">
           <div className="space-y-4">
             <div className="grid gap-4 md:grid-cols-2">
               <form className="relative" onSubmit={handleBarcodeSubmit}>
                 <Barcode className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <input
-                  className="h-12 w-full rounded-2xl border border-slate-200 bg-white pl-11 text-sm text-slate-700 outline-none ring-sky-100 focus:border-sky-400 focus:ring-2"
+                  className="h-11 w-full rounded-lg border border-slate-200 bg-white pl-11 text-sm text-slate-700 shadow-[0_1px_2px_rgba(15,23,42,0.06)] outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
                   placeholder="Leia o codigo de barras aqui..."
                   value={barcodeInput}
                   onChange={(e) => setBarcodeInput(e.target.value)}
@@ -252,7 +258,7 @@ export default function GraphPOSPDV() {
               <div className="relative">
                 <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <input
-                  className="h-12 w-full rounded-2xl border border-slate-200 bg-white pl-11 text-sm text-slate-700 outline-none ring-sky-100 focus:border-sky-400 focus:ring-2"
+                  className="h-11 w-full rounded-lg border border-slate-200 bg-white pl-11 text-sm text-slate-700 shadow-[0_1px_2px_rgba(15,23,42,0.06)] outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
                   placeholder="Buscar por nome..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
@@ -260,12 +266,12 @@ export default function GraphPOSPDV() {
               </div>
             </div>
 
-            <GraphPOSCard className="min-h-[520px] p-0">
-              <div className="h-full min-h-[520px] rounded-2xl border border-dashed border-slate-200 bg-[radial-gradient(circle,_#E5E7EB_1px,_transparent_1px)] bg-[length:18px_18px] p-10">
+            <GraphPOSCard className="min-h-[540px] p-0">
+              <div className="h-full min-h-[520px] rounded-xl border border-dashed border-slate-200 bg-white p-10 shadow-[0_6px_20px_rgba(15,23,42,0.06)] bg-[radial-gradient(circle,_#e2e8f0_0.8px,_transparent_0.8px)] [background-size:20px_20px]">
                 {!search.trim() ? (
                   <div className="flex h-full items-center justify-center text-center">
-                    <div className="flex max-w-md flex-col items-center gap-3 text-slate-500">
-                      <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white shadow-sm">
+                    <div className="flex max-w-md flex-col items-center gap-4 text-slate-500">
+                      <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white shadow-[0_1px_2px_rgba(15,23,42,0.08)]">
                         <ShoppingCart className="h-6 w-6 text-slate-400" />
                       </div>
                       <h2 className="text-base font-semibold text-slate-700">Aguardando produtos</h2>
@@ -289,9 +295,9 @@ export default function GraphPOSPDV() {
                         key={product.id}
                         type="button"
                         onClick={() => addToCart(product)}
-                        className="rounded-2xl border border-slate-200 bg-white p-3 text-left shadow-sm transition hover:border-sky-300"
+                        className="rounded-lg border border-slate-200 bg-white p-3 text-left shadow-[0_1px_2px_rgba(15,23,42,0.06)] transition hover:border-sky-300 hover:shadow-[0_8px_18px_rgba(15,23,42,0.08)]"
                       >
-                        <div className="mb-3 flex aspect-square items-center justify-center overflow-hidden rounded-xl border border-slate-100 bg-white">
+                        <div className="mb-3 flex aspect-square items-center justify-center overflow-hidden rounded-lg border border-slate-100 bg-white">
                           {product.image_url ? (
                             <img src={product.image_url} alt={product.name} className="h-full w-full object-cover" />
                           ) : (
@@ -312,11 +318,14 @@ export default function GraphPOSPDV() {
           </div>
 
           <div className="lg:sticky lg:top-8">
-            <GraphPOSSidebarResumo title="Carrinho">
+            <GraphPOSSidebarResumo
+              title="Carrinho"
+              className="rounded-xl shadow-[0_8px_24px_rgba(15,23,42,0.08)]"
+            >
               <div className="space-y-5">
                 <div className="relative" ref={customerRef}>
                   {selectedCustomer ? (
-                    <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                    <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 shadow-[0_1px_2px_rgba(15,23,42,0.06)]">
                       <User className="h-4 w-4 text-slate-400" />
                       <div className="flex-1">
                         <p className="text-sm font-semibold text-slate-800">{selectedCustomer.name}</p>
@@ -328,10 +337,18 @@ export default function GraphPOSPDV() {
                       </div>
                       <button
                         type="button"
-                        className="text-xs font-semibold text-slate-400"
+                        className="text-xs font-semibold text-red-500 hover:text-red-600"
                         onClick={() => {
                           setSelectedCustomer(null);
                           setCustomerSearch('');
+                          const checkout = getGraphPOSCheckoutState();
+                          if (checkout) {
+                            setGraphPOSCheckoutState({
+                              ...checkout,
+                              customer: undefined,
+                            });
+                          }
+                          toast({ title: 'Cliente removido do pedido' });
                         }}
                       >
                         Remover
@@ -341,7 +358,7 @@ export default function GraphPOSPDV() {
                     <>
                       <User className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                       <input
-                        className="h-11 w-full rounded-2xl border border-slate-200 bg-white pl-11 text-sm text-slate-700 outline-none"
+                        className="h-11 w-full rounded-lg border border-slate-200 bg-white pl-11 text-sm text-slate-700 shadow-[0_1px_2px_rgba(15,23,42,0.06)] outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
                         placeholder="Buscar cliente (nome, CPF, telefone)..."
                         value={customerSearch}
                         onChange={(e) => {
@@ -386,14 +403,14 @@ export default function GraphPOSPDV() {
                 </div>
 
                 {cart.length === 0 ? (
-                  <div className="flex min-h-[220px] flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-slate-200 bg-slate-50 text-sm text-slate-400">
+                  <div className="flex min-h-[220px] flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-slate-200 bg-slate-50 text-sm text-slate-400">
                     <ShoppingCart className="h-8 w-8 text-slate-300" />
                     Carrinho vazio
                   </div>
                 ) : (
                   <div className="space-y-3">
                     {cart.map((item) => (
-                      <div key={item.product.id} className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+                      <div key={item.product.id} className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white p-3 shadow-[0_1px_2px_rgba(15,23,42,0.06)]">
                         <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-xl bg-slate-100">
                           {item.product.image_url ? (
                             <img src={item.product.image_url} alt={item.product.name} className="h-full w-full object-cover" />
@@ -439,7 +456,7 @@ export default function GraphPOSPDV() {
                   <div className="flex items-center justify-between">
                     <span>Desconto</span>
                     <input
-                      className="h-9 w-20 rounded-xl border border-slate-200 bg-white px-2 text-right text-sm text-slate-600"
+                      className="h-9 w-24 rounded-lg border border-slate-200 bg-white px-2 text-right text-sm text-slate-600 shadow-[0_1px_2px_rgba(15,23,42,0.06)]"
                       value={discount.toFixed(2).replace('.', ',')}
                       onChange={(e) => {
                         const value = Number(e.target.value.replace(',', '.'));
@@ -448,14 +465,19 @@ export default function GraphPOSPDV() {
                     />
                   </div>
                   <div className="h-px w-full bg-slate-200" />
-                  <div className="flex items-center justify-between text-base font-semibold text-slate-900">
+                  <div className="flex items-center justify-between text-lg font-semibold text-slate-900">
                     <span>Total</span>
                     <span>{formatCurrency(total)}</span>
                   </div>
                   <div className="flex items-center gap-3">
                   </div>
                 </div>
-                <BotaoPrimario onClick={handleFinalize}>Finalizar Venda</BotaoPrimario>
+                <BotaoPrimario
+                  onClick={handleFinalize}
+                  className="h-[46px] rounded-[10px] bg-sky-500 shadow-[0_8px_20px_rgba(14,165,233,0.25)] hover:bg-sky-600"
+                >
+                  Finalizar Venda
+                </BotaoPrimario>
               </div>
             </GraphPOSSidebarResumo>
           </div>

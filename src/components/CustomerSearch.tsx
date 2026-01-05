@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { Customer } from '@/types/database';
 import { cn } from '@/lib/utils';
+import { normalizeDigits } from '@/components/ui/masked-input';
 
 interface CustomerSearchProps {
   selectedCustomer: Customer | null;
@@ -35,10 +36,15 @@ export default function CustomerSearch({ selectedCustomer, onSelect }: CustomerS
         return;
       }
       setLoading(true);
+      const digits = normalizeDigits(search);
+      const filters = [`name.ilike.%${search}%`];
+      if (digits) {
+        filters.push(`document.ilike.%${digits}%`, `phone.ilike.%${digits}%`);
+      }
       const { data } = await supabase
         .from('customers')
         .select('*')
-        .or(`name.ilike.%${search}%,document.ilike.%${search}%,phone.ilike.%${search}%`)
+        .or(filters.join(','))
         .limit(10);
       setCustomers(data as Customer[] || []);
       setLoading(false);

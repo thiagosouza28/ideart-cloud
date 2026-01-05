@@ -17,7 +17,7 @@ import { EmptyStateCard } from '@/components/dashboard/EmptyStateCard';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { formatOrderNumber } from '@/lib/utils';
-import { Order, OrderStatus } from '@/types/database';
+import { Order, OrderStatus, Sale } from '@/types/database';
 
 const statusLabels: Record<OrderStatus, string> = {
   orcamento: 'Orçamento',
@@ -44,6 +44,7 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const { profile } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
+  const [sales, setSales] = useState<Sale[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -55,17 +56,30 @@ export default function Dashboard() {
       }
 
       setLoading(true);
-      const { data, error } = await supabase
-        .from('orders')
-        .select('id, order_number, customer_name, status, total, created_at, payment_method')
-        .eq('company_id', profile.company_id)
-        .order('created_at', { ascending: false })
-        .limit(200);
+      const [ordersResult, salesResult] = await Promise.all([
+        supabase
+          .from('orders')
+          .select('id, order_number, customer_name, status, total, created_at, payment_method, payment_status')
+          .eq('company_id', profile.company_id)
+          .order('created_at', { ascending: false })
+          .limit(200),
+        supabase
+          .from('sales')
+          .select('id, total, amount_paid, created_at')
+          .order('created_at', { ascending: false })
+          .limit(200),
+      ]);
 
-      if (!error) {
-        setOrders((data as Order[]) || []);
+      if (!ordersResult.error) {
+        setOrders((ordersResult.data as Order[]) || []);
       } else {
         setOrders([]);
+      }
+
+      if (!salesResult.error) {
+        setSales((salesResult.data as Sale[]) || []);
+      } else {
+        setSales([]);
       }
       setLoading(false);
     };
@@ -97,13 +111,29 @@ export default function Dashboard() {
     orders.forEach((order) => {
       const createdAt = new Date(order.created_at);
       const total = Number(order.total ?? 0);
-      if (createdAt.toDateString() === now.toDateString()) {
-        totalToday += total;
+      const isPaid = order.payment_status === 'pago' && order.status !== 'orcamento';
+      if (isPaid) {
+        if (createdAt.toDateString() === now.toDateString()) {
+          totalToday += total;
+        }
+        if (createdAt >= start7) total7d += total;
+        if (createdAt >= start30) total30d += total;
       }
-      if (createdAt >= start7) total7d += total;
-      if (createdAt >= start30) total30d += total;
       if (order.customer_name) customers.add(order.customer_name);
       statusCounts[order.status] += 1;
+    });
+
+    sales.forEach((sale) => {
+      const createdAt = new Date(sale.created_at);
+      const total = Number(sale.total ?? 0);
+      const paid = Number(sale.amount_paid ?? 0);
+      if (paid >= total && total > 0) {
+        if (createdAt.toDateString() === now.toDateString()) {
+          totalToday += total;
+        }
+        if (createdAt >= start7) total7d += total;
+        if (createdAt >= start30) total30d += total;
+      }
     });
 
     return {
@@ -113,7 +143,7 @@ export default function Dashboard() {
       customers: customers.size,
       statusCounts,
     };
-  }, [orders]);
+  }, [orders, sales]);
 
   const kpiCards = useMemo(() => ([
     {
@@ -212,6 +242,10 @@ export default function Dashboard() {
         </button>
       </div>
 
+      <p className="text-xs text-slate-400">
+        Considera apenas pagamentos aprovados.
+      </p>
+
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {kpiCards.map((card) => (
           <StatCard
@@ -264,16 +298,19 @@ export default function Dashboard() {
                   <button
                     key={order.id}
                     type="button"
-                    className="flex w-full items-center justify-between rounded-2xl border border-slate-100 px-4 py-3 text-left transition hover:border-slate-200 hover:bg-slate-50"
+                    className="group flex w-full items-center justify-between rounded-2xl border border-slate-100 px-4 py-3 text-left transition hover:border-slate-200 hover:bg-slate-50"
                     onClick={() => navigate(`/pedidos/${order.id}`)}
                   >
                     <div>
                       <p className="text-sm font-semibold text-slate-800">#{formatOrderNumber(order.order_number)}</p>
                       <p className="text-xs text-slate-400">{order.customer_name || 'Cliente'}</p>
                     </div>
-                    <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
-                      {statusLabels[order.status]}
-                    </span>
+                    <div className="flex items-center gap-3">
+                      <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
+                        {statusLabels[order.status]}
+                      </span>
+                      <span className="text-slate-300 group-hover:text-slate-400">→</span>
+                    </div>
                   </button>
                 ))}
               </div>

@@ -222,7 +222,7 @@ export const buildPeriodSeries = (
 
 const buildCashTransactions = (sources: ReportSources) => {
   const paymentTransactions: CashTransaction[] = sources.orderPayments
-    .filter((payment) => payment.status !== 'pendente')
+    .filter((payment) => payment.status === 'pago')
     .map((payment) => ({
       id: payment.id,
       date: payment.paid_at || payment.created_at,
@@ -234,16 +234,18 @@ const buildCashTransactions = (sources: ReportSources) => {
       status: payment.status,
     }));
 
-  const saleTransactions: CashTransaction[] = sources.sales.map((sale) => ({
-    id: sale.id,
-    date: sale.created_at,
-    type: 'entrada',
-    origin: 'pdv',
-    description: `Venda PDV ${sale.id}`,
-    amount: Number(sale.total),
-    method: sale.payment_method || null,
-    status: 'pago',
-  }));
+  const saleTransactions: CashTransaction[] = sources.sales
+    .filter((sale) => Number(sale.amount_paid) >= Number(sale.total))
+    .map((sale) => ({
+      id: sale.id,
+      date: sale.created_at,
+      type: 'entrada',
+      origin: 'pdv',
+      description: `Venda PDV ${sale.id}`,
+      amount: Number(sale.total),
+      method: sale.payment_method || null,
+      status: 'pago',
+    }));
 
   const entryTransactions: CashTransaction[] = sources.financialEntries
     .filter((entry) => entry.status === 'pago')
@@ -288,10 +290,13 @@ const calculateOpeningBalance = async (filters: ReportFilters) => {
   const entries = (entriesResult.data as FinancialEntry[] | null) || [];
 
   const paymentTotal = sumBy(
-    paidPayments.filter((payment) => payment.status !== 'pendente'),
+    paidPayments.filter((payment) => payment.status === 'pago'),
     (payment) => Number(payment.amount),
   );
-  const salesTotal = sumBy(paidSales, (sale) => Number(sale.total));
+  const salesTotal = sumBy(
+    paidSales.filter((sale) => Number(sale.amount_paid) >= Number(sale.total)),
+    (sale) => Number(sale.total),
+  );
   const entryTotal = sumBy(
     entries.filter((entry) => entry.status === 'pago'),
     (entry) => (entry.type === 'receita' ? Number(entry.amount) : -Number(entry.amount)),
@@ -319,11 +324,14 @@ const buildCashReport = async (sources: ReportSources, filters: ReportFilters): 
 };
 
 const buildFinancialReport = (sources: ReportSources): FinancialReport => {
-  const paidPayments = sources.orderPayments.filter((payment) => payment.status !== 'pendente');
+  const paidPayments = sources.orderPayments.filter((payment) => payment.status === 'pago');
   const paidEntries = sources.financialEntries.filter((entry) => entry.status === 'pago');
 
   const revenueFromOrders = sumBy(paidPayments, (payment) => Number(payment.amount));
-  const revenueFromSales = sumBy(sources.sales, (sale) => Number(sale.total));
+  const revenueFromSales = sumBy(
+    sources.sales.filter((sale) => Number(sale.amount_paid) >= Number(sale.total)),
+    (sale) => Number(sale.total),
+  );
   const revenueFromManual = sumBy(
     paidEntries.filter((entry) => entry.type === 'receita'),
     (entry) => Number(entry.amount),
@@ -351,10 +359,12 @@ const buildFinancialReport = (sources: ReportSources): FinancialReport => {
     return acc;
   }, {} as Record<string, number>);
 
-  sources.sales.forEach((sale) => {
-    const key = sale.payment_method || 'indefinido';
-    revenueByMethod[key] = (revenueByMethod[key] || 0) + Number(sale.total);
-  });
+  sources.sales
+    .filter((sale) => Number(sale.amount_paid) >= Number(sale.total))
+    .forEach((sale) => {
+      const key = sale.payment_method || 'indefinido';
+      revenueByMethod[key] = (revenueByMethod[key] || 0) + Number(sale.total);
+    });
 
   paidEntries
     .filter((entry) => entry.type === 'receita')
@@ -400,32 +410,41 @@ const buildFinancialReport = (sources: ReportSources): FinancialReport => {
 };
 
 const buildSalesReport = (sources: ReportSources): SalesReport => {
-  const orders = sources.orders;
-  const orderCount = orders.length;
-  const orderRevenue = sumBy(orders, (order) => Number(order.total));
-  const salesRevenue = sumBy(sources.sales, (sale) => Number(sale.total));
+  const paidOrders = sources.orders.filter(
+    (order) => order.status !== 'orcamento' && order.payment_status === 'pago',
+  );
+  const paidSales = sources.sales.filter(
+    (sale) => Number(sale.amount_paid) >= Number(sale.total),
+  );
+  const orderCount = paidOrders.length;
+  const orderRevenue = sumBy(paidOrders, (order) => Number(order.total));
+  const salesRevenue = sumBy(paidSales, (sale) => Number(sale.total));
   const totalSales = orderRevenue + salesRevenue;
-  const totalCount = orderCount + sources.sales.length;
+  const totalCount = orderCount + paidSales.length;
   const ticketAverage = totalCount > 0 ? totalSales / totalCount : 0;
 
-  const statusCounts = orders.reduce((acc, order) => {
+  const statusCounts = sources.orders.reduce((acc, order) => {
     acc[order.status] = (acc[order.status] || 0) + 1;
     return acc;
   }, {} as Record<string, number>);
 
-  const itemRows = sources.orderItems.map((item) => ({
-    id: item.product_id || item.product_name,
-    name: item.product_name,
-    quantity: Number(item.quantity),
-    total: Number(item.total),
-  }));
+  const itemRows = sources.orderItems
+    .filter((item) => paidOrders.some((order) => order.id === item.order_id))
+    .map((item) => ({
+      id: item.product_id || item.product_name,
+      name: item.product_name,
+      quantity: Number(item.quantity),
+      total: Number(item.total),
+    }));
 
-  const saleItemRows = sources.saleItems.map((item) => ({
-    id: item.product_id || item.product_name,
-    name: item.product_name,
-    quantity: Number(item.quantity),
-    total: Number(item.total),
-  }));
+  const saleItemRows = sources.saleItems
+    .filter((item) => paidSales.some((sale) => sale.id === item.sale_id))
+    .map((item) => ({
+      id: item.product_id || item.product_name,
+      name: item.product_name,
+      quantity: Number(item.quantity),
+      total: Number(item.total),
+    }));
 
   const combinedItems = [...itemRows, ...saleItemRows];
   const groupedItems = groupBy(combinedItems, (row) => row.id as string);
@@ -438,7 +457,7 @@ const buildSalesReport = (sources: ReportSources): SalesReport => {
 
   salesByProduct.sort((a, b) => b.total - a.total);
 
-  const customerGroups = groupBy(orders, (order) => order.customer_id || order.customer_name || 'sem-cliente');
+  const customerGroups = groupBy(paidOrders, (order) => order.customer_id || order.customer_name || 'sem-cliente');
   const salesByCustomer = Object.values(customerGroups).map((rows) => ({
     id: rows[0].customer_id || rows[0].customer_name || 'sem-cliente',
     name: rows[0].customer_name || sources.customers.find((c) => c.id === rows[0].customer_id)?.name || 'Cliente',
@@ -449,7 +468,7 @@ const buildSalesReport = (sources: ReportSources): SalesReport => {
   salesByCustomer.sort((a, b) => b.total - a.total);
 
   const salesTransactions: CashTransaction[] = [
-    ...orders.map((order) => ({
+    ...paidOrders.map((order) => ({
       id: order.id,
       date: order.created_at,
       type: 'entrada',
@@ -459,7 +478,7 @@ const buildSalesReport = (sources: ReportSources): SalesReport => {
       method: order.payment_method || null,
       status: order.status,
     })),
-    ...sources.sales.map((sale) => ({
+    ...paidSales.map((sale) => ({
       id: sale.id,
       date: sale.created_at,
       type: 'entrada',
@@ -492,8 +511,12 @@ const buildSalesReport = (sources: ReportSources): SalesReport => {
 };
 
 const buildCustomerReport = (sources: ReportSources): CustomerReport => {
-  const orders = sources.orders;
-  const grouped = groupBy(orders, (order) => order.customer_id || order.customer_name || 'sem-cliente');
+  const paidOrderIds = new Set(
+    sources.orders
+      .filter((order) => order.status !== 'orcamento' && order.payment_status === 'pago')
+      .map((order) => order.id),
+  );
+  const grouped = groupBy(sources.orders, (order) => order.customer_id || order.customer_name || 'sem-cliente');
 
   const customerStats = Object.values(grouped).map((rows) => {
     const lastOrderAt = rows.reduce<string | null>((latest, row) => {
@@ -505,7 +528,10 @@ const buildCustomerReport = (sources: ReportSources): CustomerReport => {
       id: rows[0].customer_id || rows[0].customer_name || 'sem-cliente',
       name: rows[0].customer_name || sources.customers.find((c) => c.id === rows[0].customer_id)?.name || 'Cliente',
       orders: rows.length,
-      total: sumBy(rows, (row) => Number(row.total)),
+      total: sumBy(
+        rows.filter((row) => paidOrderIds.has(row.id)),
+        (row) => Number(row.total),
+      ),
       balance: sumBy(rows, (row) => Math.max(0, Number(row.total) - Number(row.amount_paid))),
       lastOrderAt,
     };
@@ -553,12 +579,19 @@ const buildProductReport = (sources: ReportSources): ProductReport => {
     return acc;
   }, {} as Record<string, number>);
 
-  const items = sources.orderItems.map((item) => ({
-    id: item.product_id || item.product_name,
-    name: item.product_name,
-    quantity: Number(item.quantity),
-    total: Number(item.total),
-  }));
+  const paidOrderIds = new Set(
+    sources.orders
+      .filter((order) => order.status !== 'orcamento' && order.payment_status === 'pago')
+      .map((order) => order.id),
+  );
+  const items = sources.orderItems
+    .filter((item) => paidOrderIds.has(item.order_id))
+    .map((item) => ({
+      id: item.product_id || item.product_name,
+      name: item.product_name,
+      quantity: Number(item.quantity),
+      total: Number(item.total),
+    }));
 
   const grouped = groupBy(items, (row) => row.id as string);
   const productRows = Object.values(grouped).map((rows) => ({
@@ -614,7 +647,7 @@ const loadSources = async (filters: ReportFilters): Promise<ReportSources> => {
 
   let ordersQuery = supabase
     .from('orders')
-    .select('id, order_number, customer_id, customer_name, status, total, subtotal, discount, amount_paid, created_at');
+    .select('id, order_number, customer_id, customer_name, status, total, subtotal, discount, amount_paid, created_at, payment_status');
 
   ordersQuery = applyDateRange(ordersQuery, 'created_at', startDate, endDate);
   if (statusFilter) {

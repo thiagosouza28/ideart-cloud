@@ -4,8 +4,10 @@ import { Input } from "@/components/ui/input";
 
 // ============ CPF/CNPJ Functions ============
 
+export const normalizeDigits = (value: string) => value.replace(/\D/g, "");
+
 export function formatCpfCnpj(value: string): string {
-  const digits = value.replace(/\D/g, "").slice(0, 14);
+  const digits = normalizeDigits(value).slice(0, 14);
   if (digits.length <= 11) {
     return digits
       .replace(/(\d{3})(\d)/, "$1.$2")
@@ -20,7 +22,7 @@ export function formatCpfCnpj(value: string): string {
 }
 
 export function validateCpf(cpf: string): boolean {
-  const digits = cpf.replace(/\D/g, "");
+  const digits = normalizeDigits(cpf);
   if (digits.length !== 11 || /^(\d)\1+$/.test(digits)) return false;
 
   let sum = 0;
@@ -37,7 +39,7 @@ export function validateCpf(cpf: string): boolean {
 }
 
 export function validateCnpj(cnpj: string): boolean {
-  const digits = cnpj.replace(/\D/g, "");
+  const digits = normalizeDigits(cnpj);
   if (digits.length !== 14 || /^(\d)\1+$/.test(digits)) return false;
 
   const weights1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
@@ -55,7 +57,7 @@ export function validateCnpj(cnpj: string): boolean {
 }
 
 export function validateCpfCnpj(doc: string): { valid: boolean; type: "cpf" | "cnpj" | null } {
-  const digits = doc.replace(/\D/g, "");
+  const digits = normalizeDigits(doc);
   if (digits.length === 11) return { valid: validateCpf(doc), type: "cpf" };
   if (digits.length === 14) return { valid: validateCnpj(doc), type: "cnpj" };
   return { valid: false, type: null };
@@ -64,7 +66,7 @@ export function validateCpfCnpj(doc: string): { valid: boolean; type: "cpf" | "c
 // ============ Phone Functions ============
 
 export function formatPhone(value: string): string {
-  const digits = value.replace(/\D/g, "").slice(0, 11);
+  const digits = normalizeDigits(value).slice(0, 11);
   if (digits.length <= 10) {
     return digits
       .replace(/(\d{2})(\d)/, "($1) $2")
@@ -73,6 +75,11 @@ export function formatPhone(value: string): string {
   return digits
     .replace(/(\d{2})(\d)/, "($1) $2")
     .replace(/(\d{5})(\d)/, "$1-$2");
+}
+
+export function validatePhone(value: string): boolean {
+  const digits = normalizeDigits(value);
+  return digits.length === 11 && digits[2] === "9";
 }
 
 // ============ CEP Functions ============

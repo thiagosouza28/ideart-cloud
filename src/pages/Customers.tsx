@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { supabase } from '@/integrations/supabase/client';
 import { Customer } from '@/types/database';
 import { toast } from 'sonner';
+import { normalizeDigits } from '@/components/ui/masked-input';
 
 export default function Customers() {
   const navigate = useNavigate();
@@ -25,10 +26,13 @@ export default function Customers() {
     loadCustomers();
   }, []);
 
-  const filtered = customers.filter(c => 
-    c.name.toLowerCase().includes(search.toLowerCase()) ||
-    c.document?.includes(search) ||
-    c.phone?.includes(search)
+  const searchText = search.trim().toLowerCase();
+  const searchDigits = normalizeDigits(search);
+  const filtered = customers.filter(c =>
+    c.name.toLowerCase().includes(searchText) ||
+    (searchDigits
+      ? (c.document?.includes(searchDigits) || c.phone?.includes(searchDigits))
+      : false)
   );
 
   const handleDelete = async (id: string, name: string) => {

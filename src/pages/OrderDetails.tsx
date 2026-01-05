@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+﻿import { useEffect, useState, useRef } from 'react';
 import { formatOrderNumber } from '@/lib/utils';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -11,7 +11,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
-import { Order, OrderFinalPhoto, OrderItem, OrderStatusHistory, OrderStatus, OrderPayment, PaymentMethod, PaymentStatus } from '@/types/database';
+import { Order, OrderFinalPhoto, OrderItem, OrderStatusHistory, OrderStatus, OrderPayment, PaymentMethod, PaymentStatus, Product } from '@/types/database';
 import { ArrowLeft, Loader2, CheckCircle, Clock, Package, Truck, XCircle, User, FileText, Printer, MessageCircle, Link, Copy, CreditCard, PauseCircle, Trash2, Image as ImageIcon, Upload } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -20,15 +20,19 @@ import { Label } from '@/components/ui/label';
 import OrderReceipt from '@/components/OrderReceipt';
 import {
   calculatePaymentSummary,
+  cancelOrder,
+  deleteOrder,
   cancelOrderPayment,
   createOrderPayment,
   deleteOrderPayment,
   getOrCreatePublicLink,
   updateOrderStatus,
+  updateOrderItems,
   uploadOrderFinalPhoto,
   type PaymentSummary,
 } from '@/services/orders';
 import { ensurePublicStorageUrl } from '@/lib/storage';
+import { resolveSuggestedPrice } from '@/lib/pricing';
 
 const statusConfig: Record<OrderStatus, { label: string; icon: React.ComponentType<any>; color: string; next: OrderStatus[] }> = {
   orcamento: {
@@ -75,6 +79,16 @@ const statusConfig: Record<OrderStatus, { label: string; icon: React.ComponentTy
   },
 };
 
+const statusLabels: Record<OrderStatus, string> = {
+  orcamento: 'Orcamento',
+  pendente: 'Pendente',
+  em_producao: 'Em producao',
+  pronto: 'Pronto',
+  aguardando_retirada: 'Aguardando retirada',
+  entregue: 'Entregue',
+  cancelado: 'Cancelado',
+};
+
 export default function OrderDetails() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -97,6 +111,14 @@ export default function OrderDetails() {
   const [newStatus, setNewStatus] = useState<OrderStatus | ''>('');
   const [statusNotes, setStatusNotes] = useState('');
   const [saving, setSaving] = useState(false);
+  const [entryDialogOpen, setEntryDialogOpen] = useState(false);
+  const [entryAmount, setEntryAmount] = useState(0);
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelConfirmPaid, setCancelConfirmPaid] = useState(false);
+  const [cancelLoading, setCancelLoading] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState(0);
@@ -113,6 +135,12 @@ export default function OrderDetails() {
   const [publicLinkToken, setPublicLinkToken] = useState<string | null>(null);
   const [linkLoading, setLinkLoading] = useState(false);
   const [copiedLink, setCopiedLink] = useState<'public' | 'message' | null>(null);
+  const [isEditingItems, setIsEditingItems] = useState(false);
+  const [editableItems, setEditableItems] = useState<OrderItem[]>([]);
+  const [savingItems, setSavingItems] = useState(false);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [newItemProductId, setNewItemProductId] = useState('');
+  const [newItemQuantity, setNewItemQuantity] = useState(1);
 
   const formatCurrency = (v: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
@@ -145,6 +173,150 @@ export default function OrderDetails() {
     const ok = document.execCommand('copy');
     document.body.removeChild(textarea);
     return ok;
+  };
+
+  const isBudget = order?.status === 'orcamento';
+
+  const calculateItemTotal = (item: Pick<OrderItem, 'quantity' | 'unit_price' | 'discount'>) =>
+    Math.max(0, Number(item.quantity) * Number(item.unit_price) - Number(item.discount || 0));
+
+  const calculateSubtotal = (itemsList: OrderItem[]) =>
+    itemsList.reduce((sum, item) => sum + Number(item.total || 0), 0);
+
+  const calculateOrderTotal = (subtotalValue: number) =>
+    Math.max(0, subtotalValue - Number(order?.discount || 0));
+
+  const ensureProductsLoaded = async () => {
+    if (products.length > 0 || !order?.company_id) return;
+    const { data, error } = await supabase
+      .from('products')
+      .select('*')
+      .eq('is_active', true)
+      .eq('company_id', order.company_id)
+      .order('name');
+    if (error) {
+      toast({ title: 'Erro ao carregar produtos', variant: 'destructive' });
+      return;
+    }
+    setProducts(data as Product[] || []);
+  };
+
+  const startEditingItems = async () => {
+    if (!isBudget) return;
+    await ensureProductsLoaded();
+    const mapped = (items || []).map((item) => ({
+      ...item,
+      total: calculateItemTotal(item),
+    }));
+    setEditableItems(mapped);
+    setNewItemProductId('');
+    setNewItemQuantity(1);
+    setIsEditingItems(true);
+  };
+
+  const cancelEditingItems = () => {
+    setEditableItems([]);
+    setIsEditingItems(false);
+    setNewItemProductId('');
+    setNewItemQuantity(1);
+  };
+
+  const handleChangeItemProduct = (index: number, productId: string) => {
+    const product = products.find((p) => p.id === productId);
+    if (!product) return;
+    setEditableItems((prev) =>
+      prev.map((item, idx) => {
+        if (idx !== index) return item;
+        const quantity = Math.max(1, Number(item.quantity));
+        const unitPrice = resolveSuggestedPrice(product, quantity, [], 0);
+        const next = {
+          ...item,
+          product_id: product.id,
+          product_name: product.name,
+          unit_price: unitPrice,
+        };
+        return { ...next, total: calculateItemTotal(next) };
+      }),
+    );
+  };
+
+  const handleChangeItemQuantity = (index: number, value: number) => {
+    const quantity = Math.max(1, Number(value) || 1);
+    setEditableItems((prev) =>
+      prev.map((item, idx) => {
+        if (idx !== index) return item;
+        const next = { ...item, quantity };
+        return { ...next, total: calculateItemTotal(next) };
+      }),
+    );
+  };
+
+  const handleRemoveItem = (index: number) => {
+    setEditableItems((prev) => prev.filter((_, idx) => idx !== index));
+  };
+
+  const handleAddItem = () => {
+    const product = products.find((p) => p.id === newItemProductId);
+    if (!product) {
+      toast({ title: 'Selecione um produto', variant: 'destructive' });
+      return;
+    }
+    const quantity = Math.max(1, Number(newItemQuantity) || 1);
+    const unitPrice = resolveSuggestedPrice(product, quantity, [], 0);
+    const newItem: OrderItem = {
+      id: crypto.randomUUID(),
+      order_id: order?.id || '',
+      product_id: product.id,
+      product_name: product.name,
+      quantity,
+      unit_price: unitPrice,
+      discount: 0,
+      total: Math.max(0, quantity * unitPrice),
+      attributes: null,
+      notes: null,
+      created_at: new Date().toISOString(),
+    };
+    setEditableItems((prev) => [...prev, newItem]);
+    setNewItemProductId('');
+    setNewItemQuantity(1);
+  };
+
+  const handleSaveItems = async () => {
+    if (!order) return;
+    if (editableItems.length === 0) {
+      toast({ title: 'Adicione pelo menos um item', variant: 'destructive' });
+      return;
+    }
+    setSavingItems(true);
+    try {
+      const payload = editableItems.map((item) => ({
+        id: item.id,
+        product_id: item.product_id,
+        product_name: item.product_name,
+        quantity: Number(item.quantity),
+        unit_price: Number(item.unit_price),
+        discount: Number(item.discount || 0),
+        notes: item.notes ?? null,
+        attributes: item.attributes ?? null,
+      }));
+      const updatedOrder = await updateOrderItems({ orderId: order.id, items: payload });
+      const refreshedItems = editableItems.map((item) => ({
+        ...item,
+        total: calculateItemTotal(item),
+      }));
+      setOrder(updatedOrder);
+      setItems(refreshedItems);
+      setIsEditingItems(false);
+      toast({ title: 'Orçamento atualizado com sucesso!' });
+    } catch (error: any) {
+      toast({
+        title: 'Erro ao salvar alterações',
+        description: error?.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setSavingItems(false);
+    }
   };
 
   const normalizeWhatsappPhone = (value?: string | null) => {
@@ -200,8 +372,24 @@ export default function OrderDetails() {
     return text;
   };
 
+  const buildWhatsAppMessage = (link: string) => {
+    if (!order) return '';
+    const template =
+      order.company?.whatsapp_message_template ||
+      'Olá {cliente_nome}, seu pedido #{pedido_numero} está pronto! Acompanhe pelo link: {pedido_link}';
+    const replacements: Record<string, string> = {
+      '{cliente_nome}': order.customer?.name || order.customer_name || 'cliente',
+      '{pedido_numero}': formatOrderNumber(order.order_number),
+      '{pedido_status}': statusLabels[order.status] ?? order.status,
+      '{pedido_total}': formatCurrency(Number(order.total || 0)),
+      '{pedido_link}': link,
+      '{empresa_nome}': order.company?.name || 'Nossa empresa',
+    };
+    return Object.entries(replacements).reduce((acc, [key, value]) => acc.replaceAll(key, value), template);
+  };
+
   const handleWhatsApp = () => {
-    sendWhatsAppMessage(generateReceiptText());
+    handleSendWhatsAppUpdate();
   };
 
   const printReceipt = (content: HTMLDivElement | null, title: string) => {
@@ -250,9 +438,20 @@ export default function OrderDetails() {
     if (id) fetchOrder();
   }, [id]);
 
+  useEffect(() => {
+    if (!isBudget && isEditingItems) {
+      setIsEditingItems(false);
+      setEditableItems([]);
+    }
+  }, [isBudget, isEditingItems]);
+
   const fetchOrder = async () => {
     const [orderResult, itemsResult, historyResult, paymentsResult, linkResult, finalPhotosResult] = await Promise.all([
-      supabase.from('orders').select('*, customer:customers(*), company:companies(*)').eq('id', id).single(),
+      supabase.from('orders')
+        .select('*, customer:customers(*), company:companies(*)')
+        .eq('id', id)
+        .is('deleted_at', null)
+        .single(),
       supabase.from('order_items').select('*').eq('order_id', id).order('created_at'),
       supabase.from('order_status_history').select('*').eq('order_id', id).order('created_at', { ascending: false }),
       supabase.from('order_payments').select('*').eq('order_id', id).order('created_at', { ascending: false }),
@@ -352,8 +551,7 @@ export default function OrderDetails() {
     const token = await ensurePublicLink();
     if (!token) return;
     const url = getPublicLinkUrl(token);
-    const customerName = order.customer?.name || order.customer_name || 'cliente';
-    const message = `Olá ${customerName}, seu pedido #${formatOrderNumber(order.order_number)} está pronto para acompanhamento. Acesse o link: ${url}`;
+    const message = buildWhatsAppMessage(url);
     const copied = await copyToClipboard(message);
     if (!copied) {
       toast({ title: 'Falha ao copiar', description: 'Tente novamente.', variant: 'destructive' });
@@ -369,10 +567,45 @@ export default function OrderDetails() {
     const token = await ensurePublicLink();
     if (!token) return;
     const url = getPublicLinkUrl(token);
-    const customerName = order.customer?.name || order.customer_name || 'cliente';
-    const message = `Olá ${customerName}, seu pedido #${formatOrderNumber(order.order_number)} está pronto para acompanhamento. Acesse o link: ${url}`;
-    sendWhatsAppMessage(message);
+    sendWhatsAppMessage(buildWhatsAppMessage(url));
   };
+
+  const handleCancelOrder = async () => {
+    if (!order) return;
+    setCancelLoading(true);
+    try {
+      await cancelOrder({
+        orderId: order.id,
+        motivo: cancelReason.trim() || undefined,
+        confirmPaid: cancelConfirmPaid,
+      });
+      toast({ title: 'Pedido cancelado com sucesso!' });
+      setCancelDialogOpen(false);
+      setCancelReason('');
+      setCancelConfirmPaid(false);
+      navigate('/pedidos');
+    } catch (error: any) {
+      toast({ title: 'Erro ao cancelar', description: error?.message, variant: 'destructive' });
+    } finally {
+      setCancelLoading(false);
+    }
+  };
+
+  const handleDeleteOrder = async () => {
+    if (!order) return;
+    setDeleteLoading(true);
+    try {
+      await deleteOrder(order.id);
+      toast({ title: 'Orçamento excluído com sucesso!' });
+      setDeleteDialogOpen(false);
+      navigate('/pedidos');
+    } catch (error: any) {
+      toast({ title: 'Erro ao excluir', description: error?.message, variant: 'destructive' });
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
 
   const handleOpenPaymentReceipt = (payment: OrderPayment) => {
     if (!order) return;
@@ -441,14 +674,13 @@ export default function OrderDetails() {
     }
   };
 
-  const handleStatusChange = async () => {
+  const applyStatusChange = async (entrada?: number | null) => {
     if (!newStatus || !order) return;
 
-    // Validation: Require photo for 'pronto' status
     if (newStatus === 'pronto' && finalPhotos.length === 0) {
       toast({
-        title: 'Foto obrigatória',
-        description: 'É necessário anexar pelo menos uma foto do produto pronto antes de alterar o status para "Pronto".',
+        title: 'Foto obrigat¢ria',
+        description: ' necess rio anexar pelo menos uma foto do produto pronto antes de alterar o status para "Pronto".',
         variant: 'destructive',
       });
       setStatusDialogOpen(false);
@@ -463,27 +695,37 @@ export default function OrderDetails() {
         status: newStatus,
         notes: statusNotes || undefined,
         userId: user?.id,
+        entrada: entrada ?? null,
       });
 
       toast({ title: 'Status atualizado com sucesso!' });
       setStatusDialogOpen(false);
+      setEntryDialogOpen(false);
 
-      // Auto-prompt to send WhatsApp message
       if (order.customer?.phone) {
         if (window.confirm(`Status alterado para "${newStatus}". Deseja enviar mensagem no WhatsApp para o cliente?`)) {
-          // Small delay to ensure state updates
           setTimeout(() => handleSendWhatsAppUpdate(), 500);
         }
       }
 
       setNewStatus('');
       setStatusNotes('');
+      setEntryAmount(0);
       fetchOrder();
     } catch (error: any) {
       toast({ title: 'Erro ao atualizar status', description: error?.message, variant: 'destructive' });
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleStatusChange = async () => {
+    if (!newStatus || !order) return;
+    if (order.status === 'orcamento' && newStatus === 'pendente') {
+      setEntryDialogOpen(true);
+      return;
+    }
+    await applyStatusChange();
   };
 
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
@@ -571,8 +813,7 @@ export default function OrderDetails() {
   const StatusIcon = config.icon;
   const publicLink = publicLinkToken ? getPublicLinkUrl(publicLinkToken) : '';
   const messageLink = publicLink || '[link]';
-  const customerName = order.customer?.name || order.customer_name || 'cliente';
-  const clientMessage = `Olá ${customerName}, seu pedido #${formatOrderNumber(order.order_number)} está pronto para acompanhamento. Acesse o link: ${messageLink}`;
+  const clientMessage = buildWhatsAppMessage(messageLink);
   const canSendWhatsApp = Boolean(order?.customer?.phone);
   const publicLinkLabel = linkLoading
     ? 'Gerando...'
@@ -590,6 +831,8 @@ export default function OrderDetails() {
     ...photo,
     url: ensurePublicStorageUrl('order-final-photos', photo.storage_path),
   }));
+  const editingSubtotal = calculateSubtotal(isEditingItems ? editableItems : items);
+  const editingTotal = calculateOrderTotal(editingSubtotal);
 
   return (
     <div className="page-container w-full max-w-none">
@@ -611,6 +854,22 @@ export default function OrderDetails() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {order.status !== 'cancelado' && (
+            <Button
+              variant="outline"
+              onClick={() => setCancelDialogOpen(true)}
+            >
+              Cancelar
+            </Button>
+          )}
+          {order.status === 'orcamento' && (
+            <Button
+              variant="destructive"
+              onClick={() => setDeleteDialogOpen(true)}
+            >
+              Excluir
+            </Button>
+          )}
           {config.next.length > 0 && hasPermission(['admin', 'atendente', 'caixa', 'producao']) && (
             <Button onClick={() => setStatusDialogOpen(true)}>
               Alterar Status
@@ -725,8 +984,24 @@ export default function OrderDetails() {
 
           {/* Items */}
           <Card>
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>Itens do Pedido</CardTitle>
+              {isBudget && !isEditingItems && (
+                <Button variant="outline" size="sm" onClick={startEditingItems}>
+                  Editar or�amento
+                </Button>
+              )}
+              {isBudget && isEditingItems && (
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={cancelEditingItems} disabled={savingItems}>
+                    Cancelar
+                  </Button>
+                  <Button size="sm" onClick={handleSaveItems} disabled={savingItems}>
+                    {savingItems && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Salvar altera��es
+                  </Button>
+                </div>
+              )}
             </CardHeader>
             <CardContent>
               <Table>
@@ -734,42 +1009,118 @@ export default function OrderDetails() {
                   <TableRow>
                     <TableHead>Produto</TableHead>
                     <TableHead className="text-center">Qtd</TableHead>
-                    <TableHead className="text-right">Preço Unit.</TableHead>
+                    <TableHead className="text-right">Pre��o Unit.</TableHead>
                     <TableHead className="text-right">Total</TableHead>
+                    {isEditingItems && <TableHead className="text-right">A��oes</TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {items.map((item) => (
+                  {(isEditingItems ? editableItems : items).map((item, index) => (
                     <TableRow key={item.id}>
                       <TableCell>
-                        <div>
-                          <p className="font-medium">{item.product_name}</p>
-                          {item.attributes && Object.keys(item.attributes).length > 0 && (
-                            <div className="flex gap-1 mt-1">
-                              {Object.entries(item.attributes).map(([key, value]) => (
-                                <Badge key={key} variant="outline" className="text-xs">
-                                  {value}
-                                </Badge>
+                        {isEditingItems ? (
+                          <Select
+                            value={item.product_id ?? ""}
+                            onValueChange={(value) => handleChangeItemProduct(index, value)}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecione o produto" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {products.map((product) => (
+                                <SelectItem key={product.id} value={product.id}>
+                                  {product.name}
+                                </SelectItem>
                               ))}
-                            </div>
-                          )}
-                          {item.notes && (
-                            <p className="text-xs text-muted-foreground mt-1">Obs: {item.notes}</p>
-                          )}
-                        </div>
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <div>
+                            <p className="font-medium">{item.product_name}</p>
+                            {item.attributes && Object.keys(item.attributes).length > 0 && (
+                              <div className="flex gap-1 mt-1">
+                                {Object.entries(item.attributes).map(([key, value]) => (
+                                  <Badge key={key} variant="outline" className="text-xs">
+                                    {value}
+                                  </Badge>
+                                ))}
+                              </div>
+                            )}
+                            {item.notes && (
+                              <p className="text-xs text-muted-foreground mt-1">Obs: {item.notes}</p>
+                            )}
+                          </div>
+                        )}
                       </TableCell>
-                      <TableCell className="text-center">{item.quantity}</TableCell>
+                      <TableCell className="text-center">
+                        {isEditingItems ? (
+                          <Input
+                            type="number"
+                            min={1}
+                            value={item.quantity}
+                            onChange={(e) => handleChangeItemQuantity(index, Number(e.target.value))}
+                            className="w-20 text-center"
+                          />
+                        ) : (
+                          item.quantity
+                        )}
+                      </TableCell>
                       <TableCell className="text-right">{formatCurrency(Number(item.unit_price))}</TableCell>
                       <TableCell className="text-right font-medium">{formatCurrency(Number(item.total))}</TableCell>
+                      {isEditingItems && (
+                        <TableCell className="text-right">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleRemoveItem(index)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      )}
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
 
+              {isEditingItems && (
+                <div className="mt-4 rounded-lg border p-4">
+                  <div className="grid gap-3 md:grid-cols-[1fr_120px_auto] items-end">
+                    <div className="space-y-2">
+                      <Label>Produto</Label>
+                      <Select value={newItemProductId} onValueChange={setNewItemProductId}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione um produto" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {products.map((product) => (
+                            <SelectItem key={product.id} value={product.id}>
+                              {product.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Quantidade</Label>
+                      <Input
+                        type="number"
+                        min={1}
+                        value={newItemQuantity}
+                        onChange={(e) => setNewItemQuantity(Number(e.target.value))}
+                      />
+                    </div>
+                    <Button onClick={handleAddItem} className="mt-6 md:mt-0">
+                      Adicionar item
+                    </Button>
+                  </div>
+                </div>
+              )}
+
               <div className="mt-4 pt-4 border-t space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Subtotal</span>
-                  <span>{formatCurrency(Number(order.subtotal))}</span>
+                  <span>{formatCurrency(editingSubtotal)}</span>
                 </div>
                 {Number(order.discount) > 0 && (
                   <div className="flex justify-between text-sm">
@@ -780,12 +1131,11 @@ export default function OrderDetails() {
                 <Separator />
                 <div className="flex justify-between font-bold text-lg">
                   <span>Total</span>
-                  <span className="text-primary">{formatCurrency(Number(order.total))}</span>
+                  <span className="text-primary">{formatCurrency(editingTotal)}</span>
                 </div>
               </div>
             </CardContent>
           </Card>
-
           {finalPhotosWithUrls.some((photo) => photo.url) && (
             <Card>
               <CardHeader>
@@ -1155,6 +1505,100 @@ export default function OrderDetails() {
       </Dialog>
 
       <Dialog
+        open={entryDialogOpen}
+        onOpenChange={(open) => {
+          setEntryDialogOpen(open);
+          if (!open) setEntryAmount(0);
+        }}
+      >
+        <DialogContent aria-describedby={undefined} className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Registrar entrada</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Deseja registrar um valor de entrada para este pedido?
+            </p>
+            <div className="space-y-2">
+              <Label>Valor de entrada (opcional)</Label>
+              <CurrencyInput value={entryAmount} onChange={setEntryAmount} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => applyStatusChange()} disabled={saving}>
+              Continuar sem entrada
+            </Button>
+            <Button onClick={() => applyStatusChange(entryAmount)} disabled={saving || entryAmount <= 0}>
+              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Registrar entrada e continuar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
+        <DialogContent aria-describedby={undefined} className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Cancelar pedido</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Motivo (opcional)</Label>
+              <Textarea
+                value={cancelReason}
+                onChange={(e) => setCancelReason(e.target.value)}
+                placeholder="Descreva o motivo do cancelamento..."
+                rows={3}
+              />
+            </div>
+            {order.payment_status === 'pago' && (
+              <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={cancelConfirmPaid}
+                  onChange={(e) => setCancelConfirmPaid(e.target.checked)}
+                />
+                Confirmo o cancelamento de um pedido pago.
+              </label>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCancelDialogOpen(false)} disabled={cancelLoading}>
+              Voltar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleCancelOrder}
+              disabled={cancelLoading || (order.payment_status === 'pago' && !cancelConfirmPaid)}
+            >
+              {cancelLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Cancelar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent aria-describedby={undefined} className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Excluir orçamento</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Tem certeza que deseja excluir este orçamento? Essa ação não pode ser desfeita.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)} disabled={deleteLoading}>
+              Voltar
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteOrder} disabled={deleteLoading}>
+              {deleteLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Excluir
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
         open={photoViewerOpen}
         onOpenChange={(open) => {
           setPhotoViewerOpen(open);
@@ -1182,9 +1626,6 @@ export default function OrderDetails() {
     </div>
   );
 }
-
-
-
 
 
 

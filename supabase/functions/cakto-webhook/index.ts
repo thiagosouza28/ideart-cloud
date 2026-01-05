@@ -18,6 +18,52 @@ const getSupabaseClient = () =>
 const normalizeEvent = (value: string) =>
   value.toLowerCase().replace(/[\s_]+/g, '.');
 
+const normalizeDigits = (value: string) => value.replace(/\D/g, '');
+
+const validateCpf = (value: string) => {
+  const digits = normalizeDigits(value);
+  if (digits.length !== 11 || /^(\d)\1+$/.test(digits)) return false;
+
+  let sum = 0;
+  for (let i = 0; i < 9; i += 1) sum += Number(digits[i]) * (10 - i);
+  let check = (sum * 10) % 11;
+  if (check === 10 || check === 11) check = 0;
+  if (check !== Number(digits[9])) return false;
+
+  sum = 0;
+  for (let i = 0; i < 10; i += 1) sum += Number(digits[i]) * (11 - i);
+  check = (sum * 10) % 11;
+  if (check === 10 || check === 11) check = 0;
+  return check === Number(digits[10]);
+};
+
+const validateCnpj = (value: string) => {
+  const digits = normalizeDigits(value);
+  if (digits.length !== 14 || /^(\d)\1+$/.test(digits)) return false;
+  const weights1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+  const weights2 = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+  let sum = 0;
+  for (let i = 0; i < 12; i += 1) sum += Number(digits[i]) * weights1[i];
+  let check = sum % 11 < 2 ? 0 : 11 - (sum % 11);
+  if (check !== Number(digits[12])) return false;
+  sum = 0;
+  for (let i = 0; i < 13; i += 1) sum += Number(digits[i]) * weights2[i];
+  check = sum % 11 < 2 ? 0 : 11 - (sum % 11);
+  return check === Number(digits[13]);
+};
+
+const validateCpfCnpj = (value: string) => {
+  const digits = normalizeDigits(value);
+  if (digits.length === 11) return validateCpf(digits);
+  if (digits.length === 14) return validateCnpj(digits);
+  return false;
+};
+
+const validatePhone = (value: string) => {
+  const digits = normalizeDigits(value);
+  return digits.length === 11 && digits[2] === '9';
+};
+
 const isAllowedEvent = (eventName: string) => {
   if (!eventName) return false;
   const ev = normalizeEvent(eventName);
@@ -345,19 +391,32 @@ serve(async (req) => {
       metadata?.full_name ??
       metadata?.name ??
       null;
-    const customerPhone =
+    const rawCustomerPhone =
       data?.customer?.phone ??
       data?.customer?.phone_number ??
       data?.customer_phone ??
       data?.phone ??
       metadata?.phone ??
       null;
-    const customerDocument =
+    const normalizedCustomerPhone = rawCustomerPhone
+      ? normalizeDigits(String(rawCustomerPhone))
+      : null;
+    const customerPhone = normalizedCustomerPhone && validatePhone(normalizedCustomerPhone)
+      ? normalizedCustomerPhone
+      : null;
+
+    const rawCustomerDocument =
       data?.customer?.document ??
       data?.customer?.document_number ??
       data?.document ??
       metadata?.document ??
       null;
+    const normalizedCustomerDocument = rawCustomerDocument
+      ? normalizeDigits(String(rawCustomerDocument))
+      : null;
+    const customerDocument = normalizedCustomerDocument && validateCpfCnpj(normalizedCustomerDocument)
+      ? normalizedCustomerDocument
+      : null;
     const companyName =
       metadata?.company_name ??
       data?.company_name ??
@@ -385,6 +444,11 @@ serve(async (req) => {
       metadata?.offer_id ??
       metadata?.offerId ??
       null;
+    console.log('[cakto-webhook] offer/plan lookup start', {
+      offerId,
+      checkoutPlanId: checkout?.plan_id ?? null,
+      email: customerEmail ?? checkout?.email ?? null,
+    });
     if (!planId && offerId) {
       const offerUrl = /^https?:\/\//i.test(offerId)
         ? offerId
@@ -437,6 +501,10 @@ serve(async (req) => {
         planId = createdPlan?.id ?? null;
       }
     }
+    console.log('[cakto-webhook] offer/plan lookup resolved', {
+      offerId,
+      planId,
+    });
 
     if (checkout?.status === 'active' || checkout?.status === 'completed') {
       await supabase.from('webhook_events')
@@ -470,6 +538,11 @@ serve(async (req) => {
       checkout = fallbackCheckout;
       planId = checkout?.plan_id ?? planId;
     }
+    console.log('[cakto-webhook] checkout resolve', {
+      checkoutId: checkout?.id ?? null,
+      checkoutPlanId: checkout?.plan_id ?? null,
+      finalPlanId: planId,
+    });
     if (!email || !caktoSubId || !normalizedStatus) {
       await supabase.from('webhook_events')
         .update({ processed_at: new Date().toISOString() })

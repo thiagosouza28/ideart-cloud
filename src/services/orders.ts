@@ -7,6 +7,7 @@ import type {
   PaymentMethod,
   PaymentStatus,
   PublicOrderPayload,
+  OrderItem,
 } from '@/types/database';
 
 const statusLabels: Record<OrderStatus, string> = {
@@ -387,6 +388,45 @@ type UpdateStatusInput = {
   status: OrderStatus;
   notes?: string;
   userId?: string | null;
+  entrada?: number | null;
+};
+
+type OrderItemUpdate = Pick<
+  OrderItem,
+  'id' | 'product_id' | 'product_name' | 'quantity' | 'unit_price' | 'discount' | 'notes' | 'attributes'
+>;
+
+export const updateOrderItems = async (params: {
+  orderId: string;
+  items: OrderItemUpdate[];
+}) => {
+  const payload = { items: params.items };
+
+  if (EDGE_FUNCTIONS_ENABLED) {
+    try {
+      const response = await invokeEdgeFunction<{ order: Order }>(
+        'orders',
+        payload,
+        { method: 'PATCH', path: `/${params.orderId}/items` },
+      );
+      return response.order;
+    } catch (error) {
+      if (!shouldFallbackToDirectUpdate(error)) {
+        throw error;
+      }
+    }
+  }
+
+  const { data, error } = await supabase.rpc('update_order_items' as any, {
+    p_order_id: params.orderId,
+    p_items: params.items,
+  });
+
+  if (error || !data) {
+    throw error || new Error('Falha ao atualizar itens do pedido');
+  }
+
+  return data as Order;
 };
 
 export const updateOrderStatus = async ({
@@ -394,12 +434,13 @@ export const updateOrderStatus = async ({
   status,
   notes,
   userId,
+  entrada,
 }: UpdateStatusInput) => {
   if (EDGE_FUNCTIONS_ENABLED) {
     try {
       const response = await invokeEdgeFunction<{ order: Order }>(
         'orders',
-        { status, notes },
+        { status, notes, entrada },
         { method: 'PATCH', path: `/${orderId}/status` }
       );
 
@@ -478,6 +519,63 @@ export const updateOrderStatus = async ({
   }
 
   return updatedOrder || null;
+};
+
+export const cancelOrder = async ({
+  orderId,
+  motivo,
+  confirmPaid,
+}: {
+  orderId: string;
+  motivo?: string;
+  confirmPaid?: boolean;
+}) => {
+  const payload = { motivo: motivo || null, confirm_paid: Boolean(confirmPaid) };
+  if (EDGE_FUNCTIONS_ENABLED) {
+    const response = await invokeEdgeFunction<{ order: Order }>(
+      'orders',
+      payload,
+      { method: 'PATCH', path: `/${orderId}/cancel` }
+    );
+    return response.order;
+  }
+
+  const { data, error } = await supabase
+    .from('orders')
+    .update({
+      status: 'cancelado',
+      cancel_reason: motivo || null,
+      cancelled_at: new Date().toISOString(),
+    })
+    .eq('id', orderId)
+    .select('*')
+    .single();
+
+  if (error || !data) {
+    throw error || new Error('Falha ao cancelar pedido');
+  }
+
+  return data as Order;
+};
+
+export const deleteOrder = async (orderId: string) => {
+  if (EDGE_FUNCTIONS_ENABLED) {
+    await invokeEdgeFunction<{ ok: boolean }>(
+      'orders',
+      null,
+      { method: 'DELETE', path: `/${orderId}` }
+    );
+    return;
+  }
+
+  const { error } = await supabase
+    .from('orders')
+    .update({ deleted_at: new Date().toISOString() })
+    .eq('id', orderId);
+
+  if (error) {
+    throw error;
+  }
 };
 
 export const fetchPublicOrder = async (token: string) => {

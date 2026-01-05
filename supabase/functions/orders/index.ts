@@ -25,7 +25,7 @@ const getCorsHeaders = (origin: string | null) => {
   return {
     "Access-Control-Allow-Origin": origin || "*",
     "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-authorization",
-    "Access-Control-Allow-Methods": "PATCH, OPTIONS",
+    "Access-Control-Allow-Methods": "PATCH, DELETE, OPTIONS",
     "Access-Control-Max-Age": "86400",
   };
 };
@@ -97,6 +97,19 @@ type StatusUpdatePayload = {
   notes?: string | null;
 };
 
+type ItemsUpdatePayload = {
+  items?: Array<{
+    id?: string;
+    product_id?: string | null;
+    product_name?: string;
+    quantity?: number;
+    unit_price?: number;
+    discount?: number;
+    notes?: string | null;
+    attributes?: Record<string, string> | null;
+  }>;
+};
+
 Deno.serve(async (req) => {
   const origin = req.headers.get("origin");
   const corsHeaders = getCorsHeaders(origin);
@@ -112,7 +125,7 @@ Deno.serve(async (req) => {
     headers: safeHeaders(req),
   });
 
-  if (req.method !== "PATCH") {
+  if (req.method !== "PATCH" && req.method !== "DELETE") {
     return jsonResponse(corsHeaders, 405, { error: "Invalid method" });
   }
 
@@ -120,11 +133,18 @@ Deno.serve(async (req) => {
   const normalizedSegments = segments[0] === "orders"
     ? segments.slice(1)
     : segments;
-  if (normalizedSegments.length !== 2 || normalizedSegments[1] !== "status") {
-    return jsonResponse(corsHeaders, 404, { error: "Not found" });
-  }
-
   const orderId = normalizedSegments[0];
+  const action = normalizedSegments[1];
+  if (req.method === "PATCH") {
+    if (normalizedSegments.length !== 2 || !["status", "items", "cancel"].includes(action)) {
+      return jsonResponse(corsHeaders, 404, { error: "Not found" });
+    }
+  }
+  if (req.method === "DELETE") {
+    if (normalizedSegments.length !== 1) {
+      return jsonResponse(corsHeaders, 404, { error: "Not found" });
+    }
+  }
 
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
@@ -183,9 +203,155 @@ Deno.serve(async (req) => {
     }
     const userRole = roleData.role;
 
-    const body = (await req.json().catch(() => ({}))) as StatusUpdatePayload;
+    if (req.method === "DELETE") {
+      const { data: order, error: orderError } = await supabase
+        .from("orders")
+        .select("id, status, deleted_at")
+        .eq("id", orderId)
+        .single();
+
+      if (orderError || !order) {
+        return jsonResponse(corsHeaders, 404, { error: "Pedido nao encontrado" });
+      }
+
+      if (order.deleted_at) {
+        return jsonResponse(corsHeaders, 400, { error: "Pedido ja excluido" });
+      }
+
+      if (order.status !== "orcamento") {
+        return jsonResponse(corsHeaders, 403, {
+          error: "Somente orçamentos podem ser excluídos",
+        });
+      }
+
+      const { error: deleteError } = await supabase
+        .from("orders")
+        .update({
+          deleted_at: new Date().toISOString(),
+          deleted_by: userId,
+        })
+        .eq("id", orderId);
+
+      if (deleteError) {
+        return jsonResponse(corsHeaders, 400, {
+          error: deleteError.message || "Falha ao excluir orçamento",
+        });
+      }
+
+      return jsonResponse(corsHeaders, 200, { ok: true });
+    }
+
+    if (action === "cancel") {
+      const body = (await req.json().catch(() => ({}))) as { motivo?: string; confirm_paid?: boolean };
+      const reason = typeof body.motivo === "string" ? body.motivo.trim() : null;
+      const confirmPaid = Boolean(body.confirm_paid);
+
+      const { data: order, error: orderError } = await supabase
+        .from("orders")
+        .select("id, status, payment_status, deleted_at")
+        .eq("id", orderId)
+        .single();
+
+      if (orderError || !order) {
+        return jsonResponse(corsHeaders, 404, { error: "Pedido nao encontrado" });
+      }
+
+      if (order.deleted_at) {
+        return jsonResponse(corsHeaders, 400, { error: "Pedido excluido" });
+      }
+
+      if (order.status === "cancelado") {
+        return jsonResponse(corsHeaders, 400, { error: "Pedido ja cancelado" });
+      }
+
+      if (order.payment_status === "pago" && !confirmPaid) {
+        return jsonResponse(corsHeaders, 400, {
+          error: "Pedido pago. Confirme o cancelamento para prosseguir.",
+        });
+      }
+
+      const { data: updatedOrder, error: cancelError } = await supabase
+        .from("orders")
+        .update({
+          status: "cancelado",
+          cancel_reason: reason,
+          cancelled_at: new Date().toISOString(),
+          cancelled_by: userId,
+          updated_by: userId,
+        })
+        .eq("id", orderId)
+        .select("*")
+        .single();
+
+      if (cancelError || !updatedOrder) {
+        return jsonResponse(corsHeaders, 400, {
+          error: cancelError?.message || "Falha ao cancelar pedido",
+        });
+      }
+
+      const { error: historyError } = await supabase
+        .from("order_status_history")
+        .insert({
+          order_id: orderId,
+          status: "cancelado",
+          user_id: userId,
+          notes: reason ? `Cancelado: ${reason}` : "Cancelado",
+        });
+
+      if (historyError) {
+        return jsonResponse(corsHeaders, 400, {
+          error: historyError.message || "Falha ao registrar historico",
+        });
+      }
+
+      return jsonResponse(corsHeaders, 200, { order: updatedOrder });
+    }
+
+    if (action === "items") {
+      const body = (await req.json().catch(() => ({}))) as ItemsUpdatePayload;
+      const items = Array.isArray(body.items) ? body.items : [];
+
+      if (items.length === 0) {
+        return jsonResponse(corsHeaders, 400, { error: "Itens obrigatorios" });
+      }
+
+      const { data: order, error: orderError } = await supabase
+        .from("orders")
+        .select("id, status")
+        .eq("id", orderId)
+        .single();
+
+      if (orderError || !order) {
+        return jsonResponse(corsHeaders, 404, { error: "Pedido nao encontrado" });
+      }
+
+      if (order.status !== "orcamento") {
+        return jsonResponse(corsHeaders, 403, {
+          error: "Pedido não pode ser alterado após sair do status Orçamento",
+        });
+      }
+
+      const { data: updatedOrder, error: updateItemsError } = await supabase.rpc(
+        "update_order_items",
+        {
+          p_order_id: orderId,
+          p_items: items,
+        },
+      );
+
+      if (updateItemsError || !updatedOrder) {
+        return jsonResponse(corsHeaders, 400, {
+          error: updateItemsError?.message || "Falha ao atualizar itens do pedido",
+        });
+      }
+
+      return jsonResponse(corsHeaders, 200, { order: updatedOrder });
+    }
+
+    const body = (await req.json().catch(() => ({}))) as StatusUpdatePayload & { entrada?: number };
     const status = body.status?.trim();
     const notes = typeof body.notes === "string" ? body.notes.trim() : null;
+    const entrada = typeof body.entrada === "number" ? body.entrada : null;
 
     if (!status) {
       return jsonResponse(corsHeaders, 400, { error: "Status obrigatorio" });
@@ -193,12 +359,15 @@ Deno.serve(async (req) => {
 
     const { data: order, error: orderError } = await supabase
       .from("orders")
-      .select("id, order_number, company_id, status")
+      .select("id, order_number, company_id, status, total, amount_paid, payment_status, payment_method, deleted_at")
       .eq("id", orderId)
       .single();
 
     if (orderError || !order) {
       return jsonResponse(corsHeaders, 404, { error: "Pedido nao encontrado" });
+    }
+    if (order.deleted_at) {
+      return jsonResponse(corsHeaders, 400, { error: "Pedido excluido" });
     }
 
     if (order.status === "cancelado" && status === "pendente") {
@@ -269,6 +438,44 @@ Deno.serve(async (req) => {
           error: notifyError.message || "Falha ao notificar status",
         });
       }
+    }
+
+    if (status === "pendente" && order.status === "orcamento" && entrada && entrada > 0) {
+      const paidAt = new Date().toISOString();
+      const newPaid = Number(order.amount_paid || 0) + entrada;
+      const paymentStatus = newPaid >= Number(order.total || 0) ? "pago" : "parcial";
+      const { error: paymentError } = await supabase
+        .from("order_payments")
+        .insert({
+          order_id: orderId,
+          company_id: order.company_id,
+          amount: entrada,
+          status: "pago",
+          method: order.payment_method || "dinheiro",
+          paid_at: paidAt,
+          created_by: userId,
+          notes: "Entrada registrada",
+        });
+      if (paymentError) {
+        return jsonResponse(corsHeaders, 400, {
+          error: paymentError.message || "Falha ao registrar entrada",
+        });
+      }
+      const { data: finalOrder, error: updatePaymentError } = await supabase
+        .from("orders")
+        .update({
+          amount_paid: newPaid,
+          payment_status: paymentStatus,
+        })
+        .eq("id", orderId)
+        .select("*")
+        .single();
+      if (updatePaymentError || !finalOrder) {
+        return jsonResponse(corsHeaders, 400, {
+          error: updatePaymentError?.message || "Falha ao atualizar pagamento",
+        });
+      }
+      return jsonResponse(corsHeaders, 200, { order: finalOrder });
     }
 
     return jsonResponse(corsHeaders, 200, { order: updatedOrder });

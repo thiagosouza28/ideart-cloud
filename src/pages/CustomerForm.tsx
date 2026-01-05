@@ -7,14 +7,16 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { 
-  CpfCnpjInput, 
-  PhoneInput, 
-  CepInput, 
-  validateCpfCnpj, 
-  formatCpfCnpj, 
-  formatPhone, 
-  formatCep 
+import {
+  CpfCnpjInput,
+  PhoneInput,
+  CepInput,
+  validateCpfCnpj,
+  formatCpfCnpj,
+  formatPhone,
+  formatCep,
+  normalizeDigits,
+  validatePhone,
 } from '@/components/ui/masked-input';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -27,12 +29,12 @@ const ESTADOS_BR = [
 export default function CustomerForm() {
   const navigate = useNavigate();
   const { id } = useParams();
-  const isEditing = !!id;
-  
+  const isEditing = Boolean(id);
+
   const [loading, setLoading] = useState(false);
   const [loadingCep, setLoadingCep] = useState(false);
   const [documentError, setDocumentError] = useState('');
-  
+
   const [form, setForm] = useState({
     name: '',
     document: '',
@@ -42,32 +44,32 @@ export default function CustomerForm() {
     address: '',
     city: '',
     state: '',
-    notes: ''
+    notes: '',
   });
 
   useEffect(() => {
-    if (isEditing) {
-      supabase.from('customers').select('*').eq('id', id).single().then(({ data }) => {
-        if (data) setForm({
-          name: data.name || '',
-          document: data.document || '',
-          email: data.email || '',
-          phone: data.phone || '',
-          zip_code: data.zip_code || '',
-          address: data.address || '',
-          city: data.city || '',
-          state: data.state || '',
-          notes: data.notes || ''
-        });
+    if (!isEditing) return;
+    supabase.from('customers').select('*').eq('id', id).single().then(({ data }) => {
+      if (!data) return;
+      setForm({
+        name: data.name || '',
+        document: data.document ? formatCpfCnpj(data.document) : '',
+        email: data.email || '',
+        phone: data.phone ? formatPhone(data.phone) : '',
+        zip_code: data.zip_code ? formatCep(data.zip_code) : '',
+        address: data.address || '',
+        city: data.city || '',
+        state: data.state || '',
+        notes: data.notes || '',
       });
-    }
+    });
   }, [id, isEditing]);
 
   const handleDocumentChange = (value: string) => {
     const formatted = formatCpfCnpj(value);
     setForm(prev => ({ ...prev, document: formatted }));
-    
-    const digits = value.replace(/\D/g, '');
+
+    const digits = normalizeDigits(value);
     if (digits.length === 11 || digits.length === 14) {
       const { valid, type } = validateCpfCnpj(formatted);
       if (!valid) {
@@ -83,37 +85,37 @@ export default function CustomerForm() {
   const handleCepChange = async (value: string) => {
     const formatted = formatCep(value);
     setForm(prev => ({ ...prev, zip_code: formatted }));
-    
-    const digits = value.replace(/\D/g, '');
-    if (digits.length === 8) {
-      setLoadingCep(true);
-      try {
-        const response = await fetch(`https://viacep.com.br/ws/${digits}/json/`);
-        const data = await response.json();
-        if (!data.erro) {
-          setForm(prev => ({
-            ...prev,
-            address: data.logradouro || prev.address,
-            city: data.localidade || prev.city,
-            state: data.uf || prev.state
-          }));
-        }
-      } catch {
-        // Ignore CEP lookup errors
-      } finally {
-        setLoadingCep(false);
+
+    const digits = normalizeDigits(value);
+    if (digits.length !== 8) return;
+
+    setLoadingCep(true);
+    try {
+      const response = await fetch(`https://viacep.com.br/ws/${digits}/json/`);
+      const data = await response.json();
+      if (!data.erro) {
+        setForm(prev => ({
+          ...prev,
+          address: data.logradouro || prev.address,
+          city: data.localidade || prev.city,
+          state: data.uf || prev.state,
+        }));
       }
+    } catch {
+      // Ignore CEP lookup errors
+    } finally {
+      setLoadingCep(false);
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!form.name.trim()) {
       toast.error('Nome é obrigatório');
       return;
     }
-    
+
     if (form.document) {
       const { valid } = validateCpfCnpj(form.document);
       if (!valid) {
@@ -121,21 +123,43 @@ export default function CustomerForm() {
         return;
       }
     }
-    
+
+    if (form.phone && !validatePhone(form.phone)) {
+      toast.error('Telefone inválido. Use um celular brasileiro válido.');
+      return;
+    }
+
     setLoading(true);
-    
+
+    const documentDigits = form.document ? normalizeDigits(form.document) : null;
+    const phoneDigits = form.phone ? normalizeDigits(form.phone) : null;
+
+    if (documentDigits) {
+      const { data: existingDoc } = await supabase
+        .from('customers')
+        .select('id')
+        .eq('document', documentDigits)
+        .neq('id', id ?? '')
+        .maybeSingle();
+      if (existingDoc?.id) {
+        toast.error('CPF/CNPJ já cadastrado para outro cliente.');
+        setLoading(false);
+        return;
+      }
+    }
+
     const customerData = {
       name: form.name.trim(),
-      document: form.document || null,
+      document: documentDigits,
       email: form.email || null,
-      phone: form.phone || null,
-      zip_code: form.zip_code || null,
+      phone: phoneDigits,
+      zip_code: form.zip_code ? normalizeDigits(form.zip_code) : null,
       address: form.address || null,
       city: form.city || null,
       state: form.state || null,
-      notes: form.notes || null
+      notes: form.notes || null,
     };
-    
+
     if (isEditing) {
       const { error } = await supabase.from('customers').update(customerData).eq('id', id);
       if (error) {
@@ -153,7 +177,7 @@ export default function CustomerForm() {
       }
       toast.success('Cliente cadastrado com sucesso');
     }
-    
+
     navigate('/clientes');
   };
 
@@ -188,27 +212,27 @@ export default function CustomerForm() {
                 required
               />
             </div>
-            
+
             <div>
               <Label htmlFor="document">CPF / CNPJ</Label>
               <CpfCnpjInput
                 id="document"
                 value={form.document}
-                onChange={(value) => handleDocumentChange(value)}
+                onChange={handleDocumentChange}
                 className={documentError ? 'border-destructive' : ''}
               />
               {documentError && <p className="text-sm text-destructive mt-1">{documentError}</p>}
             </div>
-            
+
             <div>
-              <Label htmlFor="phone">Telefone</Label>
+              <Label htmlFor="phone">Telefone (WhatsApp)</Label>
               <PhoneInput
                 id="phone"
                 value={form.phone}
                 onChange={(value) => setForm(prev => ({ ...prev, phone: value }))}
               />
             </div>
-            
+
             <div className="md:col-span-2">
               <Label htmlFor="email">E-mail</Label>
               <Input
@@ -233,30 +257,12 @@ export default function CustomerForm() {
                 id="zip_code"
                 value={form.zip_code}
                 onChange={(value) => setForm(prev => ({ ...prev, zip_code: value }))}
-                onSearch={async (cep) => {
-                  setLoadingCep(true);
-                  try {
-                    const response = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
-                    const data = await response.json();
-                    if (!data.erro) {
-                      setForm(prev => ({
-                        ...prev,
-                        address: data.logradouro || prev.address,
-                        city: data.localidade || prev.city,
-                        state: data.uf || prev.state
-                      }));
-                    }
-                  } catch {
-                    // Ignore CEP lookup errors
-                  } finally {
-                    setLoadingCep(false);
-                  }
-                }}
+                onSearch={handleCepChange}
                 disabled={loadingCep}
               />
               {loadingCep && <p className="text-sm text-muted-foreground mt-1">Buscando endereço...</p>}
             </div>
-            
+
             <div className="md:col-span-2">
               <Label htmlFor="address">Endereço</Label>
               <Input
@@ -266,7 +272,7 @@ export default function CustomerForm() {
                 placeholder="Rua, número, complemento"
               />
             </div>
-            
+
             <div className="md:col-span-2">
               <Label htmlFor="city">Cidade</Label>
               <Input
@@ -276,7 +282,7 @@ export default function CustomerForm() {
                 placeholder="Cidade"
               />
             </div>
-            
+
             <div>
               <Label htmlFor="state">Estado</Label>
               <Select value={form.state} onValueChange={(v) => setForm(prev => ({ ...prev, state: v }))}>

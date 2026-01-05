@@ -30,7 +30,7 @@ import { Separator } from '@/components/ui/separator';
 import { supabase } from '@/integrations/supabase/client';
 import { ensurePublicStorageUrl } from '@/lib/storage';
 import { getBasePrice, isPromotionActive, resolveSuggestedPrice } from '@/lib/pricing';
-import { CpfCnpjInput, PhoneInput, validateCpf } from '@/components/ui/masked-input';
+import { CpfCnpjInput, PhoneInput, normalizeDigits, validateCpf, validatePhone } from '@/components/ui/masked-input';
 import { useToast } from '@/hooks/use-toast';
 import { Company, PaymentMethod, Product } from '@/types/database';
 
@@ -295,7 +295,7 @@ export default function PublicProductDetails() {
 
   const handleDocumentChange = (value: string) => {
     handleOrderFieldChange('document', value);
-    const digits = value.replace(/\D/g, '');
+    const digits = normalizeDigits(value);
     if (!digits) {
       setCpfStatus(null);
       clearOrderError('document');
@@ -332,12 +332,11 @@ export default function PublicProductDetails() {
       nextErrors.name = 'Informe o nome completo.';
     }
 
-    const phoneDigits = orderForm.phone.replace(/\D/g, '');
-    if (phoneDigits.length !== 10 && phoneDigits.length !== 11) {
+    if (!validatePhone(orderForm.phone)) {
       nextErrors.phone = 'Telefone invalido.';
     }
 
-    const docDigits = orderForm.document.replace(/\D/g, '');
+    const docDigits = normalizeDigits(orderForm.document);
     if (docDigits.length !== 11 || !validateCpf(orderForm.document)) {
       nextErrors.document = 'CPF invalido.';
     }
@@ -372,11 +371,13 @@ export default function PublicProductDetails() {
     setOrderSubmitting(true);
     setOrderResult(null);
 
+    const phoneDigits = normalizeDigits(orderForm.phone);
+    const documentDigits = normalizeDigits(orderForm.document);
     const { data, error } = await supabase.rpc('create_public_order', {
       p_company_id: company.id,
       p_customer_name: orderForm.name.trim(),
-      p_customer_phone: orderForm.phone.trim(),
-      p_customer_document: orderForm.document.trim(),
+      p_customer_phone: phoneDigits,
+      p_customer_document: documentDigits,
       p_payment_method: orderForm.paymentMethod as PaymentMethod,
       p_items: [
         {

@@ -3,7 +3,7 @@ import { Plus, Edit, Trash2, Building2, Upload, Loader2, MapPin, Phone, Mail, Gl
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { CurrencyInput } from '@/components/ui/currency-input';
-import { PhoneInput } from '@/components/ui/masked-input';
+import { PhoneInput, formatPhone, normalizeDigits, validatePhone } from '@/components/ui/masked-input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -172,8 +172,8 @@ export default function Settings() {
           name: data.name || "",
           description: data.description || "",
           email: data.email || "",
-          phone: data.phone || "",
-          whatsapp: data.whatsapp || "",
+          phone: data.phone ? formatPhone(data.phone) : "",
+          whatsapp: data.whatsapp ? formatPhone(data.whatsapp) : "",
           address: data.address || "",
           city: data.city || "",
           state: data.state || "",
@@ -266,7 +266,18 @@ export default function Settings() {
       return;
     }
 
+    if (companyForm.phone && !validatePhone(companyForm.phone)) {
+      toast({ title: "Telefone inválido", description: "Use um celular brasileiro válido.", variant: "destructive" });
+      return;
+    }
+    if (companyForm.whatsapp && !validatePhone(companyForm.whatsapp)) {
+      toast({ title: "WhatsApp inválido", description: "Use um celular brasileiro válido.", variant: "destructive" });
+      return;
+    }
+
     setSavingCompany(true);
+    const phoneDigits = companyForm.phone ? normalizeDigits(companyForm.phone) : null;
+    const whatsappDigits = companyForm.whatsapp ? normalizeDigits(companyForm.whatsapp) : null;
 
     try {
       let logoUrl = company.logo_url;
@@ -302,8 +313,8 @@ export default function Settings() {
           name: companyName,
           description: companyForm.description || null,
           email: companyForm.email || null,
-          phone: companyForm.phone || null,
-          whatsapp: companyForm.whatsapp || null,
+          phone: phoneDigits,
+          whatsapp: whatsappDigits,
           address: companyForm.address || null,
           city: companyForm.city || null,
           state: companyForm.state || null,

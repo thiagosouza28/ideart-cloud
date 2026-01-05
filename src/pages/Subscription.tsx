@@ -86,6 +86,7 @@ export default function Subscription() {
   const [searchParams] = useSearchParams();
 
   const [plans, setPlans] = useState<Plan[]>([]);
+  const [extraPlans, setExtraPlans] = useState<Plan[]>([]);
   const [offers, setOffers] = useState<CaktoOffer[]>([]);
   const [company, setCompany] = useState<CompanyWithPlan | null>(null);
   const [latestSubscription, setLatestSubscription] =
@@ -100,6 +101,16 @@ export default function Subscription() {
     () => computeSubscriptionState(company),
     [company]
   );
+  const allPlans = useMemo(() => {
+    if (extraPlans.length === 0) return plans;
+    const merged = [...plans];
+    extraPlans.forEach((planItem) => {
+      if (!merged.some((entry) => entry.id === planItem.id)) {
+        merged.push(planItem);
+      }
+    });
+    return merged;
+  }, [plans, extraPlans]);
 
   /* ======================================================
      LOAD DATA
@@ -130,7 +141,8 @@ export default function Subscription() {
       toast.error('Erro ao carregar planos');
     }
 
-    setPlans((plansData as Plan[]) ?? []);
+    const activePlans = (plansData as Plan[]) ?? [];
+    setPlans(activePlans);
 
     /* ---------- EMPRESA ---------- */
     if (!profile?.company_id) {
@@ -183,9 +195,34 @@ export default function Subscription() {
       }
 
       setLatestSubscription(subscription);
+
+      const planIdsToCheck = [
+        companyData?.plan_id,
+        subscription?.plan_id,
+      ].filter(Boolean) as string[];
+      const missingPlanIds = planIdsToCheck.filter(
+        (planId) => !activePlans.some((planItem) => planItem.id === planId)
+      );
+
+      if (missingPlanIds.length > 0) {
+        const { data: extraPlansData, error: extraPlansError } = await supabase
+          .from('plans')
+          .select('*')
+          .in('id', missingPlanIds);
+
+        if (extraPlansError) {
+          console.error(extraPlansError);
+          setExtraPlans([]);
+        } else {
+          setExtraPlans((extraPlansData as Plan[]) ?? []);
+        }
+      } else {
+        setExtraPlans([]);
+      }
     } catch (err) {
       console.error('Erro ao buscar assinatura', err);
       setLatestSubscription(null);
+      setExtraPlans([]);
     }
 
     setLoading(false);
@@ -302,7 +339,7 @@ export default function Subscription() {
     return 'mes';
   };
 
-  const activeOffer = useMemo(() => {
+  const activeOfferFromLink = useMemo(() => {
     if (!latestSubscription?.payment_link_url || offers.length === 0) return null;
     const link = latestSubscription.payment_link_url;
     return (
@@ -312,12 +349,20 @@ export default function Subscription() {
     );
   }, [latestSubscription?.payment_link_url, offers]);
 
-  const activePlan =
+  const activePlanFromIds =
     company?.plan ??
     latestSubscription?.plan ??
-    plans.find((planItem) => planItem.id === company?.plan_id) ??
-    plans.find((planItem) => planItem.id === latestSubscription?.plan_id) ??
+    allPlans.find((planItem) => planItem.id === company?.plan_id) ??
+    allPlans.find((planItem) => planItem.id === latestSubscription?.plan_id) ??
     null;
+  const activeOfferFromPlan = activePlanFromIds?.cakto_plan_id
+    ? offers.find((offerItem) => offerItem.id === activePlanFromIds.cakto_plan_id)
+    : null;
+  const activeOffer = activeOfferFromLink ?? activeOfferFromPlan ?? null;
+  const activePlanFromOffer = activeOffer?.id
+    ? allPlans.find((planItem) => planItem.cakto_plan_id === activeOffer.id)
+    : null;
+  const activePlan = activePlanFromIds ?? activePlanFromOffer ?? null;
   const activePlanId =
     activePlan?.id ??
     company?.plan_id ??

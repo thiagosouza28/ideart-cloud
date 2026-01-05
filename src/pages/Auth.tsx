@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Package, Loader2, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { CpfCnpjInput, normalizeDigits, validateCpf } from '@/components/ui/masked-input';
 import { z } from 'zod';
 
 const loginSchema = z.object({
@@ -18,7 +19,7 @@ const loginSchema = z.object({
 const signupSchema = z.object({
   fullName: z.string().min(2, 'Nome deve ter no minimo 2 caracteres'),
   email: z.string().email('E-mail inválido'),
-  cpf: z.string().regex(/^\d{11}$/, 'CPF deve conter 11 numeros'),
+  cpf: z.string().min(1, 'CPF obrigatorio'),
   password: z.string().min(6, 'Senha deve ter no minimo 6 caracteres'),
   confirmPassword: z.string(),
 }).refine((data) => data.password === data.confirmPassword, {
@@ -26,7 +27,6 @@ const signupSchema = z.object({
   path: ['confirmPassword'],
 });
 
-const normalizeCpf = (value: string) => value.replace(/\D/g, "");
 
 export default function Auth() {
   const navigate = useNavigate();
@@ -102,7 +102,7 @@ export default function Auth() {
 
     try {
       const email = signupEmail.trim();
-      const cpfDigits = normalizeCpf(signupCpf);
+      const cpfDigits = normalizeDigits(signupCpf);
       const result = signupSchema.safeParse({
         fullName: signupName,
         email,
@@ -113,6 +113,12 @@ export default function Auth() {
 
       if (!result.success) {
         setError(result.error.errors[0].message);
+        setIsLoading(false);
+        return;
+      }
+
+      if (!validateCpf(cpfDigits)) {
+        setError('CPF invalido');
         setIsLoading(false);
         return;
       }
@@ -285,12 +291,11 @@ export default function Auth() {
 
                 <div className="space-y-2.5">
                   <Label htmlFor="signup-cpf" className="text-sm font-medium">CPF</Label>
-                  <Input
+                  <CpfCnpjInput
                     id="signup-cpf"
-                    type="text"
                     placeholder="000.000.000-00"
                     value={signupCpf}
-                    onChange={(e) => setSignupCpf(e.target.value)}
+                    onChange={(value) => setSignupCpf(value)}
                     className="h-11 transition-all focus-visible:ring-2 focus-visible:ring-primary/20"
                     required
                   />

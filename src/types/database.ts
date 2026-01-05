@@ -51,6 +51,7 @@ export interface Company {
   catalog_show_prices?: boolean | null;
   catalog_show_contact?: boolean | null;
   catalog_contact_url?: string | null;
+  whatsapp_message_template?: string | null;
   catalog_font?: string | null;
   catalog_columns_mobile?: number | null;
   catalog_columns_desktop?: number | null;
@@ -289,6 +290,10 @@ export interface Order {
   amount_paid: number;
   notes: string | null;
   cancel_reason: string | null;
+  cancelled_at?: string | null;
+  cancelled_by?: string | null;
+  deleted_at?: string | null;
+  deleted_by?: string | null;
   created_by: string | null;
   updated_by: string | null;
   created_at: string;

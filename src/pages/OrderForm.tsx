@@ -20,6 +20,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { resolveSuggestedPrice } from '@/lib/pricing';
+import { normalizeDigits } from '@/components/ui/masked-input';
 
 interface OrderItemForm {
   product: Product;
@@ -206,13 +207,49 @@ export default function OrderForm() {
 
     setSaving(true);
 
+    let resolvedCustomerId = customerId || null;
+    const trimmedCustomerName = customerName.trim();
+
+    if (!resolvedCustomerId && trimmedCustomerName) {
+      const { data: existingCustomer, error: lookupError } = await supabase
+        .from('customers')
+        .select('id')
+        .ilike('name', trimmedCustomerName)
+        .limit(1)
+        .maybeSingle();
+
+      if (lookupError) {
+        toast({ title: 'Erro ao buscar cliente', description: lookupError.message, variant: 'destructive' });
+        setSaving(false);
+        return;
+      }
+
+      if (existingCustomer?.id) {
+        resolvedCustomerId = existingCustomer.id;
+      } else {
+        const { data: createdCustomer, error: createCustomerError } = await supabase
+          .from('customers')
+          .insert({ name: trimmedCustomerName })
+          .select('id')
+          .single();
+
+        if (createCustomerError || !createdCustomer?.id) {
+          toast({ title: 'Erro ao criar cliente', description: createCustomerError?.message, variant: 'destructive' });
+          setSaving(false);
+          return;
+        }
+
+        resolvedCustomerId = createdCustomer.id;
+      }
+    }
+
     // Create order
     const { data: order, error } = await supabase
       .from('orders')
       .insert({
         company_id: profile?.company_id || null,
-        customer_id: customerId || null,
-        customer_name: customerName || null,
+        customer_id: resolvedCustomerId,
+        customer_name: trimmedCustomerName || null,
         status: 'orcamento' as OrderStatus,
         subtotal,
         discount,
@@ -256,10 +293,13 @@ export default function OrderForm() {
     navigate('/pedidos');
   };
 
-  const filteredCustomers = customers.filter(c => 
-    c.name.toLowerCase().includes(customerSearch.toLowerCase()) ||
-    c.document?.includes(customerSearch) ||
-    c.phone?.includes(customerSearch)
+  const searchText = customerSearch.trim().toLowerCase();
+  const searchDigits = normalizeDigits(customerSearch);
+  const filteredCustomers = customers.filter(c =>
+    c.name.toLowerCase().includes(searchText) ||
+    (searchDigits
+      ? (c.document?.includes(searchDigits) || c.phone?.includes(searchDigits))
+      : false)
   );
 
   if (loading) {
@@ -307,15 +347,15 @@ export default function OrderForm() {
                 </Button>
               </div>
             ) : (
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid gap-4 md:grid-cols-2 items-end">
                 <Popover open={customerSearchOpen} onOpenChange={setCustomerSearchOpen}>
                   <PopoverTrigger asChild>
-                    <Button variant="outline" className="justify-start">
+                    <Button variant="outline" className="justify-start w-full">
                       <Search className="mr-2 h-4 w-4" />
                       Buscar cliente cadastrado
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-80 p-0" align="start">
+                  <PopoverContent className="w-[520px] max-w-[90vw] p-0" align="start">
                     <Command>
                       <CommandInput 
                         placeholder="Buscar por nome, CPF ou telefone..." 
@@ -369,34 +409,16 @@ export default function OrderForm() {
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* Product Search */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-              {products.slice(0, 8).map((product) => (
-                <Button
-                  key={product.id}
-                  type="button"
-                  variant="outline"
-                  className="h-auto py-3 flex-col items-start text-left"
-                  onClick={() => openProductDialog(product)}
-                >
-                  <span className="font-medium text-sm truncate w-full">{product.name}</span>
-                  <span className="text-xs text-muted-foreground">
-                    {formatCurrency(getProductPrice(product, 1))}
-                  </span>
-                </Button>
-              ))}
-            </div>
-
             <Popover>
               <PopoverTrigger asChild>
                 <Button type="button" variant="outline" className="w-full">
                   <Search className="mr-2 h-4 w-4" />
-                  Buscar mais produtos...
+                  Buscar produtos ou serviços
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-96 p-0" align="start">
+              <PopoverContent className="w-[520px] max-w-[90vw] p-0" align="start">
                 <Command>
-                  <CommandInput placeholder="Buscar produto..." />
+                  <CommandInput placeholder="Buscar produto ou serviço..." />
                   <CommandList>
                     <CommandEmpty>Nenhum produto encontrado</CommandEmpty>
                     <CommandGroup>
