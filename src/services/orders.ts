@@ -353,6 +353,26 @@ export const createOrderPayment = async ({
     throw insertError;
   }
 
+  if (status !== 'pendente') {
+    const { error: financialError } = await supabase
+      .from('financial_entries')
+      .insert({
+        company_id: companyId,
+        type: 'receita',
+        origin: 'order_payment',
+        amount,
+        status: 'pago',
+        payment_method: method,
+        description: `Pagamento pedido #${order.order_number}`,
+        occurred_at: paidAt || new Date().toISOString(),
+        created_by: createdBy || null,
+      } as any);
+
+    if (financialError) {
+      console.warn('Falha ao registrar entrada financeira', financialError);
+    }
+  }
+
   const updatedPaidTotal =
     currentPaid + (status === 'pendente' ? 0 : Number(amount));
   const summary = calculatePaymentSummary(Number(order.total), updatedPaidTotal);
@@ -389,6 +409,7 @@ type UpdateStatusInput = {
   notes?: string;
   userId?: string | null;
   entrada?: number | null;
+  paymentMethod?: PaymentMethod | null;
 };
 
 type OrderItemUpdate = Pick<
@@ -435,12 +456,13 @@ export const updateOrderStatus = async ({
   notes,
   userId,
   entrada,
+  paymentMethod,
 }: UpdateStatusInput) => {
   if (EDGE_FUNCTIONS_ENABLED) {
     try {
       const response = await invokeEdgeFunction<{ order: Order }>(
         'orders',
-        { status, notes, entrada },
+        { status, notes, entrada, payment_method: paymentMethod ?? null },
         { method: 'PATCH', path: `/${orderId}/status` }
       );
 
@@ -506,6 +528,17 @@ export const updateOrderStatus = async ({
 
   if (historyError) {
     throw historyError;
+  }
+
+  if (entrada && entrada > 0) {
+    const resolvedMethod = paymentMethod || (updatedOrder.payment_method as PaymentMethod | null) || 'dinheiro';
+    await createOrderPayment({
+      orderId,
+      amount: Number(entrada),
+      method: resolvedMethod,
+      status: 'pago',
+      createdBy: userId || null,
+    });
   }
 
   if (order.company_id) {
@@ -624,6 +657,13 @@ export const cancelOrderPayment = async (
   orderId: string,
   paymentId: string,
 ) => {
+  const { data: originalPayment } = await supabase
+    .from('order_payments')
+    .select('amount, status, method')
+    .eq('id', paymentId)
+    .eq('order_id', orderId)
+    .maybeSingle();
+
   const { data: payment, error: updateError } = await supabase
     .from('order_payments')
     .update({ status: 'pendente', paid_at: null })
@@ -637,6 +677,19 @@ export const cancelOrderPayment = async (
   }
 
   const { order, summary } = await updateOrderPaymentTotals(orderId);
+
+  if (order.company_id && originalPayment && originalPayment.status !== 'pendente') {
+    await supabase.from('financial_entries').insert({
+      company_id: order.company_id,
+      type: 'despesa',
+      origin: 'order_payment_cancel',
+      amount: Number(originalPayment.amount || 0),
+      status: 'pago',
+      payment_method: originalPayment.method,
+      description: `Estorno pagamento pedido #${order.order_number}`,
+      occurred_at: new Date().toISOString(),
+    } as any);
+  }
 
   if (order.company_id) {
     await supabase.from('order_notifications').insert({
@@ -655,6 +708,13 @@ export const deleteOrderPayment = async (
   orderId: string,
   paymentId: string,
 ) => {
+  const { data: originalPayment } = await supabase
+    .from('order_payments')
+    .select('amount, status, method')
+    .eq('id', paymentId)
+    .eq('order_id', orderId)
+    .maybeSingle();
+
   const { data: payment, error: deleteError } = await supabase
     .from('order_payments')
     .delete()
@@ -668,6 +728,19 @@ export const deleteOrderPayment = async (
   }
 
   const { order, summary } = await updateOrderPaymentTotals(orderId);
+
+  if (order.company_id && originalPayment && originalPayment.status !== 'pendente') {
+    await supabase.from('financial_entries').insert({
+      company_id: order.company_id,
+      type: 'despesa',
+      origin: 'order_payment_delete',
+      amount: Number(originalPayment.amount || 0),
+      status: 'pago',
+      payment_method: originalPayment.method,
+      description: `Estorno pagamento pedido #${order.order_number}`,
+      occurred_at: new Date().toISOString(),
+    } as any);
+  }
 
   if (order.company_id) {
     await supabase.from('order_notifications').insert({

@@ -925,7 +925,10 @@ export default function PublicProductDetails() {
               </div>
               <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
                 {relatedProducts.map((related) => (
-                  <Link key={related.id} to={`/catalogo/${slug}/produto/${related.id}`}>
+                  <Link
+                    key={related.id}
+                    to={`/catalogo/${slug}/produto/${related.slug?.trim() ? related.slug : related.id}`}
+                  >
                     <Card className="overflow-hidden border border-slate-200 bg-white hover:shadow-md transition-shadow">
                       <div className="aspect-square bg-slate-100 relative overflow-hidden">
                         {isPromotionActive(related) && (

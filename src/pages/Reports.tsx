@@ -24,6 +24,7 @@ import { useToast } from '@/hooks/use-toast';
 import { buildPeriodSeries, loadReports, type ReportBundle, type ReportFilters, type SalesPeriod } from '@/services/reports';
 import { exportToCsv, exportToExcel, openPdfPreview, printPdf, type ExportRow } from '@/lib/report-export';
 import { OrderStatus } from '@/types/database';
+import { useAuth } from '@/contexts/AuthContext';
 
 const statusOptions: Array<{ value: OrderStatus | 'all'; label: string }> = [
   { value: 'all', label: 'Todos' },
@@ -153,11 +154,13 @@ const buildExportRows = (tab: ReportTab, data: ReportBundle | null): ExportRow[]
 
 export default function Reports() {
   const { toast } = useToast();
+  const { profile } = useAuth();
   const defaults = useMemo(() => defaultDateRange(), []);
   const [filters, setFilters] = useState<ReportFilters>({
     startDate: defaults.start,
     endDate: defaults.end,
     status: 'all',
+    companyId: profile?.company_id ?? null,
   });
   const [activeTab, setActiveTab] = useState<ReportTab>('cash');
   const [reportData, setReportData] = useState<ReportBundle | null>(null);
@@ -188,8 +191,17 @@ export default function Reports() {
     loadData(filters);
   }, [filters]);
 
+  useEffect(() => {
+    setFilters((prev) => ({ ...prev, companyId: profile?.company_id ?? null }));
+  }, [profile?.company_id]);
+
   const handleClear = () => {
-    setFilters({ startDate: defaults.start, endDate: defaults.end, status: 'all' as const });
+    setFilters({
+      startDate: defaults.start,
+      endDate: defaults.end,
+      status: 'all' as const,
+      companyId: profile?.company_id ?? null,
+    });
   };
 
   const cashSeries = useMemo(() => {

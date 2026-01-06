@@ -244,6 +244,7 @@ export interface StockMovement {
 
 export interface Sale {
   id: string;
+  company_id?: string | null;
   customer_id: string | null;
   user_id: string;
   subtotal: number;

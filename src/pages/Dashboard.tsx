@@ -59,13 +59,14 @@ export default function Dashboard() {
       const [ordersResult, salesResult] = await Promise.all([
         supabase
           .from('orders')
-          .select('id, order_number, customer_name, status, total, created_at, payment_method, payment_status')
+          .select('id, order_number, customer_name, status, total, amount_paid, created_at, payment_method, payment_status')
           .eq('company_id', profile.company_id)
           .order('created_at', { ascending: false })
           .limit(200),
         supabase
           .from('sales')
           .select('id, total, amount_paid, created_at')
+          .eq('company_id', profile.company_id)
           .order('created_at', { ascending: false })
           .limit(200),
       ]);
@@ -97,6 +98,8 @@ export default function Dashboard() {
     let totalToday = 0;
     let total7d = 0;
     let total30d = 0;
+    let paidTotal = 0;
+    let pendingTotal = 0;
     const customers = new Set<string>();
     const statusCounts: Record<OrderStatus, number> = {
       orcamento: 0,
@@ -111,13 +114,18 @@ export default function Dashboard() {
     orders.forEach((order) => {
       const createdAt = new Date(order.created_at);
       const total = Number(order.total ?? 0);
-      const isPaid = order.payment_status === 'pago' && order.status !== 'orcamento';
-      if (isPaid) {
+      const paidAmount = Math.max(0, Number(order.amount_paid ?? 0));
+      const isRevenueOrder = order.status !== 'orcamento' && order.status !== 'cancelado';
+      if (isRevenueOrder && paidAmount > 0) {
         if (createdAt.toDateString() === now.toDateString()) {
-          totalToday += total;
+          totalToday += paidAmount;
         }
-        if (createdAt >= start7) total7d += total;
-        if (createdAt >= start30) total30d += total;
+        if (createdAt >= start7) total7d += paidAmount;
+        if (createdAt >= start30) total30d += paidAmount;
+      }
+      if (isRevenueOrder) {
+        paidTotal += paidAmount;
+        pendingTotal += Math.max(0, total - paidAmount);
       }
       if (order.customer_name) customers.add(order.customer_name);
       statusCounts[order.status] += 1;
@@ -127,12 +135,14 @@ export default function Dashboard() {
       const createdAt = new Date(sale.created_at);
       const total = Number(sale.total ?? 0);
       const paid = Number(sale.amount_paid ?? 0);
-      if (paid >= total && total > 0) {
+      const paidValue = Math.max(0, Math.min(total, paid));
+      if (paidValue > 0) {
         if (createdAt.toDateString() === now.toDateString()) {
-          totalToday += total;
+          totalToday += paidValue;
         }
-        if (createdAt >= start7) total7d += total;
-        if (createdAt >= start30) total30d += total;
+        if (createdAt >= start7) total7d += paidValue;
+        if (createdAt >= start30) total30d += paidValue;
+        paidTotal += paidValue;
       }
     });
 
@@ -140,6 +150,8 @@ export default function Dashboard() {
       totalToday,
       total7d,
       total30d,
+      paidTotal,
+      pendingTotal,
       customers: customers.size,
       statusCounts,
     };
@@ -257,6 +269,17 @@ export default function Dashboard() {
             icon={card.icon}
           />
         ))}
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs text-slate-400">Total recebido</p>
+          <p className="text-lg font-semibold text-slate-900">{formatCurrency(metrics.paidTotal)}</p>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs text-slate-400">Saldo pendente</p>
+          <p className="text-lg font-semibold text-amber-600">{formatCurrency(metrics.pendingTotal)}</p>
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">

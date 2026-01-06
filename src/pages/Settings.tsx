@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { supabase } from '@/integrations/supabase/client';
 import { Category, Supply, Attribute, AttributeValue, Company } from '@/types/database';
 import { useToast } from '@/hooks/use-toast';
@@ -80,6 +81,7 @@ export default function Settings() {
   const [originalForm, setOriginalForm] = useState<typeof companyForm | null>(null);
   const [isSaved, setIsSaved] = useState(true);
   const companyFetchRef = useRef<string | null>(null);
+  const whatsappTemplateRef = useRef<HTMLTextAreaElement>(null);
   const [dangerOpen, setDangerOpen] = useState(false);
   const [resetPassword, setResetPassword] = useState('');
   const [resetConfirmText, setResetConfirmText] = useState('');
@@ -103,6 +105,19 @@ export default function Settings() {
 
   // Edit mode
   const [editId, setEditId] = useState<string | null>(null);
+
+  const whatsappPlaceholders = [
+    { value: '{cliente_nome}', label: 'Cliente', description: 'Nome do cliente' },
+    { value: '{cliente_telefone}', label: 'Telefone', description: 'Telefone do cliente' },
+    { value: '{pedido_id}', label: 'ID', description: 'Identificador do pedido' },
+    { value: '{pedido_numero}', label: 'Pedido', description: 'Numero do pedido' },
+    { value: '{pedido_status}', label: 'Status', description: 'Status do pedido' },
+    { value: '{pedido_total}', label: 'Total', description: 'Total do pedido' },
+    { value: '{total}', label: 'Total curto', description: 'Alias do total do pedido' },
+    { value: '{pedido_link}', label: 'Link', description: 'Link do pedido' },
+    { value: '{link_catalogo}', label: 'Catalogo', description: 'Link do catalogo publico' },
+    { value: '{empresa_nome}', label: 'Empresa', description: 'Nome da empresa' },
+  ];
 
   useEffect(() => {
     fetchAll();
@@ -370,6 +385,28 @@ export default function Settings() {
       toast({ title: "Erro ao salvar", variant: "destructive" });
     } finally {
       setSavingCompany(false);
+    }
+  };
+
+  const insertWhatsappPlaceholder = (placeholder: string) => {
+    const textarea = whatsappTemplateRef.current;
+    const currentValue = companyForm.whatsapp_message_template || '';
+    const start = textarea?.selectionStart ?? currentValue.length;
+    const end = textarea?.selectionEnd ?? currentValue.length;
+    const nextValue =
+      currentValue.slice(0, start) + placeholder + currentValue.slice(end);
+
+    setCompanyForm((prev) => ({
+      ...prev,
+      whatsapp_message_template: nextValue,
+    }));
+
+    if (textarea) {
+      requestAnimationFrame(() => {
+        const cursorPos = start + placeholder.length;
+        textarea.focus();
+        textarea.setSelectionRange(cursorPos, cursorPos);
+      });
     }
   };
 
@@ -710,17 +747,43 @@ export default function Settings() {
                 </div>
               </div>
 
-                <div className="space-y-3">
-                  <Label htmlFor="whatsapp-template" className="flex items-center gap-2">
-                    <MessageCircle className="h-4 w-4" />
-                    Mensagem padrao do WhatsApp
-                  </Label>
-                  <Textarea
-                    id="whatsapp-template"
-                    value={companyForm.whatsapp_message_template}
-                    onChange={(e) => setCompanyForm({ ...companyForm, whatsapp_message_template: e.target.value })}
-                    placeholder="Ola {cliente_nome}, seu pedido #{pedido_numero} esta pronto! Acompanhe pelo link: {pedido_link}"
-                    className="min-h-[120px]"
+              <div className="space-y-3">
+                <Label htmlFor="whatsapp-template" className="flex items-center gap-2">
+                  <MessageCircle className="h-4 w-4" />
+                  Mensagem padrao do WhatsApp
+                </Label>
+                <TooltipProvider delayDuration={150}>
+                  <div className="flex flex-wrap gap-2">
+                    {whatsappPlaceholders.map((placeholder) => (
+                      <Tooltip key={placeholder.value}>
+                        <TooltipTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onMouseDown={(event) => event.preventDefault()}
+                              onClick={() => insertWhatsappPlaceholder(placeholder.value)}
+                            >
+                            {placeholder.label}
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <div className="text-xs">
+                            <p className="font-medium">{placeholder.description}</p>
+                            <p className="mt-1 text-muted-foreground">{placeholder.value}</p>
+                          </div>
+                        </TooltipContent>
+                      </Tooltip>
+                    ))}
+                  </div>
+                </TooltipProvider>
+                <Textarea
+                  id="whatsapp-template"
+                  ref={whatsappTemplateRef}
+                  value={companyForm.whatsapp_message_template}
+                  onChange={(e) => setCompanyForm({ ...companyForm, whatsapp_message_template: e.target.value })}
+                  placeholder="Ola {cliente_nome}, seu pedido #{pedido_numero} esta pronto! Acompanhe pelo link: {pedido_link}"
+                  className="min-h-[120px]"
                   />
                   <div className="text-xs text-muted-foreground">
                     Variaveis disponiveis:

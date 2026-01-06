@@ -417,7 +417,10 @@ export default function PublicCatalog() {
           <div className={viewMode === 'grid' ? 'catalog-grid' : 'flex flex-col gap-4'}>
             {filteredProducts.map(product => (
               viewMode === 'grid' ? (
-                <Link key={product.id} to={`/catalogo/${slug}/produto/${product.slug ?? product.id}`}>
+                <Link
+                  key={product.id}
+                  to={`/catalogo/${slug}/produto/${product.slug?.trim() ? product.slug : product.id}`}
+                >
                   <Card className="relative overflow-hidden group hover:shadow-md transition-shadow flex flex-col h-full catalog-card border">
                     <div className="relative aspect-square overflow-hidden bg-slate-100">
                       {isPromotionActive(product as unknown as Product) && (
@@ -481,7 +484,10 @@ export default function PublicCatalog() {
                   </Card>
                 </Link>
               ) : (
-                <Link key={product.id} to={`/catalogo/${slug}/produto/${product.slug ?? product.id}`}>
+                <Link
+                  key={product.id}
+                  to={`/catalogo/${slug}/produto/${product.slug?.trim() ? product.slug : product.id}`}
+                >
                   <Card className="relative overflow-hidden group hover:shadow-md transition-shadow catalog-card border">
                     <div className="flex">
                       <div className="w-24 h-24 sm:w-32 sm:h-32 bg-slate-100 overflow-hidden flex-shrink-0">

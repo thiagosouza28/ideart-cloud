@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -70,10 +71,6 @@ export default function Categories() {
         toast.error('Categoria pai invÃ¡lida');
         return;
       }
-    }
-    if (formData.parent_id && !rootCategories.some((category) => category.id === formData.parent_id)) {
-      toast.error('Apenas categorias principais podem ser selecionadas como pai');
-      return;
     }
 
     setSaving(true);
@@ -170,14 +167,28 @@ export default function Categories() {
     return collected;
   }, [childrenByParent, selectedCategory]);
 
-  const parentOptions = useMemo(() => {
+    const parentOptions = useMemo(() => {
+    const rows: Array<{ id: string; name: string; level: number }> = [];
+
+    const walk = (items: Category[], level: number) => {
+      items.forEach((item) => {
+        rows.push({ id: item.id, name: item.name, level });
+        const children = childrenByParent.get(item.id) ?? [];
+        if (children.length > 0) {
+          walk(children, level + 1);
+        }
+      });
+    };
+
     const roots = [...rootCategories].sort((a, b) => a.name.localeCompare(b.name));
-    return roots.filter((option) => {
+    walk(roots, 0);
+
+    return rows.filter((option) => {
       if (!selectedCategory) return true;
       if (option.id === selectedCategory.id) return false;
       return !descendantIds.has(option.id);
     });
-  }, [descendantIds, rootCategories, selectedCategory]);
+  }, [childrenByParent, descendantIds, rootCategories, selectedCategory]);
 
   const displayCategories = useMemo(() => {
     const rows: Array<{ category: Category; level: number }> = [];
@@ -243,11 +254,16 @@ export default function Categories() {
                 {displayCategories.map(({ category, level }) => (
                   <TableRow key={category.id}>
                     <TableCell className="font-medium">
-                      <span className="inline-flex items-center gap-2" style={{ paddingLeft: level * 16 }}>
-                        {level > 0 && <span className="text-muted-foreground">â†³</span>}
-                        {category.name}
-                      </span>
-                    </TableCell>
+  <span className="inline-flex items-center gap-2" style={{ paddingLeft: level * 16 }}>
+    {level > 0 && <span className="text-muted-foreground">ƒÅü</span>}
+    {category.name}
+    {category.parent_id && (
+      <Badge variant="secondary" className="text-[11px]">
+        Subcategoria
+      </Badge>
+    )}
+  </span>
+</TableCell>
                     <TableCell className="text-muted-foreground">
                       {getParentName(category.parent_id)}
                     </TableCell>
@@ -301,7 +317,7 @@ export default function Categories() {
                   <SelectItem value="none">Sem categoria pai (categoria principal)</SelectItem>
                   {parentOptions.map((option) => (
                     <SelectItem key={option.id} value={option.id}>
-                      {option.name}
+                      {`${'-- '.repeat(option.level)}${option.name}`}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -336,5 +352,7 @@ export default function Categories() {
     </div>
   );
 }
+
+
 
 

@@ -113,6 +113,7 @@ export default function OrderDetails() {
   const [saving, setSaving] = useState(false);
   const [entryDialogOpen, setEntryDialogOpen] = useState(false);
   const [entryAmount, setEntryAmount] = useState(0);
+  const [entryMethod, setEntryMethod] = useState<PaymentMethod | ''>('');
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const [cancelConfirmPaid, setCancelConfirmPaid] = useState(false);
@@ -373,25 +374,28 @@ export default function OrderDetails() {
 
     return text;
   };
-
   const buildWhatsAppMessage = (link: string) => {
     if (!order) return '';
     const template =
       order.company?.whatsapp_message_template ||
-        'Ola {cliente_nome}, seu pedido #{pedido_numero} esta pronto! Acompanhe pelo link: {pedido_link}';
-      const replacements: Record<string, string> = {
-        '{cliente_nome}': order.customer?.name || order.customer_name || 'cliente',
-        '{cliente_telefone}': order.customer?.phone || order.customer_phone || '',
-        '{pedido_numero}': formatOrderNumber(order.order_number),
+      'Ola {cliente_nome}, seu pedido #{pedido_numero} esta pronto! Acompanhe pelo link: {pedido_link}';
+    const catalogLink = order.company?.slug
+      ? `${window.location.origin}/catalogo/${order.company.slug}`
+      : '';
+    const replacements: Record<string, string> = {
+      '{cliente_nome}': order.customer?.name || order.customer_name || 'cliente',
+      '{cliente_telefone}': order.customer?.phone || order.customer_phone || '',
+      '{pedido_numero}': formatOrderNumber(order.order_number),
+      '{pedido_id}': order.id,
       '{pedido_status}': statusLabels[order.status] ?? order.status,
       '{pedido_total}': formatCurrency(Number(order.total || 0)),
+      '{total}': formatCurrency(Number(order.total || 0)),
       '{pedido_link}': link,
+      '{link_catalogo}': catalogLink,
       '{empresa_nome}': order.company?.name || 'Nossa empresa',
     };
     return Object.entries(replacements).reduce((acc, [key, value]) => acc.replaceAll(key, value), template);
-  };
-
-  const handleWhatsApp = () => {
+  };  const handleWhatsApp = () => {
     handleSendWhatsAppUpdate();
   };
 
@@ -481,6 +485,8 @@ export default function OrderDetails() {
     setFinalPhotos(finalPhotosResult.data as OrderFinalPhoto[] || []);
     setPayments(paymentsResult.data as OrderPayment[] || []);
     setPublicLinkToken(linkResult.data?.token || null);
+    setMessageDirty(false);
+    setMessageText('');
 
     if (orderData) {
       const remaining = Math.max(0, Number(orderData.total) - Number(orderData.amount_paid));
@@ -520,38 +526,19 @@ export default function OrderDetails() {
   const getPublicLinkUrl = (token: string) => `${window.location.origin}/pedido/${token}`;
   const publicLink = publicLinkToken ? getPublicLinkUrl(publicLinkToken) : '';
   const messageLink = publicLink || '[link]';
-
-  useEffect(() => {
-    setMessageDirty(false);
-  }, [order?.id]);
-
-  useEffect(() => {
-    if (!messageDirty) {
-      setMessageText(buildWhatsAppMessage(messageLink));
-    }
-  }, [
-    messageLink,
-    messageDirty,
-    order?.id,
-    order?.status,
-    order?.total,
-    order?.customer?.name,
-    order?.customer_name,
-    order?.customer?.phone,
-    order?.customer_phone,
-    order?.company?.whatsapp_message_template,
-    order?.company?.name,
-  ]);
-
   const resolveMessageForSend = (url: string) => {
     if (!messageDirty) return buildWhatsAppMessage(url);
+    const catalogLink = order?.company?.slug
+      ? `${window.location.origin}/catalogo/${order.company.slug}`
+      : '';
     return messageText
       .replaceAll('{pedido_link}', url)
+      .replaceAll('{link_catalogo}', catalogLink)
       .replaceAll('[link]', url);
   };
 
-  const clientMessage = messageText || buildWhatsAppMessage(messageLink);
-const ensurePublicLink = async () => {
+  const clientMessage = messageDirty ? messageText : buildWhatsAppMessage(messageLink);
+  const ensurePublicLink = async () => {
     if (!order) return null;
     if (publicLinkToken) return publicLinkToken;
     setLinkLoading(true);
@@ -712,6 +699,11 @@ const ensurePublicLink = async () => {
   const applyStatusChange = async (entrada?: number | null) => {
     if (!newStatus || !order) return;
 
+    if (entrada && entrada > 0 && !entryMethod) {
+      toast({ title: 'Selecione a forma de pagamento', variant: 'destructive' });
+      return;
+    }
+
     if (newStatus === 'pronto' && finalPhotos.length === 0) {
       toast({
         title: 'Foto obrigat¢ria',
@@ -731,6 +723,7 @@ const ensurePublicLink = async () => {
         notes: statusNotes || undefined,
         userId: user?.id,
         entrada: entrada ?? null,
+        paymentMethod: entrada && entryMethod ? entryMethod : undefined,
       });
 
       toast({ title: 'Status atualizado com sucesso!' });
@@ -754,9 +747,11 @@ const ensurePublicLink = async () => {
     }
   };
 
-  const handleStatusChange = async () => {
+    const handleStatusChange = async () => {
     if (!newStatus || !order) return;
+
     if (order.status === 'orcamento' && newStatus === 'pendente') {
+      setEntryMethod(order.payment_method || '');
       setEntryDialogOpen(true);
       return;
     }
@@ -1543,7 +1538,10 @@ const canSendWhatsApp = Boolean(order?.customer?.phone);
         open={entryDialogOpen}
         onOpenChange={(open) => {
           setEntryDialogOpen(open);
-          if (!open) setEntryAmount(0);
+          if (!open) {
+            setEntryAmount(0);
+            setEntryMethod('');
+          }
         }}
       >
         <DialogContent aria-describedby={undefined} className="max-w-md">
@@ -1557,6 +1555,21 @@ const canSendWhatsApp = Boolean(order?.customer?.phone);
             <div className="space-y-2">
               <Label>Valor de entrada (opcional)</Label>
               <CurrencyInput value={entryAmount} onChange={setEntryAmount} />
+            </div>
+            <div className="space-y-2">
+              <Label>Forma de pagamento</Label>
+              <Select value={entryMethod} onValueChange={(v) => setEntryMethod(v as PaymentMethod)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="dinheiro">Dinheiro</SelectItem>
+                  <SelectItem value="cartao">Cartao</SelectItem>
+                  <SelectItem value="pix">Pix</SelectItem>
+                  <SelectItem value="boleto">Boleto</SelectItem>
+                  <SelectItem value="outro">Outro</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
           <DialogFooter>
@@ -1661,6 +1674,17 @@ const canSendWhatsApp = Boolean(order?.customer?.phone);
     </div>
   );
 }
+
+
+
+
+
+
+
+
+
+
+
 
 
 

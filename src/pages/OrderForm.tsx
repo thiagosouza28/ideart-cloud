@@ -254,6 +254,9 @@ export default function OrderForm() {
         subtotal,
         discount,
         total,
+        amount_paid: 0,
+        payment_status: 'pendente',
+        payment_method: null,
         notes,
         created_by: user?.id,
       })

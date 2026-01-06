@@ -95,6 +95,7 @@ const getRouteSegments = (url: URL, functionName: string) => {
 type StatusUpdatePayload = {
   status?: string;
   notes?: string | null;
+  payment_method?: string | null;
 };
 
 type ItemsUpdatePayload = {
@@ -352,6 +353,10 @@ Deno.serve(async (req) => {
     const status = body.status?.trim();
     const notes = typeof body.notes === "string" ? body.notes.trim() : null;
     const entrada = typeof body.entrada === "number" ? body.entrada : null;
+    const paymentMethod =
+      typeof body.payment_method === "string" && body.payment_method.trim()
+        ? body.payment_method.trim()
+        : null;
 
     if (!status) {
       return jsonResponse(corsHeaders, 400, { error: "Status obrigatorio" });
@@ -444,6 +449,7 @@ Deno.serve(async (req) => {
       const paidAt = new Date().toISOString();
       const newPaid = Number(order.amount_paid || 0) + entrada;
       const paymentStatus = newPaid >= Number(order.total || 0) ? "pago" : "parcial";
+      const resolvedMethod = paymentMethod || order.payment_method || "dinheiro";
       const { error: paymentError } = await supabase
         .from("order_payments")
         .insert({
@@ -451,16 +457,34 @@ Deno.serve(async (req) => {
           company_id: order.company_id,
           amount: entrada,
           status: "pago",
-          method: order.payment_method || "dinheiro",
+          method: resolvedMethod,
           paid_at: paidAt,
           created_by: userId,
           notes: "Entrada registrada",
         });
-      if (paymentError) {
-        return jsonResponse(corsHeaders, 400, {
-          error: paymentError.message || "Falha ao registrar entrada",
+        if (paymentError) {
+          return jsonResponse(corsHeaders, 400, {
+            error: paymentError.message || "Falha ao registrar entrada",
+          });
+        }
+
+        const { error: financialError } = await supabase
+          .from("financial_entries")
+        .insert({
+          company_id: order.company_id,
+          type: "receita",
+          origin: "order_payment",
+          amount: entrada,
+          status: "pago",
+          payment_method: resolvedMethod,
+          description: `Entrada pedido #${order.order_number}`,
+          occurred_at: paidAt,
+          created_by: userId,
         });
-      }
+
+        if (financialError) {
+          console.warn("Falha ao registrar entrada financeira", financialError);
+        }
       const { data: finalOrder, error: updatePaymentError } = await supabase
         .from("orders")
         .update({

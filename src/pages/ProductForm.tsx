@@ -75,7 +75,7 @@ export default function ProductForm() {
   const { id } = useParams<{ id: string }>();
   const isEditing = !!id && id !== 'novo';
   const { toast } = useToast();
-  const { profile } = useAuth();
+  const { profile, company } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -131,6 +131,9 @@ export default function ProductForm() {
   const [productAttributes, setProductAttributes] = useState<ProductAttributeItem[]>([]);
 
   const [errors, setErrors] = useState<Record<string, string>>();
+  const productLinkPreview = company?.slug
+    ? `/catalogo/${company.slug}/produto/${productSlug || 'slug-do-produto'}`
+    : `/catalogo/produto/${productSlug || 'slug-do-produto'}`;
 
   const categoryMap = useMemo(() => {
     const map = new Map<string, Category>();
@@ -178,11 +181,9 @@ export default function ProductForm() {
     return flattened;
   }, [categories, categoryMap, childrenByParent]);
 
-  const rootCategoryOptions = useMemo(() => {
-    return categories
-      .filter((category) => !category.parent_id || !categoryMap.has(category.parent_id))
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }, [categories, categoryMap]);
+  const parentCategoryOptions = useMemo(() => {
+    return categoryOptions;
+  }, [categoryOptions]);
 
   useEffect(() => {
     fetchData();
@@ -908,7 +909,7 @@ export default function ProductForm() {
                 }}
                 placeholder="slug-do-produto"
               />
-              <p className="text-xs text-muted-foreground">/catalogo/produto/{productSlug || 'slug-do-produto'}</p>
+                <p className="text-xs text-muted-foreground">{productLinkPreview}</p>
             </div>
 
             <div className="md:col-span-2 space-y-2">
@@ -1483,11 +1484,11 @@ export default function ProductForm() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">Sem categoria pai (categoria principal)</SelectItem>
-                  {rootCategoryOptions.map((option) => (
-                    <SelectItem key={option.id} value={option.id}>
-                      {option.name}
-                    </SelectItem>
-                  ))}
+                    {parentCategoryOptions.map((option) => (
+                      <SelectItem key={option.id} value={option.id}>
+                        {`${'-- '.repeat(option.level)}${option.name}`}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">

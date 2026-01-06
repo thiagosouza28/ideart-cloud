@@ -59,8 +59,20 @@ export default function PDV() {
   const [company, setCompany] = useState<Company | null>(null);
   const barcodeInputRef = useRef<HTMLInputElement>(null);
   const receiptRef = useRef<HTMLDivElement>(null);
+  const cartHydratedRef = useRef(false);
+  const stateHydratedRef = useRef(false);
+  const productsHydratedRef = useRef(false);
   const { user, profile } = useAuth();
   const { toast } = useToast();
+  const cartStorageKey = profile?.company_id ? `pdv_cart_${profile.company_id}` : 'pdv_cart_default';
+  const pdvStateStorageKey = profile?.company_id ? `pdv_state_${profile.company_id}` : 'pdv_state_default';
+  const productsStorageKey = profile?.company_id ? `pdv_products_${profile.company_id}` : 'pdv_products_default';
+
+  useEffect(() => {
+    cartHydratedRef.current = false;
+    stateHydratedRef.current = false;
+    productsHydratedRef.current = false;
+  }, [cartStorageKey, pdvStateStorageKey, productsStorageKey]);
 
   useEffect(() => {
     if (profile?.company_id) {
@@ -81,9 +93,108 @@ export default function PDV() {
   }, [profile?.company_id]);
 
   useEffect(() => {
+    const raw = localStorage.getItem(productsStorageKey);
+    if (!raw) {
+      productsHydratedRef.current = true;
+      return;
+    }
+    try {
+      const parsed = JSON.parse(raw) as Product[];
+      if (Array.isArray(parsed)) {
+        const restored = parsed.map((product) => ({
+          ...product,
+          image_url: ensurePublicStorageUrl('product-images', product.image_url),
+        }));
+        setProducts(restored);
+      }
+    } catch {
+      localStorage.removeItem(productsStorageKey);
+    } finally {
+      productsHydratedRef.current = true;
+    }
+  }, [productsStorageKey]);
+
+  useEffect(() => {
+    const raw = localStorage.getItem(cartStorageKey);
+    if (!raw) {
+      cartHydratedRef.current = true;
+      return;
+    }
+    try {
+      const parsed = JSON.parse(raw) as CartItem[];
+      if (Array.isArray(parsed)) {
+        const restored = parsed.map((item) => ({
+          ...item,
+          product: {
+            ...item.product,
+            image_url: ensurePublicStorageUrl('product-images', item.product.image_url),
+          },
+        }));
+        setCart(restored);
+      }
+    } catch {
+      localStorage.removeItem(cartStorageKey);
+    } finally {
+      cartHydratedRef.current = true;
+    }
+  }, [cartStorageKey]);
+
+  useEffect(() => {
+    const raw = localStorage.getItem(pdvStateStorageKey);
+    if (!raw) {
+      stateHydratedRef.current = true;
+      return;
+    }
+    try {
+      const parsed = JSON.parse(raw) as {
+        paymentMethod?: PaymentMethod;
+        amountPaid?: string;
+        discount?: number;
+        customer?: Customer | null;
+      };
+      if (parsed.paymentMethod) setPaymentMethod(parsed.paymentMethod);
+      if (typeof parsed.amountPaid === 'string') setAmountPaid(parsed.amountPaid);
+      if (typeof parsed.discount === 'number') setDiscount(parsed.discount);
+      if (parsed.customer) setSelectedCustomer(parsed.customer);
+    } catch {
+      localStorage.removeItem(pdvStateStorageKey);
+    } finally {
+      stateHydratedRef.current = true;
+    }
+  }, [pdvStateStorageKey]);
+
+  useEffect(() => {
+    if (!cartHydratedRef.current || !stateHydratedRef.current) return;
+    if (cart.length === 0) {
+      localStorage.removeItem(cartStorageKey);
+      return;
+    }
+    localStorage.setItem(cartStorageKey, JSON.stringify(cart));
+  }, [cart, cartStorageKey]);
+
+  useEffect(() => {
+    if (!cartHydratedRef.current || !stateHydratedRef.current) return;
+    const payload = {
+      paymentMethod,
+      amountPaid,
+      discount,
+      customer: selectedCustomer,
+    };
+    localStorage.setItem(pdvStateStorageKey, JSON.stringify(payload));
+  }, [amountPaid, discount, paymentMethod, pdvStateStorageKey, selectedCustomer]);
+
+  useEffect(() => {
+    if (!productsHydratedRef.current) return;
+    if (products.length === 0) {
+      localStorage.removeItem(productsStorageKey);
+      return;
+    }
+    localStorage.setItem(productsStorageKey, JSON.stringify(products));
+  }, [products, productsStorageKey]);
+
+  useEffect(() => {
     const term = search.trim();
     if (!term) {
-      setProducts([]);
       setProductsLoading(false);
       return;
     }
@@ -175,15 +286,26 @@ export default function PDV() {
   const removeFromCart = (productId: string) => setCart(cart.filter(i => i.product.id !== productId));
 
   const subtotal = cart.reduce((acc, i) => acc + (i.unit_price * i.quantity - i.discount), 0);
-  const total = subtotal - discount;
-  const change = paymentMethod === 'dinheiro' ? Math.max(0, parseFloat(amountPaid || '0') - total) : 0;
+  const total = Math.max(0, subtotal - discount);
+  const paidAmount = paymentMethod === 'dinheiro' ? Number(amountPaid || 0) : total;
+  const change = paymentMethod === 'dinheiro' ? Math.max(0, paidAmount - total) : 0;
 
   const formatCurrency = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
   const getUnitPrice = (product: Product) => resolveSuggestedPrice(product, 1, [], 0);
 
   const handleFinalizeSale = () => {
     if (cart.length === 0) return toast({ title: 'Carrinho vazio', variant: 'destructive' });
-    if (paymentMethod === 'dinheiro' && parseFloat(amountPaid || '0') < total) return toast({ title: 'Valor pago insuficiente', variant: 'destructive' });
+    if (!Number.isFinite(total) || total <= 0) {
+      return toast({ title: 'Total invalido', variant: 'destructive' });
+    }
+    if (paymentMethod === 'dinheiro') {
+      if (!Number.isFinite(paidAmount) || paidAmount <= 0) {
+        return toast({ title: 'Informe o valor pago', variant: 'destructive' });
+      }
+      if (paidAmount < total) {
+        return toast({ title: 'Valor pago insuficiente', variant: 'destructive' });
+      }
+    }
     setShowConfirmDialog(true);
   };
 
@@ -193,18 +315,39 @@ export default function PDV() {
     const { data: sale, error } = await supabase.from('sales').insert({
       user_id: user?.id,
       customer_id: selectedCustomer?.id || null,
+      company_id: profile?.company_id || null,
       subtotal,
       discount,
       total,
       payment_method: paymentMethod,
-      amount_paid: paymentMethod === 'dinheiro' ? parseFloat(amountPaid) : total,
-      change_amount: change
-    }).select().single();
+      amount_paid: paidAmount,
+      change_amount: change,
+    } as any).select().single();
 
     if (error || !sale) {
       toast({ title: 'Erro ao finalizar venda', variant: 'destructive' });
       setLoading(false);
       return;
+    }
+
+    if (profile?.company_id) {
+      const { error: financialError } = await supabase
+        .from('financial_entries')
+        .insert({
+          company_id: profile.company_id,
+          type: 'receita',
+          origin: 'pdv',
+          amount: total,
+          status: 'pago',
+          payment_method: paymentMethod,
+          description: `Venda PDV #${sale.id.slice(0, 8)}`,
+          occurred_at: new Date().toISOString(),
+          created_by: user?.id || null,
+        } as any);
+
+      if (financialError) {
+        toast({ title: 'Erro ao registrar entrada financeira', variant: 'destructive' });
+      }
     }
 
     await Promise.all(cart.map(i =>
@@ -305,6 +448,8 @@ export default function PDV() {
     });
 
     toast({ title: 'Venda finalizada com sucesso!' });
+    localStorage.removeItem(cartStorageKey);
+    localStorage.removeItem(pdvStateStorageKey);
     setCart([]);
     setDiscount(0);
     setAmountPaid('');
@@ -341,8 +486,8 @@ export default function PDV() {
   };
 
   return (
-    <div className="page-container flex min-h-0 flex-col gap-6 bg-slate-50/70">
-      <div className="flex items-center justify-between gap-4 flex-wrap rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
+    <div className="page-container w-full max-w-none flex min-h-0 flex-col gap-4 bg-slate-50/70">
+      <div className="flex items-center justify-between gap-2 flex-wrap rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
         <div className="flex items-center gap-3 text-slate-600">
           <div className="h-10 w-10 rounded-xl bg-slate-100 flex items-center justify-center">
             <ShoppingCart className="h-5 w-5 text-primary" />
@@ -357,14 +502,9 @@ export default function PDV() {
         </Badge>
       </div>
 
-      <div>
-        <h2 className="text-2xl font-semibold text-slate-900">PDV</h2>
-        <p className="text-sm text-slate-500">Ponto de venda</p>
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
-        <div className="space-y-4">
-          <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="space-y-2">
+          <div className="grid gap-2 sm:grid-cols-2">
             <form onSubmit={handleBarcodeSubmit} className="relative">
               <Barcode className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
               <Input
@@ -388,9 +528,9 @@ export default function PDV() {
           </div>
 
           <Card className="border-slate-200 bg-white shadow-sm">
-            <CardContent className="p-4">
-              <div className="min-h-[520px] rounded-xl border border-dashed border-slate-200 bg-slate-50/70 p-6">
-                {!search.trim() ? (
+            <CardContent className="p-2">
+              <div className="min-h-[420px] max-h-[calc(100vh-16rem)] overflow-auto rounded-xl border border-dashed border-slate-200 bg-slate-50/70 p-2">
+                {!search.trim() && products.length === 0 ? (
                   <div className="flex h-full flex-col items-center justify-center text-center text-sm text-slate-500">
                     <div className="h-12 w-12 rounded-full bg-white shadow flex items-center justify-center mb-3">
                       <ShoppingBag className="h-5 w-5 text-slate-400" />
@@ -409,15 +549,15 @@ export default function PDV() {
                     Nenhum produto encontrado.
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
                     {products.map((p) => (
                       <Card
                         key={p.id}
                         className="cursor-pointer hover:border-primary transition-colors shadow-sm"
                         onClick={() => addToCart(p)}
                       >
-                        <CardContent className="p-3">
-                          <div className="aspect-square bg-white rounded-lg mb-3 border border-slate-200 flex items-center justify-center overflow-hidden">
+                        <CardContent className="p-2">
+                          <div className="aspect-square bg-white rounded-lg mb-2 border border-slate-200 flex items-center justify-center overflow-hidden">
                             {p.image_url ? (
                               <img src={p.image_url} alt={p.name} loading="lazy" className="w-full h-full object-cover" />
                             ) : (
@@ -439,22 +579,22 @@ export default function PDV() {
           </Card>
         </div>
 
-        <Card className="border-slate-200 bg-white flex flex-col overflow-hidden lg:sticky lg:top-6 max-h-[calc(100vh-6rem)] shadow-sm">
-          <CardHeader className="border-b space-y-3">
+        <Card className="border-slate-200 bg-white flex flex-col overflow-hidden lg:sticky lg:top-3 max-h-[calc(100vh-4.5rem)] shadow-sm">
+          <CardHeader className="border-b space-y-2 px-3 py-2">
             <div className="flex items-center gap-2">
               <ShoppingCart className="h-5 w-5 text-primary" />
               <CardTitle className="text-lg">Carrinho</CardTitle>
             </div>
             <CustomerSearch selectedCustomer={selectedCustomer} onSelect={setSelectedCustomer} />
           </CardHeader>
-          <CardContent className="flex-1 overflow-auto space-y-3 p-4">
+          <CardContent className="flex-1 overflow-auto space-y-2 p-2">
             {cart.length === 0 ? (
               <div className="flex h-full flex-col items-center justify-center text-sm text-slate-500 py-12">
                 <ShoppingCart className="h-10 w-10 text-slate-300 mb-3" />
                 Carrinho vazio
               </div>
             ) : cart.map((item) => (
-              <div key={item.product.id} className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 bg-white shadow-sm">
+              <div key={item.product.id} className="flex items-center gap-2 p-2 rounded-xl border border-slate-200 bg-white shadow-sm">
                 <div className="h-12 w-12 rounded-lg bg-slate-100 overflow-hidden flex items-center justify-center">
                   {item.product.image_url ? (
                     <img src={item.product.image_url} alt={item.product.name} className="h-full w-full object-cover" />
@@ -481,7 +621,7 @@ export default function PDV() {
               </div>
             ))}
           </CardContent>
-          <CardFooter className="border-t p-4 flex-col gap-4">
+          <CardFooter className="border-t p-2 flex-col gap-2">
             <div className="w-full space-y-2 text-sm">
               <div className="flex justify-between"><span>Subtotal</span><span>{formatCurrency(subtotal)}</span></div>
               <div className="flex justify-between items-center">
@@ -504,7 +644,7 @@ export default function PDV() {
                 {paymentMethod === 'dinheiro' && (
                   <CurrencyInput
                     placeholder="Valor pago"
-                    value={parseFloat(amountPaid) || 0}
+                    value={Number(amountPaid || 0)}
                     onChange={(value) => setAmountPaid(value.toString())}
                     className="h-10"
                   />

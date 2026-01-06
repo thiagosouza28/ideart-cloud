@@ -18,6 +18,7 @@ export type ReportFilters = {
   startDate?: string;
   endDate?: string;
   status?: OrderStatus | 'all';
+  companyId?: string | null;
 };
 
 export type SalesPeriod = 'daily' | 'weekly' | 'monthly' | 'annual';
@@ -221,8 +222,9 @@ export const buildPeriodSeries = (
 };
 
 const buildCashTransactions = (sources: ReportSources) => {
+  const ignoredOrigins = new Set(['order_payment', 'pdv']);
   const paymentTransactions: CashTransaction[] = sources.orderPayments
-    .filter((payment) => payment.status === 'pago')
+    .filter((payment) => payment.status !== 'pendente')
     .map((payment) => ({
       id: payment.id,
       date: payment.paid_at || payment.created_at,
@@ -248,7 +250,7 @@ const buildCashTransactions = (sources: ReportSources) => {
     }));
 
   const entryTransactions: CashTransaction[] = sources.financialEntries
-    .filter((entry) => entry.status === 'pago')
+    .filter((entry) => entry.status === 'pago' && !ignoredOrigins.has(entry.origin || ''))
     .map((entry) => ({
       id: entry.id,
       date: entry.paid_at || entry.occurred_at,
@@ -269,20 +271,31 @@ const calculateOpeningBalance = async (filters: ReportFilters) => {
   if (!filters.startDate) return 0;
   const startDate = buildDate(filters.startDate);
   startDate.setHours(0, 0, 0, 0);
+  const companyId = filters.companyId ?? null;
+
+  let paymentsQuery = supabase
+    .from('order_payments')
+    .select('amount, status, paid_at, created_at')
+    .lt('created_at', startDate.toISOString());
+  let salesQuery = supabase
+    .from('sales')
+    .select('total, created_at')
+    .lt('created_at', startDate.toISOString());
+  let entriesQuery = supabase
+    .from('financial_entries')
+    .select('amount, type, status, paid_at, occurred_at, origin')
+    .lt('occurred_at', startDate.toISOString());
+
+  if (companyId) {
+    paymentsQuery = paymentsQuery.eq('company_id', companyId);
+    salesQuery = salesQuery.eq('company_id', companyId);
+    entriesQuery = entriesQuery.eq('company_id', companyId);
+  }
 
   const [paymentsResult, salesResult, entriesResult] = await Promise.all([
-    supabase
-      .from('order_payments')
-      .select('amount, status, paid_at, created_at')
-      .lt('created_at', startDate.toISOString()),
-    supabase
-      .from('sales')
-      .select('total, created_at')
-      .lt('created_at', startDate.toISOString()),
-    supabase
-      .from('financial_entries')
-      .select('amount, type, status, paid_at, occurred_at')
-      .lt('occurred_at', startDate.toISOString()),
+    paymentsQuery,
+    salesQuery,
+    entriesQuery,
   ]);
 
   const paidPayments = (paymentsResult.data as OrderPayment[] | null) || [];
@@ -290,15 +303,16 @@ const calculateOpeningBalance = async (filters: ReportFilters) => {
   const entries = (entriesResult.data as FinancialEntry[] | null) || [];
 
   const paymentTotal = sumBy(
-    paidPayments.filter((payment) => payment.status === 'pago'),
+    paidPayments.filter((payment) => payment.status !== 'pendente'),
     (payment) => Number(payment.amount),
   );
   const salesTotal = sumBy(
     paidSales.filter((sale) => Number(sale.amount_paid) >= Number(sale.total)),
     (sale) => Number(sale.total),
   );
+  const ignoredOrigins = new Set(['order_payment', 'pdv']);
   const entryTotal = sumBy(
-    entries.filter((entry) => entry.status === 'pago'),
+    entries.filter((entry) => entry.status === 'pago' && !ignoredOrigins.has(entry.origin || '')),
     (entry) => (entry.type === 'receita' ? Number(entry.amount) : -Number(entry.amount)),
   );
 
@@ -324,7 +338,8 @@ const buildCashReport = async (sources: ReportSources, filters: ReportFilters): 
 };
 
 const buildFinancialReport = (sources: ReportSources): FinancialReport => {
-  const paidPayments = sources.orderPayments.filter((payment) => payment.status === 'pago');
+  const ignoredOrigins = new Set(['order_payment', 'pdv']);
+  const paidPayments = sources.orderPayments.filter((payment) => payment.status !== 'pendente');
   const paidEntries = sources.financialEntries.filter((entry) => entry.status === 'pago');
 
   const revenueFromOrders = sumBy(paidPayments, (payment) => Number(payment.amount));
@@ -333,7 +348,7 @@ const buildFinancialReport = (sources: ReportSources): FinancialReport => {
     (sale) => Number(sale.total),
   );
   const revenueFromManual = sumBy(
-    paidEntries.filter((entry) => entry.type === 'receita'),
+    paidEntries.filter((entry) => entry.type === 'receita' && !ignoredOrigins.has(entry.origin || '')),
     (entry) => Number(entry.amount),
   );
 
@@ -367,7 +382,7 @@ const buildFinancialReport = (sources: ReportSources): FinancialReport => {
     });
 
   paidEntries
-    .filter((entry) => entry.type === 'receita')
+    .filter((entry) => entry.type === 'receita' && !ignoredOrigins.has(entry.origin || ''))
     .forEach((entry) => {
       const key = entry.payment_method || 'indefinido';
       revenueByMethod[key] = (revenueByMethod[key] || 0) + Number(entry.amount);
@@ -644,11 +659,15 @@ const buildProductReport = (sources: ReportSources): ProductReport => {
 const loadSources = async (filters: ReportFilters): Promise<ReportSources> => {
   const { startDate, endDate } = normalizeRange(filters);
   const statusFilter = filters.status && filters.status !== 'all' ? filters.status : null;
+  const companyId = filters.companyId ?? null;
 
   let ordersQuery = supabase
     .from('orders')
     .select('id, order_number, customer_id, customer_name, status, total, subtotal, discount, amount_paid, created_at, payment_status');
 
+  if (companyId) {
+    ordersQuery = ordersQuery.eq('company_id', companyId);
+  }
   ordersQuery = applyDateRange(ordersQuery, 'created_at', startDate, endDate);
   if (statusFilter) {
     ordersQuery = (ordersQuery as any).eq('status', statusFilter);
@@ -658,32 +677,47 @@ const loadSources = async (filters: ReportFilters): Promise<ReportSources> => {
   const orders = (ordersResult.data as Order[]) || [];
   const orderIds = orders.map((order) => order.id);
 
-  const [orderItemsResult, paymentsResult, salesResult, entriesResult, categoriesResult, productsResult, suppliesResult] =
+  let paymentsQuery = applyDateRange(
+    supabase.from('order_payments').select('*'),
+    'created_at',
+    startDate,
+    endDate,
+  );
+  let salesQuery = applyDateRange(
+    supabase.from('sales').select('*'),
+    'created_at',
+    startDate,
+    endDate,
+  );
+  let entriesQuery = applyDateRange(
+    supabase.from('financial_entries').select('*'),
+    'occurred_at',
+    startDate,
+    endDate,
+  );
+  let categoriesQuery = supabase.from('expense_categories').select('*');
+  let productsQuery = supabase
+    .from('products')
+    .select('id, name, base_cost, labor_cost, waste_percentage, profit_margin');
+
+  if (companyId) {
+    paymentsQuery = paymentsQuery.eq('company_id', companyId);
+    salesQuery = salesQuery.eq('company_id', companyId);
+    entriesQuery = entriesQuery.eq('company_id', companyId);
+    categoriesQuery = categoriesQuery.eq('company_id', companyId);
+    productsQuery = productsQuery.eq('company_id', companyId);
+  }
+
+  const [orderItemsResult, paymentsResult, salesResult, entriesResult, categoriesResult, productsResult] =
     await Promise.all([
       orderIds.length
         ? supabase.from('order_items').select('*').in('order_id', orderIds)
         : Promise.resolve({ data: [] }),
-      applyDateRange(
-        supabase.from('order_payments').select('*'),
-        'created_at',
-        startDate,
-        endDate,
-      ),
-      applyDateRange(
-        supabase.from('sales').select('*'),
-        'created_at',
-        startDate,
-        endDate,
-      ),
-      applyDateRange(
-        supabase.from('financial_entries').select('*'),
-        'occurred_at',
-        startDate,
-        endDate,
-      ),
-      supabase.from('expense_categories').select('*'),
-      supabase.from('products').select('id, name, base_cost, labor_cost, waste_percentage, profit_margin'),
-      supabase.from('product_supplies').select('product_id, quantity, supply:supplies(cost_per_unit)'),
+      paymentsQuery,
+      salesQuery,
+      entriesQuery,
+      categoriesQuery,
+      productsQuery,
     ]);
 
   const sales = (salesResult.data as Sale[]) || [];
@@ -703,6 +737,15 @@ const loadSources = async (filters: ReportFilters): Promise<ReportSources> => {
     ? await supabase.from('customers').select('*').in('id', customerIds)
     : { data: [] };
 
+  const products = (productsResult.data as Product[]) || [];
+  const productIds = products.map((product) => product.id);
+  const suppliesResult = productIds.length
+    ? await supabase
+      .from('product_supplies')
+      .select('product_id, quantity, supply:supplies(cost_per_unit)')
+      .in('product_id', productIds)
+    : { data: [] };
+
   return {
     orders,
     orderItems: (orderItemsResult.data as OrderItem[]) || [],
@@ -710,7 +753,7 @@ const loadSources = async (filters: ReportFilters): Promise<ReportSources> => {
     sales,
     saleItems: (saleItemsResult.data as SaleItem[]) || [],
     customers: (customersResult.data as Customer[]) || [],
-    products: (productsResult.data as Product[]) || [],
+    products,
     productSupplies: (suppliesResult.data as ProductSupply[]) || [],
     financialEntries: (entriesResult.data as FinancialEntry[]) || [],
     expenseCategories: (categoriesResult.data as ExpenseCategory[]) || [],

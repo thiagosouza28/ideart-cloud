@@ -10,16 +10,27 @@ import { supabase } from '@/integrations/supabase/client';
 import type { Company } from '@/types/database';
 import { toast } from 'sonner';
 import { ensurePublicStorageUrl } from '@/lib/storage';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function Companies() {
   const navigate = useNavigate();
+  const { profile } = useAuth();
   const [companies, setCompanies] = useState<Company[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [copiedSlug, setCopiedSlug] = useState<string | null>(null);
 
   const loadCompanies = async () => {
-    const { data } = await supabase.from('companies').select('*').order('name');
+    if (!profile?.company_id) {
+      setCompanies([]);
+      setLoading(false);
+      return;
+    }
+    const { data } = await supabase
+      .from('companies')
+      .select('*')
+      .eq('id', profile.company_id)
+      .order('name');
     const mapped = (data as Company[] || []).map((company) => ({
       ...company,
       logo_url: ensurePublicStorageUrl('product-images', company.logo_url),
@@ -30,7 +41,7 @@ export default function Companies() {
 
   useEffect(() => {
     loadCompanies();
-  }, []);
+  }, [profile?.company_id]);
 
   const filtered = companies.filter(c =>
     c.name.toLowerCase().includes(search.toLowerCase()) ||

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -45,6 +45,13 @@ type CatalogSettings = Partial<Company> & {
   catalog_columns_desktop?: number | null;
 };
 
+const generateSlug = (value: string) =>
+  value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
 export default function CatalogManager() {
   const { profile, company } = useAuth();
   const navigate = useNavigate();
@@ -56,7 +63,7 @@ export default function CatalogManager() {
   const [settings, setSettings] = useState<CatalogSettings>({});
   const [savingSettings, setSavingSettings] = useState(false);
 
-  const loadProducts = async () => {
+  const loadProducts = useCallback(async () => {
     if (!profile?.company_id) return;
     setLoading(true);
     const { data, error } = await supabase
@@ -67,16 +74,16 @@ export default function CatalogManager() {
       .order("name", { ascending: true });
 
     if (error) {
-      toast.error("Erro ao carregar produtos do catálogo");
+      toast.error("Erro ao carregar produtos do catalogo");
       setLoading(false);
       return;
     }
 
     setProducts((data || []) as CatalogProduct[]);
     setLoading(false);
-  };
+  }, [profile?.company_id]);
 
-  const loadSettings = async () => {
+  const loadSettings = useCallback(async () => {
     if (!profile?.company_id) return;
     const { data, error } = await supabase
       .from("companies")
@@ -85,7 +92,7 @@ export default function CatalogManager() {
       .maybeSingle();
 
     if (error) {
-      toast.error("Erro ao carregar personalização do catálogo");
+      toast.error("Erro ao carregar personalizacao do catalogo");
       return;
     }
 
@@ -109,12 +116,12 @@ export default function CatalogManager() {
       catalog_columns_mobile: companyData.catalog_columns_mobile,
       catalog_columns_desktop: companyData.catalog_columns_desktop,
     });
-  };
+  }, [profile?.company_id]);
 
   useEffect(() => {
     loadProducts();
     loadSettings();
-  }, [profile?.company_id]);
+  }, [loadProducts, loadSettings]);
 
   const filteredProducts = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -125,18 +132,29 @@ export default function CatalogManager() {
   }, [products, search]);
 
   const updateProduct = async (productId: string, patch: Partial<CatalogProduct>) => {
+    const resolvedPatch = { ...patch };
+    if (Object.prototype.hasOwnProperty.call(patch, 'slug')) {
+      const current = products.find((item) => item.id === productId);
+      const nextSlug = String(patch.slug ?? '').trim();
+      if (!nextSlug) {
+        resolvedPatch.slug = current?.name ? generateSlug(current.name) : null;
+      } else {
+        resolvedPatch.slug = nextSlug;
+      }
+    }
+
     const { error } = await supabase
       .from("products")
-      .update(patch)
+      .update(resolvedPatch)
       .eq("id", productId);
 
     if (error) {
-      toast.error("Erro ao atualizar produto do catálogo");
+      toast.error("Erro ao atualizar produto do catalogo");
       return;
     }
 
     setProducts((prev) =>
-      prev.map((item) => (item.id === productId ? { ...item, ...patch } : item))
+      prev.map((item) => (item.id === productId ? { ...item, ...resolvedPatch } : item))
     );
   };
 
