@@ -13,8 +13,11 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 const statusLabels: Record<OrderStatus, string> = {
   orcamento: 'Orçamento',
   pendente: 'Pendente',
+  produzindo_arte: 'Produzindo arte',
+  arte_aprovada: 'Arte aprovada',
   em_producao: 'Em Produção',
-  pronto: 'Pronto',
+  finalizado: 'Finalizado',
+  pronto: 'Finalizado',
   aguardando_retirada: 'Aguardando retirada',
   entregue: 'Entregue',
   cancelado: 'Cancelado',
@@ -23,7 +26,10 @@ const statusLabels: Record<OrderStatus, string> = {
 const statusColors: Record<OrderStatus, string> = {
   orcamento: 'bg-blue-100 text-blue-800',
   pendente: 'bg-orange-100 text-orange-800',
+  produzindo_arte: 'bg-indigo-100 text-indigo-800',
+  arte_aprovada: 'bg-emerald-100 text-emerald-800',
   em_producao: 'bg-yellow-100 text-yellow-800',
+  finalizado: 'bg-green-100 text-green-800',
   pronto: 'bg-green-100 text-green-800',
   aguardando_retirada: 'bg-sky-100 text-sky-800',
   entregue: 'bg-gray-100 text-gray-800',
@@ -52,7 +58,10 @@ export default function Orders() {
     const matchesSearch =
       order.order_number.toString().includes(search) ||
       order.customer_name?.toLowerCase().includes(search.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
+    const matchesStatus = statusFilter === 'all'
+      || (statusFilter === 'finalizado'
+        ? order.status === 'finalizado' || order.status === 'pronto'
+        : order.status === statusFilter);
     return matchesSearch && matchesStatus;
   });
 
@@ -63,7 +72,8 @@ export default function Orders() {
   const getStatusCounts = () => {
     const counts: Record<string, number> = { all: orders.length };
     orders.forEach((order) => {
-      counts[order.status] = (counts[order.status] || 0) + 1;
+      const key = order.status === 'pronto' ? 'finalizado' : order.status;
+      counts[key] = (counts[key] || 0) + 1;
     });
     return counts;
   };
@@ -94,14 +104,26 @@ export default function Orders() {
           <TabsTrigger value="pendente" className="data-[state=active]:text-primary data-[state=active]:font-semibold">
             Pendentes <span className="ml-1 text-xs opacity-70">({counts.pendente || 0})</span>
           </TabsTrigger>
+          <TabsTrigger value="produzindo_arte" className="data-[state=active]:text-primary data-[state=active]:font-semibold">
+            Produzindo Arte <span className="ml-1 text-xs opacity-70">({counts.produzindo_arte || 0})</span>
+          </TabsTrigger>
+          <TabsTrigger value="arte_aprovada" className="data-[state=active]:text-primary data-[state=active]:font-semibold">
+            Arte Aprovada <span className="ml-1 text-xs opacity-70">({counts.arte_aprovada || 0})</span>
+          </TabsTrigger>
           <TabsTrigger value="em_producao" className="data-[state=active]:text-primary data-[state=active]:font-semibold">
             Em Produção <span className="ml-1 text-xs opacity-70">({counts.em_producao || 0})</span>
           </TabsTrigger>
-          <TabsTrigger value="pronto" className="data-[state=active]:text-primary data-[state=active]:font-semibold">
-            Prontos <span className="ml-1 text-xs opacity-70">({counts.pronto || 0})</span>
+          <TabsTrigger value="finalizado" className="data-[state=active]:text-primary data-[state=active]:font-semibold">
+            Finalizados <span className="ml-1 text-xs opacity-70">({counts.finalizado || 0})</span>
+          </TabsTrigger>
+          <TabsTrigger value="aguardando_retirada" className="data-[state=active]:text-primary data-[state=active]:font-semibold">
+            Aguardando Retirada <span className="ml-1 text-xs opacity-70">({counts.aguardando_retirada || 0})</span>
           </TabsTrigger>
           <TabsTrigger value="entregue" className="data-[state=active]:text-primary data-[state=active]:font-semibold">
             Entregues <span className="ml-1 text-xs opacity-70">({counts.entregue || 0})</span>
+          </TabsTrigger>
+          <TabsTrigger value="cancelado" className="data-[state=active]:text-primary data-[state=active]:font-semibold">
+            Cancelados <span className="ml-1 text-xs opacity-70">({counts.cancelado || 0})</span>
           </TabsTrigger>
         </TabsList>
       </Tabs>

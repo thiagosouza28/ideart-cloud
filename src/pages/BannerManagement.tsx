@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
     Plus,
@@ -42,6 +42,7 @@ import { toast } from 'sonner';
 import { ensurePublicStorageUrl } from '@/lib/storage';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { useUnsavedChanges } from '@/hooks/use-unsaved-changes';
 
 interface Banner {
     id: string;
@@ -82,8 +83,18 @@ export default function BannerManagement() {
     const [currentBanner, setCurrentBanner] = useState<Partial<Banner>>(emptyBanner);
     const [saving, setSaving] = useState(false);
     const [uploading, setUploading] = useState(false);
+    const [initialBannerSnapshot, setInitialBannerSnapshot] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const formRef = useRef<HTMLDivElement>(null);
+
+    const currentSnapshot = useMemo(() => JSON.stringify(currentBanner), [currentBanner]);
+    const isDirty = Boolean(
+        isDialogOpen
+        && initialBannerSnapshot
+        && initialBannerSnapshot !== currentSnapshot
+    );
+
+    useUnsavedChanges(isDirty && !saving);
 
     useEffect(() => {
         if (profile?.company_id) {
@@ -110,13 +121,16 @@ export default function BannerManagement() {
     };
 
     const handleOpenCreate = () => {
-        setCurrentBanner({ ...emptyBanner, company_id: profile?.company_id });
+        const nextBanner = { ...emptyBanner, company_id: profile?.company_id };
+        setCurrentBanner(nextBanner);
+        setInitialBannerSnapshot(JSON.stringify(nextBanner));
         setIsDialogOpen(true);
         setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0);
     };
 
     const handleOpenEdit = (banner: Banner) => {
         setCurrentBanner(banner);
+        setInitialBannerSnapshot(JSON.stringify(banner));
         setIsDialogOpen(true);
         setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0);
     };

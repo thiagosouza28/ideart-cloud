@@ -13,13 +13,14 @@ import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Category, Supply, Attribute, AttributeValue, ProductType } from '@/types/database';
+import { Category, Supply, Attribute, AttributeValue, ProductColor, ProductType } from '@/types/database';
 import { ArrowLeft, Plus, Trash2, Calculator, Save, Loader2, Upload, Image, Globe, Package, FolderPlus, Tag } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useAuth } from '@/contexts/AuthContext';
 import { generateProductDescription } from '@/services/ai';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { ensurePublicStorageUrl, getStoragePathFromUrl } from '@/lib/storage';
+import { useUnsavedChanges } from '@/hooks/use-unsaved-changes';
 
 const productSchema = z.object({
   name: z.string().min(2, 'Nome deve ter no mínimo 2 caracteres').max(100),
@@ -41,7 +42,18 @@ const productSchema = z.object({
   promo_price: z.number().min(0, 'Preço promocional deve ser positivo').optional().nullable(),
   promo_start_at: z.string().optional().nullable(),
   promo_end_at: z.string().optional().nullable(),
+  image_urls: z.array(z.string().min(1)).max(5).optional(),
+  product_colors: z.array(
+    z.object({
+      name: z.string().min(1, 'Nome da cor e obrigatorio'),
+      hex: z.string().regex(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/, 'HEX invalido'),
+      active: z.boolean(),
+    })
+  ).optional(),
+  personalization_enabled: z.boolean(),
 });
+
+const MAX_PRODUCT_IMAGES = 5;
 
 function generateSlug(name: string): string {
   return name
@@ -51,6 +63,54 @@ function generateSlug(name: string): string {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '');
 }
+
+const normalizeProductColors = (value: unknown): ProductColor[] => {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      if (!item || typeof item !== 'object') return null;
+      const record = item as Record<string, unknown>;
+      const name = typeof record.name === 'string' ? record.name.trim() : '';
+      const hex = typeof record.hex === 'string' ? record.hex.trim() : '';
+      const active = typeof record.active === 'boolean' ? record.active : true;
+      if (!name || !hex) return null;
+      return { name, hex, active };
+    })
+    .filter((color): color is ProductColor => !!color);
+};
+
+const normalizeProductImages = (value: unknown, fallback?: string | null): string[] => {
+  const rawList = Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string' && item.trim() !== '')
+    : [];
+  const normalized = rawList
+    .map((url) => ensurePublicStorageUrl('product-images', url) || url)
+    .filter((url): url is string => Boolean(url));
+  const withFallback = fallback ? [fallback, ...normalized] : normalized;
+  const unique = withFallback.filter((url, index, self) => self.indexOf(url) === index);
+  return unique.slice(0, MAX_PRODUCT_IMAGES);
+};
+
+const mergeAttributeDraft = (
+  base: ProductAttributeItem[],
+  draft: ProductAttributeItem[]
+): ProductAttributeItem[] => {
+  return base.map((attr) => {
+    const draftAttr = draft.find((item) => item.attribute_id === attr.attribute_id);
+    if (!draftAttr) return attr;
+    const draftValues = Array.isArray(draftAttr.values) ? draftAttr.values : [];
+    const mergedValues = attr.values.map((value) => {
+      const draftValue = draftValues.find((item) => item.id === value.id);
+      if (!draftValue) return value;
+      return {
+        ...value,
+        selected: Boolean(draftValue.selected),
+        price_modifier: Number(draftValue.price_modifier ?? value.price_modifier),
+      };
+    });
+    return { ...attr, values: mergedValues };
+  });
+};
 
 interface ProductSupplyItem {
   supply_id: string;
@@ -97,8 +157,10 @@ export default function ProductForm() {
   const [catalogPrice, setCatalogPrice] = useState<number | null>(null);
   const [catalogShortDescription, setCatalogShortDescription] = useState('');
   const [catalogLongDescription, setCatalogLongDescription] = useState('');
+  const [productColors, setProductColors] = useState<ProductColor[]>([]);
+  const [personalizationEnabled, setPersonalizationEnabled] = useState(false);
   const [generatingDescription, setGeneratingDescription] = useState(false);
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [baseCost, setBaseCost] = useState(0);
   const [laborCost, setLaborCost] = useState(0);
   const [wastePercentage, setWastePercentage] = useState(0);
@@ -129,11 +191,18 @@ export default function ProductForm() {
   const [productSupplies, setProductSupplies] = useState<ProductSupplyItem[]>([]);
   const [priceTiers, setPriceTiers] = useState<PriceTierItem[]>([]);
   const [productAttributes, setProductAttributes] = useState<ProductAttributeItem[]>([]);
+  const [initialSnapshot, setInitialSnapshot] = useState<string | null>(null);
+  const [draftReady, setDraftReady] = useState(false);
 
   const [errors, setErrors] = useState<Record<string, string>>();
   const productLinkPreview = company?.slug
     ? `/catalogo/${company.slug}/produto/${productSlug || 'slug-do-produto'}`
     : `/catalogo/produto/${productSlug || 'slug-do-produto'}`;
+  const draftStorageKey = useMemo(() => {
+    const companyKey = company?.id || profile?.company_id || 'public';
+    const productKey = isEditing ? id : 'novo';
+    return `product-form-draft:${companyKey}:${productKey}`;
+  }, [company?.id, profile?.company_id, isEditing, id]);
 
   const categoryMap = useMemo(() => {
     const map = new Map<string, Category>();
@@ -187,6 +256,11 @@ export default function ProductForm() {
 
   useEffect(() => {
     fetchData();
+  }, [id]);
+
+  useEffect(() => {
+    setInitialSnapshot(null);
+    setDraftReady(false);
   }, [id]);
 
   const fetchData = async () => {
@@ -248,7 +322,10 @@ export default function ProductForm() {
       setCatalogPrice(product.catalog_price !== null && product.catalog_price !== undefined ? Number(product.catalog_price) : null);
       setCatalogShortDescription(product.catalog_short_description || '');
       setCatalogLongDescription(product.catalog_long_description || '');
-      setImageUrl(ensurePublicStorageUrl('product-images', product.image_url));
+      setProductColors(normalizeProductColors(product.product_colors));
+      setPersonalizationEnabled(product.personalization_enabled ?? false);
+      const normalizedPrimaryImage = ensurePublicStorageUrl('product-images', product.image_url);
+      setImageUrls(normalizeProductImages(product.image_urls, normalizedPrimaryImage));
       setBaseCost(Number(product.base_cost));
       setLaborCost(Number(product.labor_cost));
       setWastePercentage(Number(product.waste_percentage));
@@ -316,60 +393,110 @@ export default function ProductForm() {
           }),
         }));
       }
+    } else {
+      setProductColors([]);
+      setPersonalizationEnabled(false);
+      setImageUrls([]);
     }
 
     setProductAttributes(productAttrSelection);
     setLoading(false);
   };
 
-  // Image upload
+    // Image upload
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = Array.from(e.target.files ?? []);
+    if (files.length === 0) return;
 
-    if (!file.type.startsWith('image/')) {
-      toast({ title: 'Selecione uma imagem válida', variant: 'destructive' });
+    const remainingSlots = MAX_PRODUCT_IMAGES - imageUrls.length;
+    if (remainingSlots <= 0) {
+      toast({ title: `Limite de ${MAX_PRODUCT_IMAGES} imagens`, variant: 'destructive' });
       return;
     }
 
-    if (file.size > 5 * 1024 * 1024) {
-      toast({ title: 'Imagem deve ter no máximo 5MB', variant: 'destructive' });
+    const filesToUpload = files.slice(0, remainingSlots);
+    const validFiles: File[] = [];
+    let rejectedType = false;
+    let rejectedSize = false;
+
+    for (const file of filesToUpload) {
+      if (!file.type.startsWith('image/')) {
+        rejectedType = true;
+        continue;
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        rejectedSize = true;
+        continue;
+      }
+      validFiles.push(file);
+    }
+
+    if (rejectedType) {
+      toast({ title: 'Selecione apenas imagens validas', variant: 'destructive' });
+    }
+    if (rejectedSize) {
+      toast({ title: 'Imagem deve ter no maximo 5MB', variant: 'destructive' });
+    }
+    if (validFiles.length === 0) {
+      e.target.value = '';
       return;
     }
 
     setUploadingImage(true);
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-    const filePath = `products/${fileName}`;
+    const uploadedUrls: string[] = [];
 
-    const { error: uploadError } = await supabase.storage
-      .from('product-images')
-      .upload(filePath, file);
+    for (const file of validFiles) {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+      const filePath = `products/${fileName}`;
 
-    if (uploadError) {
-      toast({ title: 'Erro ao enviar imagem', variant: 'destructive' });
-      setUploadingImage(false);
-      return;
+      const { error: uploadError } = await supabase.storage
+        .from('product-images')
+        .upload(filePath, file);
+
+      if (uploadError) {
+        toast({ title: 'Erro ao enviar imagem', variant: 'destructive' });
+        continue;
+      }
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('product-images')
+        .getPublicUrl(filePath);
+
+      const normalizedUrl = ensurePublicStorageUrl('product-images', publicUrl);
+      if (normalizedUrl) {
+        uploadedUrls.push(normalizedUrl);
+      }
     }
 
-    const { data: { publicUrl } } = supabase.storage
-      .from('product-images')
-      .getPublicUrl(filePath);
-
-    const normalizedUrl = ensurePublicStorageUrl('product-images', publicUrl);
-    setImageUrl(normalizedUrl);
     setUploadingImage(false);
-    toast({ title: 'Imagem enviada com sucesso!' });
+    if (uploadedUrls.length > 0) {
+      setImageUrls((prev) => [...prev, ...uploadedUrls].slice(0, MAX_PRODUCT_IMAGES));
+      toast({ title: 'Imagens enviadas com sucesso!' });
+    }
+    e.target.value = '';
   };
 
-  const removeImage = async () => {
-    if (imageUrl) {
-      const path = getStoragePathFromUrl('product-images', imageUrl);
+  const setPrimaryImage = (index: number) => {
+    if (index <= 0) return;
+    setImageUrls((prev) => {
+      if (index >= prev.length) return prev;
+      const next = [...prev];
+      const [selected] = next.splice(index, 1);
+      next.unshift(selected);
+      return next;
+    });
+  };
+
+  const removeImage = async (index: number) => {
+    const targetUrl = imageUrls[index];
+    if (targetUrl) {
+      const path = getStoragePathFromUrl('product-images', targetUrl);
       if (path) {
         await supabase.storage.from('product-images').remove([path]);
       }
     }
-    setImageUrl(null);
+    setImageUrls((prev) => prev.filter((_, i) => i !== index));
   };
 
   // Calculate costs
@@ -384,6 +511,221 @@ export default function ProductForm() {
   const minPrice = costWithWaste * 1.1; // 10% margin minimum
   const defaultUnitPrice = finalPriceTouched ? finalPrice : suggestedPrice;
   const defaultPriceLabel = finalPriceTouched ? 'preço final' : 'preço sugerido';
+
+  const formSnapshot = useMemo(() => ({
+    name,
+    sku,
+    description,
+    productSlug,
+    productType,
+    categoryId,
+    unit,
+    isActive,
+    showInCatalog,
+    catalogFeatured,
+    catalogPrice,
+    catalogShortDescription,
+    catalogLongDescription,
+    imageUrls,
+    baseCost,
+    laborCost,
+    wastePercentage,
+    profitMargin,
+    finalPrice,
+    stockQuantity,
+    minStock,
+    minOrderQuantity,
+    trackStock,
+    promoPrice,
+    promoStartAt,
+    promoEndAt,
+    productColors,
+    personalizationEnabled,
+    productSupplies: productSupplies.map((ps) => ({
+      supply_id: ps.supply_id,
+      quantity: ps.quantity,
+    })),
+    priceTiers,
+    productAttributes: productAttributes.map((attr) => ({
+      attribute_id: attr.attribute_id,
+      values: attr.values.map((val) => ({
+        id: val.id,
+        selected: val.selected,
+        price_modifier: val.price_modifier,
+      })),
+    })),
+  }), [
+    name,
+    sku,
+    description,
+    productSlug,
+    productType,
+    categoryId,
+    unit,
+    isActive,
+    showInCatalog,
+    catalogFeatured,
+    catalogPrice,
+    catalogShortDescription,
+    catalogLongDescription,
+    imageUrls,
+    baseCost,
+    laborCost,
+    wastePercentage,
+    profitMargin,
+    finalPrice,
+    stockQuantity,
+    minStock,
+    minOrderQuantity,
+    trackStock,
+    promoPrice,
+    promoStartAt,
+    promoEndAt,
+    productColors,
+    personalizationEnabled,
+    productSupplies,
+    priceTiers,
+    productAttributes,
+  ]);
+  const formSnapshotJson = useMemo(() => JSON.stringify(formSnapshot), [formSnapshot]);
+  const isDirty = initialSnapshot !== null && initialSnapshot !== formSnapshotJson;
+
+  useEffect(() => {
+    if (!loading && initialSnapshot === null) {
+      setInitialSnapshot(formSnapshotJson);
+    }
+  }, [loading, initialSnapshot, formSnapshotJson]);
+
+  useEffect(() => {
+    if (loading || draftReady || initialSnapshot === null) return;
+    if (typeof window === 'undefined') {
+      setDraftReady(true);
+      return;
+    }
+
+    const stored = window.localStorage.getItem(draftStorageKey);
+    if (!stored) {
+      setDraftReady(true);
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(stored) as {
+        productId?: string | null;
+        data?: typeof formSnapshot;
+        meta?: { slugTouched?: boolean; finalPriceTouched?: boolean };
+      };
+      const draftData = parsed?.data;
+      if (!draftData) {
+        setDraftReady(true);
+        return;
+      }
+
+      if (isEditing && parsed.productId && parsed.productId !== id) {
+        setDraftReady(true);
+        return;
+      }
+      if (!isEditing && parsed.productId) {
+        setDraftReady(true);
+        return;
+      }
+
+      setName(draftData.name ?? '');
+      setSku(draftData.sku ?? '');
+      setDescription(draftData.description ?? '');
+      setProductSlug(draftData.productSlug ?? '');
+      setProductType(draftData.productType ?? 'produto');
+      setCategoryId(draftData.categoryId ?? '');
+      setUnit(draftData.unit ?? 'un');
+      setIsActive(Boolean(draftData.isActive));
+      setShowInCatalog(Boolean(draftData.showInCatalog));
+      setCatalogFeatured(Boolean(draftData.catalogFeatured));
+      setCatalogPrice(draftData.catalogPrice ?? null);
+      setCatalogShortDescription(draftData.catalogShortDescription ?? '');
+      setCatalogLongDescription(draftData.catalogLongDescription ?? '');
+      setImageUrls(normalizeProductImages(draftData.imageUrls));
+      setBaseCost(Number(draftData.baseCost ?? 0));
+      setLaborCost(Number(draftData.laborCost ?? 0));
+      setWastePercentage(Number(draftData.wastePercentage ?? 0));
+      setProfitMargin(Number(draftData.profitMargin ?? 0));
+      setFinalPrice(Number(draftData.finalPrice ?? 0));
+      setStockQuantity(Number(draftData.stockQuantity ?? 0));
+      setMinStock(Number(draftData.minStock ?? 0));
+      setMinOrderQuantity(Number(draftData.minOrderQuantity ?? 1));
+      setTrackStock(Boolean(draftData.trackStock));
+      setPromoPrice(draftData.promoPrice ?? null);
+      setPromoStartAt(draftData.promoStartAt ?? '');
+      setPromoEndAt(draftData.promoEndAt ?? '');
+      setProductColors(normalizeProductColors(draftData.productColors));
+      setPersonalizationEnabled(Boolean(draftData.personalizationEnabled));
+
+      if (Array.isArray(draftData.productSupplies)) {
+        setProductSupplies(
+          draftData.productSupplies.map((ps) => ({
+            supply_id: ps.supply_id,
+            quantity: Number(ps.quantity ?? 1),
+            supply: supplies.find((s) => s.id === ps.supply_id),
+          }))
+        );
+      }
+
+      if (Array.isArray(draftData.priceTiers)) {
+        setPriceTiers(
+          draftData.priceTiers.map((tier) => ({
+            min_quantity: Number(tier.min_quantity ?? 1),
+            max_quantity: tier.max_quantity !== null && tier.max_quantity !== undefined
+              ? Number(tier.max_quantity)
+              : null,
+            price: Number(tier.price ?? 0),
+          }))
+        );
+      }
+
+      if (Array.isArray(draftData.productAttributes)) {
+        setProductAttributes((prev) => mergeAttributeDraft(prev, draftData.productAttributes));
+      }
+
+      if (typeof parsed.meta?.slugTouched === 'boolean') {
+        setSlugTouched(parsed.meta.slugTouched);
+      }
+      if (typeof parsed.meta?.finalPriceTouched === 'boolean') {
+        setFinalPriceTouched(parsed.meta.finalPriceTouched);
+      } else if (draftData.finalPrice !== null && draftData.finalPrice !== undefined) {
+        setFinalPriceTouched(true);
+      }
+    } catch {
+      // Ignore malformed drafts.
+    } finally {
+      setDraftReady(true);
+    }
+  }, [loading, draftReady, initialSnapshot, draftStorageKey, isEditing, id, supplies]);
+
+  useUnsavedChanges(isDirty && !saving);
+
+  useEffect(() => {
+    if (!draftReady || typeof window === 'undefined') return;
+    const payload = {
+      productId: isEditing ? id : null,
+      companyId: company?.id || profile?.company_id || null,
+      updatedAt: new Date().toISOString(),
+      data: formSnapshot,
+      meta: {
+        slugTouched,
+        finalPriceTouched,
+      },
+    };
+    window.localStorage.setItem(draftStorageKey, JSON.stringify(payload));
+  }, [
+    draftReady,
+    draftStorageKey,
+    formSnapshot,
+    isEditing,
+    id,
+    company?.id,
+    profile?.company_id,
+    slugTouched,
+    finalPriceTouched,
+  ]);
 
   useEffect(() => {
     if (!finalPriceTouched) {
@@ -429,6 +771,26 @@ export default function ProductForm() {
 
   const removePriceTier = (index: number) => {
     setPriceTiers(priceTiers.filter((_, i) => i !== index));
+  };
+
+  const addProductColor = () => {
+    setProductColors((prev) => [...prev, { name: '', hex: '#000000', active: true }]);
+  };
+
+  const updateProductColor = (
+    index: number,
+    field: keyof ProductColor,
+    value: string | boolean
+  ) => {
+    setProductColors((prev) =>
+      prev.map((color, i) =>
+        i === index ? { ...color, [field]: value } : color
+      )
+    );
+  };
+
+  const removeProductColor = (index: number) => {
+    setProductColors((prev) => prev.filter((_, i) => i !== index));
   };
 
   const handleGenerateDescription = async () => {
@@ -561,6 +923,18 @@ export default function ProductForm() {
     const normalizedSku = normalizeSku(sku);
 
     const normalizedSlug = generateSlug((slugTouched ? productSlug : name).trim() || name.trim());
+    const normalizedColors = productColors.map((color) => ({
+      name: color.name.trim(),
+      hex: color.hex.trim(),
+      active: color.active,
+    }));
+    const normalizedImageUrls = normalizeProductImages(imageUrls);
+    const primaryImageUrl = normalizedImageUrls[0] ?? null;
+    const hasInvalidColor = normalizedColors.some((color) => !color.name || !color.hex);
+    if (hasInvalidColor) {
+      toast({ title: 'Preencha nome e HEX das cores', variant: 'destructive' });
+      return;
+    }
     const formData = {
       name: name.trim(),
       sku: normalizedSku || null,
@@ -569,7 +943,8 @@ export default function ProductForm() {
       product_type: productType,
       category_id: categoryId || null,
       company_id: profile?.company_id || null,
-      image_url: imageUrl,
+      image_url: primaryImageUrl,
+      image_urls: normalizedImageUrls,
       show_in_catalog: showInCatalog,
       catalog_enabled: showInCatalog,
       catalog_featured: catalogFeatured,
@@ -577,6 +952,8 @@ export default function ProductForm() {
       catalog_short_description: catalogShortDescription.trim() || null,
       catalog_long_description: catalogLongDescription.trim() || null,
       catalog_min_order: minOrderQuantity,
+      product_colors: normalizedColors,
+      personalization_enabled: personalizationEnabled,
       unit,
       is_active: isActive,
       base_cost: baseCost,
@@ -699,6 +1076,9 @@ export default function ProductForm() {
     }
 
     toast({ title: isEditing ? 'Produto atualizado com sucesso!' : 'Produto cadastrado com sucesso!' });
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem(draftStorageKey);
+    }
     navigate('/produtos');
   };
 
@@ -957,6 +1337,86 @@ export default function ProductForm() {
                 rows={4}
               />
             </div>
+
+            <Separator className="md:col-span-2" />
+
+            <div className="md:col-span-2 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="text-base">Cores disponíveis</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Configure as cores que o cliente pode escolher no catálogo.
+                  </p>
+                </div>
+                <Button type="button" variant="outline" size="sm" onClick={addProductColor}>
+                  <Plus className="h-4 w-4 mr-1" /> Adicionar cor
+                </Button>
+              </div>
+
+              {productColors.length > 0 ? (
+                <div className="space-y-3">
+                  {productColors.map((color, index) => (
+                    <div
+                      key={`${color.name}-${index}`}
+                      className="grid gap-3 rounded-lg border p-3 md:grid-cols-[1fr_140px_120px_80px_40px] items-center"
+                    >
+                      <Input
+                        placeholder="Nome da cor"
+                        value={color.name}
+                        onChange={(e) => updateProductColor(index, 'name', e.target.value)}
+                      />
+                      <Input
+                        placeholder="#1E90FF"
+                        value={color.hex}
+                        onChange={(e) => updateProductColor(index, 'hex', e.target.value)}
+                      />
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="color"
+                          value={color.hex || '#000000'}
+                          onChange={(e) => updateProductColor(index, 'hex', e.target.value)}
+                          className="h-9 w-12 rounded border border-input bg-transparent p-0"
+                          aria-label="Selecionar cor"
+                        />
+                        <div
+                          className="h-9 w-9 rounded border"
+                          style={{ backgroundColor: color.hex || '#000000' }}
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          checked={color.active}
+                          onCheckedChange={(checked) => updateProductColor(index, 'active', checked)}
+                        />
+                        <span className="text-xs text-muted-foreground">Ativa</span>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => removeProductColor(index)}
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                  Nenhuma cor cadastrada.
+                </div>
+              )}
+            </div>
+
+            <div className="md:col-span-2 flex items-center justify-between rounded-lg border p-3">
+              <div className="space-y-1">
+                <Label className="text-sm font-medium">Personalização (Nome na capa)</Label>
+                <p className="text-xs text-muted-foreground">
+                  Exiba o campo de personalização na página do produto.
+                </p>
+              </div>
+              <Switch checked={personalizationEnabled} onCheckedChange={setPersonalizationEnabled} />
+            </div>
           </CardContent>
         </Card>
 
@@ -968,7 +1428,7 @@ export default function ProductForm() {
               Imagem do Produto
             </CardTitle>
             <CardDescription>
-              Adicione uma imagem para exibir no catálogo público
+              Adicione ate 5 imagens para exibir no catalogo publico
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -976,64 +1436,87 @@ export default function ProductForm() {
               ref={fileInputRef}
               type="file"
               accept="image/*"
+              multiple
               onChange={handleImageUpload}
               className="hidden"
             />
 
-            {imageUrl ? (
-              <div className="flex items-start gap-4">
-                <div className="relative">
-                  <img
-                    src={imageUrl}
-                    alt="Produto"
-                    className="w-40 h-40 object-cover rounded-lg border"
-                  />
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    size="icon"
-                    className="absolute -top-2 -right-2 h-6 w-6"
-                    onClick={removeImage}
-                  >
-                    <Trash2 className="h-3 w-3" />
-                  </Button>
+            <div className="space-y-4">
+              {imageUrls.length > 0 && (
+                <div className="flex flex-wrap gap-4">
+                  {imageUrls.map((url, index) => (
+                    <div
+                      key={`${url}-${index}`}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setPrimaryImage(index)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          setPrimaryImage(index);
+                        }
+                      }}
+                      className="group relative h-32 w-32 overflow-hidden rounded-lg border cursor-pointer"
+                      title={index === 0 ? 'Imagem principal' : 'Definir como capa'}
+                    >
+                      <img
+                        src={url}
+                        alt={`Produto ${index + 1}`}
+                        className="h-full w-full object-cover"
+                      />
+                      {index === 0 ? (
+                        <Badge variant="secondary" className="absolute left-2 top-2">
+                          Principal
+                        </Badge>
+                      ) : (
+                        <span className="absolute left-2 top-2 rounded bg-white/80 px-2 py-0.5 text-[10px] text-slate-700 opacity-0 transition-opacity group-hover:opacity-100">
+                          Definir capa
+                        </span>
+                      )}
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="icon"
+                        className="absolute right-2 top-2 h-6 w-6 opacity-0 transition-opacity group-hover:opacity-100"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          removeImage(index);
+                        }}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  ))}
                 </div>
-                <div className="text-sm text-muted-foreground">
-                  <p>Imagem enviada com sucesso.</p>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="mt-2"
-                    onClick={() => fileInputRef.current?.click()}
-                  >
-                    Trocar imagem
-                  </Button>
+              )}
+
+              {imageUrls.length < MAX_PRODUCT_IMAGES && (
+                <div
+                  onClick={() => !uploadingImage && fileInputRef.current?.click()}
+                  className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover:border-primary/50 transition-colors"
+                >
+                  {uploadingImage ? (
+                    <div className="flex flex-col items-center gap-2">
+                      <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                      <p className="text-sm text-muted-foreground">Enviando...</p>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center gap-2">
+                      <Upload className="h-8 w-8 text-muted-foreground" />
+                      <p className="text-sm text-muted-foreground">
+                        Clique para enviar imagens
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        PNG, JPG ou WEBP (max. 5MB)
+                      </p>
+                    </div>
+                  )}
                 </div>
-              </div>
-            ) : (
-              <div
-                onClick={() => !uploadingImage && fileInputRef.current?.click()}
-                className="border-2 border-dashed rounded-lg p-8 text-center cursor-pointer hover:border-primary/50 transition-colors"
-              >
-                {uploadingImage ? (
-                  <div className="flex flex-col items-center gap-2">
-                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                    <p className="text-sm text-muted-foreground">Enviando...</p>
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center gap-2">
-                    <Upload className="h-8 w-8 text-muted-foreground" />
-                    <p className="text-sm text-muted-foreground">
-                      Clique para enviar uma imagem
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      PNG, JPG ou WEBP (máx. 5MB)
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
+              )}
+
+              <p className="text-xs text-muted-foreground">
+                {imageUrls.length}/{MAX_PRODUCT_IMAGES} imagens cadastradas.
+              </p>
+            </div>
           </CardContent>
         </Card>
 
@@ -1510,3 +1993,5 @@ export default function ProductForm() {
     </div>
   );
 }
+
+

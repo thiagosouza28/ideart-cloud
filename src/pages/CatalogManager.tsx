@@ -13,6 +13,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Product, Company } from "@/types/database";
 import { ArrowUpDown, ExternalLink, Save } from "lucide-react";
 import { toast } from "sonner";
+import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
 
 type CatalogProduct = Pick<
   Product,
@@ -62,6 +63,8 @@ export default function CatalogManager() {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [settings, setSettings] = useState<CatalogSettings>({});
   const [savingSettings, setSavingSettings] = useState(false);
+  const [initialSettingsSnapshot, setInitialSettingsSnapshot] = useState<string | null>(null);
+  const [initialOrderSnapshot, setInitialOrderSnapshot] = useState<string | null>(null);
 
   const loadProducts = useCallback(async () => {
     if (!profile?.company_id) return;
@@ -79,7 +82,9 @@ export default function CatalogManager() {
       return;
     }
 
-    setProducts((data || []) as CatalogProduct[]);
+    const nextProducts = (data || []) as CatalogProduct[];
+    setProducts(nextProducts);
+    setInitialOrderSnapshot(JSON.stringify(nextProducts.map((item) => item.id)));
     setLoading(false);
   }, [profile?.company_id]);
 
@@ -98,7 +103,7 @@ export default function CatalogManager() {
 
     const companyData = data as Company | null;
     if (!companyData) return;
-    setSettings({
+    const nextSettings = {
       catalog_primary_color: companyData.catalog_primary_color,
       catalog_secondary_color: companyData.catalog_secondary_color,
       catalog_text_color: companyData.catalog_text_color,
@@ -115,7 +120,9 @@ export default function CatalogManager() {
       catalog_font: companyData.catalog_font,
       catalog_columns_mobile: companyData.catalog_columns_mobile,
       catalog_columns_desktop: companyData.catalog_columns_desktop,
-    });
+    };
+    setSettings(nextSettings);
+    setInitialSettingsSnapshot(JSON.stringify(nextSettings));
   }, [profile?.company_id]);
 
   useEffect(() => {
@@ -130,6 +137,16 @@ export default function CatalogManager() {
       product.name.toLowerCase().includes(term) || (product.sku || "").toLowerCase().includes(term)
     );
   }, [products, search]);
+
+  const currentOrderSnapshot = useMemo(
+    () => JSON.stringify(products.map((item) => item.id)),
+    [products]
+  );
+  const settingsSnapshot = useMemo(() => JSON.stringify(settings), [settings]);
+  const orderDirty = initialOrderSnapshot !== null && currentOrderSnapshot !== initialOrderSnapshot;
+  const settingsDirty = initialSettingsSnapshot !== null && settingsSnapshot !== initialSettingsSnapshot;
+
+  useUnsavedChanges((orderDirty || settingsDirty) && !savingOrder && !savingSettings);
 
   const updateProduct = async (productId: string, patch: Partial<CatalogProduct>) => {
     const resolvedPatch = { ...patch };
@@ -187,6 +204,7 @@ export default function CatalogManager() {
     setProducts((prev) =>
       prev.map((item, index) => ({ ...item, catalog_sort_order: index + 1 }))
     );
+    setInitialOrderSnapshot(JSON.stringify(products.map((item) => item.id)));
     toast.success("Ordem do catálogo atualizada");
     setSavingOrder(false);
   };
@@ -204,6 +222,7 @@ export default function CatalogManager() {
       return;
     }
     toast.success("Personalização salva");
+    setInitialSettingsSnapshot(JSON.stringify(settings));
     setSavingSettings(false);
   };
 

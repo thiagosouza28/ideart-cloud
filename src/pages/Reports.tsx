@@ -30,8 +30,10 @@ const statusOptions: Array<{ value: OrderStatus | 'all'; label: string }> = [
   { value: 'all', label: 'Todos' },
   { value: 'orcamento', label: 'Orcamento' },
   { value: 'pendente', label: 'Pendente' },
-  { value: 'em_producao', label: 'Em Produção' },
-  { value: 'pronto', label: 'Pronto' },
+  { value: 'produzindo_arte', label: 'Produzindo arte' },
+  { value: 'arte_aprovada', label: 'Arte aprovada' },
+  { value: 'em_producao', label: 'Em Producao' },
+  { value: 'finalizado', label: 'Finalizado' },
   { value: 'aguardando_retirada', label: 'Aguardando retirada' },
   { value: 'entregue', label: 'Entregue' },
   { value: 'cancelado', label: 'Cancelado' },
@@ -1032,3 +1034,4 @@ export default function Reports() {
     </div>
   );
 }
+

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+﻿import { useEffect, useMemo, useState } from 'react';
 import { formatOrderNumber } from '@/lib/utils';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Calendar, Sparkles } from 'lucide-react';
@@ -6,16 +6,22 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { supabase } from '@/integrations/supabase/client';
 import { Customer, Order, OrderStatus } from '@/types/database';
+import { ensurePublicStorageUrl } from '@/lib/storage';
+import { calculateAge, formatDateBr, isBirthdayToday } from '@/lib/birthdays';
 
 type DeliveryMap = Record<string, string>;
 
 const statusLabels: Record<OrderStatus, string> = {
-  orcamento: 'Orçamento',
+  orcamento: 'OrÃ§amento',
   pendente: 'Pendente',
-  em_producao: 'Em Produção',
-  pronto: 'Pronto',
+  produzindo_arte: 'Produzindo arte',
+  arte_aprovada: 'Arte aprovada',
+  em_producao: 'Em ProduÃ§Ã£o',
+  finalizado: 'Finalizado',
+  pronto: 'Finalizado',
   aguardando_retirada: 'Aguardando retirada',
   entregue: 'Entregue',
   cancelado: 'Cancelado',
@@ -24,7 +30,10 @@ const statusLabels: Record<OrderStatus, string> = {
 const statusColors: Record<OrderStatus, string> = {
   orcamento: 'bg-blue-100 text-blue-800',
   pendente: 'bg-orange-100 text-orange-800',
+  produzindo_arte: 'bg-indigo-100 text-indigo-800',
+  arte_aprovada: 'bg-emerald-100 text-emerald-800',
   em_producao: 'bg-yellow-100 text-yellow-800',
+  finalizado: 'bg-green-100 text-green-800',
   pronto: 'bg-green-100 text-green-800',
   aguardando_retirada: 'bg-sky-100 text-sky-800',
   entregue: 'bg-gray-100 text-gray-800',
@@ -71,7 +80,7 @@ export default function CustomerHistory() {
       ]);
 
       if (customerResult.error || !customerResult.data) {
-        setError('Cliente não encontrado.');
+        setError('Cliente nÃ£o encontrado.');
         setLoading(false);
         return;
       }
@@ -123,7 +132,7 @@ export default function CustomerHistory() {
     finishedOrders.length > 0 ? totalFinishedValue / finishedOrders.length : 0;
 
   const customerSegment = useMemo(() => {
-    if (!lastPurchase) return 'Sem histórico';
+    if (!lastPurchase) return 'Sem histÃ³rico';
     const days = daysBetween(lastPurchase, new Date().toISOString());
     if (days <= 60) return 'Ativo';
     return 'Inativo';
@@ -133,7 +142,10 @@ export default function CustomerHistory() {
     const counts: Record<OrderStatus, number> = {
       orcamento: 0,
       pendente: 0,
+      produzindo_arte: 0,
+      arte_aprovada: 0,
       em_producao: 0,
+      finalizado: 0,
       pronto: 0,
       aguardando_retirada: 0,
       entregue: 0,
@@ -148,7 +160,7 @@ export default function CustomerHistory() {
   const insights = useMemo(() => {
     const notes: string[] = [];
     if (orders.length === 0) {
-      notes.push('Cliente ainda não possui pedidos registrados.');
+      notes.push('Cliente ainda nÃ£o possui pedidos registrados.');
     }
     if (lastPurchase) {
       const days = daysBetween(lastPurchase, new Date().toISOString());
@@ -161,7 +173,7 @@ export default function CustomerHistory() {
       }
     }
     if (ticketAverage > 0 && ticketAverage < 150) {
-      notes.push('Ticket médio baixo: oportunidade para kits ou adicionais.');
+      notes.push('Ticket mÃ©dio baixo: oportunidade para kits ou adicionais.');
     }
     const pendingBalance = orders.reduce(
       (sum, order) => sum + Math.max(0, Number(order.total) - Number(order.amount_paid)),
@@ -172,6 +184,14 @@ export default function CustomerHistory() {
     }
     return notes;
   }, [orders, lastPurchase, ticketAverage]);
+
+  const birthDateLabel = formatDateBr(customer?.date_of_birth);
+  const customerAge = calculateAge(customer?.date_of_birth);
+  const birthdayToday = isBirthdayToday(customer?.date_of_birth);
+  const customerPhoto = ensurePublicStorageUrl('customer-photos', customer?.photo_url);
+  const customerInitials = customer?.name
+    ? customer.name.split(' ').filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('')
+    : 'CL';
 
   if (loading) {
     return (
@@ -186,10 +206,10 @@ export default function CustomerHistory() {
       <div className="page-container flex items-center justify-center min-h-[400px]">
         <Card className="max-w-md w-full">
           <CardHeader>
-            <CardTitle>Histórico do Cliente</CardTitle>
+            <CardTitle>HistÃ³rico do Cliente</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-muted-foreground">{error || 'Cliente não encontrado.'}</p>
+            <p className="text-muted-foreground">{error || 'Cliente nÃ£o encontrado.'}</p>
           </CardContent>
         </Card>
       </div>
@@ -200,20 +220,35 @@ export default function CustomerHistory() {
     <div className="page-container w-full max-w-none space-y-6">
       <div className="page-header">
         <div>
-          <h1 className="page-title">Relatório do Cliente</h1>
+          <h1 className="page-title">RelatÃ³rio do Cliente</h1>
           <p className="text-muted-foreground">Resumo de pedidos e comportamento</p>
         </div>
       </div>
 
       <Card>
         <CardContent className="flex flex-col gap-4 p-6 md:flex-row md:items-center md:justify-between">
-          <div className="space-y-2">
-            <h2 className="text-xl font-semibold">{customer.name}</h2>
-            <div className="flex flex-wrap gap-2">
-              <Badge variant="outline">Segmento: {customerSegment}</Badge>
-              <Badge variant="outline">
-                Última compra: {lastPurchase ? formatDate(lastPurchase) : '-'}
-              </Badge>
+          <div className="flex items-start gap-4">
+            <Avatar className="h-14 w-14">
+              {customerPhoto ? (
+                <AvatarImage src={customerPhoto} alt={customer.name} />
+              ) : null}
+              <AvatarFallback className="bg-muted text-xs">{customerInitials}</AvatarFallback>
+            </Avatar>
+            <div className="space-y-2">
+              <h2 className="text-xl font-semibold">{customer.name}</h2>
+              <div className="flex flex-wrap gap-2">
+                <Badge variant="outline">Nascimento: {birthDateLabel}</Badge>
+                {customerAge !== null && (
+                  <Badge variant="outline">Idade: {customerAge} anos</Badge>
+                )}
+                {birthdayToday && (
+                  <Badge className="bg-emerald-100 text-emerald-800">Aniversario hoje</Badge>
+                )}
+                <Badge variant="outline">Segmento: {customerSegment}</Badge>
+                <Badge variant="outline">
+                  Ultima compra: {lastPurchase ? formatDate(lastPurchase) : '-'}
+                </Badge>
+              </div>
             </div>
           </div>
           <Button variant="outline" onClick={() => navigate('/clientes')} className="gap-2">
@@ -235,24 +270,24 @@ export default function CustomerHistory() {
           <CardContent className="pt-6 space-y-2">
             <p className="text-sm text-muted-foreground">Pedidos finalizados</p>
             <p className="text-2xl font-semibold">{finishedOrders.length}</p>
-            <p className="text-xs text-muted-foreground">Base para última compra e ticket</p>
+            <p className="text-xs text-muted-foreground">Base para Ãºltima compra e ticket</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-6 space-y-2">
-            <p className="text-sm text-muted-foreground">Total pago (histórico)</p>
+            <p className="text-sm text-muted-foreground">Total pago (histÃ³rico)</p>
             <p className="text-2xl font-semibold">{formatCurrency(totalPaid)}</p>
-            <p className="text-xs text-muted-foreground">Somatório de pagamentos</p>
+            <p className="text-xs text-muted-foreground">SomatÃ³rio de pagamentos</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-6 space-y-2">
-            <p className="text-sm text-muted-foreground">Ticket médio (finalizados)</p>
+            <p className="text-sm text-muted-foreground">Ticket mÃ©dio (finalizados)</p>
             <p className="text-2xl font-semibold">
               {finishedOrders.length > 0 ? formatCurrency(ticketAverage) : 'R$ 0,00'}
             </p>
             <p className="text-xs text-muted-foreground">
-              Intervalo médio: {lastPurchase ? `${daysBetween(lastPurchase, new Date().toISOString())} dias` : '--'}
+              Intervalo mÃ©dio: {lastPurchase ? `${daysBetween(lastPurchase, new Date().toISOString())} dias` : '--'}
             </p>
           </CardContent>
         </Card>
@@ -287,7 +322,7 @@ export default function CustomerHistory() {
             {insights.length > 0 ? (
               insights.map((insight) => <p key={insight}>{insight}</p>)
             ) : (
-              <p>Nenhum insight disponível no momento.</p>
+              <p>Nenhum insight disponÃ­vel no momento.</p>
             )}
           </CardContent>
         </Card>
@@ -375,3 +410,4 @@ export default function CustomerHistory() {
     </div>
   );
 }
+

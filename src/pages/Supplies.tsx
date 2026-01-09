@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Package, Search, Plus, Pencil, Trash2, Upload, Image as ImageIcon, ArrowLeft, Printer } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,6 +13,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import type { Supply } from '@/types/database';
 import { ensurePublicStorageUrl } from '@/lib/storage';
+import { useUnsavedChanges } from '@/hooks/use-unsaved-changes';
 
 const units = ['un', 'kg', 'g', 'm', 'cm', 'ml', 'L', 'folha', 'rolo', 'pacote', 'caixa'];
 
@@ -24,6 +25,7 @@ export default function Supplies() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedSupply, setSelectedSupply] = useState<Supply | null>(null);
   const [saving, setSaving] = useState(false);
+  const [initialFormSnapshot, setInitialFormSnapshot] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -75,6 +77,7 @@ export default function Supplies() {
       min_stock: 0,
       image_url: '',
     });
+    setInitialFormSnapshot(JSON.stringify({ name: '', unit: 'un', cost_per_unit: 0, sale_price: 0, stock_quantity: 0, min_stock: 0, image_url: '' }));
     setDialogOpen(true);
   };
 
@@ -89,6 +92,7 @@ export default function Supplies() {
       min_stock: supply.min_stock,
       image_url: ensurePublicStorageUrl('product-images', supply.image_url) || '',
     });
+    setInitialFormSnapshot(JSON.stringify({ name: supply.name, unit: supply.unit, cost_per_unit: supply.cost_per_unit, sale_price: supply.sale_price || 0, stock_quantity: supply.stock_quantity, min_stock: supply.min_stock, image_url: ensurePublicStorageUrl('product-images', supply.image_url) || '' }));
     setDialogOpen(true);
   };
 
@@ -145,6 +149,11 @@ export default function Supplies() {
   const removeImage = () => {
     setFormData({ ...formData, image_url: '' });
   };
+
+  const formSnapshotJson = useMemo(() => JSON.stringify(formData), [formData]);
+  const isDirty = dialogOpen && initialFormSnapshot !== null && initialFormSnapshot !== formSnapshotJson;
+
+  useUnsavedChanges(isDirty && !saving);
 
   const handlePrint = () => {
     const rows = supplies.map(supply => ({
@@ -579,3 +588,5 @@ export default function Supplies() {
     </div>
   );
 }
+
+

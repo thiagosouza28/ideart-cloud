@@ -142,6 +142,8 @@ export type Database = {
           trial_ends_at: string | null
           updated_at: string
           whatsapp: string | null
+          whatsapp_message_template: string | null
+          birthday_message_template: string | null
         }
         Insert: {
           address?: string | null
@@ -191,6 +193,8 @@ export type Database = {
           trial_ends_at?: string | null
           updated_at?: string
           whatsapp?: string | null
+          whatsapp_message_template?: string | null
+          birthday_message_template?: string | null
         }
         Update: {
           address?: string | null
@@ -240,6 +244,8 @@ export type Database = {
           trial_ends_at?: string | null
           updated_at?: string
           whatsapp?: string | null
+          whatsapp_message_template?: string | null
+          birthday_message_template?: string | null
         }
         Relationships: [
           {
@@ -256,11 +262,13 @@ export type Database = {
           address: string | null
           city: string | null
           created_at: string
+          date_of_birth: string | null
           document: string | null
           email: string | null
           id: string
           name: string
           notes: string | null
+          photo_url: string | null
           phone: string | null
           state: string | null
           updated_at: string
@@ -270,11 +278,13 @@ export type Database = {
           address?: string | null
           city?: string | null
           created_at?: string
+          date_of_birth?: string | null
           document?: string | null
           email?: string | null
           id?: string
           name: string
           notes?: string | null
+          photo_url?: string | null
           phone?: string | null
           state?: string | null
           updated_at?: string
@@ -284,11 +294,13 @@ export type Database = {
           address?: string | null
           city?: string | null
           created_at?: string
+          date_of_birth?: string | null
           document?: string | null
           email?: string | null
           id?: string
           name?: string
           notes?: string | null
+          photo_url?: string | null
           phone?: string | null
           state?: string | null
           updated_at?: string
@@ -914,12 +926,15 @@ export type Database = {
           final_price: number | null
           id: string
           image_url: string | null
+          image_urls: Json
           is_active: boolean
           labor_cost: number
           min_order_quantity: number
           min_stock: number
           name: string
           product_type: Database["public"]["Enums"]["product_type"]
+          personalization_enabled: boolean
+          product_colors: Json
           profit_margin: number
           promo_end_at: string | null
           promo_price: number | null
@@ -942,12 +957,15 @@ export type Database = {
           final_price?: number | null
           id?: string
           image_url?: string | null
+          image_urls?: Json
           is_active?: boolean
           labor_cost?: number
           min_order_quantity?: number
           min_stock?: number
           name: string
           product_type?: Database["public"]["Enums"]["product_type"]
+          personalization_enabled?: boolean
+          product_colors?: Json
           profit_margin?: number
           promo_end_at?: string | null
           promo_price?: number | null
@@ -970,12 +988,15 @@ export type Database = {
           final_price?: number | null
           id?: string
           image_url?: string | null
+          image_urls?: Json
           is_active?: boolean
           labor_cost?: number
           min_order_quantity?: number
           min_stock?: number
           name?: string
           product_type?: Database["public"]["Enums"]["product_type"]
+          personalization_enabled?: boolean
+          product_colors?: Json
           profit_margin?: number
           promo_end_at?: string | null
           promo_price?: number | null
@@ -1374,6 +1395,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      approve_art_by_token: {
+        Args: { p_token: string }
+        Returns: Json
+      }
       approve_order_by_token: {
         Args: { p_token: string }
         Returns: Json
@@ -1420,7 +1445,10 @@ export type Database = {
       order_status:
       | "orcamento"
       | "pendente"
+      | "produzindo_arte"
+      | "arte_aprovada"
       | "em_producao"
+      | "finalizado"
       | "pronto"
       | "aguardando_retirada"
       | "entregue"
@@ -1560,7 +1588,10 @@ export const Constants = {
       order_status: [
         "orcamento",
         "pendente",
+        "produzindo_arte",
+        "arte_aprovada",
         "em_producao",
+        "finalizado",
         "pronto",
         "aguardando_retirada",
         "entregue",

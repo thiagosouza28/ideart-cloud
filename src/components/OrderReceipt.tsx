@@ -22,8 +22,11 @@ const formatDate = (d: string) =>
 const orderStatusLabels: Record<Order['status'], string> = {
   orcamento: 'Orçamento',
   pendente: 'Pendente',
+  produzindo_arte: 'Produzindo arte',
+  arte_aprovada: 'Arte aprovada',
   em_producao: 'Em Produção',
-  pronto: 'Pronto',
+  finalizado: 'Finalizado',
+  pronto: 'Finalizado',
   aguardando_retirada: 'Aguardando retirada',
   entregue: 'Entregue',
   cancelado: 'Cancelado',
@@ -244,7 +247,7 @@ const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
             </div>
           )}
 
-          {(order.status === 'entregue' || order.status === 'aguardando_retirada' || order.status === 'pronto') && (
+          {(order.status === 'entregue' || order.status === 'aguardando_retirada' || order.status === 'finalizado' || order.status === 'pronto') && (
             <div className="receipt-block mt-12 mb-4 flex flex-col items-center gap-1">
               <div className="w-64 border-t border-slate-900"></div>
               <p className="text-[10px] uppercase tracking-wide text-slate-500">

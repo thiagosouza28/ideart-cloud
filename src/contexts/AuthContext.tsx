@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { AppRole, Company, Profile } from '@/types/database';
@@ -34,6 +35,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const navigate = useNavigate();
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -59,7 +61,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }).finally(() => {
         setPasswordRecovery(true);
         if (window.location.pathname !== "/alterar-senha") {
-          window.location.href = "/alterar-senha";
+          navigate({ pathname: "/alterar-senha", search, hash }, { replace: true });
         }
       });
     }
@@ -72,7 +74,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (event === 'PASSWORD_RECOVERY') {
           setPasswordRecovery(true);
           if (window.location.pathname !== '/alterar-senha') {
-            window.location.href = '/alterar-senha';
+            const currentSearch = window.location.search;
+            const currentHash = window.location.hash;
+            navigate({ pathname: '/alterar-senha', search: currentSearch, hash: currentHash }, { replace: true });
           }
         }
 

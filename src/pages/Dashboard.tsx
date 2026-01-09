@@ -22,8 +22,11 @@ import { Order, OrderStatus, Sale } from '@/types/database';
 const statusLabels: Record<OrderStatus, string> = {
   orcamento: 'Orçamento',
   pendente: 'Pendente',
+  produzindo_arte: 'Produzindo arte',
+  arte_aprovada: 'Arte aprovada',
   em_producao: 'Em Produção',
-  pronto: 'Pronto',
+  finalizado: 'Finalizado',
+  pronto: 'Finalizado',
   aguardando_retirada: 'Aguardando retirada',
   entregue: 'Entregue',
   cancelado: 'Cancelado',
@@ -104,7 +107,10 @@ export default function Dashboard() {
     const statusCounts: Record<OrderStatus, number> = {
       orcamento: 0,
       pendente: 0,
+      produzindo_arte: 0,
+      arte_aprovada: 0,
       em_producao: 0,
+      finalizado: 0,
       pronto: 0,
       aguardando_retirada: 0,
       entregue: 0,
@@ -115,7 +121,8 @@ export default function Dashboard() {
       const createdAt = new Date(order.created_at);
       const total = Number(order.total ?? 0);
       const paidAmount = Math.max(0, Number(order.amount_paid ?? 0));
-      const isRevenueOrder = order.status !== 'orcamento' && order.status !== 'cancelado';
+      const isRevenueOrder =
+        order.status !== 'orcamento' && order.status !== 'pendente' && order.status !== 'cancelado';
       if (isRevenueOrder && paidAmount > 0) {
         if (createdAt.toDateString() === now.toDateString()) {
           totalToday += paidAmount;
@@ -186,23 +193,23 @@ export default function Dashboard() {
 
   const summaryCards = useMemo(() => ([
     {
-      title: 'Orçamentos',
-      value: metrics.statusCounts.orcamento.toString(),
+      title: 'Pendentes',
+      value: metrics.statusCounts.pendente.toString(),
       subtitle: 'aguardando aprovação',
       icon: <ClipboardCheck className="h-5 w-5" />,
       tone: 'blue' as const,
     },
     {
-      title: 'Em Produção',
-      value: metrics.statusCounts.em_producao.toString(),
-      subtitle: 'em andamento',
+      title: 'Arte',
+      value: (metrics.statusCounts.produzindo_arte + metrics.statusCounts.arte_aprovada).toString(),
+      subtitle: 'ajustes em andamento',
       icon: <Activity className="h-5 w-5" />,
       tone: 'orange' as const,
     },
     {
-      title: 'Prontos',
-      value: metrics.statusCounts.pronto.toString(),
-      subtitle: 'aguardando entrega',
+      title: 'Em Produção',
+      value: metrics.statusCounts.em_producao.toString(),
+      subtitle: 'em andamento',
       icon: <BadgeDollarSign className="h-5 w-5" />,
       tone: 'green' as const,
     },
@@ -211,7 +218,10 @@ export default function Dashboard() {
   const recentOrders = useMemo(() => {
     return orders.slice(0, 3).map((order) => {
       const method = order.payment_method ? (paymentMethodLabels[order.payment_method] ?? order.payment_method) : 'Sem pagamento';
-      const statusTone = order.status === 'entregue' || order.status === 'pronto' ? 'success' : 'warning';
+      const statusTone =
+        order.status === 'entregue' || order.status === 'finalizado' || order.status === 'pronto'
+          ? 'success'
+          : 'warning';
       return {
         id: `#${formatOrderNumber(order.order_number)}`,
         customer: order.customer_name || 'Cliente',
@@ -224,7 +234,10 @@ export default function Dashboard() {
   }, [orders]);
 
   const productionQueue = useMemo(
-    () => orders.filter((order) => order.status === 'pendente' || order.status === 'em_producao'),
+    () =>
+      orders.filter((order) =>
+        ['pendente', 'produzindo_arte', 'arte_aprovada', 'em_producao'].includes(order.status),
+      ),
     [orders],
   );
 

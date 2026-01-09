@@ -1,14 +1,17 @@
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Plus, Search, Edit, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { supabase } from '@/integrations/supabase/client';
 import { Customer } from '@/types/database';
 import { toast } from 'sonner';
 import { normalizeDigits } from '@/components/ui/masked-input';
+import { ensurePublicStorageUrl } from '@/lib/storage';
+import { calculateAge, formatDateBr } from '@/lib/birthdays';
 
 export default function Customers() {
   const navigate = useNavigate();
@@ -17,7 +20,10 @@ export default function Customers() {
   const [loading, setLoading] = useState(true);
 
   const loadCustomers = async () => {
-    const { data } = await supabase.from('customers').select('*').order('name');
+    const { data } = await supabase
+      .from('customers')
+      .select('id, name, document, phone, email, city, date_of_birth, photo_url')
+      .order('name');
     setCustomers(data as Customer[] || []);
     setLoading(false);
   };
@@ -42,7 +48,7 @@ export default function Customers() {
       toast.error('Erro ao excluir cliente');
       return;
     }
-    toast.success('Cliente excluído');
+    toast.success('Cliente excluÃ­do');
     loadCustomers();
   };
 
@@ -67,25 +73,37 @@ export default function Customers() {
                 <TableHead>CPF/CNPJ</TableHead>
                 <TableHead>Telefone</TableHead>
                 <TableHead>E-mail</TableHead>
+                <TableHead>Nascimento</TableHead>
+                <TableHead>Idade</TableHead>
                 <TableHead>Cidade</TableHead>
-                <TableHead className="w-[100px]">Ações</TableHead>
+                <TableHead className="w-[100px]">Acoes</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
-                <TableRow><TableCell colSpan={6} className="text-center py-8">Carregando...</TableCell></TableRow>
+                <TableRow><TableCell colSpan={8} className="text-center py-8">Carregando...</TableCell></TableRow>
               ) : filtered.length === 0 ? (
-                <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">Nenhum cliente encontrado</TableCell></TableRow>
+                <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">Nenhum cliente encontrado</TableCell></TableRow>
               ) : filtered.map((c) => (
                 <TableRow key={c.id}>
                   <TableCell className="font-medium">
-                    <Link to={`/clientes/${c.id}/historico`} className="text-primary hover:underline">
-                      {c.name}
+                    <Link to={`/clientes/${c.id}/historico`} className="flex items-center gap-2 text-primary hover:underline">
+                      <Avatar className="h-8 w-8">
+                        {c.photo_url ? (
+                          <AvatarImage src={ensurePublicStorageUrl('customer-photos', c.photo_url) || undefined} alt={c.name} />
+                        ) : null}
+                        <AvatarFallback className="bg-muted text-[10px]">
+                          {c.name.split(' ').filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('') || 'CL'}
+                        </AvatarFallback>
+                      </Avatar>
+                      <span>{c.name}</span>
                     </Link>
                   </TableCell>
                   <TableCell>{c.document || '-'}</TableCell>
                   <TableCell>{c.phone || '-'}</TableCell>
                   <TableCell>{c.email || '-'}</TableCell>
+                  <TableCell>{formatDateBr(c.date_of_birth)}</TableCell>
+                  <TableCell>{calculateAge(c.date_of_birth) ?? '-'}</TableCell>
                   <TableCell>{c.city || '-'}</TableCell>
                   <TableCell>
                     <div className="flex gap-1">
@@ -102,3 +120,4 @@ export default function Customers() {
     </div>
   );
 }
+

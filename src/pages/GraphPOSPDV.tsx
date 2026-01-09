@@ -7,7 +7,7 @@ import { BotaoPrimario } from '@/components/graphpos/GraphPOSButtons';
 import { supabase } from '@/integrations/supabase/client';
 import { Product, CartItem, Customer } from '@/types/database';
 import { ensurePublicStorageUrl } from '@/lib/storage';
-import { resolveSuggestedPrice } from '@/lib/pricing';
+import { resolveProductPrice } from '@/lib/pricing';
 import { useToast } from '@/hooks/use-toast';
 import { getGraphPOSCheckoutState, setGraphPOSCheckoutState } from '@/lib/graphposCheckout';
 import { normalizeDigits } from '@/components/ui/masked-input';
@@ -142,7 +142,7 @@ export default function GraphPOSPDV() {
 
   const formatCurrency = (v: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
-  const getUnitPrice = (product: Product) => resolveSuggestedPrice(product, 1, [], 0);
+  const getUnitPrice = (product: Product) => resolveProductPrice(product, 1, [], 0);
 
   const addToCart = (product: Product) => {
     const existing = cart.find((i) => i.product.id === product.id);

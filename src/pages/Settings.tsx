@@ -1,5 +1,6 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Plus, Edit, Trash2, Building2, Upload, Loader2, MapPin, Phone, Mail, Globe, ExternalLink, Copy, Check, Palette, LayoutGrid, List, Settings as SettingsIcon, MessageCircle } from 'lucide-react';
+﻿import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Plus, Edit, Trash2, Building2, Upload, Loader2, MapPin, Phone, Mail, Globe, ExternalLink, Copy, Check, Palette, LayoutGrid, List, Settings as SettingsIcon, MessageCircle, Gift } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { CurrencyInput } from '@/components/ui/currency-input';
@@ -18,6 +19,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { z } from 'zod';
 import { ensurePublicStorageUrl } from '@/lib/storage';
+import { useUnsavedChanges } from '@/hooks/use-unsaved-changes';
 
 const categorySchema = z.object({ name: z.string().min(2).max(50) });
 const supplySchema = z.object({
@@ -31,6 +33,7 @@ const attributeSchema = z.object({ name: z.string().min(2).max(50) });
 export default function Settings() {
   const { toast } = useToast();
   const { profile, user, hasPermission } = useAuth();
+  const navigate = useNavigate();
   const [categories, setCategories] = useState<Category[]>([]);
   const [supplies, setSupplies] = useState<Supply[]>([]);
   const [attributes, setAttributes] = useState<Attribute[]>([]);
@@ -49,6 +52,7 @@ export default function Settings() {
     phone: "",
     whatsapp: "",
     whatsapp_message_template: "",
+    birthday_message_template: "",
     address: "",
     city: "",
     state: "",
@@ -82,13 +86,14 @@ export default function Settings() {
   const [isSaved, setIsSaved] = useState(true);
   const companyFetchRef = useRef<string | null>(null);
   const whatsappTemplateRef = useRef<HTMLTextAreaElement>(null);
+  const birthdayTemplateRef = useRef<HTMLTextAreaElement>(null);
   const [dangerOpen, setDangerOpen] = useState(false);
   const [resetPassword, setResetPassword] = useState('');
   const [resetConfirmText, setResetConfirmText] = useState('');
   const [resetChecked, setResetChecked] = useState(false);
   const [resetLoading, setResetLoading] = useState(false);
   const [resetError, setResetError] = useState<string | null>(null);
-  // Controla a aba por estado para evitar reload e manter o estado dos formulários.
+  // Controla a aba por estado para evitar reload e manter o estado dos formulÃ¡rios.
   const [activeTab, setActiveTab] = useState<'company' | 'catalog'>('company');
 
   // Dialogs
@@ -116,6 +121,14 @@ export default function Settings() {
     { value: '{total}', label: 'Total curto', description: 'Alias do total do pedido' },
     { value: '{pedido_link}', label: 'Link', description: 'Link do pedido' },
     { value: '{link_catalogo}', label: 'Catalogo', description: 'Link do catalogo publico' },
+    { value: '{empresa_nome}', label: 'Empresa', description: 'Nome da empresa' },
+  ];
+
+  const birthdayPlaceholders = [
+    { value: '{cliente_nome}', label: 'Cliente', description: 'Nome do cliente' },
+    { value: '{cliente_telefone}', label: 'Telefone', description: 'Telefone do cliente' },
+    { value: '{cliente_idade}', label: 'Idade', description: 'Idade que ira completar' },
+    { value: '{aniversario_data}', label: 'Aniversario', description: 'Dia e mes do aniversario' },
     { value: '{empresa_nome}', label: 'Empresa', description: 'Nome da empresa' },
   ];
 
@@ -216,6 +229,7 @@ export default function Settings() {
           catalog_filter_text_color: catalogFilterText,
           catalog_layout: (data as any).catalog_layout || "grid",
           whatsapp_message_template: data.whatsapp_message_template || "",
+          birthday_message_template: data.birthday_message_template || "",
         };
         setCompanyForm(formData);
         setOriginalForm(formData);
@@ -258,18 +272,7 @@ export default function Settings() {
     }
   }, [activeTab, hasChanges]);
 
-  // Warn before closing/refreshing the page
-  useEffect(() => {
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (hasChanges) {
-        e.preventDefault();
-        e.returnValue = '';
-      }
-    };
-
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [hasChanges]);
+  useUnsavedChanges(hasChanges && !savingCompany);
 
   const saveCompany = async () => {
     if (!company) {
@@ -279,16 +282,16 @@ export default function Settings() {
 
     const companyName = companyForm.name?.trim();
     if (!companyName) {
-      toast({ title: "Nome da empresa é obrigatório", variant: "destructive" });
+      toast({ title: "Nome da empresa Ã© obrigatÃ³rio", variant: "destructive" });
       return;
     }
 
     if (companyForm.phone && !validatePhone(companyForm.phone)) {
-      toast({ title: "Telefone inválido", description: "Use um celular brasileiro válido.", variant: "destructive" });
+      toast({ title: "Telefone invÃ¡lido", description: "Use um celular brasileiro vÃ¡lido.", variant: "destructive" });
       return;
     }
     if (companyForm.whatsapp && !validatePhone(companyForm.whatsapp)) {
-      toast({ title: "WhatsApp inválido", description: "Use um celular brasileiro válido.", variant: "destructive" });
+      toast({ title: "WhatsApp invÃ¡lido", description: "Use um celular brasileiro vÃ¡lido.", variant: "destructive" });
       return;
     }
 
@@ -359,6 +362,7 @@ export default function Settings() {
           catalog_filter_text_color: companyForm.catalog_filter_text_color,
           catalog_layout: companyForm.catalog_layout,
           whatsapp_message_template: companyForm.whatsapp_message_template?.trim() || null,
+          birthday_message_template: companyForm.birthday_message_template?.trim() || null,
         } as any)
         .eq('id', company.id)
         .select()
@@ -410,6 +414,28 @@ export default function Settings() {
     }
   };
 
+  const insertBirthdayPlaceholder = (placeholder: string) => {
+    const textarea = birthdayTemplateRef.current;
+    const currentValue = companyForm.birthday_message_template || '';
+    const start = textarea?.selectionStart ?? currentValue.length;
+    const end = textarea?.selectionEnd ?? currentValue.length;
+    const nextValue =
+      currentValue.slice(0, start) + placeholder + currentValue.slice(end);
+
+    setCompanyForm((prev) => ({
+      ...prev,
+      birthday_message_template: nextValue,
+    }));
+
+    if (textarea) {
+      requestAnimationFrame(() => {
+        const cursorPos = start + placeholder.length;
+        textarea.focus();
+        textarea.setSelectionRange(cursorPos, cursorPos);
+      });
+    }
+  };
+
   const formatCurrency = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
   const isAdmin = hasPermission(['admin', 'super_admin']);
   const resetReady = isAdmin
@@ -420,11 +446,11 @@ export default function Settings() {
 
   const handleResetCompany = async () => {
     if (!profile?.company_id) {
-      setResetError('Empresa não encontrada.');
+      setResetError('Empresa nÃ£o encontrada.');
       return;
     }
     if (!user?.email) {
-      setResetError('E-mail do usuário não encontrado.');
+      setResetError('E-mail do usuÃ¡rio nÃ£o encontrado.');
       return;
     }
 
@@ -446,7 +472,7 @@ export default function Settings() {
     const accessToken = sessionData?.session?.access_token;
     if (sessionError || !accessToken) {
       setResetLoading(false);
-      setResetError('Sessão inválida. Faça login novamente.');
+      setResetError('SessÃ£o invÃ¡lida. FaÃ§a login novamente.');
       return;
     }
 
@@ -469,13 +495,13 @@ export default function Settings() {
     setResetConfirmText('');
     setResetChecked(false);
     setResetLoading(false);
-    window.location.assign('/dashboard');
+    navigate('/dashboard', { replace: true });
   };
 
   // Categories
   const saveCategory = async () => {
     const result = categorySchema.safeParse({ name: categoryName.trim() });
-    if (!result.success) return toast({ title: 'Nome inválido', variant: 'destructive' });
+    if (!result.success) return toast({ title: 'Nome invÃ¡lido', variant: 'destructive' });
 
     const { error } = editId
       ? await supabase.from('categories').update({ name: categoryName.trim() }).eq('id', editId)
@@ -496,7 +522,7 @@ export default function Settings() {
   // Supplies
   const saveSupply = async () => {
     const result = supplySchema.safeParse(supplyForm);
-    if (!result.success) return toast({ title: 'Dados inválidos', variant: 'destructive' });
+    if (!result.success) return toast({ title: 'Dados invÃ¡lidos', variant: 'destructive' });
 
     const { error } = editId
       ? await supabase.from('supplies').update(supplyForm).eq('id', editId)
@@ -517,7 +543,7 @@ export default function Settings() {
   // Attributes
   const saveAttribute = async () => {
     const result = attributeSchema.safeParse({ name: attributeName.trim() });
-    if (!result.success) return toast({ title: 'Nome inválido', variant: 'destructive' });
+    if (!result.success) return toast({ title: 'Nome invÃ¡lido', variant: 'destructive' });
 
     const { error } = editId
       ? await supabase.from('attributes').update({ name: attributeName.trim() }).eq('id', editId)
@@ -558,14 +584,14 @@ export default function Settings() {
   return (
     <div className="page-container pb-20">
       <div className="page-header">
-        <h1 className="page-title">Configurações</h1>
+        <h1 className="page-title">ConfiguraÃ§Ãµes</h1>
       </div>
 
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'company' | 'catalog')}>
 
         <TabsList>
           <TabsTrigger value="company" type="button">Empresa</TabsTrigger>
-          <TabsTrigger value="catalog" type="button">Personalização</TabsTrigger>
+          <TabsTrigger value="catalog" type="button">PersonalizaÃ§Ã£o</TabsTrigger>
         </TabsList>
 
         {/* Company */}
@@ -577,7 +603,7 @@ export default function Settings() {
                 Dados da Empresa
               </CardTitle>
               <CardDescription>
-                Atualize as informações da sua empresa
+                Atualize as informaÃ§Ãµes da sua empresa
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -632,13 +658,13 @@ export default function Settings() {
                   className={nameError ? "border-destructive focus-visible:ring-destructive" : ""}
                 />
                 {nameError && (
-                  <p className="text-sm text-destructive">Nome da empresa é obrigatório</p>
+                  <p className="text-sm text-destructive">Nome da empresa Ã© obrigatÃ³rio</p>
                 )}
               </div>
 
               {/* Description */}
               <div className="space-y-2">
-                <Label htmlFor="company-description">Descrição</Label>
+                <Label htmlFor="company-description">DescriÃ§Ã£o</Label>
                 <Textarea
                   id="company-description"
                   value={companyForm.description}
@@ -701,10 +727,10 @@ export default function Settings() {
               <div className="space-y-4">
                 <Label className="flex items-center gap-2">
                   <MapPin className="h-4 w-4" />
-                  Endereço
+                  EndereÃ§o
                 </Label>
                 <Input
-                  placeholder="Rua, número, bairro"
+                  placeholder="Rua, nÃºmero, bairro"
                   value={companyForm.address}
                   onChange={(e) => setCompanyForm({ ...companyForm, address: e.target.value })}
                 />
@@ -782,7 +808,7 @@ export default function Settings() {
                   ref={whatsappTemplateRef}
                   value={companyForm.whatsapp_message_template}
                   onChange={(e) => setCompanyForm({ ...companyForm, whatsapp_message_template: e.target.value })}
-                  placeholder="Ola {cliente_nome}, seu pedido #{pedido_numero} esta pronto! Acompanhe pelo link: {pedido_link}"
+                  placeholder="Ola {cliente_nome}, seu pedido #{pedido_numero} esta finalizado! Acompanhe pelo link: {pedido_link}"
                   className="min-h-[120px]"
                   />
                   <div className="text-xs text-muted-foreground">
@@ -799,21 +825,71 @@ export default function Settings() {
                   </div>
                 </div>
 
+                
+                <div className="space-y-3">
+                  <Label htmlFor="birthday-template" className="flex items-center gap-2">
+                    <Gift className="h-4 w-4" />
+                    Mensagem de aniversario
+                  </Label>
+                  <TooltipProvider delayDuration={150}>
+                    <div className="flex flex-wrap gap-2">
+                      {birthdayPlaceholders.map((placeholder) => (
+                        <Tooltip key={placeholder.value}>
+                          <TooltipTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onMouseDown={(event) => event.preventDefault()}
+                              onClick={() => insertBirthdayPlaceholder(placeholder.value)}
+                            >
+                              {placeholder.label}
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <div className="text-xs">
+                              <p className="font-medium">{placeholder.description}</p>
+                              <p className="mt-1 text-muted-foreground">{placeholder.value}</p>
+                            </div>
+                          </TooltipContent>
+                        </Tooltip>
+                      ))}
+                    </div>
+                  </TooltipProvider>
+                  <Textarea
+                    id="birthday-template"
+                    ref={birthdayTemplateRef}
+                    value={companyForm.birthday_message_template}
+                    onChange={(e) => setCompanyForm({ ...companyForm, birthday_message_template: e.target.value })}
+                    placeholder="Ola {cliente_nome}, feliz aniversario! Que seu dia seja especial. {empresa_nome}"
+                    className="min-h-[120px]"
+                  />
+                  <div className="text-xs text-muted-foreground">
+                    Variaveis disponiveis:
+                    <div className="mt-2 grid grid-cols-1 gap-1 sm:grid-cols-2">
+                      <span>{'{cliente_nome}'}</span>
+                      <span>{'{cliente_telefone}'}</span>
+                      <span>{'{cliente_idade}'}</span>
+                      <span>{'{aniversario_data}'}</span>
+                      <span>{'{empresa_nome}'}</span>
+                    </div>
+                  </div>
+                </div>
                 <Button onClick={saveCompany} disabled={savingCompany} className="w-full md:w-auto">
-                {savingCompany && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Salvar Alterações
-              </Button>
+                  {savingCompany && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Salvar Alteracoes
+                </Button>
             </CardContent>
           </Card>
 
         </TabsContent>
-        {/* Personalização */}
+        {/* PersonalizaÃ§Ã£o */}
         <TabsContent value="catalog">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Palette className="h-5 w-5" />
-                Personalização do Catálogo
+                PersonalizaÃ§Ã£o do CatÃ¡logo
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -821,10 +897,10 @@ export default function Settings() {
               <div className="space-y-4" data-catalog-settings>
                 <Label className="flex items-center gap-2">
                   <Palette className="h-4 w-4" />
-                  Cores do Catálogo
+                  Cores do CatÃ¡logo
                 </Label>
                 <p className="text-sm text-muted-foreground">
-                  Personalize as cores do seu catálogo público
+                  Personalize as cores do seu catÃ¡logo pÃºblico
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   <div className="space-y-2">
@@ -1220,10 +1296,10 @@ export default function Settings() {
               <div className="space-y-4">
                 <Label className="flex items-center gap-2">
                   <LayoutGrid className="h-4 w-4" />
-                  Layout Padrão do Catálogo
+                  Layout PadrÃ£o do CatÃ¡logo
                 </Label>
                 <p className="text-sm text-muted-foreground">
-                  Escolha o layout padrão para exibição dos produtos
+                  Escolha o layout padrÃ£o para exibiÃ§Ã£o dos produtos
                 </p>
                 <div className="flex gap-4">
                   <Button
@@ -1247,10 +1323,11 @@ export default function Settings() {
                 </div>
               </div>
 
-              <Button onClick={saveCompany} disabled={savingCompany} className="w-full md:w-auto">
-                {savingCompany && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Salvar Alteracoes
-              </Button>
+              
+                <Button onClick={saveCompany} disabled={savingCompany} className="w-full md:w-auto">
+                  {savingCompany && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Salvar Alteracoes
+                </Button>
             </CardContent>
           </Card>
           {/* Catalog Preview Card */}
@@ -1259,10 +1336,10 @@ export default function Settings() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Globe className="h-5 w-5" />
-                  Catálogo Público
+                  CatÃ¡logo PÃºblico
                 </CardTitle>
                 <CardDescription>
-                  Compartilhe seu catálogo de produtos com clientes
+                  Compartilhe seu catÃ¡logo de produtos com clientes
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -1290,13 +1367,13 @@ export default function Settings() {
                     onClick={() => window.open(`/catalogo/${company.slug}`, '_blank')}
                   >
                     <ExternalLink className="h-4 w-4 mr-2" />
-                    Abrir Catálogo
+                    Abrir CatÃ¡logo
                   </Button>
                   <Button
                     variant="default"
                     className="flex-1"
                     onClick={() => {
-                      // Mantém a troca de abas via estado para evitar reload.
+                      // MantÃ©m a troca de abas via estado para evitar reload.
                       setActiveTab('catalog');
                       setTimeout(() => {
                         document.querySelector('[data-catalog-settings]')?.scrollIntoView({ behavior: 'smooth' });
@@ -1304,7 +1381,7 @@ export default function Settings() {
                     }}
                   >
                     <SettingsIcon className="h-4 w-4 mr-2" />
-                    Configurar Catálogo
+                    Configurar CatÃ¡logo
                   </Button>
                 </div>
 
@@ -1375,7 +1452,7 @@ export default function Settings() {
 
           <div className="space-y-4">
             <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-              Esta ação é irreversível. Todos os pedidos, produtos e clientes serão apagados permanentemente.
+              Esta aÃ§Ã£o Ã© irreversÃ­vel. Todos os pedidos, produtos e clientes serÃ£o apagados permanentemente.
             </div>
 
             <div className="space-y-2">
@@ -1403,7 +1480,7 @@ export default function Settings() {
                 checked={resetChecked}
                 onCheckedChange={(checked) => setResetChecked(checked === true)}
               />
-              <Label htmlFor="reset-confirm">Eu entendo que isso é irreversível</Label>
+              <Label htmlFor="reset-confirm">Eu entendo que isso Ã© irreversÃ­vel</Label>
             </div>
 
             {resetError && <p className="text-sm text-red-600">{resetError}</p>}
@@ -1435,7 +1512,7 @@ export default function Settings() {
               </span>
             ) : !company ? null : hasChanges ? (
               <span className="text-amber-600 dark:text-amber-400">
-                Alterações não salvas
+                AlteraÃ§Ãµes nÃ£o salvas
               </span>
             ) : isSaved ? (
               <span className="text-green-600 dark:text-green-400 flex items-center gap-1">
@@ -1463,7 +1540,7 @@ export default function Settings() {
                 Salvando...
               </>
             ) : hasChanges ? (
-              "Salvar Alterações"
+              "Salvar AlteraÃ§Ãµes"
             ) : (
               "Salvo"
             )}
@@ -1474,3 +1551,7 @@ export default function Settings() {
     </div>
   );
 }
+
+
+
+

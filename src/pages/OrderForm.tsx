@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { z } from 'zod';
 import { Button } from '@/components/ui/button';
@@ -19,8 +19,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { resolveSuggestedPrice } from '@/lib/pricing';
+import { resolveProductPrice } from '@/lib/pricing';
 import { normalizeDigits } from '@/components/ui/masked-input';
+import { useUnsavedChanges } from '@/hooks/use-unsaved-changes';
 
 interface OrderItemForm {
   product: Product;
@@ -37,6 +38,7 @@ export default function OrderForm() {
   const { user, profile } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [initialSnapshot, setInitialSnapshot] = useState<string | null>(null);
 
   // Data
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -69,6 +71,35 @@ export default function OrderForm() {
   useEffect(() => {
     fetchData();
   }, []);
+
+  const itemsSnapshot = useMemo(() => (
+    items.map((item) => ({
+      product_id: item.product.id,
+      quantity: item.quantity,
+      unit_price: item.unit_price,
+      discount: item.discount,
+      attributes: item.attributes,
+      notes: item.notes,
+    }))
+  ), [items]);
+
+  const formSnapshot = useMemo(() => ({
+    customerId,
+    customerName,
+    notes,
+    discount,
+    items: itemsSnapshot,
+  }), [customerId, customerName, notes, discount, itemsSnapshot]);
+  const formSnapshotJson = useMemo(() => JSON.stringify(formSnapshot), [formSnapshot]);
+  const isDirty = initialSnapshot !== null && initialSnapshot !== formSnapshotJson;
+
+  useEffect(() => {
+    if (!loading && initialSnapshot === null) {
+      setInitialSnapshot(formSnapshotJson);
+    }
+  }, [loading, initialSnapshot, formSnapshotJson]);
+
+  useUnsavedChanges(isDirty && !saving);
 
   const fetchData = async () => {
     const [custResult, prodResult, attrResult, attrValResult, prodAttrResult, tiersResult, suppliesResult] = await Promise.all([
@@ -110,7 +141,7 @@ export default function OrderForm() {
   // Calculate price based on quantity and price tiers
   const getProductPrice = (product: Product, quantity: number): number => {
     const suppliesCost = suppliesCostMap[product.id] || 0;
-    return resolveSuggestedPrice(product, quantity, priceTiers, suppliesCost);
+    return resolveProductPrice(product, quantity, priceTiers, suppliesCost);
   };
 
   // Get available attributes for a product
@@ -250,7 +281,7 @@ export default function OrderForm() {
         company_id: profile?.company_id || null,
         customer_id: resolvedCustomerId,
         customer_name: trimmedCustomerName || null,
-        status: 'orcamento' as OrderStatus,
+        status: 'pendente' as OrderStatus,
         subtotal,
         discount,
         total,
@@ -287,9 +318,9 @@ export default function OrderForm() {
     // Insert initial status history
     await supabase.from('order_status_history').insert({
       order_id: order.id,
-      status: 'orcamento',
+      status: 'pendente',
       user_id: user?.id,
-      notes: 'Pedido criado',
+      notes: 'Pedido criado como orcamento',
     });
 
     toast({ title: 'Pedido criado com sucesso!' });
@@ -562,10 +593,10 @@ export default function OrderForm() {
 
               <div className="pt-2">
                 <Badge variant="outline" className="text-sm">
-                  Status: Orçamento
+                  Status: Pendente
                 </Badge>
                 <p className="text-xs text-muted-foreground mt-2">
-                  O pedido será criado como orçamento. Você pode alterar o status depois.
+                  O pedido sera criado como orcamento e enviado para aprovacao.
                 </p>
               </div>
             </CardContent>

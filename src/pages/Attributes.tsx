@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
+import { useUnsavedChanges } from '@/hooks/use-unsaved-changes';
 import { toast } from 'sonner';
 import type { Attribute, AttributeValue } from '@/types/database';
 
@@ -23,6 +24,8 @@ export default function Attributes() {
   const [attributeName, setAttributeName] = useState('');
   const [valueName, setValueName] = useState('');
   const [saving, setSaving] = useState(false);
+  const [initialAttributeSnapshot, setInitialAttributeSnapshot] = useState('');
+  const [initialValueSnapshot, setInitialValueSnapshot] = useState('');
 
   useEffect(() => {
     loadData();
@@ -48,9 +51,11 @@ export default function Attributes() {
     if (attribute) {
       setSelectedAttribute(attribute);
       setAttributeName(attribute.name);
+      setInitialAttributeSnapshot(attribute.name);
     } else {
       setSelectedAttribute(null);
       setAttributeName('');
+      setInitialAttributeSnapshot('');
     }
     setAttributeDialogOpen(true);
   };
@@ -58,8 +63,14 @@ export default function Attributes() {
   const openValueDialog = (attribute: Attribute) => {
     setSelectedAttribute(attribute);
     setValueName('');
+    setInitialValueSnapshot('');
     setValueDialogOpen(true);
   };
+
+  const attributeDirty = attributeDialogOpen && attributeName.trim() !== (initialAttributeSnapshot || '');
+  const valueDirty = valueDialogOpen && valueName.trim() !== (initialValueSnapshot || '');
+
+  useUnsavedChanges((attributeDirty || valueDirty) && !saving);
 
   const handleSaveAttribute = async () => {
     if (!attributeName.trim()) {
@@ -291,5 +302,6 @@ export default function Attributes() {
     </div>
   );
 }
+
 
 

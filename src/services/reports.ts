@@ -426,7 +426,8 @@ const buildFinancialReport = (sources: ReportSources): FinancialReport => {
 
 const buildSalesReport = (sources: ReportSources): SalesReport => {
   const paidOrders = sources.orders.filter(
-    (order) => order.status !== 'orcamento' && order.payment_status === 'pago',
+    (order) =>
+      order.status !== 'orcamento' && order.status !== 'pendente' && order.payment_status === 'pago',
   );
   const paidSales = sources.sales.filter(
     (sale) => Number(sale.amount_paid) >= Number(sale.total),
@@ -528,7 +529,7 @@ const buildSalesReport = (sources: ReportSources): SalesReport => {
 const buildCustomerReport = (sources: ReportSources): CustomerReport => {
   const paidOrderIds = new Set(
     sources.orders
-      .filter((order) => order.status !== 'orcamento' && order.payment_status === 'pago')
+      .filter((order) => order.status !== 'orcamento' && order.status !== 'pendente' && order.payment_status === 'pago')
       .map((order) => order.id),
   );
   const grouped = groupBy(sources.orders, (order) => order.customer_id || order.customer_name || 'sem-cliente');
@@ -596,7 +597,7 @@ const buildProductReport = (sources: ReportSources): ProductReport => {
 
   const paidOrderIds = new Set(
     sources.orders
-      .filter((order) => order.status !== 'orcamento' && order.payment_status === 'pago')
+      .filter((order) => order.status !== 'orcamento' && order.status !== 'pendente' && order.payment_status === 'pago')
       .map((order) => order.id),
   );
   const items = sources.orderItems

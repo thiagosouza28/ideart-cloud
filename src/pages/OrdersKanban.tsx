@@ -25,8 +25,10 @@ import { useNavigate } from 'react-router-dom';
 const statusOrder: OrderStatus[] = [
   'orcamento',
   'pendente',
+  'produzindo_arte',
+  'arte_aprovada',
   'em_producao',
-  'pronto',
+  'finalizado',
   'aguardando_retirada',
   'entregue',
   'cancelado',
@@ -35,8 +37,11 @@ const statusOrder: OrderStatus[] = [
 const statusLabels: Record<OrderStatus, string> = {
   orcamento: 'Orçamento',
   pendente: 'Pendente',
+  produzindo_arte: 'Produzindo arte',
+  arte_aprovada: 'Arte aprovada',
   em_producao: 'Em Produção',
-  pronto: 'Pronto',
+  finalizado: 'Finalizado',
+  pronto: 'Finalizado',
   aguardando_retirada: 'Aguardando retirada',
   entregue: 'Entregue',
   cancelado: 'Cancelado',
@@ -45,7 +50,10 @@ const statusLabels: Record<OrderStatus, string> = {
 const statusColors: Record<OrderStatus, string> = {
   orcamento: 'bg-blue-100 text-blue-800',
   pendente: 'bg-orange-100 text-orange-800',
+  produzindo_arte: 'bg-indigo-100 text-indigo-800',
+  arte_aprovada: 'bg-emerald-100 text-emerald-800',
   em_producao: 'bg-yellow-100 text-yellow-800',
+  finalizado: 'bg-green-100 text-green-800',
   pronto: 'bg-green-100 text-green-800',
   aguardando_retirada: 'bg-sky-100 text-sky-800',
   entregue: 'bg-gray-100 text-gray-800',
@@ -413,10 +421,15 @@ export default function OrdersKanban() {
     if (!event.over) return;
 
     const orderId = String(event.active.id);
-    const targetStatus = String(event.over.id);
+    let targetStatus = String(event.over.id);
     const order = orders.find((item) => item.id === orderId);
     if (!order) return;
     if (String(order.status) === targetStatus) return;
+
+    if (order.status === 'pendente' && targetStatus !== 'cancelado') {
+      const needsArt = window.confirm('Este pedido precisa de criacao ou ajuste de arte?');
+      targetStatus = needsArt ? 'produzindo_arte' : 'em_producao';
+    }
 
     if (
       order.status === 'cancelado' &&

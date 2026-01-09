@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+﻿import { useEffect, useMemo, useRef, useState } from 'react';
 import { formatOrderNumber } from '@/lib/utils';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -11,8 +11,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
-import { Order, OrderFinalPhoto, OrderItem, OrderStatusHistory, OrderStatus, OrderPayment, PaymentMethod, PaymentStatus, Product } from '@/types/database';
-import { ArrowLeft, Loader2, CheckCircle, Clock, Package, Truck, XCircle, User, FileText, Printer, MessageCircle, Link, Copy, CreditCard, PauseCircle, Trash2, Image as ImageIcon, Upload } from 'lucide-react';
+import { Order, OrderFinalPhoto, OrderArtFile, OrderItem, OrderStatusHistory, OrderStatus, OrderPayment, PaymentMethod, PaymentStatus, Product } from '@/types/database';
+import { ArrowLeft, Loader2, CheckCircle, Clock, Package, Truck, XCircle, User, FileText, Printer, MessageCircle, Link, Copy, CreditCard, PauseCircle, Trash2, Image as ImageIcon, Upload, Paintbrush, Sparkles } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -32,11 +32,12 @@ import {
   type PaymentSummary,
 } from '@/services/orders';
 import { ensurePublicStorageUrl } from '@/lib/storage';
-import { resolveSuggestedPrice } from '@/lib/pricing';
+import { resolveProductPrice } from '@/lib/pricing';
+import { useUnsavedChanges } from '@/hooks/use-unsaved-changes';
 
 const statusConfig: Record<OrderStatus, { label: string; icon: React.ComponentType<any>; color: string; next: OrderStatus[] }> = {
   orcamento: {
-    label: 'Or�amento',
+    label: 'Orcamento',
     icon: FileText,
     color: 'bg-blue-100 text-blue-800',
     next: ['pendente', 'cancelado']
@@ -45,19 +46,37 @@ const statusConfig: Record<OrderStatus, { label: string; icon: React.ComponentTy
     label: 'Pendente',
     icon: PauseCircle,
     color: 'bg-orange-100 text-orange-800',
+    next: ['produzindo_arte', 'em_producao', 'cancelado']
+  },
+  produzindo_arte: {
+    label: 'Produzindo arte',
+    icon: Paintbrush,
+    color: 'bg-indigo-100 text-indigo-800',
+    next: ['arte_aprovada', 'cancelado']
+  },
+  arte_aprovada: {
+    label: 'Arte aprovada',
+    icon: Sparkles,
+    color: 'bg-emerald-100 text-emerald-800',
     next: ['em_producao', 'cancelado']
   },
   em_producao: {
-    label: 'Em Produ��o',
+    label: 'Em Producao',
     icon: Clock,
     color: 'bg-yellow-100 text-yellow-800',
-    next: ['pronto', 'cancelado']
+    next: ['finalizado', 'cancelado']
   },
-  pronto: {
-    label: 'Pronto',
+  finalizado: {
+    label: 'Finalizado',
     icon: Package,
     color: 'bg-green-100 text-green-800',
-    next: ['aguardando_retirada', 'cancelado']
+    next: ['aguardando_retirada', 'entregue', 'cancelado']
+  },
+  pronto: {
+    label: 'Finalizado',
+    icon: Package,
+    color: 'bg-green-100 text-green-800',
+    next: ['aguardando_retirada', 'entregue', 'cancelado']
   },
   aguardando_retirada: {
     label: 'Aguardando retirada',
@@ -75,15 +94,18 @@ const statusConfig: Record<OrderStatus, { label: string; icon: React.ComponentTy
     label: 'Cancelado',
     icon: XCircle,
     color: 'bg-red-100 text-red-800',
-    next: []
+    next: ['pendente']
   },
 };
 
 const statusLabels: Record<OrderStatus, string> = {
   orcamento: 'Orcamento',
   pendente: 'Pendente',
+  produzindo_arte: 'Produzindo arte',
+  arte_aprovada: 'Arte aprovada',
   em_producao: 'Em producao',
-  pronto: 'Pronto',
+  finalizado: 'Finalizado',
+  pronto: 'Finalizado',
   aguardando_retirada: 'Aguardando retirada',
   entregue: 'Entregue',
   cancelado: 'Cancelado',
@@ -99,6 +121,7 @@ export default function OrderDetails() {
   const [items, setItems] = useState<OrderItem[]>([]);
   const [history, setHistory] = useState<OrderStatusHistory[]>([]);
   const [finalPhotos, setFinalPhotos] = useState<OrderFinalPhoto[]>([]);
+  const [artFiles, setArtFiles] = useState<OrderArtFile[]>([]);
   const [payments, setPayments] = useState<OrderPayment[]>([]);
   const [profiles, setProfiles] = useState<Record<string, string>>({});
   const [photoViewerOpen, setPhotoViewerOpen] = useState(false);
@@ -178,7 +201,7 @@ export default function OrderDetails() {
     return ok;
   };
 
-  const isBudget = order?.status === 'orcamento';
+  const isBudget = order?.status === 'orcamento' || order?.status === 'pendente';
 
   const calculateItemTotal = (item: Pick<OrderItem, 'quantity' | 'unit_price' | 'discount'>) =>
     Math.max(0, Number(item.quantity) * Number(item.unit_price) - Number(item.discount || 0));
@@ -231,7 +254,7 @@ export default function OrderDetails() {
       prev.map((item, idx) => {
         if (idx !== index) return item;
         const quantity = Math.max(1, Number(item.quantity));
-        const unitPrice = resolveSuggestedPrice(product, quantity, [], 0);
+        const unitPrice = resolveProductPrice(product, quantity, [], 0);
         const next = {
           ...item,
           product_id: product.id,
@@ -265,7 +288,7 @@ export default function OrderDetails() {
       return;
     }
     const quantity = Math.max(1, Number(newItemQuantity) || 1);
-    const unitPrice = resolveSuggestedPrice(product, quantity, [], 0);
+    const unitPrice = resolveProductPrice(product, quantity, [], 0);
     const newItem: OrderItem = {
       id: crypto.randomUUID(),
       order_id: order?.id || '',
@@ -310,10 +333,10 @@ export default function OrderDetails() {
       setOrder(updatedOrder);
       setItems(refreshedItems);
       setIsEditingItems(false);
-      toast({ title: 'Or�amento atualizado com sucesso!' });
+      toast({ title: 'Orï¿½amento atualizado com sucesso!' });
     } catch (error: any) {
       toast({
-        title: 'Erro ao salvar altera��es',
+        title: 'Erro ao salvar alteraï¿½ï¿½es',
         description: error?.message,
         variant: 'destructive',
       });
@@ -329,17 +352,29 @@ export default function OrderDetails() {
     if (digits.length === 10 || digits.length === 11) return `55${digits}`;
     return digits.startsWith('55') ? digits : `55${digits}`;
   };
+const sendWhatsAppMessage = (message: string) => {
+  const rawPhone = normalizeWhatsappPhone(order?.customer?.phone);
 
-  const sendWhatsAppMessage = (message: string) => {
-    const phone = normalizeWhatsappPhone(order?.customer?.phone);
-    if (!phone) {
-      toast({ title: 'Cliente sem telefone cadastrado', variant: 'destructive' });
-      return;
-    }
+  if (!rawPhone) {
+    toast({ title: 'Cliente sem telefone cadastrado', variant: 'destructive' });
+    return;
+  }
 
-    const text = encodeURIComponent(message);
-    window.open(`https://wa.me/${phone}?text=${text}`, '_blank');
-  };
+  let phone = rawPhone.replace(/\D/g, '');
+
+  // Garante DDI Brasil
+  if (!phone.startsWith('55')) {
+    phone = `55${phone}`;
+  }
+
+  const text = encodeURIComponent(message);
+
+  // Usa sessÃ£o jÃ¡ logada do WhatsApp Web
+  const whatsappUrl = `https://web.whatsapp.com/send?phone=${phone}&text=${text}`;
+
+  // ðŸ”¥ Redireciona a aba atual
+  window.location.href = whatsappUrl;
+};
 
   const generateReceiptText = () => {
     if (!order) return '';
@@ -363,10 +398,26 @@ export default function OrderDetails() {
     if (Number(order.discount) > 0) {
       text += `Desconto: -${formatCurrency(Number(order.discount))}\n`;
     }
-    text += `*TOTAL: ${formatCurrency(Number(order.total))}*\n\n`;
+    text += `*TOTAL: ${formatCurrency(Number(order.total))} 
 
-    text += `Pagamento: ${order.payment_method || '-'}\n`;
-    text += `Status: ${getPaymentStatusLabel(order.payment_status)}\n`;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    **/*7entStatusLabel(order.payment_status)}\n`;
 
     if (order.notes) {
       text += `\nObs: ${order.notes}`;
@@ -378,7 +429,7 @@ export default function OrderDetails() {
     if (!order) return '';
     const template =
       order.company?.whatsapp_message_template ||
-      'Ola {cliente_nome}, seu pedido #{pedido_numero} esta pronto! Acompanhe pelo link: {pedido_link}';
+      'Ola {cliente_nome}, seu pedido #{pedido_numero} esta finalizado! Acompanhe pelo link: {pedido_link}';
     const catalogLink = order.company?.slug
       ? `${window.location.origin}/catalogo/${order.company.slug}`
       : '';
@@ -395,7 +446,8 @@ export default function OrderDetails() {
       '{empresa_nome}': order.company?.name || 'Nossa empresa',
     };
     return Object.entries(replacements).reduce((acc, [key, value]) => acc.replaceAll(key, value), template);
-  };  const handleWhatsApp = () => {
+  };
+  const handleWhatsApp = () => {
     handleSendWhatsAppUpdate();
   };
 
@@ -453,7 +505,7 @@ export default function OrderDetails() {
   }, [isBudget, isEditingItems]);
 
   const fetchOrder = async () => {
-    const [orderResult, itemsResult, historyResult, paymentsResult, linkResult, finalPhotosResult] = await Promise.all([
+    const [orderResult, itemsResult, historyResult, paymentsResult, linkResult, finalPhotosResult, artFilesResult] = await Promise.all([
       supabase.from('orders')
         .select('*, customer:customers(*), company:companies(*)')
         .eq('id', id)
@@ -464,10 +516,11 @@ export default function OrderDetails() {
       supabase.from('order_payments').select('*').eq('order_id', id).order('created_at', { ascending: false }),
       supabase.from('order_public_links').select('token').eq('order_id', id).maybeSingle(),
       (supabase.from('order_final_photos' as any).select('*').eq('order_id', id).order('created_at', { ascending: false })) as any,
+      (supabase.from('order_art_files' as any).select('*').eq('order_id', id).order('created_at', { ascending: false })) as any,
     ]) as any[];
 
     if (orderResult.error || !orderResult.data) {
-      toast({ title: 'Pedido n�o encontrado', variant: 'destructive' });
+      toast({ title: 'Pedido nï¿½o encontrado', variant: 'destructive' });
       navigate('/pedidos');
       return;
     }
@@ -483,6 +536,7 @@ export default function OrderDetails() {
     setItems(itemsResult.data as OrderItem[] || []);
     setHistory(historyResult.data as OrderStatusHistory[] || []);
     setFinalPhotos(finalPhotosResult.data as OrderFinalPhoto[] || []);
+    setArtFiles(artFilesResult.data as OrderArtFile[] || []);
     setPayments(paymentsResult.data as OrderPayment[] || []);
     setPublicLinkToken(linkResult.data?.token || null);
     setMessageDirty(false);
@@ -497,6 +551,7 @@ export default function OrderDetails() {
     const userIds = [
       ...(historyResult.data || []).map((h: any) => h.user_id).filter(Boolean),
       ...(finalPhotosResult.data || []).map((photo: any) => photo.created_by).filter(Boolean),
+      ...(artFilesResult.data || []).map((file: any) => file.created_by).filter(Boolean),
     ];
     if (userIds.length > 0) {
       const { data: profilesData } = await supabase
@@ -618,7 +673,7 @@ export default function OrderDetails() {
     setDeleteLoading(true);
     try {
       await deleteOrder(order.id);
-      toast({ title: 'Or�amento exclu�do com sucesso!' });
+      toast({ title: 'Orï¿½amento excluï¿½do com sucesso!' });
       setDeleteDialogOpen(false);
       navigate('/pedidos');
     } catch (error: any) {
@@ -644,7 +699,7 @@ export default function OrderDetails() {
     if (!order) return;
     const remaining = Math.max(0, Number(order.total) - Number(order.amount_paid));
     if (remaining <= 0) {
-      toast({ title: 'Pedido j� quitado', description: 'N�o h� saldo pendente.', variant: 'destructive' });
+      toast({ title: 'Pedido jï¿½ quitado', description: 'Nï¿½o hï¿½ saldo pendente.', variant: 'destructive' });
       return;
     }
     setPaymentAmount(remaining);
@@ -704,10 +759,20 @@ export default function OrderDetails() {
       return;
     }
 
-    if (newStatus === 'pronto' && finalPhotos.length === 0) {
+    if ((newStatus === 'finalizado' || newStatus === 'pronto') && finalPhotos.length === 0) {
       toast({
-        title: 'Foto obrigat�ria',
-        description: '� necess�rio anexar pelo menos uma foto do produto pronto antes de alterar o status para "Pronto".',
+        title: 'Foto obrigatï¿½ria',
+        description: 'E necessario anexar pelo menos uma foto do produto final antes de alterar o status.',
+        variant: 'destructive',
+      });
+      setStatusDialogOpen(false);
+      return;
+    }
+
+    if (newStatus === 'arte_aprovada' && artFiles.length === 0) {
+      toast({
+        title: 'Arquivo obrigatorio',
+        description: 'Anexe pelo menos um arquivo da arte antes de finalizar.',
         variant: 'destructive',
       });
       setStatusDialogOpen(false);
@@ -716,11 +781,18 @@ export default function OrderDetails() {
 
     setSaving(true);
 
+    const trimmedNotes = statusNotes.trim();
+    const artNote =
+      newStatus === 'arte_aprovada'
+        ? `Arquivos da arte anexados (${artFiles.length}).`
+        : '';
+    const resolvedNotes = [trimmedNotes, artNote].filter(Boolean).join(' ');
+
     try {
       await updateOrderStatus({
         orderId: order.id,
         status: newStatus,
-        notes: statusNotes || undefined,
+        notes: resolvedNotes || undefined,
         userId: user?.id,
         entrada: entrada ?? null,
         paymentMethod: entrada && entryMethod ? entryMethod : undefined,
@@ -731,7 +803,8 @@ export default function OrderDetails() {
       setEntryDialogOpen(false);
 
       if (order.customer?.phone) {
-        if (window.confirm(`Status alterado para "${newStatus}". Deseja enviar mensagem no WhatsApp para o cliente?`)) {
+        const statusLabel = statusLabels[newStatus] ?? newStatus;
+        if (window.confirm(`Status alterado para "${statusLabel}". Deseja enviar mensagem no WhatsApp para o cliente?`)) {
           setTimeout(() => handleSendWhatsAppUpdate(), 500);
         }
       }
@@ -760,6 +833,8 @@ export default function OrderDetails() {
 
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingArtFile, setUploadingArtFile] = useState(false);
+  const artFileInputRef = useRef<HTMLInputElement>(null);
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!order || !e.target.files || e.target.files.length === 0) return;
@@ -780,6 +855,67 @@ export default function OrderDetails() {
       setUploadingPhoto(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
+  };
+
+  const allowedArtMimeTypes = ['image/jpeg', 'image/png', 'application/pdf'];
+
+  const normalizeClipboardFile = (file: File, index: number) => {
+    if (file.name && file.name !== 'image.png') {
+      return file;
+    }
+    const extension = file.type === 'image/jpeg' ? 'jpg' : file.type === 'image/png' ? 'png' : 'png';
+    return new File([file], `arte-${Date.now()}-${index}.${extension}`, { type: file.type || 'image/png' });
+  };
+
+  const uploadArtFiles = async (files: File[]) => {
+    if (!order || files.length === 0) return;
+    setUploadingArtFile(true);
+    const uploaded: OrderArtFile[] = [];
+    try {
+      const { uploadOrderArtFile } = await import('@/services/orders');
+      for (const file of files) {
+        if (!allowedArtMimeTypes.includes(file.type)) {
+          toast({
+            title: 'Arquivo invalido',
+            description: 'Use JPG, PNG ou PDF.',
+            variant: 'destructive',
+          });
+          continue;
+        }
+        const artFile = await uploadOrderArtFile(order.id, file, user?.id);
+        uploaded.push(artFile as OrderArtFile);
+      }
+
+      if (uploaded.length > 0) {
+        setArtFiles((prev) => [...uploaded, ...prev]);
+        toast({ title: 'Arquivos enviados com sucesso!' });
+      }
+    } catch (error: any) {
+      console.error(error);
+      toast({ title: 'Erro ao enviar arquivos', description: error?.message, variant: 'destructive' });
+    } finally {
+      setUploadingArtFile(false);
+      if (artFileInputRef.current) artFileInputRef.current.value = '';
+    }
+  };
+
+  const handleArtFilesUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files ? Array.from(e.target.files) : [];
+    await uploadArtFiles(files);
+  };
+
+  const handleArtPaste = async (event: React.ClipboardEvent<HTMLDivElement>) => {
+    if (!order || order.status !== 'produzindo_arte') return;
+    const items = Array.from(event.clipboardData?.items || []);
+    const imageFiles = items
+      .filter((item) => item.type.startsWith('image/'))
+      .map((item) => item.getAsFile())
+      .filter(Boolean) as File[];
+
+    if (imageFiles.length === 0) return;
+    event.preventDefault();
+    const normalized = imageFiles.map((file, index) => normalizeClipboardFile(file, index));
+    await uploadArtFiles(normalized);
   };
 
   const handleReceiptDialogChange = (open: boolean) => {
@@ -809,7 +945,7 @@ export default function OrderDetails() {
 
   const handleDeletePayment = async (paymentId: string) => {
     if (!order) return;
-    if (!window.confirm('Excluir este pagamento? Esta a��o n�o pode ser desfeita.')) return;
+    if (!window.confirm('Excluir este pagamento? Esta aï¿½ï¿½o nï¿½o pode ser desfeita.')) return;
     setPaymentActionId(paymentId);
     setPaymentActionType('delete');
     try {
@@ -824,6 +960,39 @@ export default function OrderDetails() {
     }
   };
 
+  const editableItemsSnapshot = useMemo(() => (
+    editableItems.map((item) => ({
+      product_id: item.product_id,
+      quantity: item.quantity,
+      unit_price: item.unit_price,
+      discount: item.discount,
+    }))
+  ), [editableItems]);
+  const itemsSnapshot = useMemo(() => (
+    items.map((item) => ({
+      product_id: item.product_id,
+      quantity: item.quantity,
+      unit_price: item.unit_price,
+      discount: item.discount,
+    }))
+  ), [items]);
+  const itemsDirty = isEditingItems && JSON.stringify(editableItemsSnapshot) !== JSON.stringify(itemsSnapshot);
+  const pendingItemInput = isEditingItems && (newItemProductId || newItemQuantity !== 1);
+  const statusDirty = statusDialogOpen && (newStatus || statusNotes.trim() || entryDialogOpen || entryAmount > 0 || entryMethod);
+  const paymentDirty = paymentDialogOpen && (paymentNotes.trim() || paymentMethod || paymentAmount > 0);
+  const cancelDirty = cancelDialogOpen && (cancelReason.trim() || cancelConfirmPaid);
+  const hasUnsavedChanges = messageDirty
+    || itemsDirty
+    || pendingItemInput
+    || statusDirty
+    || paymentDirty
+    || cancelDirty
+    || uploadingPhoto
+    || uploadingArtFile;
+
+  useUnsavedChanges(
+    hasUnsavedChanges && !saving && !savingItems && !paymentSaving && !cancelLoading && !deleteLoading
+  );
   if (loading) {
     return (
       <div className="page-container flex items-center justify-center min-h-[400px]">
@@ -858,8 +1027,24 @@ const canSendWhatsApp = Boolean(order?.customer?.phone);
     ...photo,
     url: ensurePublicStorageUrl('order-final-photos', photo.storage_path),
   }));
+  const artFilesWithUrls = artFiles.map((file) => ({
+    ...file,
+    url: ensurePublicStorageUrl('order-art-files', file.storage_path),
+    isImage: file.file_type ? file.file_type.startsWith('image/') : false,
+  }));
+  const artFilesReady = artFilesWithUrls.filter((file) => file.url);
   const editingSubtotal = calculateSubtotal(isEditingItems ? editableItems : items);
   const editingTotal = calculateOrderTotal(editingSubtotal);
+  const artIndicator =
+    order.status === 'pendente'
+      ? { label: 'Arte: aguardando definicao', color: 'bg-slate-100 text-slate-600' }
+      : order.status === 'produzindo_arte'
+        ? { label: 'Arte: em producao', color: 'bg-indigo-100 text-indigo-800' }
+        : order.status === 'arte_aprovada'
+          ? { label: 'Arte: aprovada', color: 'bg-emerald-100 text-emerald-800' }
+          : null;
+  const canManageArtFiles = order.status === 'produzindo_arte';
+  const showArtFilesSection = canManageArtFiles || artFilesReady.length > 0;
 
   return (
     <div className="page-container w-full max-w-none">
@@ -875,6 +1060,11 @@ const canSendWhatsApp = Boolean(order?.customer?.phone);
                 <StatusIcon className="h-4 w-4 mr-1" />
                 {config.label}
               </span>
+              {artIndicator && (
+                <span className={`status-badge ${artIndicator.color}`}>
+                  {artIndicator.label}
+                </span>
+              )}
             </h1>
             <p className="text-muted-foreground">Criado em {formatDate(order.created_at)}</p>
           </div>
@@ -1007,7 +1197,7 @@ const canSendWhatsApp = Boolean(order?.customer?.phone);
                   )}
                 </div>
               ) : (
-                <p className="text-muted-foreground">{order.customer_name || 'Cliente n�o informado'}</p>
+                <p className="text-muted-foreground">{order.customer_name || 'Cliente nï¿½o informado'}</p>
               )}
             </CardContent>
           </Card>
@@ -1166,6 +1356,105 @@ const canSendWhatsApp = Boolean(order?.customer?.phone);
               </div>
             </CardContent>
           </Card>
+          {showArtFilesSection && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Paintbrush className="h-5 w-5" />
+                  Arquivos da arte
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {canManageArtFiles && (
+                  <div className="space-y-2">
+                    <input
+                      ref={artFileInputRef}
+                      type="file"
+                      accept="image/jpeg,image/png,application/pdf"
+                      multiple
+                      onChange={handleArtFilesUpload}
+                      className="hidden"
+                    />
+                    <div
+                      className="flex flex-col gap-3 rounded-lg border border-dashed p-4 text-sm text-muted-foreground"
+                      onPaste={handleArtPaste}
+                      tabIndex={0}
+                    >
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => artFileInputRef.current?.click()}
+                          disabled={uploadingArtFile}
+                        >
+                          {uploadingArtFile ? (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          ) : (
+                            <Upload className="mr-2 h-4 w-4" />
+                          )}
+                          Anexar arquivo
+                        </Button>
+                        <span>JPG, PNG ou PDF.</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Cole uma imagem com Ctrl+V ou use o botao acima.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {artFilesReady.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Nenhum arquivo anexado.</p>
+                ) : (
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    {artFilesReady.map((file) =>
+                      file.isImage ? (
+                        <button
+                          key={file.id}
+                          type="button"
+                          onClick={() =>
+                            handleOpenPhoto({
+                              url: file.url || '',
+                              created_at: file.created_at,
+                            })
+                          }
+                          className="group relative overflow-hidden rounded-lg border bg-muted/10 text-left focus:outline-none focus:ring-2 focus:ring-primary"
+                        >
+                          <img
+                            src={file.url || ''}
+                            alt={file.file_name || 'Arquivo da arte'}
+                            className="h-40 w-full object-cover"
+                          />
+                          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-2 text-xs text-white">
+                            <div>{formatDate(file.created_at)}</div>
+                            {file.created_by && profiles[file.created_by] && (
+                              <div>por {profiles[file.created_by]}</div>
+                            )}
+                          </div>
+                        </button>
+                      ) : (
+                        <a
+                          key={file.id}
+                          href={file.url || '#'}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex items-center gap-3 rounded-lg border p-3 text-left hover:bg-muted/50"
+                        >
+                          <div className="flex h-10 w-10 items-center justify-center rounded-md bg-muted">
+                            <FileText className="h-5 w-5 text-muted-foreground" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium">{file.file_name || 'Arquivo PDF'}</p>
+                            <p className="text-xs text-muted-foreground">{formatDate(file.created_at)}</p>
+                          </div>
+                        </a>
+                      ),
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
           {finalPhotosWithUrls.some((photo) => photo.url) && (
             <Card>
               <CardHeader>
@@ -1212,7 +1501,7 @@ const canSendWhatsApp = Boolean(order?.customer?.phone);
           {order.notes && (
             <Card>
               <CardHeader>
-                <CardTitle>Observa��es</CardTitle>
+                <CardTitle>Observaï¿½ï¿½es</CardTitle>
               </CardHeader>
               <CardContent>
                 <p className="text-muted-foreground">{order.notes}</p>
@@ -1362,7 +1651,7 @@ const canSendWhatsApp = Boolean(order?.customer?.phone);
               <div className="flex flex-col gap-2">
                 {isOrderPaid && (
                   <p className="text-xs text-muted-foreground">
-                    Pedido quitado. N�o � poss�vel registrar novos pagamentos.
+                    Pedido quitado. Nï¿½o ï¿½ possï¿½vel registrar novos pagamentos.
                   </p>
                 )}
                 <Button variant="outline" onClick={openPaymentDialog} disabled={isOrderPaid}>
@@ -1428,7 +1717,7 @@ const canSendWhatsApp = Boolean(order?.customer?.phone);
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Observa��es</Label>
+              <Label>Observaï¿½ï¿½es</Label>
               <Textarea
                 value={paymentNotes}
                 onChange={(e) => setPaymentNotes(e.target.value)}
@@ -1485,35 +1774,57 @@ const canSendWhatsApp = Boolean(order?.customer?.phone);
             <DialogTitle>Alterar Status do Pedido</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Novo Status</Label>
-              <Select value={newStatus} onValueChange={(v) => setNewStatus(v as OrderStatus)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione o novo status" />
-                </SelectTrigger>
-                <SelectContent>
-                  {config.next.map((status) => (
-                    <SelectItem key={status} value={status}>
-                      <div className="flex items-center gap-2">
-                        {(() => {
-                          const Icon = statusConfig[status].icon;
-                          return <Icon className="h-4 w-4" />;
-                        })()}
-                        {statusConfig[status].label}
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {order.status === 'pendente' ? (
+              <div className="space-y-2">
+                <Label>Este pedido precisa de criacao ou ajuste de arte?</Label>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <Button
+                    type="button"
+                    variant={newStatus === 'produzindo_arte' ? 'default' : 'outline'}
+                    onClick={() => setNewStatus('produzindo_arte')}
+                  >
+                    Sim, precisa
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={newStatus === 'em_producao' ? 'default' : 'outline'}
+                    onClick={() => setNewStatus('em_producao')}
+                  >
+                    Nao, ir para producao
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label>Novo Status</Label>
+                <Select value={newStatus} onValueChange={(v) => setNewStatus(v as OrderStatus)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o novo status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {config.next.map((status) => (
+                      <SelectItem key={status} value={status}>
+                        <div className="flex items-center gap-2">
+                          {(() => {
+                            const Icon = statusConfig[status].icon;
+                            return <Icon className="h-4 w-4" />;
+                          })()}
+                          {statusConfig[status].label}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div className="space-y-2">
               <Label>
-                {newStatus === 'cancelado' ? 'Motivo do cancelamento *' : 'Observa��es (opcional)'}
+                {newStatus === 'cancelado' ? 'Motivo do cancelamento *' : 'Observaï¿½ï¿½es (opcional)'}
               </Label>
               <Textarea
                 value={statusNotes}
                 onChange={(e) => setStatusNotes(e.target.value)}
-                placeholder={newStatus === 'cancelado' ? 'Informe o motivo...' : 'Adicione uma observa��o...'}
+                placeholder={newStatus === 'cancelado' ? 'Informe o motivo...' : 'Adicione uma observaï¿½ï¿½o...'}
                 rows={3}
               />
             </div>
@@ -1629,10 +1940,10 @@ const canSendWhatsApp = Boolean(order?.customer?.phone);
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <DialogContent aria-describedby={undefined} className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Excluir or�amento</DialogTitle>
+            <DialogTitle>Excluir orï¿½amento</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            Tem certeza que deseja excluir este or�amento? Essa a��o n�o pode ser desfeita.
+            Tem certeza que deseja excluir este orï¿½amento? Essa aï¿½ï¿½o nï¿½o pode ser desfeita.
           </p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteDialogOpen(false)} disabled={deleteLoading}>
@@ -1655,13 +1966,13 @@ const canSendWhatsApp = Boolean(order?.customer?.phone);
       >
         <DialogContent className="max-w-5xl w-[95vw] max-h-[95vh] overflow-hidden p-2">
           <DialogHeader className="sr-only">
-            <DialogTitle>Foto do pedido</DialogTitle>
+            <DialogTitle>Arquivo do pedido</DialogTitle>
           </DialogHeader>
           {selectedPhoto && (
             <div className="flex flex-col gap-2">
               <img
                 src={selectedPhoto.url}
-                alt="Foto do pedido"
+                alt="Arquivo do pedido"
                 className="max-h-[80vh] w-full object-contain rounded-md"
               />
               <div className="px-1 text-xs text-muted-foreground">
@@ -1674,6 +1985,10 @@ const canSendWhatsApp = Boolean(order?.customer?.phone);
     </div>
   );
 }
+
+
+
+
 
 
 

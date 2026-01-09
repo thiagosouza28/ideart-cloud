@@ -13,8 +13,11 @@ import type {
 const statusLabels: Record<OrderStatus, string> = {
   orcamento: 'Orçamento',
   pendente: 'Pendente',
+  produzindo_arte: 'Produzindo arte',
+  arte_aprovada: 'Arte aprovada',
   em_producao: 'Em Produção',
-  pronto: 'Pronto',
+  finalizado: 'Finalizado',
+  pronto: 'Finalizado',
   aguardando_retirada: 'Aguardando retirada',
   entregue: 'Entregue',
   cancelado: 'Cancelado',
@@ -22,9 +25,12 @@ const statusLabels: Record<OrderStatus, string> = {
 
 const statusTransitions: Record<OrderStatus, OrderStatus[]> = {
   orcamento: ['pendente', 'cancelado'],
-  pendente: ['em_producao', 'cancelado'],
-  em_producao: ['pronto', 'cancelado'],
-  pronto: ['aguardando_retirada', 'cancelado'],
+  pendente: ['produzindo_arte', 'em_producao', 'cancelado'],
+  produzindo_arte: ['arte_aprovada', 'cancelado'],
+  arte_aprovada: ['em_producao', 'cancelado'],
+  em_producao: ['finalizado', 'cancelado'],
+  finalizado: ['aguardando_retirada', 'entregue', 'cancelado'],
+  pronto: ['aguardando_retirada', 'entregue', 'cancelado'],
   aguardando_retirada: ['entregue', 'cancelado'],
   entregue: [],
   cancelado: ['pendente'],
@@ -83,6 +89,21 @@ const shouldFallbackToDirectUpdate = (error: unknown) => {
     message.includes('networkerror') ||
     message.includes('cors')
   );
+};
+
+const generateFileId = () => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+    const bytes = new Uint8Array(16);
+    crypto.getRandomValues(bytes);
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0'));
+    return `${hex.slice(0, 4).join('')}-${hex.slice(4, 6).join('')}-${hex.slice(6, 8).join('')}-${hex.slice(8, 10).join('')}-${hex.slice(10, 16).join('')}`;
+  }
+  return `${Date.now().toString(16)}-${Math.random().toString(16).slice(2)}`;
 };
 
 export type PaymentSummary = {
@@ -635,6 +656,18 @@ export const approveOrderByToken = async (token: string) => {
   return data as unknown as PublicOrderPayload | null;
 };
 
+export const approveArtByToken = async (token: string) => {
+  const { data, error } = await supabase.rpc('approve_art_by_token', {
+    p_token: token,
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  return data as unknown as PublicOrderPayload | null;
+};
+
 export const recordPaymentByToken = async (
   token: string,
   amount: number,
@@ -761,7 +794,7 @@ export const uploadOrderFinalPhoto = async (
   userId?: string | null
 ) => {
   const fileExt = file.name.split('.').pop();
-  const fileName = `${orderId}/${crypto.randomUUID()}.${fileExt}`;
+  const fileName = `${orderId}/${generateFileId()}.${fileExt}`;
 
   const { error: uploadError } = await supabase.storage
     .from('order-final-photos')
@@ -788,4 +821,41 @@ export const uploadOrderFinalPhoto = async (
   }
 
   return photo;
+};
+
+export const uploadOrderArtFile = async (
+  orderId: string,
+  file: File,
+  userId?: string | null
+) => {
+  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const fileExt = safeName.split('.').pop();
+  const fileName = `${orderId}/${generateFileId()}-${fileExt ? safeName : `${safeName}.bin`}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from('order-art-files')
+    .upload(fileName, file, { contentType: file.type || undefined });
+
+  if (uploadError) {
+    throw uploadError;
+  }
+
+  const { data: artFile, error: dbError } = await supabase
+    .from('order_art_files' as any)
+    .insert({
+      order_id: orderId,
+      storage_path: fileName,
+      file_name: file.name || safeName,
+      file_type: file.type || null,
+      created_by: userId || null,
+    })
+    .select('*')
+    .single();
+
+  if (dbError) {
+    await supabase.storage.from('order-art-files').remove([fileName]);
+    throw dbError;
+  }
+
+  return artFile;
 };

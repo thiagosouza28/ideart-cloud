@@ -68,6 +68,11 @@ begin
     where order_id = any(v_order_ids);
   end if;
 
+  if to_regclass('public.order_art_files') is not null then
+    delete from public.order_art_files
+    where order_id = any(v_order_ids);
+  end if;
+
   if to_regclass('public.order_status_history') is not null then
     delete from public.order_status_history
     where order_id = any(v_order_ids);

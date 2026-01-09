@@ -1,6 +1,16 @@
 export type AppRole = 'super_admin' | 'admin' | 'atendente' | 'caixa' | 'producao';
 export type ProductType = 'produto' | 'confeccionado' | 'servico';
-export type OrderStatus = 'orcamento' | 'pendente' | 'em_producao' | 'pronto' | 'aguardando_retirada' | 'entregue' | 'cancelado';
+export type OrderStatus =
+  | 'orcamento'
+  | 'pendente'
+  | 'produzindo_arte'
+  | 'arte_aprovada'
+  | 'em_producao'
+  | 'finalizado'
+  | 'pronto'
+  | 'aguardando_retirada'
+  | 'entregue'
+  | 'cancelado';
 export type StockMovementType = 'entrada' | 'saida' | 'ajuste';
 export type PaymentMethod = 'dinheiro' | 'cartao' | 'pix' | 'boleto' | 'outro';
 export type PaymentStatus = 'pendente' | 'parcial' | 'pago';
@@ -8,6 +18,12 @@ export type FinancialEntryType = 'receita' | 'despesa';
 export type FinancialEntryStatus = 'pendente' | 'pago' | 'atrasado';
 export type SubscriptionStatus = 'trial' | 'active' | 'cancelled' | 'expired' | 'canceled' | 'past_due' | 'unpaid' | 'incomplete';
 export type BillingPeriod = 'monthly' | 'yearly';
+
+export interface ProductColor {
+  name: string;
+  hex: string;
+  active: boolean;
+}
 
 export interface Company {
   id: string;
@@ -52,6 +68,7 @@ export interface Company {
   catalog_show_contact?: boolean | null;
   catalog_contact_url?: string | null;
   whatsapp_message_template?: string | null;
+  birthday_message_template?: string | null;
   catalog_font?: string | null;
   catalog_columns_mobile?: number | null;
   catalog_columns_desktop?: number | null;
@@ -160,6 +177,7 @@ export interface Product {
   category_id: string | null;
   company_id: string | null;
   image_url: string | null;
+  image_urls?: string[] | null;
   unit: string;
   is_active: boolean;
   show_in_catalog: boolean;
@@ -171,6 +189,8 @@ export interface Product {
   catalog_long_description?: string | null;
   catalog_sort_order?: number | null;
   slug?: string | null;
+  product_colors?: ProductColor[] | null;
+  personalization_enabled?: boolean | null;
   base_cost: number;
   labor_cost: number;
   waste_percentage: number;
@@ -222,6 +242,8 @@ export interface Customer {
   document: string | null;
   email: string | null;
   phone: string | null;
+  date_of_birth: string | null;
+  photo_url: string | null;
   address: string | null;
   city: string | null;
   state: string | null;
@@ -305,6 +327,7 @@ export interface Order {
   company?: Company;
   items?: OrderItem[];
   final_photos?: OrderFinalPhoto[];
+  art_files?: OrderArtFile[];
 }
 
 export interface ExpenseCategory {
@@ -442,6 +465,7 @@ export interface PublicOrderPayload {
   history: OrderStatusHistory[];
   payments: OrderPayment[];
   final_photos: OrderFinalPhoto[];
+  art_files: OrderArtFile[];
 }
 
 export interface OrderItem {
@@ -471,6 +495,16 @@ export interface OrderFinalPhoto {
   id: string;
   order_id: string;
   storage_path: string;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface OrderArtFile {
+  id: string;
+  order_id: string;
+  storage_path: string;
+  file_name: string;
+  file_type: string | null;
   created_by: string | null;
   created_at: string;
 }

@@ -2,28 +2,9 @@ import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
 
-const redirectToRecovery = () => {
-  const { pathname, search, hash } = window.location;
-  const isRecovery =
-    search.includes("type=recovery") ||
-    hash.includes("type=recovery") ||
-    search.includes("code=") ||
-    hash.includes("access_token=");
-
-  if (isRecovery && pathname !== "/alterar-senha") {
-    const query = search || "";
-    const fragment = hash || "";
-    window.location.replace(`/alterar-senha${query}${fragment}`);
-    return true;
-  }
-  return false;
-};
-
-if (!redirectToRecovery()) {
-  const root = document.getElementById("root");
-  if (root) {
-    createRoot(root).render(<App />);
-  }
+const root = document.getElementById("root");
+if (root) {
+  createRoot(root).render(<App />);
 }
 
 if ("serviceWorker" in navigator) {

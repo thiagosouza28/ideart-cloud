@@ -87,3 +87,38 @@ export const getBasePrice = (
   // 3. Default to calculated suggested price
   return calculateSuggestedPrice(product, suppliesCost);
 };
+
+export const resolveProductPrice = (
+  product: Product,
+  quantity: number,
+  priceTiers: PriceTier[] = [],
+  suppliesCost = 0,
+) => {
+  if (isPromotionActive(product) && product.promo_price !== null) {
+    return Number(product.promo_price);
+  }
+  const hasTiers = priceTiers.some((tier) => tier.product_id === product.id);
+  if (hasTiers) {
+    return resolveSuggestedPrice(product, quantity, priceTiers, suppliesCost);
+  }
+  if (product.catalog_price !== null && product.catalog_price !== undefined) {
+    return Number(product.catalog_price);
+  }
+  return resolveSuggestedPrice(product, quantity, priceTiers, suppliesCost);
+};
+
+export const resolveProductBasePrice = (
+  product: Product,
+  quantity: number = 1,
+  priceTiers: PriceTier[] = [],
+  suppliesCost = 0,
+) => {
+  const hasTiers = priceTiers.some((tier) => tier.product_id === product.id);
+  if (hasTiers) {
+    return getBasePrice(product, quantity, priceTiers, suppliesCost);
+  }
+  if (product.catalog_price !== null && product.catalog_price !== undefined) {
+    return Number(product.catalog_price);
+  }
+  return getBasePrice(product, quantity, priceTiers, suppliesCost);
+};

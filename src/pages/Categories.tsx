@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import type { Category } from '@/types/database';
+import { useUnsavedChanges } from '@/hooks/use-unsaved-changes';
 
 export default function Categories() {
   const [categories, setCategories] = useState<Category[]>([]);
@@ -19,6 +20,7 @@ export default function Categories() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [saving, setSaving] = useState(false);
+  const [initialFormSnapshot, setInitialFormSnapshot] = useState<string | null>(null);
   
   const [formData, setFormData] = useState({
     name: '',
@@ -50,12 +52,19 @@ export default function Categories() {
         name: category.name,
         parent_id: category.parent_id || ''
       });
+      setInitialFormSnapshot(JSON.stringify({ name: category.name, parent_id: category.parent_id || '' }));
     } else {
       setSelectedCategory(null);
       setFormData({ name: '', parent_id: '' });
+      setInitialFormSnapshot(JSON.stringify({ name: '', parent_id: '' }));
     }
     setDialogOpen(true);
   };
+
+  const formSnapshotJson = useMemo(() => JSON.stringify(formData), [formData]);
+  const isDirty = dialogOpen && initialFormSnapshot !== null && initialFormSnapshot !== formSnapshotJson;
+
+  useUnsavedChanges(isDirty && !saving);
 
   const handleSave = async () => {
     if (!formData.name.trim()) {
@@ -352,6 +361,7 @@ export default function Categories() {
     </div>
   );
 }
+
 
 
 

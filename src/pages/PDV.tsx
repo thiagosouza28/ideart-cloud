@@ -29,7 +29,7 @@ import { Separator } from '@/components/ui/separator';
 import SaleReceipt from '@/components/SaleReceipt';
 import CustomerSearch from '@/components/CustomerSearch';
 import { ensurePublicStorageUrl } from '@/lib/storage';
-import { resolveSuggestedPrice } from '@/lib/pricing';
+import { resolveProductPrice } from '@/lib/pricing';
 
 export default function PDV() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -291,7 +291,7 @@ export default function PDV() {
   const change = paymentMethod === 'dinheiro' ? Math.max(0, paidAmount - total) : 0;
 
   const formatCurrency = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
-  const getUnitPrice = (product: Product) => resolveSuggestedPrice(product, 1, [], 0);
+  const getUnitPrice = (product: Product) => resolveProductPrice(product, 1, [], 0);
 
   const handleFinalizeSale = () => {
     if (cart.length === 0) return toast({ title: 'Carrinho vazio', variant: 'destructive' });

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Building2, Loader2, Mail, MapPin, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { DEFAULT_TRIAL_DAYS } from "@/services/subscription";
+import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
 
 const slugify = (value: string) =>
   value
@@ -26,6 +27,7 @@ export default function Onboarding() {
   const { toast } = useToast();
   const { user, profile, company, refreshCompany, refreshUserData } = useAuth();
   const [loading, setLoading] = useState(false);
+  const [initialSnapshot, setInitialSnapshot] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     name: "",
@@ -40,7 +42,7 @@ export default function Onboarding() {
 
   useEffect(() => {
     if (company) {
-      setFormData({
+      const nextForm = {
         name: company.name ?? "",
         phone: company.phone ? formatPhone(company.phone) : "",
         whatsapp: company.whatsapp ? formatPhone(company.whatsapp) : "",
@@ -51,9 +53,22 @@ export default function Onboarding() {
         document: (company as { document?: string | null }).document
           ? formatCpfCnpj((company as { document?: string | null }).document ?? "")
           : "",
-      });
+      };
+      setFormData(nextForm);
+      setInitialSnapshot(JSON.stringify(nextForm));
     }
   }, [company]);
+
+  const formSnapshotJson = useMemo(() => JSON.stringify(formData), [formData]);
+  const isDirty = initialSnapshot !== null && initialSnapshot !== formSnapshotJson;
+
+  useEffect(() => {
+    if (!company && initialSnapshot === null) {
+      setInitialSnapshot(formSnapshotJson);
+    }
+  }, [company, initialSnapshot, formSnapshotJson]);
+
+  useUnsavedChanges(isDirty && !loading);
 
   useEffect(() => {
     if (!company?.completed) return;

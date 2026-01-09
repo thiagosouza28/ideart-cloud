@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
-import { approveOrderByToken, fetchPublicOrder } from '@/services/orders';
+import { approveArtByToken, approveOrderByToken, fetchPublicOrder } from '@/services/orders';
 import type { OrderStatus, PublicOrderPayload } from '@/types/database';
 import { ensurePublicStorageUrl } from '@/lib/storage';
 import { CheckCircle, Clock, Package, Truck, XCircle, FileText, Image as ImageIcon } from 'lucide-react';
@@ -16,8 +16,11 @@ import { CheckCircle, Clock, Package, Truck, XCircle, FileText, Image as ImageIc
 const statusLabels: Record<OrderStatus, string> = {
   orcamento: 'Orçamento',
   pendente: 'Pendente',
+  produzindo_arte: 'Produzindo arte',
+  arte_aprovada: 'Arte aprovada',
   em_producao: 'Em produção',
-  pronto: 'Pronto',
+  finalizado: 'Finalizado',
+  pronto: 'Finalizado',
   aguardando_retirada: 'Aguardando retirada',
   entregue: 'Entregue',
   cancelado: 'Cancelado',
@@ -26,7 +29,10 @@ const statusLabels: Record<OrderStatus, string> = {
 const statusIcons: Record<OrderStatus, ComponentType<any>> = {
   orcamento: FileText,
   pendente: Clock,
+  produzindo_arte: ImageIcon,
+  arte_aprovada: CheckCircle,
   em_producao: Clock,
+  finalizado: Package,
   pronto: Package,
   aguardando_retirada: CheckCircle,
   entregue: Truck,
@@ -36,7 +42,10 @@ const statusIcons: Record<OrderStatus, ComponentType<any>> = {
 const statusColors: Record<OrderStatus, string> = {
   orcamento: 'bg-blue-100 text-blue-800',
   pendente: 'bg-orange-100 text-orange-800',
+  produzindo_arte: 'bg-indigo-100 text-indigo-800',
+  arte_aprovada: 'bg-emerald-100 text-emerald-800',
   em_producao: 'bg-yellow-100 text-yellow-800',
+  finalizado: 'bg-green-100 text-green-800',
   pronto: 'bg-green-100 text-green-800',
   aguardando_retirada: 'bg-sky-100 text-sky-800',
   entregue: 'bg-gray-100 text-gray-800',
@@ -56,6 +65,7 @@ export default function PublicOrder() {
   const [payload, setPayload] = useState<PublicOrderPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [approving, setApproving] = useState(false);
+  const [approvingArt, setApprovingArt] = useState(false);
   const [photoViewerOpen, setPhotoViewerOpen] = useState(false);
   const [selectedPhoto, setSelectedPhoto] = useState<{ url: string; created_at: string } | null>(null);
   const lastStatusRef = useRef<OrderStatus | null>(null);
@@ -131,6 +141,22 @@ export default function PublicOrder() {
     }
   };
 
+  const handleApproveArt = async () => {
+    if (!token) return;
+    setApprovingArt(true);
+    try {
+      const data = await approveArtByToken(token);
+      if (data) {
+        setPayload(data);
+        toast({ title: 'Arte aprovada com sucesso!' });
+      }
+    } catch (err: any) {
+      toast({ title: 'Erro ao aprovar arte', description: err?.message, variant: 'destructive' });
+    } finally {
+      setApprovingArt(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -154,17 +180,40 @@ export default function PublicOrder() {
     );
   }
 
+  const companyLogoUrl = payload.company.logo_url
+    ? ensurePublicStorageUrl('product-images', payload.company.logo_url)
+    : null;
   const finalPhotosWithUrls = (payload.final_photos || []).map((photo) => ({
     ...photo,
     url: ensurePublicStorageUrl('order-final-photos', photo.storage_path),
   }));
+  const artFilesWithUrls = (payload.art_files || []).map((file) => ({
+    ...file,
+    url: ensurePublicStorageUrl('order-art-files', file.storage_path),
+    isImage: file.file_type ? file.file_type.startsWith('image/') : false,
+  }));
+  const artFilesReady = artFilesWithUrls.filter((file) => file.url);
   const readyPhotos = finalPhotosWithUrls.filter((photo) => photo.url);
   const showReadyPhotos =
     readyPhotos.length > 0 && (
+      payload.order.status === 'finalizado' ||
       payload.order.status === 'pronto' ||
       payload.order.status === 'aguardando_retirada' ||
       payload.order.status === 'entregue'
     );
+  const showArtFiles =
+    artFilesReady.length > 0 &&
+    [
+      'produzindo_arte',
+      'arte_aprovada',
+      'em_producao',
+      'finalizado',
+      'pronto',
+      'aguardando_retirada',
+      'entregue',
+    ].includes(payload.order.status);
+  const canApproveArt =
+    payload.order.status === 'produzindo_arte' && artFilesReady.length > 0;
   const StatusIcon = statusIcons[payload.order.status];
 
   return (
@@ -172,6 +221,13 @@ export default function PublicOrder() {
       <div className="page-container max-w-5xl mx-auto">
         <div className="space-y-2">
           <div className="flex items-center gap-3">
+            {companyLogoUrl && (
+              <img
+                src={companyLogoUrl}
+                alt={payload.company.name || 'Empresa'}
+                className="h-10 w-10 rounded-md object-cover"
+              />
+            )}
             <h1 className="page-title">Pedido #{formatOrderNumber(payload.order.order_number)}</h1>
             <span className={`status-badge ${statusColors[payload.order.status]}`}>
               {StatusIcon && <StatusIcon className="h-4 w-4 mr-1" />}
@@ -251,12 +307,87 @@ export default function PublicOrder() {
               </CardContent>
             </Card>
 
+            {showArtFiles && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <ImageIcon className="h-5 w-5" />
+                    Arquivos da arte
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    {artFilesReady.map((file) =>
+                      file.isImage ? (
+                        <button
+                          key={file.id}
+                          type="button"
+                          onClick={() =>
+                            handleOpenPhoto({
+                              url: file.url || '',
+                              created_at: file.created_at,
+                            })
+                          }
+                          className="group overflow-hidden rounded-lg border bg-muted/10 text-left focus:outline-none focus:ring-2 focus:ring-primary"
+                        >
+                          <div className="relative">
+                            <img
+                              src={file.url || ''}
+                              alt={file.file_name || 'Arquivo da arte'}
+                              className="h-40 w-full object-cover"
+                            />
+                            <div className="absolute inset-0 bg-black/0 transition group-hover:bg-black/10" />
+                          </div>
+                          <div className="px-2 py-1 text-xs text-muted-foreground">
+                            {formatDate(file.created_at)}
+                          </div>
+                        </button>
+                      ) : (
+                        <a
+                          key={file.id}
+                          href={file.url || '#'}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex items-center gap-3 rounded-lg border p-3 text-left hover:bg-muted/50"
+                        >
+                          <div className="flex h-10 w-10 items-center justify-center rounded-md bg-muted">
+                            <FileText className="h-5 w-5 text-muted-foreground" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium">{file.file_name || 'Arquivo PDF'}</p>
+                            <p className="text-xs text-muted-foreground">{formatDate(file.created_at)}</p>
+                          </div>
+                        </a>
+                      ),
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {canApproveArt && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Aprovacao da Arte</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <p className="text-sm text-muted-foreground">
+                    Revise os arquivos acima e confirme se a arte esta aprovada.
+                  </p>
+                  <Button onClick={handleApproveArt} disabled={approvingArt} className="w-full">
+                    {approvingArt && <CheckCircle className="mr-2 h-4 w-4 animate-spin" />}
+                    Aprovar Arte
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+
             {showReadyPhotos && (
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <ImageIcon className="h-5 w-5" />
-                    Fotos do pedido pronto
+                    Fotos do pedido finalizado
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -333,7 +464,8 @@ export default function PublicOrder() {
               </CardContent>
             </Card>
 
-            {payload.order.status === 'orcamento' && (
+            {(payload.order.status === 'orcamento' ||
+              (payload.order.status === 'pendente' && !payload.order.approved_at)) && (
               <Card>
                 <CardHeader>
                   <CardTitle>Aprovação do Orçamento</CardTitle>
@@ -419,13 +551,13 @@ export default function PublicOrder() {
         >
           <DialogContent className="max-w-5xl w-[95vw] max-h-[95vh] overflow-hidden p-2">
             <DialogHeader className="sr-only">
-              <DialogTitle>Foto do pedido</DialogTitle>
+              <DialogTitle>Arquivo do pedido</DialogTitle>
             </DialogHeader>
             {selectedPhoto && (
               <div className="flex flex-col gap-2">
                 <img
                   src={selectedPhoto.url}
-                  alt="Foto do pedido"
+                  alt="Arquivo do pedido"
                   className="max-h-[80vh] w-full object-contain rounded-md"
                 />
                 <div className="px-1 text-xs text-muted-foreground">
@@ -439,4 +571,3 @@ export default function PublicOrder() {
     </div>
   );
 }
-

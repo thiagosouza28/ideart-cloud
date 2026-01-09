@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useRef, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -29,10 +29,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Separator } from '@/components/ui/separator';
 import { supabase } from '@/integrations/supabase/client';
 import { ensurePublicStorageUrl } from '@/lib/storage';
-import { getBasePrice, isPromotionActive, resolveSuggestedPrice } from '@/lib/pricing';
+import { isPromotionActive, resolveProductBasePrice, resolveProductPrice } from '@/lib/pricing';
 import { CpfCnpjInput, PhoneInput, normalizeDigits, validateCpf, validatePhone } from '@/components/ui/masked-input';
 import { useToast } from '@/hooks/use-toast';
-import { Company, PaymentMethod, Product } from '@/types/database';
+import { Company, PaymentMethod, Product, ProductColor } from '@/types/database';
 
 interface CompanyWithColors extends Company {
   catalog_primary_color?: string;
@@ -62,7 +62,32 @@ interface ProductWithCategory extends Omit<Product, 'category'> {
   category?: { name: string } | null;
 }
 
-const colorSwatches = ['#1e293b', '#0ea5e9', '#be185d', '#eab308'];
+const normalizeProductColors = (value: unknown): ProductColor[] => {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      if (!item || typeof item !== 'object') return null;
+      const record = item as Record<string, unknown>;
+      const name = typeof record.name === 'string' ? record.name.trim() : '';
+      const hex = typeof record.hex === 'string' ? record.hex.trim() : '';
+      const active = typeof record.active === 'boolean' ? record.active : true;
+      if (!name || !hex) return null;
+      return { name, hex, active };
+    })
+    .filter((color): color is ProductColor => !!color);
+};
+
+const normalizeProductImages = (value: unknown, fallback?: string | null): string[] => {
+  const rawList = Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string' && item.trim() !== '')
+    : [];
+  const normalized = rawList
+    .map((url) => ensurePublicStorageUrl('product-images', url) || url)
+    .filter((url): url is string => Boolean(url));
+  const withFallback = fallback ? [fallback, ...normalized] : normalized;
+  const unique = withFallback.filter((url, index, self) => self.indexOf(url) === index);
+  return unique.slice(0, 5);
+};
 
 export default function PublicProductDetails() {
   const { slug, productSlug } = useParams<{ slug?: string; productSlug?: string }>();
@@ -74,6 +99,8 @@ export default function PublicProductDetails() {
   const [notFound, setNotFound] = useState(false);
   const [copied, setCopied] = useState(false);
   const [activeTab, setActiveTab] = useState<'descricao' | 'especificacoes' | 'envio' | 'avaliacoes'>('descricao');
+  const [selectedColorIndex, setSelectedColorIndex] = useState(0);
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const { toast } = useToast();
   const orderFormRef = useRef<HTMLDivElement>(null);
   const [orderForm, setOrderForm] = useState({
@@ -104,10 +131,13 @@ export default function PublicProductDetails() {
     productName: string;
   } | null>(null);
   const [cpfStatus, setCpfStatus] = useState<'valid' | 'invalid' | null>(null);
+  const isUuid = (value: string) =>
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 
   useEffect(() => {
     const loadProduct = async () => {
-      if (!productSlug) return;
+      const resolvedProductSlug = productSlug?.trim();
+      if (!resolvedProductSlug) return;
 
       let companyData: Company | null = null;
       if (slug) {
@@ -121,11 +151,15 @@ export default function PublicProductDetails() {
       }
 
       if (!companyData && !slug) {
-        const { data: productLookup } = await supabase
-          .from('products')
-          .select('company_id')
-          .eq('slug', productSlug)
-          .maybeSingle();
+        let productLookupQuery = supabase.from('products').select('company_id');
+        if (isUuid(resolvedProductSlug)) {
+          productLookupQuery = productLookupQuery.or(
+            `id.eq.${resolvedProductSlug},slug.eq.${resolvedProductSlug}`
+          );
+        } else {
+          productLookupQuery = productLookupQuery.eq('slug', resolvedProductSlug);
+        }
+        const { data: productLookup } = await productLookupQuery.maybeSingle();
         if (productLookup?.company_id) {
           const companyResult = await supabase
             .from('companies')
@@ -149,14 +183,22 @@ export default function PublicProductDetails() {
       };
       setCompany(normalizedCompany);
 
-      const { data: productData, error: productError } = await supabase
+      let productQuery = supabase
         .from('products')
         .select('*, category:categories(name)')
         .eq('company_id', companyData.id)
-        .or(`id.eq.${productSlug},slug.eq.${productSlug}`)
         .or('catalog_enabled.is.true,show_in_catalog.is.true')
-        .eq('is_active', true)
-        .single();
+        .eq('is_active', true);
+
+      if (isUuid(resolvedProductSlug)) {
+        productQuery = productQuery.or(
+          `id.eq.${resolvedProductSlug},slug.eq.${resolvedProductSlug}`
+        );
+      } else {
+        productQuery = productQuery.eq('slug', resolvedProductSlug);
+      }
+
+      const { data: productData, error: productError } = await productQuery.single();
 
       if (productError || !productData) {
         setNotFound(true);
@@ -164,9 +206,12 @@ export default function PublicProductDetails() {
         return;
       }
 
+      const normalizedPrimaryImage = ensurePublicStorageUrl('product-images', productData.image_url);
+      const normalizedImages = normalizeProductImages(productData.image_urls, normalizedPrimaryImage);
       setProduct({
         ...(productData as ProductWithCategory),
-        image_url: ensurePublicStorageUrl('product-images', productData.image_url),
+        image_url: normalizedImages[0] ?? normalizedPrimaryImage,
+        image_urls: normalizedImages,
       });
 
       if (productData.category_id) {
@@ -214,16 +259,38 @@ export default function PublicProductDetails() {
     if (ogDesc) ogDesc.setAttribute('content', description);
   }, [product, company]);
 
-  const basePrice = product?.catalog_price ?? null;
-  const productPrice = product
-    ? (basePrice ?? resolveSuggestedPrice(product as Product, orderForm.quantity, [], 0))
-    : 0;
-  const unitPrice = product
-    ? (basePrice ?? resolveSuggestedPrice(product as Product, 1, [], 0))
-    : 0;
+  const availableColors = useMemo(
+    () => normalizeProductColors(product?.product_colors).filter((color) => color.active),
+    [product?.product_colors]
+  );
+  const productImages = useMemo(
+    () => normalizeProductImages(product?.image_urls, product?.image_url),
+    [product?.image_urls, product?.image_url]
+  );
+
+  useEffect(() => {
+    setSelectedImageIndex(0);
+  }, [product?.id, productImages.length]);
+
+  useEffect(() => {
+    if (availableColors.length > 0) {
+      setSelectedColorIndex(0);
+    }
+  }, [product?.id, availableColors.length]);
+
+  const productPrice = product ? resolveProductPrice(product as Product, orderForm.quantity, [], 0) : 0;
+  const unitPrice = product ? resolveProductPrice(product as Product, 1, [], 0) : 0;
   const orderTotal = productPrice * orderForm.quantity;
   const minimumOrderValue = Number(company?.minimum_order_value || 0);
   const minimumOrderQuantity = Math.max(1, Number(product?.catalog_min_order ?? product?.min_order_quantity ?? 1));
+  const promoBasePrice = product && isPromotionActive(product as Product)
+    ? resolveProductBasePrice(product as Product, 1, [], 0)
+    : null;
+  const activeImage = productImages[selectedImageIndex] ?? product?.image_url ?? null;
+  const thumbnailImages: Array<string | null> = productImages.length > 0
+    ? productImages
+    : Array.from({ length: 4 }, () => null);
+  const isPersonalizationAllowed = product?.personalization_enabled === true;
 
   const formatCurrency = (value: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
@@ -559,34 +626,39 @@ export default function PublicProductDetails() {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
           <div className="space-y-4">
-            <div className="relative overflow-hidden rounded-2xl bg-slate-900">
+            <div className="relative overflow-hidden rounded-2xl bg-slate-900 aspect-[4/5]">
               {isPromotionActive(product as Product) && (
                 <Badge className="absolute top-4 left-4 catalog-badge">Novidade</Badge>
               )}
-              {product.image_url ? (
+              {activeImage ? (
                 <img
-                  src={product.image_url}
+                  src={activeImage}
                   alt={product.name}
                   className="w-full h-full object-cover"
                 />
               ) : (
-                <div className="aspect-square flex items-center justify-center bg-slate-800">
+                <div className="h-full w-full flex items-center justify-center bg-slate-800">
                   <Package className="h-16 w-16 text-white/30" />
                 </div>
               )}
             </div>
             <div className="flex gap-3">
-              {[0, 1, 2, 3].map((index) => (
-                <div
-                  key={index}
-                  className={`h-16 w-16 rounded-lg border ${index === 0 ? 'border-primary' : 'border-slate-200'} bg-white overflow-hidden`}
+              {thumbnailImages.map((url, index) => (
+                <button
+                  key={`${url ?? 'empty'}-${index}`}
+                  type="button"
+                  className={`h-16 w-16 rounded-lg border ${index === selectedImageIndex ? 'border-primary' : 'border-slate-200'} bg-white overflow-hidden`}
+                  onClick={() => {
+                    if (url) setSelectedImageIndex(index);
+                  }}
+                  disabled={!url}
                 >
-                  {product.image_url ? (
-                    <img src={product.image_url} alt="thumb" className="h-full w-full object-cover" />
+                  {url ? (
+                    <img src={url} alt={`thumb ${index + 1}`} className="h-full w-full object-cover" />
                   ) : (
                     <div className="h-full w-full bg-slate-100" />
                   )}
-                </div>
+                </button>
               ))}
             </div>
           </div>
@@ -606,12 +678,22 @@ export default function PublicProductDetails() {
             </div>
 
             {showPrices ? (
-              <div className="flex items-baseline gap-3">
-                <span className="text-3xl font-bold catalog-price">{formatCurrency(unitPrice)}</span>
-                {isPromotionActive(product as Product) && (
-                  <span className="text-sm text-slate-400 line-through">{formatCurrency(getBasePrice(product as Product))}</span>
-                )}
-              </div>
+              promoBasePrice !== null ? (
+                <div className="flex flex-col gap-1">
+                  <div className="text-sm text-slate-500">
+                    <span className="mr-1">De</span>
+                    <span className="line-through">{formatCurrency(promoBasePrice)}</span>
+                  </div>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-sm text-slate-500">Por</span>
+                    <span className="text-3xl font-bold catalog-price">{formatCurrency(unitPrice)}</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-baseline gap-3">
+                  <span className="text-3xl font-bold catalog-price">{formatCurrency(unitPrice)}</span>
+                </div>
+              )
             ) : (
               <div className="text-sm text-slate-500">Preco sob consulta</div>
             )}
@@ -621,35 +703,40 @@ export default function PublicProductDetails() {
             </p>
 
             <div className="border-t border-slate-200 pt-4 space-y-4">
-              <div>
-                <Label className="text-xs uppercase text-slate-500">Cor da Capa</Label>
-                <div className="mt-2 flex gap-2">
-                  {colorSwatches.map((color, index) => (
-                    <button
-                      key={color}
-                      className={`h-8 w-8 rounded-full border-2 ${index === 0 ? 'border-primary' : 'border-transparent'} bg-white`}
-                      style={{ backgroundColor: color }}
-                      aria-label="Cor"
-                    />
-                  ))}
+              {availableColors.length > 0 && (
+                <div>
+                  <Label className="text-xs uppercase text-slate-500">Cor da Capa</Label>
+                  <div className="mt-2 flex gap-2">
+                    {availableColors.map((color, index) => (
+                      <button
+                        key={`${color.name}-${color.hex}`}
+                        className={`h-8 w-8 rounded-full border-2 ${index === selectedColorIndex ? 'border-primary' : 'border-transparent'} bg-white`}
+                        style={{ backgroundColor: color.hex }}
+                        aria-label={color.name}
+                        onClick={() => setSelectedColorIndex(index)}
+                      />
+                    ))}
+                  </div>
                 </div>
-              </div>
-              <div>
-                <div className="flex items-center justify-between text-xs text-slate-500">
-                  <Label>Personalizacao (Nome na capa)</Label>
-                  <span>Gratis</span>
+              )}
+              {isPersonalizationAllowed && (
+                <div>
+                  <div className="flex items-center justify-between text-xs text-slate-500">
+                    <Label>Personalizacao (Nome na capa)</Label>
+                    <span>Gratis</span>
+                  </div>
+                  <Input
+                    placeholder="Ex: Ana Silva"
+                    className="mt-2"
+                    maxLength={20}
+                    value={orderForm.customization}
+                    onChange={(event) =>
+                      handleOrderFieldChange('customization', event.target.value.slice(0, 20))
+                    }
+                  />
+                  <p className="mt-1 text-xs text-slate-400">Maximo de 20 caracteres.</p>
                 </div>
-                <Input
-                  placeholder="Ex: Ana Silva"
-                  className="mt-2"
-                  maxLength={20}
-                  value={orderForm.customization}
-                  onChange={(event) =>
-                    handleOrderFieldChange('customization', event.target.value.slice(0, 20))
-                  }
-                />
-                <p className="mt-1 text-xs text-slate-400">Máximo de 20 caracteres.</p>
-              </div>
+              )}
               <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
                 <div className="flex items-center border border-slate-200 rounded-lg bg-white h-10 w-28">
                   <button
@@ -954,9 +1041,20 @@ export default function PublicProductDetails() {
                       <CardContent className="p-4">
                         <h3 className="font-semibold text-sm mb-1 truncate">{related.name}</h3>
                         {showPrices ? (
-                          <span className="text-sm font-bold catalog-price">
-                            {formatCurrency(resolveSuggestedPrice(related, 1, [], 0))}
-                          </span>
+                          isPromotionActive(related) ? (
+                            <div className="flex flex-col gap-1">
+                              <span className="text-xs text-slate-400 line-through">
+                                De {formatCurrency(resolveProductBasePrice(related as Product, 1, [], 0))}
+                              </span>
+                              <span className="text-sm font-bold catalog-price">
+                                Por {formatCurrency(resolveProductPrice(related as Product, 1, [], 0))}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-sm font-bold catalog-price">
+                              {formatCurrency(resolveProductPrice(related as Product, 1, [], 0))}
+                            </span>
+                          )
                         ) : (
                           <span className="text-xs text-slate-500">Preco sob consulta</span>
                         )}
@@ -1052,3 +1150,4 @@ export default function PublicProductDetails() {
     </div>
   );
 }
+

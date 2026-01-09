@@ -21,7 +21,7 @@ import { Separator } from '@/components/ui/separator';
 import { BannerCarousel } from '@/components/BannerCarousel';
 import { supabase } from '@/integrations/supabase/client';
 import { ensurePublicStorageUrl } from '@/lib/storage';
-import { getBasePrice, isPromotionActive, resolveSuggestedPrice } from '@/lib/pricing';
+import { isPromotionActive, resolveProductBasePrice, resolveProductPrice } from '@/lib/pricing';
 import { Category, Company, Product } from '@/types/database';
 
 interface CompanyWithColors extends Company {
@@ -146,8 +146,14 @@ export default function PublicCatalog() {
     }
   }, [company]);
 
-  const getProductPrice = (product: ProductWithCategory) =>
-    product.catalog_price ?? resolveSuggestedPrice(product as unknown as Product, 1, [], 0);
+  const getProductPrice = (product: ProductWithCategory) => {
+    const typedProduct = product as unknown as Product;
+    return resolveProductPrice(typedProduct, 1, [], 0);
+  };
+  const getPromotionBasePrice = (product: ProductWithCategory) => {
+    const typedProduct = product as unknown as Product;
+    return resolveProductBasePrice(typedProduct, 1, [], 0);
+  };
 
   const filteredProducts = useMemo(() => {
     const scoped = selectedCategory
@@ -184,7 +190,7 @@ export default function PublicCatalog() {
     const message = product
       ? `Olá! Gostaria de saber mais sobre o produto: ${product.name}`
       : 'Olá! Vim pelo catálogo online e gostaria de mais informações.';
-    window.open(`https://wa.me/55${phone}?text=${encodeURIComponent(message)}`, '_blank');
+    window.open(`https://api.whatsapp.com/send/?phone=${phone}&text=${encodeURIComponent(message)}`, '_blank');
   };
 
   const baseButtonColor = company?.catalog_primary_color || '#3b82f6';
@@ -462,16 +468,22 @@ export default function PublicCatalog() {
                       )}
                       <div className="mt-auto">
                         {showPrices ? (
-                          <div className="flex items-baseline gap-2 mb-3">
-                            {isPromotionActive(product as unknown as Product) && (
+                          isPromotionActive(product as unknown as Product) ? (
+                            <div className="flex flex-col gap-1 mb-3">
                               <span className="text-xs text-slate-400 line-through">
-                                {formatCurrency(getBasePrice(product as unknown as Product))}
+                                De {formatCurrency(getPromotionBasePrice(product))}
                               </span>
-                            )}
-                            <span className="text-lg font-bold catalog-price">
-                              {formatCurrency(getProductPrice(product))}
-                            </span>
-                          </div>
+                              <span className="text-lg font-bold catalog-price">
+                                Por {formatCurrency(getProductPrice(product))}
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="flex items-baseline gap-2 mb-3">
+                              <span className="text-lg font-bold catalog-price">
+                                {formatCurrency(getProductPrice(product))}
+                              </span>
+                            </div>
+                          )
                         ) : (
                           <div className="text-sm text-slate-500 mb-3">Preco sob consulta</div>
                         )}
@@ -513,9 +525,22 @@ export default function PublicCatalog() {
                             </p>
                           )}
                           {showPrices ? (
-                            <span className="text-lg font-bold catalog-price">
-                              {formatCurrency(getProductPrice(product))}
-                            </span>
+                            isPromotionActive(product as unknown as Product) ? (
+                              <div className="flex flex-col gap-1">
+                                <span className="text-xs text-slate-400 line-through">
+                                  De {formatCurrency(getPromotionBasePrice(product))}
+                                </span>
+                                <span className="text-lg font-bold catalog-price">
+                                  Por {formatCurrency(getProductPrice(product))}
+                                </span>
+                              </div>
+                            ) : (
+                              <div className="flex items-baseline gap-2">
+                                <span className="text-lg font-bold catalog-price">
+                                  {formatCurrency(getProductPrice(product))}
+                                </span>
+                              </div>
+                            )
                           ) : (
                             <span className="text-sm text-slate-500">Preco sob consulta</span>
                           )}

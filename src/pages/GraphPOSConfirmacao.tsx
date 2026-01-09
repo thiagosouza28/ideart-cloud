@@ -48,6 +48,8 @@ export default function GraphPOSConfirmacao() {
         document: customer.document || null,
         email: customer.email || null,
         phone: customer.phone || null,
+        date_of_birth: null,
+        photo_url: null,
         address: null,
         city: null,
         state: null,

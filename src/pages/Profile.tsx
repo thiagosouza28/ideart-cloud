@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,6 +9,7 @@ import { useToast } from '@/hooks/use-toast';
 import { User, Mail, Building2, Shield, Save, Loader2 } from 'lucide-react';
 import { AppRole, Company } from '@/types/database';
 import { ensurePublicStorageUrl } from '@/lib/storage';
+import { useUnsavedChanges } from '@/hooks/use-unsaved-changes';
 
 const roleLabels: Record<AppRole, string> = {
   super_admin: 'Super Admin',
@@ -24,6 +25,7 @@ export default function Profile() {
   const [fullName, setFullName] = useState(profile?.full_name || '');
   const [saving, setSaving] = useState(false);
   const [company, setCompany] = useState<Company | null>(null);
+  const [initialSnapshot, setInitialSnapshot] = useState<string | null>(null);
 
   useEffect(() => {
     if (profile?.company_id) {
@@ -44,10 +46,16 @@ export default function Profile() {
   }, [profile?.company_id]);
 
   useEffect(() => {
-    if (profile?.full_name) {
-      setFullName(profile.full_name);
-    }
-  }, [profile?.full_name]);
+    if (!profile) return;
+    const nextName = profile.full_name || '';
+    setFullName(nextName);
+    setInitialSnapshot(JSON.stringify({ full_name: nextName }));
+  }, [profile]);
+
+  const snapshotJson = useMemo(() => JSON.stringify({ full_name: fullName }), [fullName]);
+  const isDirty = initialSnapshot !== null && initialSnapshot !== snapshotJson;
+
+  useUnsavedChanges(isDirty && !saving);
 
   const handleSave = async () => {
     if (!user) return;

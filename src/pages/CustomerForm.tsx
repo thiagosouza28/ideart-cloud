@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   CpfCnpjInput,
   PhoneInput,
@@ -20,6 +21,9 @@ import {
 } from '@/components/ui/masked-input';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { useUnsavedChanges } from '@/hooks/use-unsaved-changes';
+import { ensurePublicStorageUrl, getStoragePathFromUrl } from '@/lib/storage';
+import { calculateAge, parseDateInput } from '@/lib/birthdays';
 
 const ESTADOS_BR = [
   'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG',
@@ -34,12 +38,17 @@ export default function CustomerForm() {
   const [loading, setLoading] = useState(false);
   const [loadingCep, setLoadingCep] = useState(false);
   const [documentError, setDocumentError] = useState('');
+  const [birthDateError, setBirthDateError] = useState('');
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [initialSnapshot, setInitialSnapshot] = useState<string | null>(null);
 
   const [form, setForm] = useState({
     name: '',
     document: '',
     email: '',
     phone: '',
+    date_of_birth: '',
+    photo_url: '',
     zip_code: '',
     address: '',
     city: '',
@@ -48,22 +57,89 @@ export default function CustomerForm() {
   });
 
   useEffect(() => {
+    setInitialSnapshot(null);
+  }, [id]);
+
+  useEffect(() => {
     if (!isEditing) return;
     supabase.from('customers').select('*').eq('id', id).single().then(({ data }) => {
       if (!data) return;
-      setForm({
+      const nextForm = {
         name: data.name || '',
         document: data.document ? formatCpfCnpj(data.document) : '',
         email: data.email || '',
         phone: data.phone ? formatPhone(data.phone) : '',
+        date_of_birth: data.date_of_birth || '',
+        photo_url: data.photo_url || '',
         zip_code: data.zip_code ? formatCep(data.zip_code) : '',
         address: data.address || '',
         city: data.city || '',
         state: data.state || '',
         notes: data.notes || '',
-      });
+      };
+      setForm(nextForm);
+      setBirthDateError('');
+      setInitialSnapshot(JSON.stringify(nextForm));
     });
   }, [id, isEditing]);
+
+  const formSnapshot = useMemo(() => ({
+    name: form.name,
+    document: form.document,
+    email: form.email,
+    phone: form.phone,
+    date_of_birth: form.date_of_birth,
+    photo_url: form.photo_url,
+    zip_code: form.zip_code,
+    address: form.address,
+    city: form.city,
+    state: form.state,
+    notes: form.notes,
+  }), [form]);
+  const formSnapshotJson = useMemo(() => JSON.stringify(formSnapshot), [formSnapshot]);
+  const isDirty = initialSnapshot !== null && initialSnapshot !== formSnapshotJson;
+
+  useEffect(() => {
+    if (!isEditing && initialSnapshot === null) {
+      setInitialSnapshot(formSnapshotJson);
+    }
+  }, [isEditing, initialSnapshot, formSnapshotJson]);
+
+  useUnsavedChanges(isDirty && !loading);
+
+  const formatDateInputValue = (date: Date) => {
+    const year = date.getFullYear();
+    const month = `${date.getMonth() + 1}`.padStart(2, '0');
+    const day = `${date.getDate()}`.padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const todayInputValue = formatDateInputValue(new Date());
+
+  const validateBirthDate = (value: string) => {
+    if (!value) return 'Data de nascimento e obrigatoria';
+    const parsed = parseDateInput(value);
+    if (!parsed) return 'Data de nascimento invalida';
+    const today = new Date();
+    const todayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    if (parsed > todayDate) return 'Data de nascimento nao pode ser futura';
+    return '';
+  };
+
+  const handleBirthDateChange = (value: string) => {
+    setForm((prev) => ({ ...prev, date_of_birth: value }));
+    setBirthDateError(validateBirthDate(value));
+  };
+
+  const photoPreview = ensurePublicStorageUrl('customer-photos', form.photo_url);
+  const customerInitials = form.name
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join('') || 'CL';
+
+  const currentAge = useMemo(() => calculateAge(form.date_of_birth), [form.date_of_birth]);
 
   const handleDocumentChange = (value: string) => {
     const formatted = formatCpfCnpj(value);
@@ -108,11 +184,79 @@ export default function CustomerForm() {
     }
   };
 
+  const handlePhotoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      toast.error('Selecione uma imagem JPG, PNG ou WEBP.');
+      event.target.value = '';
+      return;
+    }
+
+    const maxSizeMb = 5;
+    if (file.size > maxSizeMb * 1024 * 1024) {
+      toast.error(`Imagem deve ter no maximo ${maxSizeMb}MB.`);
+      event.target.value = '';
+      return;
+    }
+
+    setUploadingPhoto(true);
+    const fileExt = file.name.split('.').pop() || 'jpg';
+    const fileName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${fileExt}`;
+    const filePath = `customers/${fileName}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('customer-photos')
+      .upload(filePath, file, { upsert: true });
+
+    if (uploadError) {
+      toast.error('Erro ao enviar foto do cliente');
+      setUploadingPhoto(false);
+      event.target.value = '';
+      return;
+    }
+
+    const { data: { publicUrl } } = supabase.storage
+      .from('customer-photos')
+      .getPublicUrl(filePath);
+
+    const normalizedUrl = ensurePublicStorageUrl('customer-photos', publicUrl);
+    if (normalizedUrl) {
+      const previousUrl = form.photo_url;
+      setForm((prev) => ({ ...prev, photo_url: normalizedUrl }));
+
+      if (previousUrl && previousUrl !== normalizedUrl) {
+        const previousPath = getStoragePathFromUrl('customer-photos', previousUrl);
+        await supabase.storage.from('customer-photos').remove([previousPath]);
+      }
+      toast.success('Foto enviada com sucesso');
+    }
+
+    setUploadingPhoto(false);
+    event.target.value = '';
+  };
+
+  const removePhoto = async () => {
+    if (!form.photo_url) return;
+    const path = getStoragePathFromUrl('customer-photos', form.photo_url);
+    await supabase.storage.from('customer-photos').remove([path]);
+    setForm((prev) => ({ ...prev, photo_url: '' }));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!form.name.trim()) {
       toast.error('Nome é obrigatório');
+      return;
+    }
+
+    const birthDateErrorMessage = validateBirthDate(form.date_of_birth);
+    if (birthDateErrorMessage) {
+      setBirthDateError(birthDateErrorMessage);
+      toast.error(birthDateErrorMessage);
       return;
     }
 
@@ -153,6 +297,8 @@ export default function CustomerForm() {
       document: documentDigits,
       email: form.email || null,
       phone: phoneDigits,
+      date_of_birth: form.date_of_birth || null,
+      photo_url: form.photo_url || null,
       zip_code: form.zip_code ? normalizeDigits(form.zip_code) : null,
       address: form.address || null,
       city: form.city || null,
@@ -242,6 +388,57 @@ export default function CustomerForm() {
                 onChange={(e) => setForm(prev => ({ ...prev, email: e.target.value }))}
                 placeholder="email@exemplo.com"
               />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Nascimento e foto</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-4 md:grid-cols-2">
+            <div>
+              <Label htmlFor="date_of_birth">Data de nascimento *</Label>
+              <Input
+                id="date_of_birth"
+                type="date"
+                value={form.date_of_birth}
+                onChange={(e) => handleBirthDateChange(e.target.value)}
+                max={todayInputValue}
+                className={birthDateError ? 'border-destructive' : ''}
+                required
+              />
+              {birthDateError && <p className="text-sm text-destructive mt-1">{birthDateError}</p>}
+              {currentAge !== null && !birthDateError && (
+                <p className="text-xs text-muted-foreground mt-1">Idade atual: {currentAge} anos</p>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="photo">Foto do cliente</Label>
+                <Input
+                  id="photo"
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  onChange={handlePhotoUpload}
+                  disabled={uploadingPhoto}
+                />
+                <p className="text-xs text-muted-foreground">JPG, PNG ou WEBP. Opcional.</p>
+              </div>
+              <div className="flex flex-col items-center gap-2">
+                <Avatar className="h-16 w-16">
+                  {photoPreview ? (
+                    <AvatarImage src={photoPreview} alt={form.name || 'Cliente'} />
+                  ) : null}
+                  <AvatarFallback className="bg-muted text-xs">{customerInitials}</AvatarFallback>
+                </Avatar>
+                {form.photo_url && (
+                  <Button type="button" variant="outline" size="sm" onClick={removePhoto}>
+                    Remover foto
+                  </Button>
+                )}
+              </div>
             </div>
           </CardContent>
         </Card>

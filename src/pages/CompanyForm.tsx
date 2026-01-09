@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Building2, Loader2, Save, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -12,6 +12,7 @@ import { supabase } from '@/integrations/supabase/client';
 import type { Company } from '@/types/database';
 import { toast } from 'sonner';
 import { ensurePublicStorageUrl } from '@/lib/storage';
+import { useUnsavedChanges } from '@/hooks/use-unsaved-changes';
 
 const MAX_LOGO_SIZE_BYTES = 2 * 1024 * 1024;
 const ALLOWED_LOGO_TYPES = new Set([
@@ -59,6 +60,13 @@ export default function CompanyForm() {
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const logoObjectUrlRef = useRef<string | null>(null);
+
+  const isDirty = useMemo(() => {
+    if (!initialForm) return false;
+    return JSON.stringify(form) !== JSON.stringify(initialForm);
+  }, [form, initialForm]);
+
+  useUnsavedChanges(isDirty && !saving);
 
   useEffect(() => {
     loadCompany();

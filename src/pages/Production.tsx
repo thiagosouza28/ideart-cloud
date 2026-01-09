@@ -42,7 +42,7 @@ export default function Production() {
     const { data } = await supabase
       .from('orders')
       .select('*')
-      .in('status', ['pendente', 'em_producao'])
+      .in('status', ['pendente', 'produzindo_arte', 'arte_aprovada', 'em_producao'])
       .order('created_at');
     setOrders((data as Order[]) || []);
     setLoading(false);
@@ -52,6 +52,16 @@ export default function Production() {
     try {
       await updateOrderStatus({ orderId, status: 'em_producao', userId: user?.id });
       toast({ title: 'Pedido iniciado na producao!' });
+      fetchOrders();
+    } catch (error: any) {
+      toast({ title: 'Erro ao atualizar pedido', description: error?.message, variant: 'destructive' });
+    }
+  };
+
+  const markArtApproved = async (orderId: string) => {
+    try {
+      await updateOrderStatus({ orderId, status: 'arte_aprovada', userId: user?.id });
+      toast({ title: 'Arte aprovada com sucesso!' });
       fetchOrders();
     } catch (error: any) {
       toast({ title: 'Erro ao atualizar pedido', description: error?.message, variant: 'destructive' });
@@ -147,8 +157,8 @@ export default function Production() {
 
     try {
       uploadedPaths = await uploadFinalPhotos(readyOrder.id, readyFiles);
-      await updateOrderStatus({ orderId: readyOrder.id, status: 'pronto', userId: user?.id });
-      toast({ title: 'Pedido marcado como pronto!', description: 'Fotos salvas com sucesso.' });
+      await updateOrderStatus({ orderId: readyOrder.id, status: 'finalizado', userId: user?.id });
+      toast({ title: 'Pedido finalizado!', description: 'Fotos salvas com sucesso.' });
       closeReadyDialog();
       fetchOrders();
     } catch (error: any) {
@@ -169,6 +179,8 @@ export default function Production() {
   const formatCurrency = (value: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
   const pendingOrders = orders.filter((order) => order.status === 'pendente');
+  const artOrders = orders.filter((order) => order.status === 'produzindo_arte');
+  const artApprovedOrders = orders.filter((order) => order.status === 'arte_aprovada');
   const inProductionOrders = orders.filter((order) => order.status === 'em_producao');
 
   return (
@@ -176,7 +188,7 @@ export default function Production() {
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-slate-900">Painel de Produção</h1>
-          <p className="text-sm text-slate-500">Pedidos pendentes e em producao aguardando avancos</p>
+          <p className="text-sm text-slate-500">Pedidos pendentes, arte e producao aguardando avancos</p>
         </div>
         <Badge variant="outline" className="text-sm px-3 py-1 rounded-full">
           <Clock className="mr-2 h-4 w-4" />
@@ -190,7 +202,7 @@ export default function Production() {
         <Card className="border-slate-200 shadow-sm">
           <CardContent className="py-12 text-center text-muted-foreground">
             <Package className="mx-auto h-12 w-12 mb-4 opacity-50" />
-            Nenhum pedido pendente ou em producao
+            Nenhum pedido pendente, arte ou producao
           </CardContent>
         </Card>
       ) : (
@@ -236,9 +248,109 @@ export default function Production() {
                           <Eye className="mr-2 h-4 w-4" />
                           Ver Pedido
                         </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </div>
+          )}
+          {artOrders.length > 0 && (
+            <div className="space-y-3">
+              <h2 className="text-lg font-semibold">Produzindo Arte</h2>
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {artOrders.map((order) => (
+                  <Card key={order.id} className="border-slate-200 shadow-sm">
+                    <CardHeader className="pb-3">
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-lg">Pedido #{formatOrderNumber(order.order_number)}</CardTitle>
+                        <span className="status-badge status-produzindo_arte">Produzindo arte</span>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <div className="text-sm">
+                        <span className="text-muted-foreground">Cliente:</span>{' '}
+                        {order.customer_id ? (
+                          <Button
+                            variant="link"
+                            className="h-auto p-0 text-sm text-primary"
+                            onClick={() => navigate(`/clientes/${order.customer_id}/historico`)}
+                          >
+                            {order.customer_name || 'Cliente'}
+                          </Button>
+                        ) : (
+                          <span className="font-medium">{order.customer_name || 'Nao informado'}</span>
+                        )}
+                      </div>
+                      <div className="text-sm">
+                        <span className="text-muted-foreground">Total:</span>{' '}
+                        <span className="font-medium">{formatCurrency(Number(order.total))}</span>
+                      </div>
+                      {order.notes && (
+                        <div className="text-sm bg-muted p-2 rounded">
+                          <span className="text-muted-foreground">Obs:</span> {order.notes}
+                        </div>
+                      )}
+                      <div className="grid gap-2">
+                        <Button variant="outline" className="w-full" onClick={() => navigate(`/pedidos/${order.id}`)}>
+                          <Eye className="mr-2 h-4 w-4" />
+                          Ver Pedido
+                        </Button>
+                        <Button className="w-full" onClick={() => markArtApproved(order.id)}>
+                          <CheckCircle className="mr-2 h-4 w-4" />
+                          Arte aprovada
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </div>
+          )}
+          {artApprovedOrders.length > 0 && (
+            <div className="space-y-3">
+              <h2 className="text-lg font-semibold">Arte Aprovada</h2>
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {artApprovedOrders.map((order) => (
+                  <Card key={order.id} className="border-slate-200 shadow-sm">
+                    <CardHeader className="pb-3">
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-lg">Pedido #{formatOrderNumber(order.order_number)}</CardTitle>
+                        <span className="status-badge status-arte_aprovada">Arte aprovada</span>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <div className="text-sm">
+                        <span className="text-muted-foreground">Cliente:</span>{' '}
+                        {order.customer_id ? (
+                          <Button
+                            variant="link"
+                            className="h-auto p-0 text-sm text-primary"
+                            onClick={() => navigate(`/clientes/${order.customer_id}/historico`)}
+                          >
+                            {order.customer_name || 'Cliente'}
+                          </Button>
+                        ) : (
+                          <span className="font-medium">{order.customer_name || 'Nao informado'}</span>
+                        )}
+                      </div>
+                      <div className="text-sm">
+                        <span className="text-muted-foreground">Total:</span>{' '}
+                        <span className="font-medium">{formatCurrency(Number(order.total))}</span>
+                      </div>
+                      {order.notes && (
+                        <div className="text-sm bg-muted p-2 rounded">
+                          <span className="text-muted-foreground">Obs:</span> {order.notes}
+                        </div>
+                      )}
+                      <div className="grid gap-2">
+                        <Button variant="outline" className="w-full" onClick={() => navigate(`/pedidos/${order.id}`)}>
+                          <Eye className="mr-2 h-4 w-4" />
+                          Ver Pedido
+                        </Button>
                         <Button className="w-full" onClick={() => startProduction(order.id)}>
                           <Clock className="mr-2 h-4 w-4" />
-                          Iniciar Produção
+                          Iniciar Producao
                         </Button>
                       </div>
                     </CardContent>
@@ -290,7 +402,7 @@ export default function Production() {
                         </Button>
                         <Button className="w-full" onClick={() => openReadyDialog(order)}>
                           <CheckCircle className="mr-2 h-4 w-4" />
-                          Marcar como Pronto
+                          Marcar como Finalizado
                         </Button>
                       </div>
                     </CardContent>
@@ -388,7 +500,7 @@ export default function Production() {
               Cancelar
             </Button>
             <Button onClick={confirmReady} disabled={savingReady}>
-              {savingReady ? 'Salvando...' : 'Confirmar e marcar como pronto'}
+              {savingReady ? 'Salvando...' : 'Confirmar e marcar como finalizado'}
             </Button>
           </DialogFooter>
         </DialogContent>
