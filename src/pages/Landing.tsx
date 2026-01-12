@@ -190,7 +190,7 @@ export default function Landing() {
       const checkoutUrl = (resp as any)?.checkout_url;
 
       if (!checkoutUrl) {
-        throw new Error("Checkout indisponivel no momento.");
+        throw new Error("Checkout indisponível no momento.");
       }
 
       window.location.href = checkoutUrl;
@@ -237,7 +237,7 @@ export default function Landing() {
             Conheca a interface por dentro
           </h1>
           <p className="mx-auto mt-3 max-w-2xl text-sm text-slate-500">
-            Uma experiencia visual moderna e intuitiva, desenhada para facilitar o dia a dia da sua grafica.
+            Uma experiência visual moderna e intuitiva, desenhada para facilitar o dia a dia da sua gráfica.
             Gerencie tudo em um só lugar com eficiência.
           </p>
         </div>
@@ -277,7 +277,7 @@ export default function Landing() {
           {[
             {
               title: "Fluxos claros",
-              text: "Organize producao, pedidos e PDV com status visuais e alertas.",
+              text: "Organize produção, pedidos e PDV com status visuais e alertas.",
             },
             {
               title: "Catálogo eficiente",
@@ -300,7 +300,7 @@ export default function Landing() {
 
       <section id="planos" className="mx-auto max-w-6xl px-4 py-14">
         <div>
-          <h2 className="text-xl font-semibold">Planos e precos</h2>
+          <h2 className="text-xl font-semibold">Planos e preços</h2>
           <p className="mt-1 text-sm text-slate-500">Escolha o plano ideal para o seu negocio crescer.</p>
         </div>
         {offersLoading && (

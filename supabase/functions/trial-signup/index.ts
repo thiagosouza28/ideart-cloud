@@ -101,7 +101,7 @@ type TrialSignupPayload = {
 serve(async (req) => {
   const corsHeaders = getCorsHeaders(req);
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders, status: 204 });
-  if (req.method !== "POST") return jsonResponse(corsHeaders, 405, { error: "Invalid method" });
+  if (req.method !== "POST") return jsonResponse(corsHeaders, 405, { error: "Método inválido" });
 
   try {
     const body = (await req.json().catch(() => ({}))) as TrialSignupPayload;
@@ -113,11 +113,11 @@ serve(async (req) => {
     const companyName = body.company_name?.trim() ?? null;
 
     if (!email || !password || !fullName || !cpf) {
-      return jsonResponse(corsHeaders, 400, { error: "Dados obrigatorios ausentes" });
+      return jsonResponse(corsHeaders, 400, { error: "Dados obrigatórios ausentes" });
     }
 
     if (!validateCpf(cpf)) {
-      return jsonResponse(corsHeaders, 400, { error: "CPF invalido" });
+      return jsonResponse(corsHeaders, 400, { error: "CPF inválido" });
     }
 
     const supabase = getSupabaseClient();
@@ -128,7 +128,7 @@ serve(async (req) => {
       .eq("cpf", cpf)
       .maybeSingle();
     if (cpfOwner?.id) {
-      return jsonResponse(corsHeaders, 409, { error: "Este CPF ja esta vinculado a outra conta." });
+      return jsonResponse(corsHeaders, 409, { error: "Este CPF já está vinculado a outra conta." });
     }
 
     const now = new Date();
@@ -152,9 +152,9 @@ serve(async (req) => {
     if (userError || !createdUser.user?.id) {
       const message = userError?.message?.toLowerCase() ?? "";
       if (message.includes("already") || message.includes("exists") || message.includes("registered")) {
-        return jsonResponse(corsHeaders, 409, { error: "Este e-mail ja possui uma conta." });
+        return jsonResponse(corsHeaders, 409, { error: "Este e-mail já possui uma conta." });
       }
-      return jsonResponse(corsHeaders, 400, { error: userError?.message || "Falha ao criar usuario" });
+      return jsonResponse(corsHeaders, 400, { error: userError?.message || "Falha ao criar usuário" });
     }
 
     const userId = createdUser.user.id;

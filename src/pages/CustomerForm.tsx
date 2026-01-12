@@ -117,12 +117,12 @@ export default function CustomerForm() {
   const todayInputValue = formatDateInputValue(new Date());
 
   const validateBirthDate = (value: string) => {
-    if (!value) return 'Data de nascimento e obrigatoria';
+    if (!value) return 'Data de nascimento é obrigatória';
     const parsed = parseDateInput(value);
-    if (!parsed) return 'Data de nascimento invalida';
+    if (!parsed) return 'Data de nascimento inválida';
     const today = new Date();
     const todayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    if (parsed > todayDate) return 'Data de nascimento nao pode ser futura';
+    if (parsed > todayDate) return 'Data de nascimento não pode ser futura';
     return '';
   };
 
@@ -197,7 +197,7 @@ export default function CustomerForm() {
 
     const maxSizeMb = 5;
     if (file.size > maxSizeMb * 1024 * 1024) {
-      toast.error(`Imagem deve ter no maximo ${maxSizeMb}MB.`);
+      toast.error(`Imagem deve ter no máximo ${maxSizeMb}MB.`);
       event.target.value = '';
       return;
     }

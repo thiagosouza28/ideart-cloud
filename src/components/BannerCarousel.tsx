@@ -45,7 +45,7 @@ export function BannerCarousel({ companyId, position }: BannerCarouselProps) {
                 if (error) throw error;
                 setBanners(data || []);
             } catch (error) {
-                console.error('Error fetching banners:', error);
+                console.error('Erro ao buscar banners:', error);
             } finally {
                 setLoading(false);
             }

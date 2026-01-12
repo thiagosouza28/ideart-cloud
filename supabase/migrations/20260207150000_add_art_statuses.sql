@@ -31,11 +31,11 @@ begin
   for update;
 
   if not found then
-    raise exception 'Pedido nao encontrado';
+    raise exception 'Pedido não encontrado';
   end if;
 
   if v_order.status not in ('orcamento', 'pendente') then
-    raise exception 'Pedido nao pode ser alterado apos sair do status Orcamento/Pendente';
+    raise exception 'Pedido não pode ser alterado após sair do status Orçamento/Pendente';
   end if;
 
   delete from public.order_items where order_id = p_order_id;

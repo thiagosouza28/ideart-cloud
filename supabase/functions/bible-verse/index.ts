@@ -45,11 +45,11 @@ const jsonResponse = (headers: HeadersInit, status: number, payload: unknown) =>
 serve(async (req) => {
   const corsHeaders = getCorsHeaders(req);
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders, status: 204 });
-  if (req.method !== "GET") return jsonResponse(corsHeaders, 405, { error: "Invalid method" });
+  if (req.method !== "GET") return jsonResponse(corsHeaders, 405, { error: "Método inválido" });
 
   try {
     const response = await fetch("https://www.abibliadigital.com.br/api/verses/nvi/random");
-    if (!response.ok) throw new Error(`API error ${response.status}`);
+    if (!response.ok) throw new Error(`Erro da API ${response.status}`);
     const data = await response.json();
     return jsonResponse(corsHeaders, 200, data);
   } catch {
@@ -57,7 +57,7 @@ serve(async (req) => {
       book: { name: "Joao", version: "nvi", author: "Joao" },
       chapter: 3,
       number: 16,
-      text: "Porque Deus tanto amou o mundo que deu o seu Filho Unigenito, para que todo o que nele crer nao pereca, mas tenha a vida eterna.",
+      text: "Porque Deus tanto amou o mundo que deu o seu Filho Unigênito, para que todo o que nele crer não pereça, mas tenha a vida eterna.",
     });
   }
 });

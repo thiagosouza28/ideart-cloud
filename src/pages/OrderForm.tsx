@@ -320,7 +320,7 @@ export default function OrderForm() {
       order_id: order.id,
       status: 'pendente',
       user_id: user?.id,
-      notes: 'Pedido criado como orcamento',
+      notes: 'Pedido criado como orçamento',
     });
 
     toast({ title: 'Pedido criado com sucesso!' });
@@ -596,7 +596,7 @@ export default function OrderForm() {
                   Status: Pendente
                 </Badge>
                 <p className="text-xs text-muted-foreground mt-2">
-                  O pedido sera criado como orcamento e enviado para aprovacao.
+                  O pedido será criado como orçamento e enviado para aprovação.
                 </p>
               </div>
             </CardContent>

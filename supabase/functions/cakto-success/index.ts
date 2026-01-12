@@ -30,7 +30,7 @@ serve(async (req) => {
   const corsHeaders = getCorsHeaders(req);
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders, status: 204 });
   if (req.method !== "POST" && req.method !== "GET") {
-    return jsonResponse(corsHeaders, 405, { error: "Invalid method" });
+    return jsonResponse(corsHeaders, 405, { error: "Método inválido" });
   }
 
   try {
@@ -41,7 +41,7 @@ serve(async (req) => {
         : (await req.json().catch(() => ({})))?.token;
 
     if (!token) {
-      return jsonResponse(corsHeaders, 400, { error: "Missing token" });
+      return jsonResponse(corsHeaders, 400, { error: "Token ausente" });
     }
 
     const supabase = getSupabaseClient();
@@ -52,7 +52,7 @@ serve(async (req) => {
       .maybeSingle();
 
     if (!checkout) {
-      return jsonResponse(corsHeaders, 404, { error: "Checkout not found" });
+      return jsonResponse(corsHeaders, 404, { error: "Checkout não encontrado" });
     }
 
     if (!checkout.user_id) {
@@ -61,12 +61,12 @@ serve(async (req) => {
 
     const { data: userData, error: userError } = await supabase.auth.admin.getUserById(checkout.user_id);
     if (userError || !userData?.user?.email) {
-      return jsonResponse(corsHeaders, 404, { error: "User not found" });
+      return jsonResponse(corsHeaders, 404, { error: "Usuário não encontrado" });
     }
 
     const appUrl = Deno.env.get("APP_PUBLIC_URL") ?? "";
     if (!appUrl) {
-      return jsonResponse(corsHeaders, 400, { error: "Missing APP_PUBLIC_URL" });
+      return jsonResponse(corsHeaders, 400, { error: "APP_PUBLIC_URL ausente" });
     }
 
     const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
@@ -76,12 +76,12 @@ serve(async (req) => {
     });
 
     if (linkError) {
-      return jsonResponse(corsHeaders, 400, { error: linkError.message || "Failed to generate link" });
+      return jsonResponse(corsHeaders, 400, { error: linkError.message || "Falha ao gerar link" });
     }
 
     const actionLink = linkData?.properties?.action_link ?? (linkData as any)?.action_link ?? null;
     if (!actionLink) {
-      return jsonResponse(corsHeaders, 400, { error: "Missing action link" });
+      return jsonResponse(corsHeaders, 400, { error: "Link de ação ausente" });
     }
 
     await supabase.from("subscription_checkouts").update({

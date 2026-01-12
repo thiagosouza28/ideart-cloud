@@ -65,7 +65,7 @@ const secondaryMenu: MenuItem[] = [
   { title: 'Atributos', url: '/atributos', icon: Tags, roles: ['admin', 'atendente'] },
   { title: 'Estoque', url: '/estoque', icon: Boxes, roles: ['admin', 'atendente'] },
   { title: 'Clientes', url: '/clientes', icon: Users, roles: ['admin', 'atendente'] },
-  { title: 'Aniversariantes do Mes', url: '/clientes/aniversariantes', icon: Gift, roles: ['admin', 'atendente'] },
+  { title: 'Aniversariantes do Mês', url: '/clientes/aniversariantes', icon: Gift, roles: ['admin', 'atendente'] },
   { title: 'Empresas', url: '/empresas', icon: Building2, roles: ['admin'] },
   { title: 'Banners', url: '/banners', icon: ImageIcon, roles: ['admin'] },
   { title: 'Usuários', url: '/usuarios', icon: User, roles: ['admin'] },

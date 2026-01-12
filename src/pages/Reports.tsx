@@ -28,11 +28,11 @@ import { useAuth } from '@/contexts/AuthContext';
 
 const statusOptions: Array<{ value: OrderStatus | 'all'; label: string }> = [
   { value: 'all', label: 'Todos' },
-  { value: 'orcamento', label: 'Orcamento' },
+  { value: 'orcamento', label: 'Orçamento' },
   { value: 'pendente', label: 'Pendente' },
   { value: 'produzindo_arte', label: 'Produzindo arte' },
   { value: 'arte_aprovada', label: 'Arte aprovada' },
-  { value: 'em_producao', label: 'Em Producao' },
+  { value: 'em_producao', label: 'Em Produção' },
   { value: 'finalizado', label: 'Finalizado' },
   { value: 'aguardando_retirada', label: 'Aguardando retirada' },
   { value: 'entregue', label: 'Entregue' },
@@ -74,30 +74,30 @@ const buildExportRows = (tab: ReportTab, data: ReportBundle | null): ExportRow[]
       Data: formatDateTime(tx.date),
       Tipo: tx.type,
       Origem: tx.origin,
-      Descricao: tx.description,
-      Metodo: tx.method || '-',
+      Descrição: tx.description,
+      Método: tx.method || '-',
       Valor: currency(tx.amount),
       Status: tx.status,
     }));
   }
   if (tab === 'financial') {
     const rows: ExportRow[] = [
-      { Secao: 'Resumo', Descricao: 'Receita total', Valor: currency(data.financial.revenueTotal) },
-      { Secao: 'Resumo', Descricao: 'Despesa total', Valor: currency(data.financial.expenseTotal) },
-      { Secao: 'Resumo', Descricao: 'Lucro', Valor: currency(data.financial.profit) },
-      { Secao: 'Resumo', Descricao: 'Margem', Valor: percent(data.financial.margin) },
+      { Seção: 'Resumo', Descrição: 'Receita total', Valor: currency(data.financial.revenueTotal) },
+      { Seção: 'Resumo', Descrição: 'Despesa total', Valor: currency(data.financial.expenseTotal) },
+      { Seção: 'Resumo', Descrição: 'Lucro', Valor: currency(data.financial.profit) },
+      { Seção: 'Resumo', Descrição: 'Margem', Valor: percent(data.financial.margin) },
     ];
     Object.entries(data.financial.revenueByOrigin).forEach(([origin, value]) => {
-      rows.push({ Secao: 'Receita por origem', Descricao: origin, Valor: currency(value) });
+      rows.push({ Seção: 'Receita por origem', Descrição: origin, Valor: currency(value) });
     });
     Object.entries(data.financial.revenueByMethod).forEach(([method, value]) => {
-      rows.push({ Secao: 'Receita por forma', Descricao: method, Valor: currency(value) });
+      rows.push({ Seção: 'Receita por forma', Descrição: method, Valor: currency(value) });
     });
     Object.entries(data.financial.expensesByCategory).forEach(([category, value]) => {
-      rows.push({ Secao: 'Despesas por categoria', Descricao: category, Valor: currency(value) });
+      rows.push({ Seção: 'Despesas por categoria', Descrição: category, Valor: currency(value) });
     });
     Object.entries(data.financial.expensesByStatus).forEach(([status, value]) => {
-      rows.push({ Secao: 'Despesas por status', Descricao: status, Valor: currency(value) });
+      rows.push({ Seção: 'Despesas por status', Descrição: status, Valor: currency(value) });
     });
     return rows;
   }
@@ -105,7 +105,7 @@ const buildExportRows = (tab: ReportTab, data: ReportBundle | null): ExportRow[]
     const rows: ExportRow[] = [];
     data.sales.salesByProduct.forEach((row) => {
       rows.push({
-        Secao: 'Vendas por produto',
+        Seção: 'Vendas por produto',
         Produto: row.name,
         Quantidade: row.quantity,
         Total: currency(row.total),
@@ -113,7 +113,7 @@ const buildExportRows = (tab: ReportTab, data: ReportBundle | null): ExportRow[]
     });
     data.sales.salesByCustomer.forEach((row) => {
       rows.push({
-        Secao: 'Vendas por cliente',
+        Seção: 'Vendas por cliente',
         Cliente: row.name,
         Pedidos: row.orders,
         Total: currency(row.total),
@@ -125,7 +125,7 @@ const buildExportRows = (tab: ReportTab, data: ReportBundle | null): ExportRow[]
     const rows: ExportRow[] = [];
     data.customers.mostActive.forEach((row) => {
       rows.push({
-        Secao: 'Clientes ativos',
+        Seção: 'Clientes ativos',
         Cliente: row.name,
         Pedidos: row.orders,
         Total: currency(row.total),
@@ -133,14 +133,14 @@ const buildExportRows = (tab: ReportTab, data: ReportBundle | null): ExportRow[]
     });
     data.customers.highestRevenue.forEach((row) => {
       rows.push({
-        Secao: 'Maior faturamento',
+        Seção: 'Maior faturamento',
         Cliente: row.name,
         Total: currency(row.total),
       });
     });
     data.customers.pendingBalances.forEach((row) => {
       rows.push({
-        Secao: 'Saldo pendente',
+        Seção: 'Saldo pendente',
         Cliente: row.name,
         Saldo: currency(row.balance),
       });
@@ -183,7 +183,7 @@ export default function Reports() {
       const data = await loadReports(nextFilters);
       setReportData(data);
     } catch (error: any) {
-      toast({ title: 'Erro ao carregar relatorios', description: error?.message, variant: 'destructive' });
+      toast({ title: 'Erro ao carregar relatórios', description: error?.message, variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -238,7 +238,7 @@ export default function Reports() {
         <CardContent className="pt-6">
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-6">
             <div className="space-y-2 lg:col-span-2">
-              <label className="text-sm text-muted-foreground">Inicio</label>
+              <label className="text-sm text-muted-foreground">Início</label>
               <Input
                 type="date"
                 value={filters.startDate}
@@ -391,8 +391,8 @@ export default function Reports() {
                     <TableHead>Data</TableHead>
                     <TableHead>Tipo</TableHead>
                     <TableHead>Origem</TableHead>
-                    <TableHead>Descricao</TableHead>
-                    <TableHead>Metodo</TableHead>
+                    <TableHead>Descrição</TableHead>
+                    <TableHead>Método</TableHead>
                     <TableHead className="text-right">Valor</TableHead>
                     <TableHead>Status</TableHead>
                   </TableRow>
@@ -809,7 +809,7 @@ export default function Reports() {
                     <TableHead>Cliente</TableHead>
                     <TableHead className="text-right">Pedidos</TableHead>
                     <TableHead className="text-right">Total</TableHead>
-                    <TableHead className="text-right">Ultima compra</TableHead>
+                    <TableHead className="text-right">Última compra</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>

@@ -55,12 +55,12 @@ const getSupabaseClient = () =>
 serve(async (req) => {
   const corsHeaders = getCorsHeaders(req);
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders, status: 204 });
-  if (req.method !== "POST") return jsonResponse(corsHeaders, 405, { error: "Invalid method" });
+  if (req.method !== "POST") return jsonResponse(corsHeaders, 405, { error: "Método inválido" });
 
   try {
     const body = (await req.json().catch(() => ({}))) as { email?: string };
     const email = body.email?.trim().toLowerCase();
-    if (!email) return jsonResponse(corsHeaders, 400, { error: "Email obrigatorio" });
+    if (!email) return jsonResponse(corsHeaders, 400, { error: "E-mail obrigatório" });
 
     const appUrl = Deno.env.get("APP_PUBLIC_URL") ?? "https://ideartcloud.com.br";
     const redirectTo = `${appUrl.replace(/\/$/, "")}/alterar-senha`;
@@ -89,29 +89,29 @@ serve(async (req) => {
     }
 
     const text = [
-      "Solicitacao de recuperacao de senha",
+      "Solicitação de recuperação de senha",
       "",
       `Clique no link para criar uma nova senha: ${actionLink}`,
       "",
-      "Se voce nao solicitou, ignore este email.",
+      "Se você não solicitou, ignore este e-mail.",
     ].join("\n");
 
     const html = `
       <div style="font-family:Arial, sans-serif;color:#0f172a;">
-        <h2>Recuperacao de senha</h2>
-        <p>Clique no botao abaixo para criar uma nova senha.</p>
+        <h2>Recuperação de senha</h2>
+        <p>Clique no botão abaixo para criar uma nova senha.</p>
         <p>
           <a href="${actionLink}" style="display:inline-block;padding:12px 18px;background:#0f172a;color:#fff;text-decoration:none;border-radius:8px;">
             Criar nova senha
           </a>
         </p>
-        <p style="font-size:12px;color:#64748b;">Se voce nao solicitou, ignore este email.</p>
+        <p style="font-size:12px;color:#64748b;">Se você não solicitou, ignore este e-mail.</p>
       </div>
     `;
 
     await sendSmtpEmail({
       to: email,
-      subject: "Recuperacao de senha - IDEARTCLOUD",
+      subject: "Recuperação de senha - IDEARTCLOUD",
       text,
       html,
     });

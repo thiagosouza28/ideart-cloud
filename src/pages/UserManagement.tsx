@@ -95,7 +95,7 @@ export default function UserManagement() {
     const { data: profiles, error: profilesError } = await query.order('full_name');
 
     if (profilesError) {
-      toast.error('Erro ao carregar usuarios');
+      toast.error('Erro ao carregar usuários');
       setLoading(false);
       return;
     }
@@ -143,7 +143,7 @@ export default function UserManagement() {
       .order('name');
 
     if (error) {
-      console.error('Error loading companies:', error);
+      console.error('Erro ao carregar empresas:', error);
       return;
     }
     setCompanies(data || []);
@@ -166,7 +166,7 @@ export default function UserManagement() {
       .order('full_name');
 
     if (profilesError) {
-      toast.error('Erro ao carregar usuarios inativos');
+      toast.error('Erro ao carregar usuários inativos');
       setLoadingInactive(false);
       return;
     }
@@ -216,7 +216,7 @@ export default function UserManagement() {
     try {
       const targetCompanyId = profile?.company_id;
       if (!targetCompanyId) {
-        toast.error('Defina uma empresa para o usuario primeiro');
+        toast.error('Defina uma empresa para o usuário primeiro');
         setReactivating(null);
         return;
       }
@@ -233,7 +233,7 @@ export default function UserManagement() {
       await loadUsers();
     } catch (error: any) {
       console.error('Reactivate user error:', error);
-      toast.error('Erro ao reativar usuario');
+      toast.error('Erro ao reativar usuário');
     } finally {
       setReactivating(null);
     }
@@ -281,7 +281,7 @@ export default function UserManagement() {
 
   const handleAddUser = async () => {
     if (!canCreateUsers) {
-      toast.error('Apenas administradores podem criar usuarios');
+      toast.error('Apenas administradores podem criar usuários');
       return;
     }
 
@@ -301,7 +301,7 @@ export default function UserManagement() {
     }
 
     if (!newUserData.role) {
-      toast.error('Selecione o cargo do usuario');
+      toast.error('Selecione o cargo do usuário');
       return;
     }
 
@@ -311,7 +311,7 @@ export default function UserManagement() {
       const targetCompanyId = isSuperAdmin ? newUserData.companyId : (profile?.company_id || null);
 
       if (isSuperAdmin && !targetCompanyId) {
-        toast.error('Selecione uma empresa para o usuario');
+        toast.error('Selecione uma empresa para o usuário');
         setAddingUser(false);
         return;
       }
@@ -336,7 +336,7 @@ export default function UserManagement() {
       } else if (error.message?.includes('already registered')) {
         toast.error('Este e-mail já está cadastrado');
       } else {
-        toast.error(error.message || 'Erro ao adicionar usuario');
+        toast.error(error.message || 'Erro ao adicionar usuário');
       }
     } finally {
       setAddingUser(false);
@@ -362,7 +362,7 @@ export default function UserManagement() {
       await loadUsers();
     } catch (error: any) {
       console.error('Remove user error:', error);
-      toast.error('Erro ao remover usuario');
+      toast.error('Erro ao remover usuário');
     } finally {
       setRemoving(false);
     }
@@ -406,7 +406,7 @@ export default function UserManagement() {
           <Button
             onClick={() => setAddDialogOpen(true)}
             disabled={!canCreateUsers}
-            title={!canCreateUsers ? 'Apenas administradores podem criar usuarios' : undefined}
+            title={!canCreateUsers ? 'Apenas administradores podem criar usuários' : undefined}
           >
             <UserPlus className="mr-2 h-4 w-4" />
             Adicionar Usuário
@@ -423,13 +423,13 @@ export default function UserManagement() {
                 {isSuperAdmin ? 'Todos os Usuários' : 'Usuários da Empresa'}
               </CardTitle>
               <CardDescription>
-                {users.length} usuario{users.length !== 1 ? 's' : ''} cadastrado{users.length !== 1 ? 's' : ''}
+                {users.length} usuário{users.length !== 1 ? 's' : ''} cadastrado{users.length !== 1 ? 's' : ''}
               </CardDescription>
             </div>
             <div className="relative max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
               <Input
-                placeholder="Buscar usuarios..."
+                placeholder="Buscar usuários..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="pl-9"
@@ -445,7 +445,7 @@ export default function UserManagement() {
                 <TableHead>Cargo Atual</TableHead>
                 <TableHead>Cadastrado em</TableHead>
                 <TableHead className="w-[200px]">Alterar Cargo</TableHead>
-                <TableHead className="w-[80px]">Acoes</TableHead>
+                <TableHead className="w-[80px]">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -458,7 +458,7 @@ export default function UserManagement() {
               ) : filtered.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={5} className="text-center py-8 text-slate-500">
-                    Nenhum usuario encontrado
+                    Nenhum usuário encontrado
                   </TableCell>
                 </TableRow>
               ) : filtered.map((u) => (
@@ -473,7 +473,7 @@ export default function UserManagement() {
                       <div>
                         <p className="font-medium">{u.full_name}</p>
                         {u.id === user?.id && (
-                          <p className="text-xs text-slate-500">(voce)</p>
+                          <p className="text-xs text-slate-500">(você)</p>
                         )}
                       </div>
                     </div>
@@ -537,20 +537,20 @@ export default function UserManagement() {
 
       <Card className="border-slate-200">
         <CardHeader>
-          <CardTitle className="text-base">Descricao dos Cargos</CardTitle>
+          <CardTitle className="text-base">Descrição dos Cargos</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 md:grid-cols-2">
             <div className="flex items-start gap-3 p-3 rounded-lg bg-slate-50">
               <Badge variant="outline" className={roleBadgeColors.admin}>Admin</Badge>
               <p className="text-sm text-slate-500">
-                Acesso total ao sistema, incluindo gestao de usuarios, configurações e todos os modulos.
+                Acesso total ao sistema, incluindo gestão de usuários, configurações e todos os módulos.
               </p>
             </div>
             <div className="flex items-start gap-3 p-3 rounded-lg bg-slate-50">
               <Badge variant="outline" className={roleBadgeColors.atendente}>Atendente</Badge>
               <p className="text-sm text-slate-500">
-                Gerencia pedidos, produtos, estoque e clientes. Não acessa PDV ou producao.
+                Gerencia pedidos, produtos, estoque e clientes. Não acessa PDV ou produção.
               </p>
             </div>
             <div className="flex items-start gap-3 p-3 rounded-lg bg-slate-50">
@@ -562,7 +562,7 @@ export default function UserManagement() {
             <div className="flex items-start gap-3 p-3 rounded-lg bg-slate-50">
               <Badge variant="outline" className={roleBadgeColors.producao}>Produção</Badge>
               <p className="text-sm text-slate-500">
-                Acessa o painel de producao e detalhes dos pedidos em andamento.
+                Acessa o painel de produção e detalhes dos pedidos em andamento.
               </p>
             </div>
           </div>
@@ -577,7 +577,7 @@ export default function UserManagement() {
               Adicionar Novo Usuário
             </DialogTitle>
             <DialogDescription>
-              Cadastre um novo usuario para o sistema.
+              Cadastre um novo usuário para o sistema.
             </DialogDescription>
           </DialogHeader>
 
@@ -586,7 +586,7 @@ export default function UserManagement() {
               <Label htmlFor="fullName">Nome Completo *</Label>
               <Input
                 id="fullName"
-                placeholder="Joao da Silva"
+                placeholder="João da Silva"
                 value={newUserData.fullName}
                 onChange={(e) => setNewUserData({ ...newUserData, fullName: e.target.value })}
               />
@@ -673,10 +673,10 @@ export default function UserManagement() {
       <AlertDialog open={!!removeUserId} onOpenChange={() => setRemoveUserId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Remover usuario da empresa</AlertDialogTitle>
+            <AlertDialogTitle>Remover usuário da empresa</AlertDialogTitle>
             <AlertDialogDescription>
               Tem certeza que deseja remover <strong>{removeUserName}</strong> da empresa?
-              O usuario perdera acesso ao sistema, mas a conta continuara existindo.
+              O usuário perderá acesso ao sistema, mas a conta continuará existindo.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -711,7 +711,7 @@ export default function UserManagement() {
             </div>
           ) : inactiveUsers.length === 0 ? (
             <div className="text-center py-8 text-slate-500">
-              Nenhum usuario inativo encontrado
+              Nenhum usuário inativo encontrado
             </div>
           ) : (
             <div className="space-y-2 max-h-[400px] overflow-y-auto">

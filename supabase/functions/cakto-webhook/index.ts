@@ -170,8 +170,8 @@ const sendAccessEmail = async (params: {
   const companyLabel = params.companyName ? `Empresa: ${params.companyName}` : null;
   const planLabel = params.planName ? `Plano: ${params.planName}` : null;
   const passwordLine = params.password
-    ? `Senha temporaria: ${params.password}`
-    : 'Sua conta ja existe. Use sua senha atual.';
+    ? `Senha temporária: ${params.password}`
+    : 'Sua conta já existe. Use sua senha atual.';
 
   const text = [
     `Ola ${name},`,
@@ -183,7 +183,7 @@ const sendAccessEmail = async (params: {
     passwordLine,
     `Acesse: ${loginUrl}`,
     '',
-    'No primeiro acesso sera obrigatorio:',
+    'No primeiro acesso será obrigatório:',
     '1) Criar uma nova senha',
     '2) Preencher os dados da empresa',
   ].filter(Boolean).join('\n');
@@ -220,7 +220,7 @@ const sendAccessEmail = async (params: {
                   <td style="padding:0 32px 8px 32px;">
                     <div style="background:#f8fafc;border-radius:12px;padding:16px;">
                       <p style="margin:0 0 8px 0;color:#334155;font-size:14px;"><strong>Login:</strong> ${params.email}</p>
-                      <p style="margin:0;color:#334155;font-size:14px;"><strong>${params.password ? 'Senha temporaria' : 'Aviso'}:</strong> ${params.password ?? 'Sua conta ja existe. Use sua senha atual.'}</p>
+                      <p style="margin:0;color:#334155;font-size:14px;"><strong>${params.password ? 'Senha temporária' : 'Aviso'}:</strong> ${params.password ?? 'Sua conta já existe. Use sua senha atual.'}</p>
                     </div>
                   </td>
                 </tr>
@@ -234,7 +234,7 @@ const sendAccessEmail = async (params: {
                 <tr>
                   <td style="padding:8px 32px 24px 32px;">
                     <p style="margin:0 0 8px 0;color:#334155;font-size:14px;">
-                      No primeiro acesso sera obrigatorio:
+                      No primeiro acesso será obrigatório:
                     </p>
                     <ol style="margin:0;padding-left:18px;color:#334155;font-size:14px;line-height:1.6;">
                       <li>Criar uma nova senha</li>
@@ -262,7 +262,7 @@ const sendAccessEmail = async (params: {
 };
 
 serve(async (req) => {
-  if (req.method !== 'POST') return jsonResponse(405, { error: 'Invalid method' });
+  if (req.method !== 'POST') return jsonResponse(405, { error: 'Método inválido' });
 
   const raw = await req.text().catch(() => '');
   const sigHeader = req.headers.get('x-cakto-signature') ?? req.headers.get('x-signature') ?? null;
@@ -555,7 +555,7 @@ serve(async (req) => {
     if (!userId) {
       const { userId: existingUserId, error } = await getAdminUserByEmail(supabase, email);
       if (error) {
-        console.warn('Failed to lookup user by email', error);
+        console.warn('Falha ao buscar usuário pelo e-mail', error);
       }
       userId = existingUserId;
     }
@@ -574,7 +574,7 @@ serve(async (req) => {
         },
       });
       if (createError || !createdUser.user?.id) {
-        throw new Error(createError?.message || 'Failed to create user');
+        throw new Error(createError?.message || 'Falha ao criar usuário');
       }
       userId = createdUser.user.id;
       tempPassword = password;
@@ -631,7 +631,7 @@ serve(async (req) => {
         .eq('user_id', userId)
         .maybeSingle();
       if (companyUserError) {
-        console.warn('Failed to read company_users', companyUserError.message);
+        console.warn('Falha ao ler company_users', companyUserError.message);
       } else {
         companyId = companyUserLink?.company_id ?? null;
       }
@@ -673,7 +673,7 @@ serve(async (req) => {
         .single();
 
       if (companyError || !createdCompany?.id) {
-        throw new Error(companyError?.message || 'Failed to create company');
+        throw new Error(companyError?.message || 'Falha ao criar empresa');
       }
       companyId = createdCompany.id;
       createdCompany = true;
@@ -770,7 +770,7 @@ serve(async (req) => {
         .from('user_roles')
         .upsert({ user_id: userId, role: 'admin' }, { onConflict: 'user_id,role' });
       if (roleResp.error) {
-        console.error('Failed to set user role', roleResp.error.message);
+        console.error('Falha ao definir cargo do usuário', roleResp.error.message);
       }
 
       const { data: existingLink, error: linkLookupError } = await supabase
@@ -781,11 +781,11 @@ serve(async (req) => {
         .maybeSingle();
 
       if (linkLookupError) {
-        console.warn('Failed to read company_users', linkLookupError.message);
+        console.warn('Falha ao ler company_users', linkLookupError.message);
       } else if (!existingLink) {
         const linkResp = await supabase.from('company_users').insert({ company_id: companyId, user_id: userId });
         if (linkResp.error) {
-          console.error('Failed to link user to company', linkResp.error.message);
+          console.error('Falha ao vincular usuário à empresa', linkResp.error.message);
         }
       }
     }

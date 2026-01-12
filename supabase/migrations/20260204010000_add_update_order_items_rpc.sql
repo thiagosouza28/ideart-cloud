@@ -17,7 +17,7 @@ begin
   for update;
 
   if not found then
-    raise exception 'Pedido nao encontrado';
+    raise exception 'Pedido não encontrado';
   end if;
 
   if v_order.status <> 'orcamento' then

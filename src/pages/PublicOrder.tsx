@@ -368,7 +368,7 @@ export default function PublicOrder() {
             {canApproveArt && (
               <Card>
                 <CardHeader>
-                  <CardTitle>Aprovacao da Arte</CardTitle>
+                  <CardTitle>Aprovação da Arte</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <p className="text-sm text-muted-foreground">

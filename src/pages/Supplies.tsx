@@ -126,7 +126,7 @@ export default function Supplies() {
       .upload(filePath, file, { upsert: true, contentType: file.type });
 
     if (uploadError) {
-      console.error('Supplies image upload failed', uploadError);
+      console.error('Falha ao enviar imagem de insumo', uploadError);
       const message = uploadError.message || 'Erro ao fazer upload da imagem';
       const hint = uploadError.message?.toLowerCase().includes('bucket')
         ? ' Verifique se o bucket "product-images" existe e se as policies permitem upload.'
@@ -332,7 +332,7 @@ export default function Supplies() {
               <div className="space-y-6">
                 <div className="space-y-4">
                   <div>
-                    <h3 className="text-sm font-semibold">Informacoes basicas</h3>
+                    <h3 className="text-sm font-semibold">Informações básicas</h3>
                     <p className="text-xs text-muted-foreground">
                       Dados principais do insumo e regras de reposicao.
                     </p>
@@ -363,7 +363,7 @@ export default function Supplies() {
                       </Select>
                     </div>
                     <div className="space-y-2">
-                      <Label>Estoque minimo</Label>
+                      <Label>Estoque mínimo</Label>
                       <Input
                         type="number"
                         min="0"

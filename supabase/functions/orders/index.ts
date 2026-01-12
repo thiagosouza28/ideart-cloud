@@ -127,7 +127,7 @@ Deno.serve(async (req) => {
   });
 
   if (req.method !== "PATCH" && req.method !== "DELETE") {
-    return jsonResponse(corsHeaders, 405, { error: "Invalid method" });
+    return jsonResponse(corsHeaders, 405, { error: "Método inválido" });
   }
 
   const segments = getRouteSegments(url, "orders");
@@ -151,7 +151,7 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
     if (!supabaseUrl || !serviceKey) {
-      return jsonResponse(corsHeaders, 400, { error: "Missing Supabase config" });
+      return jsonResponse(corsHeaders, 400, { error: "Configuração do Supabase ausente" });
     }
 
     const allHeaders: Record<string, string> = {};
@@ -170,7 +170,7 @@ Deno.serve(async (req) => {
       logStep("ERROR", "No authorization header found");
       return jsonResponse(corsHeaders, 401, {
         error: "No authorization header",
-        detail: "Missing Authorization or X-Supabase-Authorization"
+        detail: "Authorization ou X-Supabase-Authorization ausente"
       });
     }
 
@@ -183,10 +183,10 @@ Deno.serve(async (req) => {
       token,
     );
     if (authError || !authData.user) {
-      logStep("ERROR", { authError: authError?.message || "User not found" });
+      logStep("ERROR", { authError: authError?.message || "Usuário não encontrado" });
       return jsonResponse(corsHeaders, 401, {
-        error: "Invalid session",
-        detail: authError?.message || "Auth user not found for provided token"
+        error: "Sessão inválida",
+        detail: authError?.message || "Usuário de autenticação não encontrado para o token fornecido"
       });
     }
 
@@ -212,11 +212,11 @@ Deno.serve(async (req) => {
         .single();
 
       if (orderError || !order) {
-        return jsonResponse(corsHeaders, 404, { error: "Pedido nao encontrado" });
+        return jsonResponse(corsHeaders, 404, { error: "Pedido não encontrado" });
       }
 
       if (order.deleted_at) {
-        return jsonResponse(corsHeaders, 400, { error: "Pedido ja excluido" });
+        return jsonResponse(corsHeaders, 400, { error: "Pedido já excluído" });
       }
 
       if (order.status !== "orcamento") {
@@ -254,15 +254,15 @@ Deno.serve(async (req) => {
         .single();
 
       if (orderError || !order) {
-        return jsonResponse(corsHeaders, 404, { error: "Pedido nao encontrado" });
+        return jsonResponse(corsHeaders, 404, { error: "Pedido não encontrado" });
       }
 
       if (order.deleted_at) {
-        return jsonResponse(corsHeaders, 400, { error: "Pedido excluido" });
+        return jsonResponse(corsHeaders, 400, { error: "Pedido excluído" });
       }
 
       if (order.status === "cancelado") {
-        return jsonResponse(corsHeaders, 400, { error: "Pedido ja cancelado" });
+        return jsonResponse(corsHeaders, 400, { error: "Pedido já cancelado" });
       }
 
       if (order.payment_status === "pago" && !confirmPaid) {
@@ -301,7 +301,7 @@ Deno.serve(async (req) => {
 
       if (historyError) {
         return jsonResponse(corsHeaders, 400, {
-          error: historyError.message || "Falha ao registrar historico",
+          error: historyError.message || "Falha ao registrar histórico",
         });
       }
 
@@ -313,7 +313,7 @@ Deno.serve(async (req) => {
       const items = Array.isArray(body.items) ? body.items : [];
 
       if (items.length === 0) {
-        return jsonResponse(corsHeaders, 400, { error: "Itens obrigatorios" });
+        return jsonResponse(corsHeaders, 400, { error: "Itens obrigatórios" });
       }
 
       const { data: order, error: orderError } = await supabase
@@ -323,7 +323,7 @@ Deno.serve(async (req) => {
         .single();
 
       if (orderError || !order) {
-        return jsonResponse(corsHeaders, 404, { error: "Pedido nao encontrado" });
+        return jsonResponse(corsHeaders, 404, { error: "Pedido não encontrado" });
       }
 
       if (order.status !== "orcamento") {
@@ -359,7 +359,7 @@ Deno.serve(async (req) => {
         : null;
 
     if (!status) {
-      return jsonResponse(corsHeaders, 400, { error: "Status obrigatorio" });
+      return jsonResponse(corsHeaders, 400, { error: "Status obrigatório" });
     }
 
     const { data: order, error: orderError } = await supabase
@@ -369,10 +369,10 @@ Deno.serve(async (req) => {
       .single();
 
     if (orderError || !order) {
-      return jsonResponse(corsHeaders, 404, { error: "Pedido nao encontrado" });
+      return jsonResponse(corsHeaders, 404, { error: "Pedido não encontrado" });
     }
     if (order.deleted_at) {
-      return jsonResponse(corsHeaders, 400, { error: "Pedido excluido" });
+      return jsonResponse(corsHeaders, 400, { error: "Pedido excluído" });
     }
 
     if (order.status === "cancelado" && status === "pendente") {
@@ -385,7 +385,7 @@ Deno.serve(async (req) => {
 
     if (!isStatusTransitionAllowed(order.status as string, status)) {
       return jsonResponse(corsHeaders, 400, {
-        error: "Mudanca de status nao permitida",
+        error: "Mudança de status não permitida",
       });
     }
 
@@ -422,7 +422,7 @@ Deno.serve(async (req) => {
 
     if (historyError) {
       return jsonResponse(corsHeaders, 400, {
-        error: historyError.message || "Falha ao registrar historico",
+        error: historyError.message || "Falha ao registrar histórico",
       });
     }
 

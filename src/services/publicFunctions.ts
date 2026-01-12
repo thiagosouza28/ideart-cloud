@@ -32,7 +32,7 @@ export async function invokePublicFunction<T>(
       status: res.status,
       body: json ?? text,
     });
-    throw new Error(json?.error || "Erro ao chamar funcao publica");
+    throw new Error(json?.error || "Erro ao chamar função pública");
   }
 
   return json as T;

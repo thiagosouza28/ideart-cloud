@@ -76,13 +76,13 @@ type CreateSubscriptionRequest = {
 serve(async (req) => {
   const corsHeaders = getCorsHeaders(req);
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders, status: 204 });
-  if (req.method !== "POST") return jsonResponse(corsHeaders, 405, { error: "Invalid method" });
+  if (req.method !== "POST") return jsonResponse(corsHeaders, 405, { error: "Método inválido" });
 
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
     if (!supabaseUrl || !serviceKey) {
-      return jsonResponse(corsHeaders, 400, { error: "Missing Supabase config" });
+      return jsonResponse(corsHeaders, 400, { error: "Configuração do Supabase ausente" });
     }
 
     const authHeader = req.headers.get("x-supabase-authorization") ?? req.headers.get("Authorization");
@@ -91,7 +91,7 @@ serve(async (req) => {
 
     const supabase = getSupabaseClient();
     const { data: authData, error: authError } = await supabase.auth.getUser(token);
-    if (authError || !authData.user) return jsonResponse(corsHeaders, 401, { error: "Invalid session" });
+    if (authError || !authData.user) return jsonResponse(corsHeaders, 401, { error: "Sessão inválida" });
 
     const body = (await req.json().catch(() => ({}))) as CreateSubscriptionRequest;
     const planId = body.plan_id;
@@ -99,17 +99,17 @@ serve(async (req) => {
     const customer = body.customer;
 
     if (!planId || !companyId || !customer?.email) {
-      return jsonResponse(corsHeaders, 400, { error: 'Missing plan_id, company_id or customer.email' });
+      return jsonResponse(corsHeaders, 400, { error: 'plan_id, company_id ou customer.email ausente' });
     }
 
     // Fetch plan to get cakto_plan_id
     const { data: plan } = await supabase.from('plans').select('*').eq('id', planId).maybeSingle();
     if (!plan || !plan.cakto_plan_id) {
-      return jsonResponse(corsHeaders, 400, { error: 'Plano nao encontrado ou nao vinculado ao CAKTO' });
+      return jsonResponse(corsHeaders, 400, { error: 'Plano não encontrado ou não vinculado ao CAKTO' });
     }
 
     const checkoutUrl = buildCheckoutUrl(plan.cakto_plan_id);
-    if (!checkoutUrl) return jsonResponse(corsHeaders, 400, { error: 'Checkout URL indisponivel' });
+    if (!checkoutUrl) return jsonResponse(corsHeaders, 400, { error: 'Checkout URL indisponível' });
 
     const { data: inserted, error: insertError } = await supabase.from('subscriptions').insert({
       company_id: companyId,
@@ -121,7 +121,7 @@ serve(async (req) => {
     }).select('*').single();
 
     if (insertError) {
-      log('Failed to save subscription locally', { message: insertError.message });
+      log('Falha ao salvar assinatura localmente', { message: insertError.message });
     }
 
     const token = crypto.randomUUID();
@@ -136,7 +136,7 @@ serve(async (req) => {
       company_id: companyId,
     });
     if (checkoutError) {
-      log('Failed to create checkout record', { message: checkoutError.message });
+      log('Falha ao criar registro de checkout', { message: checkoutError.message });
     }
 
     return jsonResponse(corsHeaders, 200, { subscription: inserted ?? null, checkout_url: checkoutUrl });

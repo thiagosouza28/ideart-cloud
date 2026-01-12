@@ -157,13 +157,13 @@ export default function ProductLabels() {
           : '';
         const barcodeText = barcodeValue
           ? `<div class="barcode-text">${escapeHtml(barcodeValue)}</div>`
-          : '<div class="barcode-text missing">Sem codigo</div>';
+          : '<div class="barcode-text missing">Sem código</div>';
         const price = formatCurrency(resolvePrice(product));
         return `
           <div class="label">
             <div class="name">${escapeHtml(product.name)}</div>
             ${skuLine}
-            <div class="barcode">${barcodeMarkup || '<div class="barcode-empty">Sem codigo</div>'}</div>
+            <div class="barcode">${barcodeMarkup || '<div class="barcode-empty">Sem código</div>'}</div>
             ${barcodeText}
             <div class="price">${price}</div>
           </div>
@@ -219,15 +219,15 @@ export default function ProductLabels() {
 
     if (missingBarcodeCount > 0) {
       toast({
-        title: 'Existem produtos sem codigo de barras',
-        description: 'As etiquetas sem codigo exibirao aviso no lugar do codigo.',
+        title: 'Existem produtos sem código de barras',
+        description: 'As etiquetas sem código exibirão aviso no lugar do código.',
         variant: 'destructive',
       });
     }
 
     const win = window.open('', '_blank');
     if (!win) {
-      toast({ title: 'Nao foi possivel abrir a janela de impressao', variant: 'destructive' });
+      toast({ title: 'Não foi possível abrir a janela de impressão', variant: 'destructive' });
       return;
     }
 
@@ -248,7 +248,7 @@ export default function ProductLabels() {
         <div>
           <h1 className="page-title">Etiquetas de produtos</h1>
           <p className="text-muted-foreground">
-            Selecione produtos, defina quantidades e gere etiquetas prontas para impressao.
+            Selecione produtos, defina quantidades e gere etiquetas prontas para impressão.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -268,14 +268,14 @@ export default function ProductLabels() {
           <Card>
             <CardHeader>
               <CardTitle>Selecionar produtos</CardTitle>
-              <CardDescription>Escolha os produtos que receberao etiquetas.</CardDescription>
+              <CardDescription>Escolha os produtos que receberão etiquetas.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="relative flex-1">
                   <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
-                    placeholder="Buscar por nome, SKU ou codigo de barras..."
+                    placeholder="Buscar por nome, SKU ou código de barras..."
                     value={search}
                     onChange={(event) => setSearch(event.target.value)}
                     className="pl-9"
@@ -301,7 +301,7 @@ export default function ProductLabels() {
                       <TableHead>Produto</TableHead>
                       <TableHead>SKU</TableHead>
                       <TableHead>Barcode</TableHead>
-                      <TableHead className="text-right">Preco</TableHead>
+                      <TableHead className="text-right">Preço</TableHead>
                       <TableHead className="w-[110px] text-right">Qtd.</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -333,7 +333,7 @@ export default function ProductLabels() {
                                 <span>{product.name}</span>
                                 {!product.barcode && (
                                   <Badge variant="secondary" className="w-fit">
-                                    Sem codigo
+                                    Sem código
                                   </Badge>
                                 )}
                               </div>
@@ -363,7 +363,7 @@ export default function ProductLabels() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Pre-visualizacao</CardTitle>
+              <CardTitle>Pré-visualização</CardTitle>
               <CardDescription>Confira o layout antes de imprimir.</CardDescription>
             </CardHeader>
             <CardContent>
@@ -396,7 +396,7 @@ export default function ProductLabels() {
                             {barcodeValue ? (
                               <BarcodeSvg value={barcodeValue} format={detectBarcodeFormat(barcodeValue) ?? 'code128'} height={height} moduleWidth={moduleWidth} />
                             ) : (
-                              <div className="text-[9px] text-muted-foreground">Sem codigo</div>
+                              <div className="text-[9px] text-muted-foreground">Sem código</div>
                             )}
                             <div className="text-[8px] tracking-[0.2em] text-muted-foreground">
                               {barcodeValue || 'SEM CODIGO'}
@@ -418,8 +418,8 @@ export default function ProductLabels() {
         <div className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Configuracoes</CardTitle>
-              <CardDescription>Defina tamanho e conteudo das etiquetas.</CardDescription>
+              <CardTitle>Configurações</CardTitle>
+              <CardDescription>Defina tamanho e conteúdo das etiquetas.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
@@ -441,7 +441,7 @@ export default function ProductLabels() {
               <div className="flex items-center justify-between rounded-lg border p-3">
                 <div className="space-y-1">
                   <span className="text-sm font-medium">Exibir SKU</span>
-                  <p className="text-xs text-muted-foreground">Mostra o codigo interno nas etiquetas.</p>
+                  <p className="text-xs text-muted-foreground">Mostra o código interno nas etiquetas.</p>
                 </div>
                 <Switch checked={showSku} onCheckedChange={setShowSku} />
               </div>
@@ -457,7 +457,7 @@ export default function ProductLabels() {
                 </div>
                 {missingBarcodeCount > 0 && (
                   <div className="mt-2 text-xs text-destructive">
-                    {missingBarcodeCount} produto(s) sem codigo de barras.
+                    {missingBarcodeCount} produto(s) sem código de barras.
                   </div>
                 )}
               </div>

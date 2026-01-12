@@ -37,7 +37,7 @@ import { useUnsavedChanges } from '@/hooks/use-unsaved-changes';
 
 const statusConfig: Record<OrderStatus, { label: string; icon: React.ComponentType<any>; color: string; next: OrderStatus[] }> = {
   orcamento: {
-    label: 'Orcamento',
+    label: 'Orçamento',
     icon: FileText,
     color: 'bg-blue-100 text-blue-800',
     next: ['pendente', 'cancelado']
@@ -61,7 +61,7 @@ const statusConfig: Record<OrderStatus, { label: string; icon: React.ComponentTy
     next: ['em_producao', 'cancelado']
   },
   em_producao: {
-    label: 'Em Producao',
+    label: 'Em Produção',
     icon: Clock,
     color: 'bg-yellow-100 text-yellow-800',
     next: ['finalizado', 'cancelado']
@@ -99,11 +99,11 @@ const statusConfig: Record<OrderStatus, { label: string; icon: React.ComponentTy
 };
 
 const statusLabels: Record<OrderStatus, string> = {
-  orcamento: 'Orcamento',
+  orcamento: 'Orçamento',
   pendente: 'Pendente',
   produzindo_arte: 'Produzindo arte',
   arte_aprovada: 'Arte aprovada',
-  em_producao: 'Em producao',
+  em_producao: 'Em produção',
   finalizado: 'Finalizado',
   pronto: 'Finalizado',
   aguardando_retirada: 'Aguardando retirada',
@@ -333,10 +333,10 @@ export default function OrderDetails() {
       setOrder(updatedOrder);
       setItems(refreshedItems);
       setIsEditingItems(false);
-      toast({ title: 'Orï¿½amento atualizado com sucesso!' });
+      toast({ title: 'Orçamento atualizado com sucesso!' });
     } catch (error: any) {
       toast({
-        title: 'Erro ao salvar alteraï¿½ï¿½es',
+        title: 'Erro ao salvar alterações',
         description: error?.message,
         variant: 'destructive',
       });
@@ -369,10 +369,10 @@ const sendWhatsAppMessage = (message: string) => {
 
   const text = encodeURIComponent(message);
 
-  // Usa sessÃ£o jÃ¡ logada do WhatsApp Web
+  // Usa sessão já logada do WhatsApp Web
   const whatsappUrl = `https://web.whatsapp.com/send?phone=${phone}&text=${text}`;
 
-  // ðŸ”¥ Redireciona a aba atual
+  // Redireciona a aba atual
   window.location.href = whatsappUrl;
 };
 
@@ -520,7 +520,7 @@ const sendWhatsAppMessage = (message: string) => {
     ]) as any[];
 
     if (orderResult.error || !orderResult.data) {
-      toast({ title: 'Pedido nï¿½o encontrado', variant: 'destructive' });
+      toast({ title: 'Pedido não encontrado', variant: 'destructive' });
       navigate('/pedidos');
       return;
     }
@@ -673,7 +673,7 @@ const sendWhatsAppMessage = (message: string) => {
     setDeleteLoading(true);
     try {
       await deleteOrder(order.id);
-      toast({ title: 'Orï¿½amento excluï¿½do com sucesso!' });
+      toast({ title: 'Orçamento excluído com sucesso!' });
       setDeleteDialogOpen(false);
       navigate('/pedidos');
     } catch (error: any) {
@@ -699,7 +699,7 @@ const sendWhatsAppMessage = (message: string) => {
     if (!order) return;
     const remaining = Math.max(0, Number(order.total) - Number(order.amount_paid));
     if (remaining <= 0) {
-      toast({ title: 'Pedido jï¿½ quitado', description: 'Nï¿½o hï¿½ saldo pendente.', variant: 'destructive' });
+      toast({ title: 'Pedido já quitado', description: 'Não há saldo pendente.', variant: 'destructive' });
       return;
     }
     setPaymentAmount(remaining);
@@ -761,7 +761,7 @@ const sendWhatsAppMessage = (message: string) => {
 
     if ((newStatus === 'finalizado' || newStatus === 'pronto') && finalPhotos.length === 0) {
       toast({
-        title: 'Foto obrigatï¿½ria',
+        title: 'Foto obrigatória',
         description: 'E necessario anexar pelo menos uma foto do produto final antes de alterar o status.',
         variant: 'destructive',
       });
@@ -771,7 +771,7 @@ const sendWhatsAppMessage = (message: string) => {
 
     if (newStatus === 'arte_aprovada' && artFiles.length === 0) {
       toast({
-        title: 'Arquivo obrigatorio',
+        title: 'Arquivo obrigatório',
         description: 'Anexe pelo menos um arquivo da arte antes de finalizar.',
         variant: 'destructive',
       });
@@ -876,7 +876,7 @@ const sendWhatsAppMessage = (message: string) => {
       for (const file of files) {
         if (!allowedArtMimeTypes.includes(file.type)) {
           toast({
-            title: 'Arquivo invalido',
+            title: 'Arquivo inválido',
             description: 'Use JPG, PNG ou PDF.',
             variant: 'destructive',
           });
@@ -945,7 +945,7 @@ const sendWhatsAppMessage = (message: string) => {
 
   const handleDeletePayment = async (paymentId: string) => {
     if (!order) return;
-    if (!window.confirm('Excluir este pagamento? Esta aï¿½ï¿½o nï¿½o pode ser desfeita.')) return;
+    if (!window.confirm('Excluir este pagamento? Esta ação não pode ser desfeita.')) return;
     setPaymentActionId(paymentId);
     setPaymentActionType('delete');
     try {
@@ -1037,9 +1037,9 @@ const canSendWhatsApp = Boolean(order?.customer?.phone);
   const editingTotal = calculateOrderTotal(editingSubtotal);
   const artIndicator =
     order.status === 'pendente'
-      ? { label: 'Arte: aguardando definicao', color: 'bg-slate-100 text-slate-600' }
+      ? { label: 'Arte: aguardando definição', color: 'bg-slate-100 text-slate-600' }
       : order.status === 'produzindo_arte'
-        ? { label: 'Arte: em producao', color: 'bg-indigo-100 text-indigo-800' }
+        ? { label: 'Arte: em produção', color: 'bg-indigo-100 text-indigo-800' }
         : order.status === 'arte_aprovada'
           ? { label: 'Arte: aprovada', color: 'bg-emerald-100 text-emerald-800' }
           : null;
@@ -1197,7 +1197,7 @@ const canSendWhatsApp = Boolean(order?.customer?.phone);
                   )}
                 </div>
               ) : (
-                <p className="text-muted-foreground">{order.customer_name || 'Cliente nï¿½o informado'}</p>
+                <p className="text-muted-foreground">{order.customer_name || 'Cliente não informado'}</p>
               )}
             </CardContent>
           </Card>
@@ -1397,7 +1397,7 @@ const canSendWhatsApp = Boolean(order?.customer?.phone);
                         <span>JPG, PNG ou PDF.</span>
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        Cole uma imagem com Ctrl+V ou use o botao acima.
+                        Cole uma imagem com Ctrl+V ou use o botão acima.
                       </p>
                     </div>
                   </div>
@@ -1501,7 +1501,7 @@ const canSendWhatsApp = Boolean(order?.customer?.phone);
           {order.notes && (
             <Card>
               <CardHeader>
-                <CardTitle>Observaï¿½ï¿½es</CardTitle>
+                <CardTitle>Observações</CardTitle>
               </CardHeader>
               <CardContent>
                 <p className="text-muted-foreground">{order.notes}</p>
@@ -1651,7 +1651,7 @@ const canSendWhatsApp = Boolean(order?.customer?.phone);
               <div className="flex flex-col gap-2">
                 {isOrderPaid && (
                   <p className="text-xs text-muted-foreground">
-                    Pedido quitado. Nï¿½o ï¿½ possï¿½vel registrar novos pagamentos.
+                    Pedido quitado. Não é possível registrar novos pagamentos.
                   </p>
                 )}
                 <Button variant="outline" onClick={openPaymentDialog} disabled={isOrderPaid}>
@@ -1717,7 +1717,7 @@ const canSendWhatsApp = Boolean(order?.customer?.phone);
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Observaï¿½ï¿½es</Label>
+              <Label>Observações</Label>
               <Textarea
                 value={paymentNotes}
                 onChange={(e) => setPaymentNotes(e.target.value)}
@@ -1790,7 +1790,7 @@ const canSendWhatsApp = Boolean(order?.customer?.phone);
                     variant={newStatus === 'em_producao' ? 'default' : 'outline'}
                     onClick={() => setNewStatus('em_producao')}
                   >
-                    Nao, ir para producao
+                    Não, ir para produção
                   </Button>
                 </div>
               </div>
@@ -1819,12 +1819,12 @@ const canSendWhatsApp = Boolean(order?.customer?.phone);
             )}
             <div className="space-y-2">
               <Label>
-                {newStatus === 'cancelado' ? 'Motivo do cancelamento *' : 'Observaï¿½ï¿½es (opcional)'}
+                {newStatus === 'cancelado' ? 'Motivo do cancelamento *' : 'Observações (opcional)'}
               </Label>
               <Textarea
                 value={statusNotes}
                 onChange={(e) => setStatusNotes(e.target.value)}
-                placeholder={newStatus === 'cancelado' ? 'Informe o motivo...' : 'Adicione uma observaï¿½ï¿½o...'}
+                placeholder={newStatus === 'cancelado' ? 'Informe o motivo...' : 'Adicione uma observação...'}
                 rows={3}
               />
             </div>
@@ -1940,10 +1940,10 @@ const canSendWhatsApp = Boolean(order?.customer?.phone);
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <DialogContent aria-describedby={undefined} className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Excluir orï¿½amento</DialogTitle>
+            <DialogTitle>Excluir orçamento</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            Tem certeza que deseja excluir este orï¿½amento? Essa aï¿½ï¿½o nï¿½o pode ser desfeita.
+            Tem certeza que deseja excluir este orçamento? Essa ação não pode ser desfeita.
           </p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteDialogOpen(false)} disabled={deleteLoading}>

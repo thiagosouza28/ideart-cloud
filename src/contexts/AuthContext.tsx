@@ -161,7 +161,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .maybeSingle();
 
     if (error) {
-      console.error('Error fetching company:', error);
+      console.error('Erro ao buscar empresa:', error);
       setCompany(null);
       setSubscription(null);
       return;
@@ -181,11 +181,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       ]);
 
       if (profileResult.error) {
-        console.error('Error fetching profile:', profileResult.error);
+        console.error('Erro ao buscar perfil:', profileResult.error);
       }
 
       if (roleResult.error) {
-        console.error('Error fetching user role:', roleResult.error);
+        console.error('Erro ao buscar cargo do usuário:', roleResult.error);
       }
 
       let profileData = profileResult.data as Profile | null;
@@ -225,7 +225,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       await loadCompany(profileData?.company_id);
     } catch (error) {
-      console.error('Error fetching user data:', error);
+      console.error('Erro ao buscar dados do usuário:', error);
     } finally {
       setLoading(false);
     }
@@ -312,7 +312,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 export function useAuth() {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    throw new Error('useAuth deve ser usado dentro de um AuthProvider');
   }
   return context;
 }

@@ -515,7 +515,7 @@ export default function SuperAdminPlans() {
 
                   {plan?.max_users && (
                     <p className="text-sm text-slate-500 mb-3">
-                      Ate {plan.max_users} usuario{plan.max_users > 1 ? 's' : ''}
+                      Até {plan.max_users} usuário{plan.max_users > 1 ? 's' : ''}
                     </p>
                   )}
 
@@ -554,18 +554,18 @@ export default function SuperAdminPlans() {
             </div>
 
             <div className="space-y-2">
-              <Label>Descricao</Label>
+              <Label>Descrição</Label>
               <Textarea
                 value={formData.description || ''}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                placeholder="Descricao breve do plano"
+                placeholder="Descrição breve do plano"
                 rows={2}
               />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Preco *</Label>
+              <Label>Preço *</Label>
                 <CurrencyInput
                   value={formData.price || 0}
                   onChange={(value) => setFormData({ ...formData, price: value })}

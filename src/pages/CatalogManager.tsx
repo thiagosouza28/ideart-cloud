@@ -78,7 +78,7 @@ export default function CatalogManager() {
       .order("name", { ascending: true });
 
     if (error) {
-      toast.error("Erro ao carregar produtos do catalogo");
+      toast.error("Erro ao carregar produtos do catálogo");
       setLoading(false);
       return;
     }
@@ -98,7 +98,7 @@ export default function CatalogManager() {
       .maybeSingle();
 
     if (error) {
-      toast.error("Erro ao carregar personalizacao do catalogo");
+      toast.error("Erro ao carregar personalização do catálogo");
       return;
     }
 
@@ -169,7 +169,7 @@ export default function CatalogManager() {
       .eq("id", productId);
 
     if (error) {
-      toast.error("Erro ao atualizar produto do catalogo");
+      toast.error("Erro ao atualizar produto do catálogo");
       return;
     }
 

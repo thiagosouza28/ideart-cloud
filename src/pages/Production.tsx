@@ -51,7 +51,7 @@ export default function Production() {
   const startProduction = async (orderId: string) => {
     try {
       await updateOrderStatus({ orderId, status: 'em_producao', userId: user?.id });
-      toast({ title: 'Pedido iniciado na producao!' });
+      toast({ title: 'Pedido iniciado na produção!' });
       fetchOrders();
     } catch (error: any) {
       toast({ title: 'Erro ao atualizar pedido', description: error?.message, variant: 'destructive' });
@@ -87,11 +87,11 @@ export default function Production() {
     const validFiles: File[] = [];
     files.forEach((file) => {
       if (!file.type.startsWith('image/')) {
-        toast({ title: 'Arquivo invalido', description: 'Selecione apenas imagens.', variant: 'destructive' });
+        toast({ title: 'Arquivo inválido', description: 'Selecione apenas imagens.', variant: 'destructive' });
         return;
       }
       if (file.size > 5 * 1024 * 1024) {
-        toast({ title: 'Imagem muito grande', description: 'Cada imagem deve ter ate 5MB.', variant: 'destructive' });
+        toast({ title: 'Imagem muito grande', description: 'Cada imagem deve ter até 5MB.', variant: 'destructive' });
         return;
       }
       validFiles.push(file);
@@ -188,7 +188,7 @@ export default function Production() {
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-slate-900">Painel de Produção</h1>
-          <p className="text-sm text-slate-500">Pedidos pendentes, arte e producao aguardando avancos</p>
+          <p className="text-sm text-slate-500">Pedidos pendentes, arte e produção aguardando avanços</p>
         </div>
         <Badge variant="outline" className="text-sm px-3 py-1 rounded-full">
           <Clock className="mr-2 h-4 w-4" />
@@ -202,7 +202,7 @@ export default function Production() {
         <Card className="border-slate-200 shadow-sm">
           <CardContent className="py-12 text-center text-muted-foreground">
             <Package className="mx-auto h-12 w-12 mb-4 opacity-50" />
-            Nenhum pedido pendente, arte ou producao
+            Nenhum pedido pendente, arte ou produção
           </CardContent>
         </Card>
       ) : (
@@ -279,7 +279,7 @@ export default function Production() {
                             {order.customer_name || 'Cliente'}
                           </Button>
                         ) : (
-                          <span className="font-medium">{order.customer_name || 'Nao informado'}</span>
+                          <span className="font-medium">{order.customer_name || 'Não informado'}</span>
                         )}
                       </div>
                       <div className="text-sm">
@@ -331,7 +331,7 @@ export default function Production() {
                             {order.customer_name || 'Cliente'}
                           </Button>
                         ) : (
-                          <span className="font-medium">{order.customer_name || 'Nao informado'}</span>
+                          <span className="font-medium">{order.customer_name || 'Não informado'}</span>
                         )}
                       </div>
                       <div className="text-sm">
@@ -350,7 +350,7 @@ export default function Production() {
                         </Button>
                         <Button className="w-full" onClick={() => startProduction(order.id)}>
                           <Clock className="mr-2 h-4 w-4" />
-                          Iniciar Producao
+                          Iniciar Produção
                         </Button>
                       </div>
                     </CardContent>
@@ -417,7 +417,7 @@ export default function Production() {
       <Dialog open={readyDialogOpen} onOpenChange={(open) => !open && closeReadyDialog()}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Finalizar producao</DialogTitle>
+            <DialogTitle>Finalizar produção</DialogTitle>
             <DialogDescription>
               Confirme o status e anexe fotos do produto final para registrar no pedido.
             </DialogDescription>
@@ -436,7 +436,7 @@ export default function Production() {
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Status atual</p>
-                    <p className="font-semibold">Em producao</p>
+                    <p className="font-semibold">Em produção</p>
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Total</p>
@@ -459,7 +459,7 @@ export default function Production() {
                   Selecionar fotos
                 </Button>
                 <p className="text-xs text-muted-foreground">
-                  Envie uma ou mais imagens JPG ou PNG (ate 5MB cada).
+                  Envie uma ou mais imagens JPG ou PNG (até 5MB cada).
                 </p>
               </div>
               <input

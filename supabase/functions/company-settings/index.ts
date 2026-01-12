@@ -7,7 +7,7 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
 if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-  throw new Error("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY");
+  throw new Error("SUPABASE_URL ou SUPABASE_SERVICE_ROLE_KEY ausente");
 }
 
 const getCorsHeaders = (origin: string | null) => ({
@@ -42,7 +42,7 @@ Deno.serve(async (req) => {
   }
 
   if (req.method !== "GET" && req.method !== "PATCH") {
-    return jsonResponse(corsHeaders, 405, { error: "Invalid method" });
+    return jsonResponse(corsHeaders, 405, { error: "Método inválido" });
   }
 
   try {
@@ -58,7 +58,7 @@ Deno.serve(async (req) => {
     const { data: authData, error: authError } = await supabase.auth.getUser(token);
 
     if (authError || !authData.user) {
-      return jsonResponse(corsHeaders, 401, { error: "Invalid session" });
+      return jsonResponse(corsHeaders, 401, { error: "Sessão inválida" });
     }
 
     const { data: profileData } = await supabase
@@ -69,7 +69,7 @@ Deno.serve(async (req) => {
 
     const companyId = profileData?.company_id ?? null;
     if (!companyId) {
-      return jsonResponse(corsHeaders, 400, { error: "Empresa nao encontrada" });
+      return jsonResponse(corsHeaders, 400, { error: "Empresa não encontrada" });
     }
 
     if (req.method === "GET") {
@@ -104,7 +104,7 @@ Deno.serve(async (req) => {
 
     return jsonResponse(corsHeaders, 200, data ?? { whatsapp_message_template: null });
   } catch (error) {
-    console.error("Error in company-settings:", error);
+    console.error("Erro em company-settings:", error);
     return jsonResponse(corsHeaders, 500, {
       error: error instanceof Error ? error.message : String(error),
     });

@@ -47,7 +47,7 @@ const SubscriptionCancel = () => {
         description: "Entraremos em contato para confirmar o cancelamento.",
       });
     } catch (error) {
-      console.error("Error:", error);
+      console.error("Erro:", error);
       toast({
         title: "Erro",
         description: "Não foi possível abrir o portal de gerenciamento.",

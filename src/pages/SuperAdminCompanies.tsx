@@ -171,7 +171,7 @@ export default function SuperAdminCompanies() {
       );
       setCompanyUsers(response.users || []);
     } catch (error: any) {
-      toast.error(error?.message || 'Erro ao carregar usuarios');
+      toast.error(error?.message || 'Erro ao carregar usuários');
     } finally {
       setLoadingUsers(false);
     }
@@ -382,7 +382,7 @@ export default function SuperAdminCompanies() {
                         {company.slug && (
                           <DropdownMenuItem onClick={() => window.open(`/catalogo/${company.slug}`, '_blank')}>
                             <ExternalLink className="h-4 w-4 mr-2" />
-                            Ver catalogo
+                            Ver catálogo
                           </DropdownMenuItem>
                         )}
                       </DropdownMenuContent>
@@ -449,7 +449,7 @@ export default function SuperAdminCompanies() {
           <DialogHeader>
             <DialogTitle>Usuários - {selectedCompanyUsers?.name}</DialogTitle>
             <DialogDescription>
-              Gere um link de reset de senha para enviar ao usuario.
+              Gere um link de reset de senha para enviar ao usuário.
             </DialogDescription>
           </DialogHeader>
           {loadingUsers ? (
@@ -467,7 +467,7 @@ export default function SuperAdminCompanies() {
                   <TableHead>Usuário</TableHead>
                   <TableHead>E-mail</TableHead>
                   <TableHead>Criado em</TableHead>
-                  <TableHead className="text-right">Acoes</TableHead>
+                  <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

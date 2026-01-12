@@ -202,7 +202,7 @@ export default function GraphPOSPDV() {
         .maybeSingle();
 
       if (skuError || !skuMatch) {
-        toast({ title: 'Produto nao encontrado', description: `Codigo: ${barcodeInput}`, variant: 'destructive' });
+        toast({ title: 'Produto não encontrado', description: `Código: ${barcodeInput}`, variant: 'destructive' });
         return;
       }
       productData = skuMatch;
@@ -267,7 +267,7 @@ export default function GraphPOSPDV() {
                 <Barcode className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <input
                   className="h-11 w-full rounded-lg border border-slate-200 bg-white pl-11 text-sm text-slate-700 shadow-[0_1px_2px_rgba(15,23,42,0.06)] outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
-                  placeholder="Leia o codigo de barras aqui..."
+                  placeholder="Leia o código de barras aqui..."
                   value={barcodeInput}
                   onChange={(e) => setBarcodeInput(e.target.value)}
                 />
@@ -293,7 +293,7 @@ export default function GraphPOSPDV() {
                       </div>
                       <h2 className="text-base font-semibold text-slate-700">Aguardando produtos</h2>
                       <p className="text-sm">
-                        Digite um nome ou leia um codigo de barras para buscar produtos e iniciar a venda.
+                        Digite um nome ou leia um código de barras para buscar produtos e iniciar a venda.
                       </p>
                     </div>
                   </div>

@@ -13,14 +13,14 @@ import { z } from 'zod';
 
 const loginSchema = z.object({
   email: z.string().email('E-mail inválido'),
-  password: z.string().min(6, 'Senha deve ter no minimo 6 caracteres'),
+  password: z.string().min(6, 'Senha deve ter no mínimo 6 caracteres'),
 });
 
 const signupSchema = z.object({
-  fullName: z.string().min(2, 'Nome deve ter no minimo 2 caracteres'),
+  fullName: z.string().min(2, 'Nome deve ter no mínimo 2 caracteres'),
   email: z.string().email('E-mail inválido'),
-  cpf: z.string().min(1, 'CPF obrigatorio'),
-  password: z.string().min(6, 'Senha deve ter no minimo 6 caracteres'),
+  cpf: z.string().min(1, 'CPF obrigatório'),
+  password: z.string().min(6, 'Senha deve ter no mínimo 6 caracteres'),
   confirmPassword: z.string(),
 }).refine((data) => data.password === data.confirmPassword, {
   message: 'As senhas não conferem',
@@ -118,7 +118,7 @@ export default function Auth() {
       }
 
       if (!validateCpf(cpfDigits)) {
-        setError('CPF invalido');
+        setError('CPF inválido');
         setIsLoading(false);
         return;
       }
@@ -378,7 +378,7 @@ export default function Auth() {
                   Criar Conta
                 </Button>
                 <p className="text-center text-xs text-slate-500">
-                  Ao criar conta voce ganha 3 dias de teste gratuito.
+                  Ao criar conta você ganha 3 dias de teste gratuito.
                 </p>
               </form>
             </TabsContent>

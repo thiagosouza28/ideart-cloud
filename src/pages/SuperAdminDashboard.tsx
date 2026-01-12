@@ -135,7 +135,7 @@ export default function SuperAdminDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-semibold text-blue-700">{stats.trialCompanies}</div>
-            <p className="text-xs text-slate-500">periodo de avaliacao</p>
+            <p className="text-xs text-slate-500">período de avaliação</p>
           </CardContent>
         </Card>
 
@@ -159,7 +159,7 @@ export default function SuperAdminDashboard() {
       <Card className="border-slate-200">
         <CardHeader>
           <CardTitle className="text-base">Empresas Recentes</CardTitle>
-          <CardDescription>Ultimas empresas cadastradas no sistema</CardDescription>
+          <CardDescription>Últimas empresas cadastradas no sistema</CardDescription>
         </CardHeader>
         <CardContent>
           {recentCompanies.length === 0 ? (

@@ -45,7 +45,7 @@ begin
   v_remaining := v_order_total - v_paid_total;
 
   if v_remaining <= 0 then
-    raise exception 'Pedido ja esta quitado';
+    raise exception 'Pedido já está quitado';
   end if;
 
   if p_amount > v_remaining then

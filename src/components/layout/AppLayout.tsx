@@ -20,7 +20,7 @@ const roleLabels: Record<AppRole, string> = {
   admin: 'ADMIN',
   atendente: 'ATENDENTE',
   caixa: 'CAIXA',
-  producao: 'PRODUCAO',
+  producao: 'PRODUÇÃO',
 };
 
 export function AppLayout({ children }: AppLayoutProps) {
@@ -58,7 +58,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   }, []);
 
   const navItems = useMemo(() => ([
-    { label: 'Inicio', url: '/dashboard', roles: ['super_admin', 'admin', 'atendente', 'caixa', 'producao'] as AppRole[] },
+    { label: 'Início', url: '/dashboard', roles: ['super_admin', 'admin', 'atendente', 'caixa', 'producao'] as AppRole[] },
     { label: 'Pedidos', url: '/pedidos', roles: ['admin', 'atendente', 'caixa'] as AppRole[] },
     { label: 'Catálogo', url: '/catalogo-admin', roles: ['admin'] as AppRole[] },
     { label: 'Financeiro', url: '/relatorios', roles: ['admin'] as AppRole[] },
@@ -104,7 +104,7 @@ export function AppLayout({ children }: AppLayoutProps) {
     const description = isExpired
       ? 'Seu acesso expirou. Escolha um plano para voltar a usar o sistema.'
       : days !== null
-        ? `Restam ${days} ${dayLabel} para o fim do periodo.`
+        ? `Restam ${days} ${dayLabel} para o fim do período.`
         : 'Seu plano está ativo.';
 
     return (

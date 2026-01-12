@@ -256,7 +256,7 @@ export default function PDV() {
         .maybeSingle();
 
       if (skuError || !skuMatch) {
-        toast({ title: 'Produto nao encontrado', description: `Codigo: ${barcodeInput}`, variant: 'destructive' });
+        toast({ title: 'Produto não encontrado', description: `Código: ${barcodeInput}`, variant: 'destructive' });
         barcodeInputRef.current?.focus();
         return;
       }
@@ -314,7 +314,7 @@ export default function PDV() {
   const handleFinalizeSale = () => {
     if (cart.length === 0) return toast({ title: 'Carrinho vazio', variant: 'destructive' });
     if (!Number.isFinite(total) || total <= 0) {
-      return toast({ title: 'Total invalido', variant: 'destructive' });
+      return toast({ title: 'Total inválido', variant: 'destructive' });
     }
     if (paymentMethod === 'dinheiro') {
       if (!Number.isFinite(paidAmount) || paidAmount <= 0) {
@@ -527,7 +527,7 @@ export default function PDV() {
               <Barcode className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
               <Input
                 ref={barcodeInputRef}
-                placeholder="Leia o codigo de barras aqui..."
+                placeholder="Leia o código de barras aqui..."
                 value={barcodeInput}
                 onChange={(e) => setBarcodeInput(e.target.value)}
                 className="pl-9"
@@ -555,7 +555,7 @@ export default function PDV() {
                     </div>
                     <p className="font-medium text-slate-700">Aguardando produtos</p>
                     <p className="mt-1 max-w-sm">
-                      Digite um nome ou leia um codigo de barras para buscar produtos e iniciar a venda.
+                      Digite um nome ou leia um código de barras para buscar produtos e iniciar a venda.
                     </p>
                   </div>
                 ) : productsLoading ? (

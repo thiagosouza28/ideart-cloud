@@ -35,7 +35,7 @@ export default function ForgotPassword() {
       <Card className="w-full max-w-md shadow-xl border-0 bg-background/95 backdrop-blur-sm">
         <CardHeader className="text-center space-y-2 pb-4">
           <CardTitle className="text-2xl font-bold">Recuperar senha</CardTitle>
-          <CardDescription>Vamos enviar um link para voce criar uma nova senha.</CardDescription>
+          <CardDescription>Vamos enviar um link para você criar uma nova senha.</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">

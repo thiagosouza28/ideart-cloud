@@ -16,7 +16,7 @@ const getStorageKey = () => {
 };
 
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-  throw new Error("Missing Supabase env: VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY.");
+  throw new Error("Variáveis do Supabase ausentes: VITE_SUPABASE_URL ou VITE_SUPABASE_ANON_KEY.");
 }
 
 // Import the supabase client like this:

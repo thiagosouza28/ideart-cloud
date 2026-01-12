@@ -48,7 +48,7 @@ const productSchema = z.object({
   final_price: z.number().min(0, 'Preço final deve ser positivo'),
   stock_quantity: z.number().min(0),
   min_stock: z.number().min(0),
-  min_order_quantity: z.number().int().min(1, 'Quantidade minima deve ser pelo menos 1'),
+  min_order_quantity: z.number().int().min(1, 'Quantidade mínima deve ser pelo menos 1'),
   track_stock: z.boolean(),
   promo_price: z.number().min(0, 'Preço promocional deve ser positivo').optional().nullable(),
   promo_start_at: z.string().optional().nullable(),
@@ -56,8 +56,8 @@ const productSchema = z.object({
   image_urls: z.array(z.string().min(1)).max(5).optional(),
   product_colors: z.array(
     z.object({
-      name: z.string().min(1, 'Nome da cor e obrigatorio'),
-      hex: z.string().regex(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/, 'HEX invalido'),
+      name: z.string().min(1, 'Nome da cor é obrigatório'),
+      hex: z.string().regex(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/, 'HEX inválido'),
       active: z.boolean(),
     })
   ).optional(),
@@ -452,7 +452,7 @@ export default function ProductForm() {
       toast({ title: 'Selecione apenas imagens validas', variant: 'destructive' });
     }
     if (rejectedSize) {
-      toast({ title: 'Imagem deve ter no maximo 5MB', variant: 'destructive' });
+      toast({ title: 'Imagem deve ter no máximo 5MB', variant: 'destructive' });
     }
     if (validFiles.length === 0) {
       e.target.value = '';
@@ -879,12 +879,12 @@ export default function ProductForm() {
     if (!value) return null;
     const resolvedFormat = format ?? detectBarcodeFormat(value) ?? 'code128';
     if (resolvedFormat === 'ean13') {
-      if (!/^\d{13}$/.test(value)) return 'EAN-13 deve ter 13 digitos.';
-      if (!isValidEan13(value)) return 'EAN-13 invalido.';
+      if (!/^\d{13}$/.test(value)) return 'EAN-13 deve ter 13 dígitos.';
+      if (!isValidEan13(value)) return 'EAN-13 inválido.';
       return null;
     }
     if (!isValidCode128(value)) {
-      return 'Codigo de barras invalido. Use caracteres ASCII padrao.';
+      return 'Código de barras inválido. Use caracteres ASCII padrão.';
     }
     return null;
   };
@@ -968,7 +968,7 @@ export default function ProductForm() {
       }
     }
 
-    toast({ title: 'Nao foi possivel gerar um codigo de barras unico', variant: 'destructive' });
+    toast({ title: 'Não foi possível gerar um código de barras único', variant: 'destructive' });
     setBarcodeChecking(false);
   };
 
@@ -1075,7 +1075,7 @@ export default function ProductForm() {
       const barcodeError = validateBarcodeValue(normalizedBarcode, barcodeFormat);
       if (barcodeError) {
         setErrors((prev) => ({ ...(prev || {}), barcode: barcodeError }));
-        toast({ title: 'Codigo de barras invalido', description: barcodeError, variant: 'destructive' });
+        toast({ title: 'Código de barras inválido', description: barcodeError, variant: 'destructive' });
         return;
       }
     }
@@ -1095,8 +1095,8 @@ export default function ProductForm() {
     if (normalizedBarcode) {
       const isAvailable = await checkBarcodeAvailability(normalizedBarcode);
       if (!isAvailable) {
-        setErrors((prev) => ({ ...(prev || {}), barcode: 'Codigo de barras ja esta em uso' }));
-        toast({ title: 'Codigo de barras ja esta em uso', variant: 'destructive' });
+        setErrors((prev) => ({ ...(prev || {}), barcode: 'Código de barras já está em uso' }));
+        toast({ title: 'Código de barras já está em uso', variant: 'destructive' });
         setSaving(false);
         return;
       }
@@ -1115,9 +1115,9 @@ export default function ProductForm() {
         if (error.code === '23505') {
           const message = String(error.message || (error as any).details || '').toLowerCase();
           if (message.includes('barcode')) {
-            setErrors((prev) => ({ ...(prev || {}), barcode: 'Codigo de barras ja esta em uso' }));
+            setErrors((prev) => ({ ...(prev || {}), barcode: 'Código de barras já está em uso' }));
           } else {
-            setErrors((prev) => ({ ...(prev || {}), sku: 'SKU ja esta em uso' }));
+            setErrors((prev) => ({ ...(prev || {}), sku: 'SKU já está em uso' }));
           }
         }
         toast({ title: 'Erro ao atualizar produto', description: error.message, variant: 'destructive' });
@@ -1143,9 +1143,9 @@ export default function ProductForm() {
         if (error?.code === '23505') {
           const message = String(error?.message || (error as any)?.details || '').toLowerCase();
           if (message.includes('barcode')) {
-            setErrors((prev) => ({ ...(prev || {}), barcode: 'Codigo de barras ja esta em uso' }));
+            setErrors((prev) => ({ ...(prev || {}), barcode: 'Código de barras já está em uso' }));
           } else {
-            setErrors((prev) => ({ ...(prev || {}), sku: 'SKU ja esta em uso' }));
+            setErrors((prev) => ({ ...(prev || {}), sku: 'SKU já está em uso' }));
           }
         }
         toast({ title: 'Erro ao salvar produto', description: error?.message, variant: 'destructive' });
@@ -1293,7 +1293,7 @@ export default function ProductForm() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="barcode">Codigo de barras</Label>
+              <Label htmlFor="barcode">Código de barras</Label>
               <div className="flex flex-col gap-2">
                 <div className="flex flex-wrap gap-2">
                   <Select value={barcodeFormat} onValueChange={(value) => setBarcodeFormat(value as BarcodeFormat)}>
@@ -1312,7 +1312,7 @@ export default function ProductForm() {
                       setBarcode(normalizeBarcodeValue(e.target.value));
                       clearBarcodeError();
                     }}
-                    placeholder="Codigo de barras"
+                    placeholder="Código de barras"
                     className={`flex-1 ${errors?.barcode ? 'border-destructive' : ''}`}
                   />
                   <Button
@@ -1330,7 +1330,7 @@ export default function ProductForm() {
                   </Button>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  EAN-13: 13 digitos. Code 128: ASCII 32-126.
+                  EAN-13: 13 dígitos. Code 128: ASCII 32-126.
                 </p>
                 {normalizedBarcodePreview ? (
                   <div className="flex flex-col gap-1 rounded-md border bg-muted/40 p-2">
@@ -1408,7 +1408,7 @@ export default function ProductForm() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="minOrderQuantity">Quantidade minima para pedido</Label>
+              <Label htmlFor="minOrderQuantity">Quantidade mínima para pedido</Label>
               <Input
                 id="minOrderQuantity"
                 type="number"
@@ -1607,7 +1607,7 @@ export default function ProductForm() {
               Imagem do Produto
             </CardTitle>
             <CardDescription>
-              Adicione ate 5 imagens para exibir no catalogo publico
+              Adicione até 5 imagens para exibir no catálogo público
             </CardDescription>
           </CardHeader>
           <CardContent>

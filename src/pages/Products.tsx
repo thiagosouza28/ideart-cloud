@@ -149,7 +149,7 @@ export default function Products() {
   const validateBarcodeValue = (value: string) => {
     if (!value) return null;
     if (isValidEan13(value) || isValidCode128(value)) return null;
-    return 'Codigo de barras invalido. Use EAN-13 ou Code 128.';
+    return 'Código de barras inválido. Use EAN-13 ou Code 128.';
   };
 
   // CSV Import Functions
@@ -160,7 +160,7 @@ export default function Products() {
     const csvContent = [
       headers.join(';'),
       exampleRow.join(';'),
-      '# Barcode: EAN-13 (13 digitos) ou Code 128',
+      '# Código de barras: EAN-13 (13 dígitos) ou Code 128',
       '# Tipos válidos: produto, confeccionado, servico',
       '# Ativo: sim ou não',
       '# Use ponto para decimais (ex: 10.50)',
@@ -263,7 +263,7 @@ export default function Products() {
         }
         if (normalizedBarcode) {
           if (barcodeSeen.has(normalizedBarcode)) {
-            results.push({ row: i + 1, name: row.name, status: 'error', message: 'Codigo de barras duplicado no arquivo' });
+            results.push({ row: i + 1, name: row.name, status: 'error', message: 'Código de barras duplicado no arquivo' });
             continue;
           }
           barcodeSeen.add(normalizedBarcode);
@@ -281,7 +281,7 @@ export default function Products() {
             continue;
           }
           if (barcodeExists) {
-            results.push({ row: i + 1, name: row.name, status: 'error', message: 'Codigo de barras ja esta em uso' });
+            results.push({ row: i + 1, name: row.name, status: 'error', message: 'Código de barras já está em uso' });
             continue;
           }
         }
@@ -404,7 +404,7 @@ export default function Products() {
             <div className="relative flex-1 max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Buscar por nome, SKU ou codigo de barras..."
+                placeholder="Buscar por nome, SKU ou código de barras..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="pl-9"
@@ -600,7 +600,7 @@ export default function Products() {
                       <TableHead>#</TableHead>
                       <TableHead>Nome</TableHead>
                       <TableHead>SKU</TableHead>
-                      <TableHead>Barcode</TableHead>
+                      <TableHead>Código de barras</TableHead>
                       <TableHead>Tipo</TableHead>
                       <TableHead>Custo</TableHead>
                       <TableHead>Estoque</TableHead>

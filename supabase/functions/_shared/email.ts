@@ -22,7 +22,7 @@ type EmailPayload = {
 export const sendSmtpEmail = async (payload: EmailPayload) => {
   const cfg = getSmtpConfig();
   if (!cfg.host || !cfg.user || !cfg.pass) {
-    console.warn("SMTP not configured. Skipping email.");
+    console.warn("SMTP não configurado. Ignorando envio de e-mail.");
     return false;
   }
 

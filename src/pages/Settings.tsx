@@ -94,7 +94,7 @@ export default function Settings() {
   const [resetChecked, setResetChecked] = useState(false);
   const [resetLoading, setResetLoading] = useState(false);
   const [resetError, setResetError] = useState<string | null>(null);
-  // Controla a aba por estado para evitar reload e manter o estado dos formulÃ¡rios.
+  // Controla a aba por estado para evitar reload e manter o estado dos formulários.
   const [activeTab, setActiveTab] = useState<'company' | 'catalog'>('company');
 
   // Dialogs
@@ -121,7 +121,7 @@ export default function Settings() {
     { value: '{pedido_total}', label: 'Total', description: 'Total do pedido' },
     { value: '{total}', label: 'Total curto', description: 'Alias do total do pedido' },
     { value: '{pedido_link}', label: 'Link', description: 'Link do pedido' },
-    { value: '{link_catalogo}', label: 'Catalogo', description: 'Link do catalogo publico' },
+    { value: '{link_catalogo}', label: 'Catálogo', description: 'Link do catálogo público' },
     { value: '{empresa_nome}', label: 'Empresa', description: 'Nome da empresa' },
   ];
 
@@ -283,16 +283,16 @@ export default function Settings() {
 
     const companyName = companyForm.name?.trim();
     if (!companyName) {
-      toast({ title: "Nome da empresa Ã© obrigatÃ³rio", variant: "destructive" });
+      toast({ title: "Nome da empresa é obrigatório", variant: "destructive" });
       return;
     }
 
     if (companyForm.phone && !validatePhone(companyForm.phone)) {
-      toast({ title: "Telefone invÃ¡lido", description: "Use um celular brasileiro vÃ¡lido.", variant: "destructive" });
+      toast({ title: "Telefone inválido", description: "Use um celular brasileiro válido.", variant: "destructive" });
       return;
     }
     if (companyForm.whatsapp && !validatePhone(companyForm.whatsapp)) {
-      toast({ title: "WhatsApp invÃ¡lido", description: "Use um celular brasileiro vÃ¡lido.", variant: "destructive" });
+      toast({ title: "WhatsApp inválido", description: "Use um celular brasileiro válido.", variant: "destructive" });
       return;
     }
 
@@ -322,7 +322,7 @@ export default function Settings() {
           .getPublicUrl(filePath);
 
         if (!urlData?.publicUrl) {
-          throw new Error("Logo URL not returned");
+          throw new Error("URL do logo não foi retornada.");
         }
 
         logoUrl = ensurePublicStorageUrl('product-images', urlData.publicUrl);
@@ -386,7 +386,7 @@ export default function Settings() {
         setCatalogPreviewKey((prev) => prev + 1);
       }
     } catch (error) {
-      console.error("Error:", error);
+      console.error("Erro:", error);
       toast({ title: "Erro ao salvar", variant: "destructive" });
     } finally {
       setSavingCompany(false);
@@ -447,11 +447,11 @@ export default function Settings() {
 
   const handleResetCompany = async () => {
     if (!profile?.company_id) {
-      setResetError('Empresa nÃ£o encontrada.');
+      setResetError('Empresa não encontrada.');
       return;
     }
     if (!user?.email) {
-      setResetError('E-mail do usuÃ¡rio nÃ£o encontrado.');
+      setResetError('E-mail do usuário não encontrado.');
       return;
     }
 
@@ -465,7 +465,7 @@ export default function Settings() {
 
     if (authError) {
       setResetLoading(false);
-      setResetError('Senha invalida.');
+      setResetError('Senha inválida.');
       return;
     }
 
@@ -490,7 +490,7 @@ export default function Settings() {
   // Categories
   const saveCategory = async () => {
     const result = categorySchema.safeParse({ name: categoryName.trim() });
-    if (!result.success) return toast({ title: 'Nome invÃ¡lido', variant: 'destructive' });
+    if (!result.success) return toast({ title: 'Nome inválido', variant: 'destructive' });
 
     const { error } = editId
       ? await supabase.from('categories').update({ name: categoryName.trim() }).eq('id', editId)
@@ -511,7 +511,7 @@ export default function Settings() {
   // Supplies
   const saveSupply = async () => {
     const result = supplySchema.safeParse(supplyForm);
-    if (!result.success) return toast({ title: 'Dados invÃ¡lidos', variant: 'destructive' });
+    if (!result.success) return toast({ title: 'Dados inválidos', variant: 'destructive' });
 
     const { error } = editId
       ? await supabase.from('supplies').update(supplyForm).eq('id', editId)
@@ -532,7 +532,7 @@ export default function Settings() {
   // Attributes
   const saveAttribute = async () => {
     const result = attributeSchema.safeParse({ name: attributeName.trim() });
-    if (!result.success) return toast({ title: 'Nome invÃ¡lido', variant: 'destructive' });
+    if (!result.success) return toast({ title: 'Nome inválido', variant: 'destructive' });
 
     const { error } = editId
       ? await supabase.from('attributes').update({ name: attributeName.trim() }).eq('id', editId)
@@ -573,14 +573,14 @@ export default function Settings() {
   return (
     <div className="page-container pb-20">
       <div className="page-header">
-        <h1 className="page-title">ConfiguraÃ§Ãµes</h1>
+        <h1 className="page-title">Configurações</h1>
       </div>
 
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'company' | 'catalog')}>
 
         <TabsList>
           <TabsTrigger value="company" type="button">Empresa</TabsTrigger>
-          <TabsTrigger value="catalog" type="button">PersonalizaÃ§Ã£o</TabsTrigger>
+          <TabsTrigger value="catalog" type="button">Personalização</TabsTrigger>
         </TabsList>
 
         {/* Company */}
@@ -592,7 +592,7 @@ export default function Settings() {
                 Dados da Empresa
               </CardTitle>
               <CardDescription>
-                Atualize as informaÃ§Ãµes da sua empresa
+                Atualize as informações da sua empresa
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -647,13 +647,13 @@ export default function Settings() {
                   className={nameError ? "border-destructive focus-visible:ring-destructive" : ""}
                 />
                 {nameError && (
-                  <p className="text-sm text-destructive">Nome da empresa Ã© obrigatÃ³rio</p>
+                  <p className="text-sm text-destructive">Nome da empresa é obrigatório</p>
                 )}
               </div>
 
               {/* Description */}
               <div className="space-y-2">
-                <Label htmlFor="company-description">DescriÃ§Ã£o</Label>
+                <Label htmlFor="company-description">Descrição</Label>
                 <Textarea
                   id="company-description"
                   value={companyForm.description}
@@ -664,14 +664,14 @@ export default function Settings() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="company-min-order">Valor minimo do pedido</Label>
+                <Label htmlFor="company-min-order">Valor mínimo do pedido</Label>
                 <CurrencyInput
                   id="company-min-order"
                   value={Number(companyForm.minimum_order_value || 0)}
                   onChange={(value) => setCompanyForm({ ...companyForm, minimum_order_value: value })}
                 />
                 <p className="text-sm text-muted-foreground">
-                  Pedidos do catalogo so poderao ser enviados a partir desse valor.
+                  Pedidos do catálogo só poderão ser enviados a partir desse valor.
                 </p>
               </div>
 
@@ -716,10 +716,10 @@ export default function Settings() {
               <div className="space-y-4">
                 <Label className="flex items-center gap-2">
                   <MapPin className="h-4 w-4" />
-                  EndereÃ§o
+                  Endereço
                 </Label>
                 <Input
-                  placeholder="Rua, nÃºmero, bairro"
+                  placeholder="Rua, número, bairro"
                   value={companyForm.address}
                   onChange={(e) => setCompanyForm({ ...companyForm, address: e.target.value })}
                 />
@@ -765,7 +765,7 @@ export default function Settings() {
               <div className="space-y-3">
                 <Label htmlFor="whatsapp-template" className="flex items-center gap-2">
                   <MessageCircle className="h-4 w-4" />
-                  Mensagem padrao do WhatsApp
+                  Mensagem padrão do WhatsApp
                 </Label>
                 <TooltipProvider delayDuration={150}>
                   <div className="flex flex-wrap gap-2">
@@ -866,19 +866,19 @@ export default function Settings() {
                 </div>
                 <Button onClick={saveCompany} disabled={savingCompany} className="w-full md:w-auto">
                   {savingCompany && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Salvar Alteracoes
+                  Salvar Alterações
                 </Button>
             </CardContent>
           </Card>
 
         </TabsContent>
-        {/* PersonalizaÃ§Ã£o */}
+        {/* Personalização */}
         <TabsContent value="catalog">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Palette className="h-5 w-5" />
-                PersonalizaÃ§Ã£o do CatÃ¡logo
+                Personalização do Catálogo
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -886,10 +886,10 @@ export default function Settings() {
               <div className="space-y-4" data-catalog-settings>
                 <Label className="flex items-center gap-2">
                   <Palette className="h-4 w-4" />
-                  Cores do CatÃ¡logo
+                  Cores do Catálogo
                 </Label>
                 <p className="text-sm text-muted-foreground">
-                  Personalize as cores do seu catÃ¡logo pÃºblico
+                  Personalize as cores do seu catálogo público
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   <div className="space-y-2">
@@ -917,7 +917,7 @@ export default function Settings() {
                       />
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      Fundo da barra superior do catalogo.
+                      Fundo da barra superior do catálogo.
                     </p>
                   </div>
                   <div className="space-y-2">
@@ -957,7 +957,7 @@ export default function Settings() {
                       />
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      Fundo do rodape do catalogo.
+                      Fundo do rodapé do catálogo.
                     </p>
                   </div>
                   <div className="space-y-2">
@@ -981,7 +981,7 @@ export default function Settings() {
                     </p>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="catalog-price" className="text-sm">Preco</Label>
+                    <Label htmlFor="catalog-price" className="text-sm">Preço</Label>
                     <div className="flex gap-2">
                       <input
                         type="color"
@@ -1005,7 +1005,7 @@ export default function Settings() {
                       />
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      Cor usada no preco do produto.
+                      Cor usada no preço do produto.
                     </p>
                   </div>
                   <div className="space-y-2">
@@ -1073,7 +1073,7 @@ export default function Settings() {
                       />
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      Fundo do botao principal.
+                      Fundo do botão principal.
                     </p>
                   </div>
                   <div className="space-y-2">
@@ -1093,7 +1093,7 @@ export default function Settings() {
                       />
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      Cor do texto do botao principal.
+                      Cor do texto do botão principal.
                     </p>
                   </div>
                   <div className="space-y-2">
@@ -1113,7 +1113,7 @@ export default function Settings() {
                       />
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      Cor da borda e do texto no botao outline.
+                      Cor da borda e do texto no botão outline.
                     </p>
                   </div>
                   <div className="space-y-2">
@@ -1213,7 +1213,7 @@ export default function Settings() {
                       />
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      Cor padrao dos textos do catalogo.
+                      Cor padrão dos textos do catálogo.
                     </p>
                   </div>
                 </div>
@@ -1270,7 +1270,7 @@ export default function Settings() {
                     Badge texto
                   </span>
                   <span className="font-medium" style={{ color: companyForm.catalog_price_color }}>
-                    Preco
+                    Preço
                   </span>
                   <span className="font-medium" style={{ color: companyForm.catalog_filter_text_color }}>
                     Filtro texto
@@ -1285,10 +1285,10 @@ export default function Settings() {
               <div className="space-y-4">
                 <Label className="flex items-center gap-2">
                   <LayoutGrid className="h-4 w-4" />
-                  Layout PadrÃ£o do CatÃ¡logo
+                  Layout Padrão do Catálogo
                 </Label>
                 <p className="text-sm text-muted-foreground">
-                  Escolha o layout padrÃ£o para exibiÃ§Ã£o dos produtos
+                  Escolha o layout padrão para exibição dos produtos
                 </p>
                 <div className="flex gap-4">
                   <Button
@@ -1315,7 +1315,7 @@ export default function Settings() {
               
                 <Button onClick={saveCompany} disabled={savingCompany} className="w-full md:w-auto">
                   {savingCompany && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Salvar Alteracoes
+                  Salvar Alterações
                 </Button>
             </CardContent>
           </Card>
@@ -1325,10 +1325,10 @@ export default function Settings() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Globe className="h-5 w-5" />
-                  CatÃ¡logo PÃºblico
+                  Catálogo Público
                 </CardTitle>
                 <CardDescription>
-                  Compartilhe seu catÃ¡logo de produtos com clientes
+                  Compartilhe seu catálogo de produtos com clientes
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -1356,13 +1356,13 @@ export default function Settings() {
                     onClick={() => window.open(`/catalogo/${company.slug}`, '_blank')}
                   >
                     <ExternalLink className="h-4 w-4 mr-2" />
-                    Abrir CatÃ¡logo
+                    Abrir Catálogo
                   </Button>
                   <Button
                     variant="default"
                     className="flex-1"
                     onClick={() => {
-                      // MantÃ©m a troca de abas via estado para evitar reload.
+                      // Mantém a troca de abas via estado para evitar reload.
                       setActiveTab('catalog');
                       setTimeout(() => {
                         document.querySelector('[data-catalog-settings]')?.scrollIntoView({ behavior: 'smooth' });
@@ -1370,7 +1370,7 @@ export default function Settings() {
                     }}
                   >
                     <SettingsIcon className="h-4 w-4 mr-2" />
-                    Configurar CatÃ¡logo
+                    Configurar Catálogo
                   </Button>
                 </div>
 
@@ -1395,7 +1395,7 @@ export default function Settings() {
                     />
                   ) : (
                     <div className="flex h-[240px] items-center justify-center text-sm text-muted-foreground">
-                      Salve as alteracoes para atualizar o preview do catalogo.
+                      Salve as alterações para atualizar o preview do catálogo.
                     </div>
                   )}
                 </div>
@@ -1411,7 +1411,7 @@ export default function Settings() {
           <CardHeader>
             <CardTitle className="text-red-700">Area de perigo</CardTitle>
             <CardDescription className="text-red-600">
-              Acoes irreversiveis para dados da empresa.
+              Ações irreversíveis para dados da empresa.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -1441,7 +1441,7 @@ export default function Settings() {
 
           <div className="space-y-4">
             <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-              Esta aÃ§Ã£o Ã© irreversÃ­vel. Todos os pedidos, produtos e clientes serÃ£o apagados permanentemente.
+              Esta ação é irreversível. Todos os pedidos, produtos e clientes serão apagados permanentemente.
             </div>
 
             <div className="space-y-2">
@@ -1469,7 +1469,7 @@ export default function Settings() {
                 checked={resetChecked}
                 onCheckedChange={(checked) => setResetChecked(checked === true)}
               />
-              <Label htmlFor="reset-confirm">Eu entendo que isso Ã© irreversÃ­vel</Label>
+              <Label htmlFor="reset-confirm">Eu entendo que isso é irreversível</Label>
             </div>
 
             {resetError && <p className="text-sm text-red-600">{resetError}</p>}
@@ -1501,7 +1501,7 @@ export default function Settings() {
               </span>
             ) : !company ? null : hasChanges ? (
               <span className="text-amber-600 dark:text-amber-400">
-                AlteraÃ§Ãµes nÃ£o salvas
+                Alterações não salvas
               </span>
             ) : isSaved ? (
               <span className="text-green-600 dark:text-green-400 flex items-center gap-1">
@@ -1529,7 +1529,7 @@ export default function Settings() {
                 Salvando...
               </>
             ) : hasChanges ? (
-              "Salvar AlteraÃ§Ãµes"
+              "Salvar Alterações"
             ) : (
               "Salvo"
             )}

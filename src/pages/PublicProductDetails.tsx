@@ -379,7 +379,7 @@ export default function PublicProductDetails() {
       if (valid) {
         delete next.document;
       } else {
-        next.document = 'CPF invalido.';
+        next.document = 'CPF inválido.';
       }
       return next;
     });
@@ -400,12 +400,12 @@ export default function PublicProductDetails() {
     }
 
     if (!validatePhone(orderForm.phone)) {
-      nextErrors.phone = 'Telefone invalido.';
+      nextErrors.phone = 'Telefone inválido.';
     }
 
     const docDigits = normalizeDigits(orderForm.document);
     if (docDigits.length !== 11 || !validateCpf(orderForm.document)) {
-      nextErrors.document = 'CPF invalido.';
+      nextErrors.document = 'CPF inválido.';
     }
 
     if (!orderForm.paymentMethod) {
@@ -413,17 +413,17 @@ export default function PublicProductDetails() {
     }
 
     if (orderForm.quantity < 1) {
-      nextErrors.quantity = 'Quantidade invalida.';
+      nextErrors.quantity = 'Quantidade inválida.';
     } else if (product) {
       const minimumQuantity = Math.max(1, Number(product.catalog_min_order ?? product.min_order_quantity ?? 1));
       if (orderForm.quantity < minimumQuantity) {
-        nextErrors.quantity = `A quantidade minima para este produto e ${minimumQuantity} unidade(s).`;
+        nextErrors.quantity = `A quantidade mínima para este produto é ${minimumQuantity} unidade(s).`;
       }
     }
 
     const minValue = Number(company?.minimum_order_value || 0);
     if (minValue > 0 && orderTotal < minValue) {
-      nextErrors.minimum = `O valor minimo para pedidos e ${formatCurrency(minValue)}.`;
+      nextErrors.minimum = `O valor mínimo para pedidos é ${formatCurrency(minValue)}.`;
     }
 
     setOrderErrors(nextErrors);
@@ -456,29 +456,33 @@ export default function PublicProductDetails() {
     });
 
     if (error) {
-      const isMinOrderError = error.message.includes('Minimum order value');
-      const isMinQuantityError = error.message.includes('Minimum quantity not reached');
+      const isMinOrderError =
+        error.message.includes('Minimum order value') ||
+        error.message.includes('Valor mínimo do pedido');
+      const isMinQuantityError =
+        error.message.includes('Minimum quantity not reached') ||
+        error.message.includes('Quantidade mínima não atingida');
       const minimumQuantity = Math.max(1, Number(product?.catalog_min_order ?? product?.min_order_quantity ?? 1));
 
       if (isMinOrderError) {
         const minValue = Number(company?.minimum_order_value || 0);
         setOrderErrors((prev) => ({
           ...prev,
-          minimum: `O valor minimo para pedidos e ${formatCurrency(minValue)}.`,
+          minimum: `O valor mínimo para pedidos é ${formatCurrency(minValue)}.`,
         }));
       }
 
       if (isMinQuantityError) {
         setOrderErrors((prev) => ({
           ...prev,
-          quantity: `A quantidade minima para este produto e ${minimumQuantity} unidade(s).`,
+          quantity: `A quantidade mínima para este produto é ${minimumQuantity} unidade(s).`,
         }));
       }
 
       const errorMessage = isMinQuantityError
-        ? `A quantidade minima para este produto e ${minimumQuantity} unidade(s).`
+        ? `A quantidade mínima para este produto é ${minimumQuantity} unidade(s).`
         : isMinOrderError
-          ? `O valor minimo para pedidos e ${formatCurrency(Number(company?.minimum_order_value || 0))}.`
+          ? `O valor mínimo para pedidos é ${formatCurrency(Number(company?.minimum_order_value || 0))}.`
           : error.message;
 
       toast({
@@ -541,7 +545,7 @@ export default function PublicProductDetails() {
           <h1 className="text-2xl font-bold text-slate-900 mb-2">Produto não encontrado</h1>
           <p className="text-slate-500 mb-4">Este produto não existe ou não está disponível.</p>
           <Link to={`/catalogo/${slug}`}>
-            <Button>Voltar ao catalogo</Button>
+            <Button>Voltar ao catálogo</Button>
           </Link>
         </div>
       </div>
@@ -588,7 +592,7 @@ export default function PublicProductDetails() {
               <span className="text-sm font-semibold">{company?.name || 'IDEART'}</span>
             </div>
             <nav className="hidden md:flex items-center gap-6 text-xs text-slate-500">
-              <Link to="/">Inicio</Link>
+              <Link to="/">Início</Link>
               <Link to={`/catalogo/${slug}`}>Catálogo</Link>
               <span>Servicos</span>
               <span>Contato</span>
@@ -617,7 +621,7 @@ export default function PublicProductDetails() {
 
       <main className="mx-auto max-w-6xl px-4 py-6">
         <div className="flex items-center gap-2 text-xs text-slate-400 mb-6">
-          <Link to={`/catalogo/${slug}`} className="hover:text-slate-600">Inicio</Link>
+          <Link to={`/catalogo/${slug}`} className="hover:text-slate-600">Início</Link>
           <ChevronRight className="h-3 w-3" />
           <span>{product.category?.name || 'Catálogo'}</span>
           <ChevronRight className="h-3 w-3" />
@@ -672,7 +676,7 @@ export default function PublicProductDetails() {
                     <Star key={index} className={`h-4 w-4 ${index < 4 ? 'fill-yellow-400' : ''}`} />
                   ))}
                 </div>
-                <span>(128 avaliacoes)</span>
+                <span>(128 avaliações)</span>
                 <Badge variant="secondary">Em estoque</Badge>
               </div>
             </div>
@@ -695,11 +699,11 @@ export default function PublicProductDetails() {
                 </div>
               )
             ) : (
-              <div className="text-sm text-slate-500">Preco sob consulta</div>
+              <div className="text-sm text-slate-500">Preço sob consulta</div>
             )}
 
             <p className="text-sm text-slate-600 leading-relaxed">
-              {product.catalog_short_description || product.description || 'Descricao detalhada do produto.'}
+              {product.catalog_short_description || product.description || 'Descrição detalhada do produto.'}
             </p>
 
             <div className="border-t border-slate-200 pt-4 space-y-4">
@@ -722,7 +726,7 @@ export default function PublicProductDetails() {
               {isPersonalizationAllowed && (
                 <div>
                   <div className="flex items-center justify-between text-xs text-slate-500">
-                    <Label>Personalizacao (Nome na capa)</Label>
+                    <Label>Personalização (Nome na capa)</Label>
                     <span>Gratis</span>
                   </div>
                   <Input
@@ -734,7 +738,7 @@ export default function PublicProductDetails() {
                       handleOrderFieldChange('customization', event.target.value.slice(0, 20))
                     }
                   />
-                  <p className="mt-1 text-xs text-slate-400">Maximo de 20 caracteres.</p>
+                  <p className="mt-1 text-xs text-slate-400">Máximo de 20 caracteres.</p>
                 </div>
               )}
               <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
@@ -787,10 +791,10 @@ export default function PublicProductDetails() {
         <div className="mt-12 rounded-xl border border-slate-200 bg-white overflow-hidden">
           <div className="flex flex-wrap border-b border-slate-200 text-sm">
             {[
-              { id: 'descricao', label: 'Descricao detalhada' },
-              { id: 'especificacoes', label: 'Especificacoes tecnicas' },
+              { id: 'descricao', label: 'Descrição detalhada' },
+              { id: 'especificacoes', label: 'Especificações técnicas' },
               { id: 'envio', label: 'Envio e prazos' },
-              { id: 'avaliacoes', label: 'Avaliacoes (128)' },
+              { id: 'avaliacoes', label: 'Avaliações (128)' },
             ].map((tab) => (
               <button
                 key={tab.id}
@@ -805,7 +809,7 @@ export default function PublicProductDetails() {
             {activeTab === 'descricao' && (
               <div className="space-y-4 text-sm text-slate-600">
                 <p>
-                  {product.catalog_long_description || product.description || 'Descricao detalhada do produto para apresentar beneficios e diferenciais.'}
+                  {product.catalog_long_description || product.description || 'Descrição detalhada do produto para apresentar benefícios e diferenciais.'}
                 </p>
                 <div className="grid md:grid-cols-2 gap-4">
                   <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
@@ -813,7 +817,7 @@ export default function PublicProductDetails() {
                     <p className="text-xs text-slate-500">Papel de fontes responsaveis e materiais duraveis para uso diario.</p>
                   </div>
                   <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-                    <h4 className="font-semibold text-slate-800 mb-2">Personalizacao</h4>
+                    <h4 className="font-semibold text-slate-800 mb-2">Personalização</h4>
                     <p className="text-xs text-slate-500">Gravacao com qualidade premium para destacar sua marca.</p>
                   </div>
                 </div>
@@ -822,14 +826,14 @@ export default function PublicProductDetails() {
             {activeTab === 'especificacoes' && (
               <div className="space-y-2 text-sm text-slate-600">
                 <p><strong>SKU:</strong> {product.sku || 'Não informado'}</p>
-                <p><strong>Codigo de barras:</strong> {product.barcode || 'Nao informado'}</p>
+                <p><strong>Código de barras:</strong> {product.barcode || 'Não informado'}</p>
                 <p><strong>Unidade:</strong> {product.unit || 'Não informada'}</p>
-                <p><strong>Quantidade minima:</strong> {minimumOrderQuantity}</p>
+                <p><strong>Quantidade mínima:</strong> {minimumOrderQuantity}</p>
               </div>
             )}
             {activeTab === 'envio' && (
               <div className="text-sm text-slate-600">
-                Consulte prazos e modalidades de entrega com a equipe. Pedidos acima de R$199 possuem frete gratis.
+                Consulte prazos e modalidades de entrega com a equipe. Pedidos acima de R$199 possuem frete grátis.
               </div>
             )}
             {activeTab === 'avaliacoes' && (
@@ -976,7 +980,7 @@ export default function PublicProductDetails() {
                     )}
                     {!orderErrors.quantity && minimumOrderQuantity > 1 && (
                       <p className="mt-1 text-xs text-slate-500">
-                        Quantidade minima: {minimumOrderQuantity} unidade(s).
+                        Quantidade mínima: {minimumOrderQuantity} unidade(s).
                       </p>
                     )}
                   </div>
@@ -989,7 +993,7 @@ export default function PublicProductDetails() {
 
                 {minimumOrderValue > 0 && (
                   <p className={`text-xs ${orderTotal < minimumOrderValue ? 'text-destructive' : 'text-slate-500'}`}>
-                    O valor minimo para pedidos e {formatCurrency(minimumOrderValue)}.
+                    O valor mínimo para pedidos é {formatCurrency(minimumOrderValue)}.
                   </p>
                 )}
 
@@ -1009,7 +1013,7 @@ export default function PublicProductDetails() {
             <div>
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-xl font-bold">Compre junto</h2>
-                <Link to={`/catalogo/${slug}`} className="text-xs text-primary">Ver catalogo completo</Link>
+                <Link to={`/catalogo/${slug}`} className="text-xs text-primary">Ver catálogo completo</Link>
               </div>
               <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
                 {relatedProducts.map((related) => (
@@ -1057,7 +1061,7 @@ export default function PublicProductDetails() {
                             </span>
                           )
                         ) : (
-                          <span className="text-xs text-slate-500">Preco sob consulta</span>
+                          <span className="text-xs text-slate-500">Preço sob consulta</span>
                         )}
                       </CardContent>
                     </Card>
@@ -1109,7 +1113,7 @@ export default function PublicProductDetails() {
                 )}
                 <Link to={`/catalogo/${slug}`}>
                   <Button size="sm" className="catalog-btn w-full sm:w-auto">
-                    Ver catalogo completo
+                    Ver catálogo completo
                   </Button>
                 </Link>
               </div>

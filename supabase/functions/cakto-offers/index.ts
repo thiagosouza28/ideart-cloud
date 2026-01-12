@@ -50,12 +50,12 @@ const jsonResponse = (headers: HeadersInit, status: number, payload: unknown) =>
 serve(async (req) => {
   const corsHeaders = getCorsHeaders(req);
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders, status: 204 });
-  if (req.method !== "GET") return jsonResponse(corsHeaders, 405, { error: "Invalid method" });
+  if (req.method !== "GET") return jsonResponse(corsHeaders, 405, { error: "Método inválido" });
 
   try {
     const cfg = getCaktoConfig();
     if (!cfg.apiBase) {
-      return jsonResponse(corsHeaders, 400, { error: "Missing CAKTO_API_BASE" });
+      return jsonResponse(corsHeaders, 400, { error: "CAKTO_API_BASE ausente" });
     }
 
     const raw = await listOffers(cfg, { status: "active" });

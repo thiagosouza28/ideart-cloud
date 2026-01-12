@@ -40,7 +40,7 @@ const SubscriptionSuccess = () => {
           timeout = window.setTimeout(run, 3000);
         }
       } catch (error: any) {
-        console.error("Error finishing checkout:", error);
+        console.error("Erro ao finalizar checkout:", error);
         setStatusMessage(error?.message || "Falha ao validar assinatura.");
       } finally {
         setLoading(false);
@@ -84,7 +84,7 @@ const SubscriptionSuccess = () => {
           }
         }
       } catch (error) {
-        console.error("Error fetching details:", error);
+        console.error("Erro ao buscar detalhes:", error);
       } finally {
         setLoading(false);
       }

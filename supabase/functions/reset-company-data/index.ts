@@ -71,7 +71,7 @@ type ResetRequest = {
 serve(async (req) => {
   const corsHeaders = getCorsHeaders(req);
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders, status: 204 });
-  if (req.method !== "POST") return jsonResponse(corsHeaders, 405, { error: "Invalid method" });
+  if (req.method !== "POST") return jsonResponse(corsHeaders, 405, { error: "Método inválido" });
 
   try {
     const authHeader = req.headers.get("authorization");
@@ -82,7 +82,7 @@ serve(async (req) => {
     const { data: authData, error: authError } = await supabase.auth.getUser(token);
 
     if (authError || !authData.user) {
-      return jsonResponse(corsHeaders, 401, { error: "Invalid session" });
+      return jsonResponse(corsHeaders, 401, { error: "Sessão inválida" });
     }
 
     const { data: roleData } = await supabase
@@ -103,7 +103,7 @@ serve(async (req) => {
       .maybeSingle();
 
     if (!profile?.company_id) {
-      return jsonResponse(corsHeaders, 400, { error: "Missing company_id" });
+      return jsonResponse(corsHeaders, 400, { error: "company_id ausente" });
     }
 
     const body = (await req.json().catch(() => ({}))) as ResetRequest;
@@ -120,7 +120,7 @@ serve(async (req) => {
     });
 
     if (resetError) {
-      console.error("[reset-company-data] RPC error", resetError);
+      console.error("[reset-company-data] Erro de RPC", resetError);
       return jsonResponse(corsHeaders, 400, { error: "Reset failed" });
     }
 

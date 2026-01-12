@@ -292,7 +292,7 @@ const encodeCode128B = (value: string) => {
   const dataCodes = Array.from(value).map((char) => {
     const code = char.charCodeAt(0) - 32;
     if (code < 0 || code > 95) {
-      throw new Error('Invalid Code 128 character');
+      throw new Error('Caractere inválido no Code 128');
     }
     return code;
   });

@@ -15,11 +15,11 @@ import { calculateAge, formatDateBr, isBirthdayToday } from '@/lib/birthdays';
 type DeliveryMap = Record<string, string>;
 
 const statusLabels: Record<OrderStatus, string> = {
-  orcamento: 'OrÃ§amento',
+  orcamento: 'Orçamento',
   pendente: 'Pendente',
   produzindo_arte: 'Produzindo arte',
   arte_aprovada: 'Arte aprovada',
-  em_producao: 'Em ProduÃ§Ã£o',
+  em_producao: 'Em Produção',
   finalizado: 'Finalizado',
   pronto: 'Finalizado',
   aguardando_retirada: 'Aguardando retirada',
@@ -80,7 +80,7 @@ export default function CustomerHistory() {
       ]);
 
       if (customerResult.error || !customerResult.data) {
-        setError('Cliente nÃ£o encontrado.');
+        setError('Cliente não encontrado.');
         setLoading(false);
         return;
       }
@@ -132,7 +132,7 @@ export default function CustomerHistory() {
     finishedOrders.length > 0 ? totalFinishedValue / finishedOrders.length : 0;
 
   const customerSegment = useMemo(() => {
-    if (!lastPurchase) return 'Sem histÃ³rico';
+    if (!lastPurchase) return 'Sem histórico';
     const days = daysBetween(lastPurchase, new Date().toISOString());
     if (days <= 60) return 'Ativo';
     return 'Inativo';
@@ -160,7 +160,7 @@ export default function CustomerHistory() {
   const insights = useMemo(() => {
     const notes: string[] = [];
     if (orders.length === 0) {
-      notes.push('Cliente ainda nÃ£o possui pedidos registrados.');
+      notes.push('Cliente ainda não possui pedidos registrados.');
     }
     if (lastPurchase) {
       const days = daysBetween(lastPurchase, new Date().toISOString());
@@ -173,7 +173,7 @@ export default function CustomerHistory() {
       }
     }
     if (ticketAverage > 0 && ticketAverage < 150) {
-      notes.push('Ticket mÃ©dio baixo: oportunidade para kits ou adicionais.');
+      notes.push('Ticket médio baixo: oportunidade para kits ou adicionais.');
     }
     const pendingBalance = orders.reduce(
       (sum, order) => sum + Math.max(0, Number(order.total) - Number(order.amount_paid)),
@@ -206,10 +206,10 @@ export default function CustomerHistory() {
       <div className="page-container flex items-center justify-center min-h-[400px]">
         <Card className="max-w-md w-full">
           <CardHeader>
-            <CardTitle>HistÃ³rico do Cliente</CardTitle>
+            <CardTitle>Histórico do Cliente</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-muted-foreground">{error || 'Cliente nÃ£o encontrado.'}</p>
+            <p className="text-muted-foreground">{error || 'Cliente não encontrado.'}</p>
           </CardContent>
         </Card>
       </div>
@@ -220,7 +220,7 @@ export default function CustomerHistory() {
     <div className="page-container w-full max-w-none space-y-6">
       <div className="page-header">
         <div>
-          <h1 className="page-title">RelatÃ³rio do Cliente</h1>
+          <h1 className="page-title">Relatório do Cliente</h1>
           <p className="text-muted-foreground">Resumo de pedidos e comportamento</p>
         </div>
       </div>
@@ -242,11 +242,11 @@ export default function CustomerHistory() {
                   <Badge variant="outline">Idade: {customerAge} anos</Badge>
                 )}
                 {birthdayToday && (
-                  <Badge className="bg-emerald-100 text-emerald-800">Aniversario hoje</Badge>
+                  <Badge className="bg-emerald-100 text-emerald-800">Aniversário hoje</Badge>
                 )}
                 <Badge variant="outline">Segmento: {customerSegment}</Badge>
                 <Badge variant="outline">
-                  Ultima compra: {lastPurchase ? formatDate(lastPurchase) : '-'}
+                  Última compra: {lastPurchase ? formatDate(lastPurchase) : '-'}
                 </Badge>
               </div>
             </div>
@@ -270,24 +270,24 @@ export default function CustomerHistory() {
           <CardContent className="pt-6 space-y-2">
             <p className="text-sm text-muted-foreground">Pedidos finalizados</p>
             <p className="text-2xl font-semibold">{finishedOrders.length}</p>
-            <p className="text-xs text-muted-foreground">Base para Ãºltima compra e ticket</p>
+            <p className="text-xs text-muted-foreground">Base para última compra e ticket</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-6 space-y-2">
-            <p className="text-sm text-muted-foreground">Total pago (histÃ³rico)</p>
+            <p className="text-sm text-muted-foreground">Total pago (histórico)</p>
             <p className="text-2xl font-semibold">{formatCurrency(totalPaid)}</p>
-            <p className="text-xs text-muted-foreground">SomatÃ³rio de pagamentos</p>
+            <p className="text-xs text-muted-foreground">Somatório de pagamentos</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-6 space-y-2">
-            <p className="text-sm text-muted-foreground">Ticket mÃ©dio (finalizados)</p>
+            <p className="text-sm text-muted-foreground">Ticket médio (finalizados)</p>
             <p className="text-2xl font-semibold">
               {finishedOrders.length > 0 ? formatCurrency(ticketAverage) : 'R$ 0,00'}
             </p>
             <p className="text-xs text-muted-foreground">
-              Intervalo mÃ©dio: {lastPurchase ? `${daysBetween(lastPurchase, new Date().toISOString())} dias` : '--'}
+              Intervalo médio: {lastPurchase ? `${daysBetween(lastPurchase, new Date().toISOString())} dias` : '--'}
             </p>
           </CardContent>
         </Card>
@@ -322,7 +322,7 @@ export default function CustomerHistory() {
             {insights.length > 0 ? (
               insights.map((insight) => <p key={insight}>{insight}</p>)
             ) : (
-              <p>Nenhum insight disponÃ­vel no momento.</p>
+              <p>Nenhum insight disponível no momento.</p>
             )}
           </CardContent>
         </Card>

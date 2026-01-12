@@ -76,19 +76,19 @@ type DescriptionRequest = {
 serve(async (req) => {
   const corsHeaders = getCorsHeaders(req);
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders, status: 204 });
-  if (req.method !== "POST") return jsonResponse(corsHeaders, 405, { error: "Invalid method" });
+  if (req.method !== "POST") return jsonResponse(corsHeaders, 405, { error: "Método inválido" });
 
   try {
     const openAiKey = Deno.env.get("OPENAI_API_KEY") ?? "";
     if (!openAiKey) {
-      return jsonResponse(corsHeaders, 400, { error: "Missing OpenAI config" });
+      return jsonResponse(corsHeaders, 400, { error: "Configuração do OpenAI ausente" });
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? Deno.env.get("SB_ANON_KEY") ?? "";
     if (!supabaseUrl || !supabaseAnonKey) {
-      console.error("[AI] Missing Supabase config");
-      return jsonResponse(corsHeaders, 500, { error: "Missing Supabase config" });
+      console.error("[AI] Configuração do Supabase ausente");
+      return jsonResponse(corsHeaders, 500, { error: "Configuração do Supabase ausente" });
     }
 
     const authHeader = getAuthHeader(req);
@@ -108,7 +108,7 @@ serve(async (req) => {
     const { data: authData, error: authError } = await supabase.auth.getUser(token);
 
     if (authError || !authData.user) {
-      console.error("[AI] Invalid session", authError?.message ?? authError);
+      console.error("[AI] Sessão inválida", authError?.message ?? authError);
       let hint: string | null = null;
       try {
         const payload = token.split(".")[1] ?? "";
@@ -121,7 +121,7 @@ serve(async (req) => {
       } catch {
         // ignore decode issues
       }
-      return jsonResponse(corsHeaders, 401, { error: "Invalid session", hint });
+      return jsonResponse(corsHeaders, 401, { error: "Sessão inválida", hint });
     }
 
     const { data: roleData } = await supabase
@@ -145,9 +145,9 @@ serve(async (req) => {
 
     const body = (await req.json().catch(() => ({}))) as DescriptionRequest;
     const name = body.name?.trim();
-    if (!name) return jsonResponse(corsHeaders, 400, { error: "Nome do produto obrigatorio" });
+    if (!name) return jsonResponse(corsHeaders, 400, { error: "Nome do produto obrigatório" });
 
-    const prompt = `Crie uma descricao comercial atrativa para catalogo de vendas do produto: ${name}. Responda apenas em JSON com as chaves short e long. O campo short deve ter no maximo 140 caracteres. O campo long deve ter ate 3 paragrafos.`;
+    const prompt = `Crie uma descrição comercial atrativa para catálogo de vendas do produto: ${name}. Responda apenas em JSON com as chaves short e long. O campo short deve ter no máximo 140 caracteres. O campo long deve ter até 3 parágrafos.`;
 
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
@@ -158,7 +158,7 @@ serve(async (req) => {
       body: JSON.stringify({
         model: "gpt-4o-mini",
         messages: [
-          { role: "system", content: "Voce escreve em portugues do Brasil e usa um tom comercial claro." },
+          { role: "system", content: "Você escreve em português do Brasil e usa um tom comercial claro." },
           { role: "user", content: prompt },
         ],
         temperature: 0.7,
@@ -169,7 +169,7 @@ serve(async (req) => {
     if (!response.ok) {
       const text = await response.text().catch(() => "");
       console.error("[AI] OpenAI error", response.status, text);
-      return jsonResponse(corsHeaders, 400, { error: "Falha ao gerar descricao" });
+      return jsonResponse(corsHeaders, 400, { error: "Falha ao gerar descrição" });
     }
 
     const data = await response.json().catch(() => null) as {
@@ -200,6 +200,6 @@ serve(async (req) => {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error("[AI] ERROR", message);
-    return jsonResponse(corsHeaders, 400, { error: "Falha ao gerar descricao" });
+    return jsonResponse(corsHeaders, 400, { error: "Falha ao gerar descrição" });
   }
 });

@@ -221,7 +221,7 @@ export default function PublicCatalog() {
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="animate-pulse text-muted-foreground">Carregando catalogo...</div>
+        <div className="animate-pulse text-muted-foreground">Carregando catálogo...</div>
       </div>
     );
   }
@@ -390,8 +390,8 @@ export default function PublicCatalog() {
               <SelectContent>
                 <SelectItem value="name_asc">Nome A-Z</SelectItem>
                 <SelectItem value="name_desc">Nome Z-A</SelectItem>
-                <SelectItem value="price_asc">Menor preco</SelectItem>
-                <SelectItem value="price_desc">Maior preco</SelectItem>
+                <SelectItem value="price_asc">Menor preço</SelectItem>
+                <SelectItem value="price_desc">Maior preço</SelectItem>
               </SelectContent>
             </Select>
 
@@ -417,7 +417,7 @@ export default function PublicCatalog() {
         {filteredProducts.length === 0 ? (
           <div className="text-center py-12">
             <Package className="h-12 w-12 text-slate-300 mx-auto mb-4" />
-            <p className="text-slate-500">Nenhum produto disponivel no catalogo.</p>
+            <p className="text-slate-500">Nenhum produto disponível no catálogo.</p>
           </div>
         ) : (
           <div className={viewMode === 'grid' ? 'catalog-grid' : 'flex flex-col gap-4'}>
@@ -485,7 +485,7 @@ export default function PublicCatalog() {
                             </div>
                           )
                         ) : (
-                          <div className="text-sm text-slate-500 mb-3">Preco sob consulta</div>
+                          <div className="text-sm text-slate-500 mb-3">Preço sob consulta</div>
                         )}
                         <Button className="w-full catalog-btn gap-2">
                           <Package className="h-4 w-4" />
@@ -542,7 +542,7 @@ export default function PublicCatalog() {
                               </div>
                             )
                           ) : (
-                            <span className="text-sm text-slate-500">Preco sob consulta</span>
+                            <span className="text-sm text-slate-500">Preço sob consulta</span>
                           )}
                         </div>
                         <div className="flex items-center gap-2 mt-2">

@@ -48,7 +48,7 @@ export default function Customers() {
       toast.error('Erro ao excluir cliente');
       return;
     }
-    toast.success('Cliente excluÃ­do');
+    toast.success('Cliente excluído');
     loadCustomers();
   };
 
@@ -76,7 +76,7 @@ export default function Customers() {
                 <TableHead>Nascimento</TableHead>
                 <TableHead>Idade</TableHead>
                 <TableHead>Cidade</TableHead>
-                <TableHead className="w-[100px]">Acoes</TableHead>
+                <TableHead className="w-[100px]">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

@@ -73,7 +73,7 @@ type CreateCheckoutRequest = {
 serve(async (req) => {
   const corsHeaders = getCorsHeaders(req);
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders, status: 204 });
-  if (req.method !== "POST") return jsonResponse(corsHeaders, 405, { error: "Invalid method" });
+  if (req.method !== "POST") return jsonResponse(corsHeaders, 405, { error: "Método inválido" });
 
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
@@ -81,7 +81,7 @@ serve(async (req) => {
     const appUrl = Deno.env.get("APP_PUBLIC_URL") ?? "";
 
     if (!supabaseUrl || !serviceKey || !appUrl) {
-      return jsonResponse(corsHeaders, 400, { error: "Missing environment configuration" });
+      return jsonResponse(corsHeaders, 400, { error: "Configuração de ambiente ausente" });
     }
 
     const body = (await req.json().catch(() => ({}))) as CreateCheckoutRequest;
@@ -91,7 +91,7 @@ serve(async (req) => {
     const companyName = body.company_name?.trim() ?? null;
 
     if (!planId || !email) {
-      return jsonResponse(corsHeaders, 400, { error: "Missing plan_id or email" });
+      return jsonResponse(corsHeaders, 400, { error: "plan_id ou e-mail ausente" });
     }
 
     const supabase = getSupabaseClient();
@@ -117,7 +117,7 @@ serve(async (req) => {
 
     if (existingCheckout) {
       return jsonResponse(corsHeaders, 409, {
-        error: "Checkout already pending for this email and plan.",
+        error: "Checkout já está pendente para este e-mail e plano.",
       });
     }
 
@@ -136,7 +136,7 @@ serve(async (req) => {
       .single();
 
     if (checkoutError || !checkout) {
-      return jsonResponse(corsHeaders, 400, { error: checkoutError?.message || "Failed to create checkout" });
+      return jsonResponse(corsHeaders, 400, { error: checkoutError?.message || "Falha ao criar checkout" });
     }
 
     log("Building CAKTO checkout URL", { planId: plan.id });

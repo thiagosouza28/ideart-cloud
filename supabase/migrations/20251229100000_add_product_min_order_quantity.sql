@@ -127,7 +127,7 @@ begin
     end if;
 
     if v_quantity < coalesce(v_product.min_order_quantity, 1) then
-      raise exception 'Minimum quantity not reached';
+      raise exception 'Quantidade mínima não atingida';
     end if;
 
     v_subtotal := v_subtotal + (coalesce(v_product.final_price, 0) * v_quantity);
@@ -158,7 +158,7 @@ begin
   v_total := v_subtotal - v_discount;
 
   if v_min_order > 0 and v_total < v_min_order then
-    raise exception 'Minimum order value not reached';
+    raise exception 'Valor mínimo do pedido não atingido';
   end if;
 
   update public.orders
@@ -168,7 +168,7 @@ begin
   where id = v_order_id;
 
   insert into public.order_status_history (order_id, status, notes, user_id)
-  values (v_order_id, 'pendente', 'Pedido criado via catalogo publico', null);
+  values (v_order_id, 'pendente', 'Pedido criado via catálogo público', null);
 
   insert into public.order_public_links (order_id)
   values (v_order_id)

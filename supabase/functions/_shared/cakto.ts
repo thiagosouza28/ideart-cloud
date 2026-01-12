@@ -30,10 +30,10 @@ const getAccessToken = async (cfg: CaktoConfig) => {
 
   inflightToken = (async () => {
     if (!cfg.clientId || !cfg.clientSecret) {
-      throw new Error('Missing CAKTO_CLIENT_ID or CAKTO_CLIENT_SECRET');
+      throw new Error('CAKTO_CLIENT_ID ou CAKTO_CLIENT_SECRET ausente');
     }
     if (!cfg.apiBase) {
-      throw new Error('Missing CAKTO_API_BASE');
+      throw new Error('CAKTO_API_BASE ausente');
     }
 
     const url = `${cfg.apiBase.replace(/\/$/, '')}/public_api/token/`;
@@ -51,7 +51,7 @@ const getAccessToken = async (cfg: CaktoConfig) => {
     if (!resp.ok) {
       const text = await resp.text().catch(() => '');
       inflightToken = null;
-      throw new Error(`CAKTO auth failed: ${resp.status} ${text}`);
+      throw new Error(`Falha na autenticação da CAKTO: ${resp.status} ${text}`);
     }
 
     const tokenData = await resp.json().catch(() => null) as {
@@ -93,7 +93,7 @@ export const createPlan = async (cfg: CaktoConfig, payload: Record<string, unkno
   });
   if (!resp.ok) {
     const text = await resp.text().catch(() => '');
-    throw new Error(`CAKTO create plan failed: ${resp.status} ${text}`);
+    throw new Error(`Falha ao criar plano na CAKTO: ${resp.status} ${text}`);
   }
   return resp.json().catch(() => null);
 };
@@ -111,7 +111,7 @@ export const listOffers = async (cfg: CaktoConfig, params?: Record<string, strin
   });
   if (!resp.ok) {
     const text = await resp.text().catch(() => '');
-    throw new Error(`CAKTO list offers failed: ${resp.status} ${text}`);
+    throw new Error(`Falha ao listar ofertas na CAKTO: ${resp.status} ${text}`);
   }
   return resp.json().catch(() => null);
 };
@@ -128,7 +128,7 @@ export const createCustomer = async (cfg: CaktoConfig, payload: Record<string, u
   });
   if (!resp.ok) {
     const text = await resp.text().catch(() => '');
-    throw new Error(`CAKTO create customer failed: ${resp.status} ${text}`);
+    throw new Error(`Falha ao criar cliente na CAKTO: ${resp.status} ${text}`);
   }
   return resp.json().catch(() => null);
 };
@@ -145,7 +145,7 @@ export const createSubscription = async (cfg: CaktoConfig, payload: Record<strin
   });
   if (!resp.ok) {
     const text = await resp.text().catch(() => '');
-    throw new Error(`CAKTO create subscription failed: ${resp.status} ${text}`);
+    throw new Error(`Falha ao criar assinatura na CAKTO: ${resp.status} ${text}`);
   }
   return resp.json().catch(() => null);
 };

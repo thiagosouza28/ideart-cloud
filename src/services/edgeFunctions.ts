@@ -46,7 +46,7 @@ const refreshSessionSafely = async () => {
         await resetAuthSession({ reason: 'invalid_refresh_token' });
         return null;
       }
-      throw new Error('Nao foi possivel atualizar a sessao. Tente novamente.');
+      throw new Error('Não foi possível atualizar a sessão. Tente novamente.');
     }
     return data.session ?? null;
   })();
@@ -69,7 +69,7 @@ const getActiveSession = async (supabaseUrl: string) => {
     if (isInvalidRefreshTokenError(error)) {
       await resetAuthSession({ reason: 'invalid_refresh_token' });
     }
-    throw new Error('Sessao expirada. Faca login novamente.');
+    throw new Error('Sessão expirada. Faça login novamente.');
   }
 
   let session = data.session ?? null;
@@ -80,7 +80,7 @@ const getActiveSession = async (supabaseUrl: string) => {
   if (isSessionExpiring(session)) {
     const refreshed = await refreshSessionSafely();
     if (!refreshed) {
-      throw new Error('Sessao expirada. Faca login novamente.');
+      throw new Error('Sessão expirada. Faça login novamente.');
     }
     session = refreshed;
   }
@@ -91,7 +91,7 @@ const getActiveSession = async (supabaseUrl: string) => {
 
   const payload = decodeJwtPayload(session.access_token);
   if (payload?.iss && !String(payload.iss).startsWith(supabaseUrl)) {
-    throw new Error('Sessao invalida para este projeto. Saia e entre novamente.');
+    throw new Error('Sessão inválida para este projeto. Saia e entre novamente.');
   }
 
   return session;
@@ -114,7 +114,7 @@ export async function invokeEdgeFunction<T>(
   const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY ?? (supabase as any).supabaseKey;
 
   if (!supabaseUrl) {
-    throw new Error('Missing Supabase env: VITE_SUPABASE_URL.');
+    throw new Error('Variável do Supabase ausente: VITE_SUPABASE_URL.');
   }
 
   let activeSession: Session | null = null;
@@ -122,7 +122,7 @@ export async function invokeEdgeFunction<T>(
   if (requireAuth) {
     activeSession = await getActiveSession(supabaseUrl);
     if (!activeSession?.access_token) {
-      throw new Error('Sessao nao encontrada. Faca login novamente.');
+      throw new Error('Sessão não encontrada. Faça login novamente.');
     }
   }
 
@@ -163,13 +163,13 @@ export async function invokeEdgeFunction<T>(
       if (response.status === 401) {
         message = /sessao|session/i.test(message)
           ? message
-          : 'Sessao invalida ou expirada. Saia e entre novamente.';
+          : 'Sessão inválida ou expirada. Saia e entre novamente.';
       } else if (response.status === 403) {
         message = /permissao|permission/i.test(message)
           ? message
-          : 'Voce nao tem permissao para realizar esta acao.';
+          : 'Você não tem permissão para realizar esta ação.';
       } else if (response.status === 404) {
-        message = 'Funcao nao encontrada ou caminho invalido.';
+        message = 'Função não encontrada ou caminho inválido.';
       }
 
       console.error(`[edge] ${functionName} failed`, {
@@ -192,6 +192,6 @@ export async function invokeEdgeFunction<T>(
     if (err.status) throw err;
 
     console.error(`Network error calling ${functionName}:`, err);
-    throw new Error(err.message || 'Erro de conexao com o servidor.');
+    throw new Error(err.message || 'Erro de conexão com o servidor.');
   }
 }

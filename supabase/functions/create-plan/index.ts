@@ -74,13 +74,13 @@ type CreatePlanRequest = {
 serve(async (req) => {
   const corsHeaders = getCorsHeaders(req);
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders, status: 204 });
-  if (req.method !== "POST") return jsonResponse(corsHeaders, 405, { error: "Invalid method" });
+  if (req.method !== "POST") return jsonResponse(corsHeaders, 405, { error: "Método inválido" });
 
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
     if (!supabaseUrl || !serviceKey) {
-      return jsonResponse(corsHeaders, 400, { error: "Missing Supabase config" });
+      return jsonResponse(corsHeaders, 400, { error: "Configuração do Supabase ausente" });
     }
 
     // Log all headers for debugging (mask sensitive data)
@@ -110,7 +110,7 @@ serve(async (req) => {
 
     const supabase = getSupabaseClient();
     const { data: authData, error: authError } = await supabase.auth.getUser(token);
-    if (authError || !authData.user) return jsonResponse(corsHeaders, 401, { error: "Invalid session" });
+    if (authError || !authData.user) return jsonResponse(corsHeaders, 401, { error: "Sessão inválida" });
 
     const { data: roleData } = await supabase
       .from("user_roles")
@@ -125,10 +125,10 @@ serve(async (req) => {
 
     const body = (await req.json().catch(() => ({}))) as CreatePlanRequest;
     const name = body.name?.trim();
-    if (!name) return jsonResponse(corsHeaders, 400, { error: "Nome do plano obrigatorio" });
+    if (!name) return jsonResponse(corsHeaders, 400, { error: "Nome do plano obrigatório" });
 
     const price = Number(body.price);
-    if (!Number.isFinite(price) || price < 0) return jsonResponse(corsHeaders, 400, { error: "Preco invalido" });
+    if (!Number.isFinite(price) || price < 0) return jsonResponse(corsHeaders, 400, { error: "Preço inválido" });
 
     const billingPeriodRaw = (body.billing_period || body.interval || 'month').toString().toLowerCase();
     const billingPeriod = billingPeriodRaw === 'year' || billingPeriodRaw === 'yearly'
@@ -184,7 +184,7 @@ serve(async (req) => {
       const caktoId = (caktoResp && (caktoResp.id || caktoResp.plan_id || caktoResp.cakto_id)) ?? null;
 
       if (!caktoId) {
-        throw new Error('CAKTO did not return plan id');
+        throw new Error('A CAKTO não retornou o ID do plano');
       }
 
       const { data: updatedPlan, error: updateError } = await supabase
@@ -198,7 +198,7 @@ serve(async (req) => {
 
       return jsonResponse(corsHeaders, 200, { plan: updatedPlan });
     } catch (err) {
-      log('CAKTO create failed', { message: err instanceof Error ? err.message : String(err) });
+      log('Falha ao criar plano na CAKTO', { message: err instanceof Error ? err.message : String(err) });
       // rollback local plan
       await supabase.from('plans').delete().eq('id', insertedPlan.id);
       return jsonResponse(corsHeaders, 400, { error: 'Falha ao criar plano na CAKTO. Tente novamente.' });

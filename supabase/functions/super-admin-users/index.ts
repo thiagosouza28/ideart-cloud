@@ -31,14 +31,14 @@ Deno.serve(async (req) => {
   }
 
   if (req.method !== "POST") {
-    return jsonResponse(corsHeaders, 400, { error: "Invalid method" });
+    return jsonResponse(corsHeaders, 400, { error: "Método inválido" });
   }
 
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
     if (!supabaseUrl || !serviceKey) {
-      return jsonResponse(corsHeaders, 400, { error: "Missing Supabase config" });
+      return jsonResponse(corsHeaders, 400, { error: "Configuração do Supabase ausente" });
     }
 
     const supabase = createClient(supabaseUrl, serviceKey, {
@@ -54,7 +54,7 @@ Deno.serve(async (req) => {
     const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : authHeader;
     const { data: authData, error: authError } = await supabase.auth.getUser(token);
     if (authError || !authData.user) {
-      return jsonResponse(corsHeaders, 401, { error: "Invalid session" });
+      return jsonResponse(corsHeaders, 401, { error: "Sessão inválida" });
     }
 
     const { data: roleData } = await supabase
@@ -117,13 +117,13 @@ Deno.serve(async (req) => {
         .maybeSingle();
 
       if (!profile) {
-        return jsonResponse(corsHeaders, 404, { error: "User not found for this company" });
+        return jsonResponse(corsHeaders, 404, { error: "Usuário não encontrado para esta empresa" });
       }
 
       const { data: userData } = await supabase.auth.admin.getUserById(userId);
       const email = userData?.user?.email;
       if (!email) {
-        return jsonResponse(corsHeaders, 400, { error: "User email not found" });
+        return jsonResponse(corsHeaders, 400, { error: "E-mail do usuário não encontrado" });
       }
 
       const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
@@ -137,7 +137,7 @@ Deno.serve(async (req) => {
 
       const link = linkData?.properties?.action_link;
       if (!link) {
-        return jsonResponse(corsHeaders, 400, { error: "Failed to generate reset link" });
+        return jsonResponse(corsHeaders, 400, { error: "Falha ao gerar link de redefinição" });
       }
 
       return jsonResponse(corsHeaders, 200, { link, email });
@@ -158,13 +158,13 @@ Deno.serve(async (req) => {
         .maybeSingle();
 
       if (!profile) {
-        return jsonResponse(corsHeaders, 404, { error: "User not found for this company" });
+        return jsonResponse(corsHeaders, 404, { error: "Usuário não encontrado para esta empresa" });
       }
 
       const { data: userData } = await supabase.auth.admin.getUserById(userId);
       const email = userData?.user?.email;
       if (!email) {
-        return jsonResponse(corsHeaders, 400, { error: "User email not found" });
+        return jsonResponse(corsHeaders, 400, { error: "E-mail do usuário não encontrado" });
       }
 
       const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
