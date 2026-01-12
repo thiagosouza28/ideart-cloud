@@ -20,6 +20,7 @@ type CatalogProduct = Pick<
   | "id"
   | "name"
   | "sku"
+  | "barcode"
   | "image_url"
   | "catalog_enabled"
   | "catalog_featured"
@@ -71,7 +72,7 @@ export default function CatalogManager() {
     setLoading(true);
     const { data, error } = await supabase
       .from("products")
-      .select("id,name,sku,image_url,catalog_enabled,catalog_featured,catalog_min_order,catalog_price,catalog_short_description,catalog_long_description,catalog_sort_order,show_in_catalog,is_active,slug")
+      .select("id,name,sku,barcode,image_url,catalog_enabled,catalog_featured,catalog_min_order,catalog_price,catalog_short_description,catalog_long_description,catalog_sort_order,show_in_catalog,is_active,slug")
       .eq("company_id", profile.company_id)
       .order("catalog_sort_order", { ascending: true })
       .order("name", { ascending: true });
@@ -134,7 +135,9 @@ export default function CatalogManager() {
     const term = search.trim().toLowerCase();
     if (!term) return products;
     return products.filter((product) =>
-      product.name.toLowerCase().includes(term) || (product.sku || "").toLowerCase().includes(term)
+      product.name.toLowerCase().includes(term) ||
+      (product.sku || "").toLowerCase().includes(term) ||
+      (product.barcode || "").toLowerCase().includes(term)
     );
   }, [products, search]);
 
@@ -258,7 +261,7 @@ export default function CatalogManager() {
         <TabsContent value="produtos" className="space-y-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <Input
-              placeholder="Buscar produto..."
+              placeholder="Buscar produto (nome, SKU ou codigo de barras)..."
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               className="sm:w-80"

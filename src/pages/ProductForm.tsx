@@ -20,11 +20,22 @@ import { useAuth } from '@/contexts/AuthContext';
 import { generateProductDescription } from '@/services/ai';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { ensurePublicStorageUrl, getStoragePathFromUrl } from '@/lib/storage';
+import { BarcodeSvg } from '@/components/BarcodeSvg';
+import {
+  detectBarcodeFormat,
+  generateCode128,
+  generateEan13,
+  isValidCode128,
+  isValidEan13,
+  normalizeBarcode,
+  type BarcodeFormat,
+} from '@/lib/barcode';
 import { useUnsavedChanges } from '@/hooks/use-unsaved-changes';
 
 const productSchema = z.object({
   name: z.string().min(2, 'Nome deve ter no mínimo 2 caracteres').max(100),
   sku: z.string().max(50).optional().nullable(),
+  barcode: z.string().max(64).optional().nullable(),
   description: z.string().max(500).optional().nullable(),
   product_type: z.enum(['produto', 'confeccionado', 'servico']),
   category_id: z.string().uuid().optional().nullable(),
@@ -141,10 +152,13 @@ export default function ProductForm() {
   const [saving, setSaving] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [skuChecking, setSkuChecking] = useState(false);
+  const [barcodeChecking, setBarcodeChecking] = useState(false);
 
   // Form data
   const [name, setName] = useState('');
   const [sku, setSku] = useState('');
+  const [barcode, setBarcode] = useState('');
+  const [barcodeFormat, setBarcodeFormat] = useState<BarcodeFormat>('ean13');
   const [description, setDescription] = useState('');
   const [productSlug, setProductSlug] = useState('');
   const [slugTouched, setSlugTouched] = useState(false);
@@ -312,6 +326,9 @@ export default function ProductForm() {
       setProductSlug(product.slug || generateSlug(product.name));
       setSlugTouched(false);
       setSku(product.sku || '');
+      const normalizedBarcodeValue = normalizeBarcodeValue(product.barcode || '');
+      setBarcode(normalizedBarcodeValue);
+      setBarcodeFormat(detectBarcodeFormat(normalizedBarcodeValue) ?? 'ean13');
       setDescription(product.description || '');
       setProductType(product.product_type as ProductType);
       setCategoryId(product.category_id || '');
@@ -515,6 +532,7 @@ export default function ProductForm() {
   const formSnapshot = useMemo(() => ({
     name,
     sku,
+    barcode,
     description,
     productSlug,
     productType,
@@ -557,6 +575,7 @@ export default function ProductForm() {
   }), [
     name,
     sku,
+    barcode,
     description,
     productSlug,
     productType,
@@ -632,6 +651,9 @@ export default function ProductForm() {
 
       setName(draftData.name ?? '');
       setSku(draftData.sku ?? '');
+      const normalizedDraftBarcode = normalizeBarcodeValue(draftData.barcode ?? '');
+      setBarcode(normalizedDraftBarcode);
+      setBarcodeFormat(detectBarcodeFormat(normalizedDraftBarcode) ?? 'ean13');
       setDescription(draftData.description ?? '');
       setProductSlug(draftData.productSlug ?? '');
       setProductType(draftData.productType ?? 'produto');
@@ -803,10 +825,10 @@ export default function ProductForm() {
     setGeneratingDescription(true);
     try {
       const resp = await generateProductDescription(trimmedName);
-      setCatalogShortDescription(resp.short_description || '');
-      setCatalogLongDescription(resp.long_description || '');
+      setCatalogShortDescription(resp.shortDescription || '');
+      setCatalogLongDescription(resp.longDescription || '');
       if (!description.trim()) {
-        setDescription(resp.long_description || '');
+        setDescription(resp.longDescription || '');
       }
       toast({ title: 'Descrição gerada com sucesso' });
     } catch (error: any) {
@@ -833,6 +855,7 @@ export default function ProductForm() {
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
 
   const normalizeSku = (value: string) => value.trim().toUpperCase();
+  const normalizeBarcodeValue = (value: string) => normalizeBarcode(value);
 
   const clearSkuError = () => {
     setErrors((prev) => {
@@ -841,6 +864,50 @@ export default function ProductForm() {
       delete next.sku;
       return Object.keys(next).length ? next : undefined;
     });
+  };
+
+  const clearBarcodeError = () => {
+    setErrors((prev) => {
+      if (!prev?.barcode) return prev;
+      const next = { ...prev };
+      delete next.barcode;
+      return Object.keys(next).length ? next : undefined;
+    });
+  };
+
+  const validateBarcodeValue = (value: string, format?: BarcodeFormat) => {
+    if (!value) return null;
+    const resolvedFormat = format ?? detectBarcodeFormat(value) ?? 'code128';
+    if (resolvedFormat === 'ean13') {
+      if (!/^\d{13}$/.test(value)) return 'EAN-13 deve ter 13 digitos.';
+      if (!isValidEan13(value)) return 'EAN-13 invalido.';
+      return null;
+    }
+    if (!isValidCode128(value)) {
+      return 'Codigo de barras invalido. Use caracteres ASCII padrao.';
+    }
+    return null;
+  };
+
+  const checkBarcodeAvailability = async (value: string) => {
+    if (!value) return true;
+    let query = supabase
+      .from('products')
+      .select('id')
+      .eq('barcode', value);
+
+    if (profile?.company_id) {
+      query = query.eq('company_id', profile.company_id);
+    }
+
+    const { data, error } = await query.maybeSingle();
+    if (error) {
+      toast({ title: 'Erro ao validar codigo de barras', description: error.message, variant: 'destructive' });
+      return false;
+    }
+    if (!data) return true;
+    if (isEditing && data.id === id) return true;
+    return false;
   };
 
   const checkSkuAvailability = async (value: string) => {
@@ -884,6 +951,27 @@ export default function ProductForm() {
     setSkuChecking(false);
   };
 
+  const handleGenerateBarcode = async () => {
+    setBarcodeChecking(true);
+    const generator = barcodeFormat === 'ean13' ? generateEan13 : generateCode128;
+
+    for (let attempt = 0; attempt < 6; attempt++) {
+      const candidate = normalizeBarcodeValue(generator());
+      const error = validateBarcodeValue(candidate, barcodeFormat);
+      if (error) continue;
+      const isAvailable = await checkBarcodeAvailability(candidate);
+      if (isAvailable) {
+        setBarcode(candidate);
+        clearBarcodeError();
+        setBarcodeChecking(false);
+        return;
+      }
+    }
+
+    toast({ title: 'Nao foi possivel gerar um codigo de barras unico', variant: 'destructive' });
+    setBarcodeChecking(false);
+  };
+
   const saveCategory = async () => {
     if (!newCategoryName.trim()) {
       toast({ title: 'Nome da categoria é obrigatório', variant: 'destructive' });
@@ -921,6 +1009,7 @@ export default function ProductForm() {
     setErrors({});
 
     const normalizedSku = normalizeSku(sku);
+    const normalizedBarcode = normalizeBarcodeValue(barcode);
 
     const normalizedSlug = generateSlug((slugTouched ? productSlug : name).trim() || name.trim());
     const normalizedColors = productColors.map((color) => ({
@@ -938,6 +1027,7 @@ export default function ProductForm() {
     const formData = {
       name: name.trim(),
       sku: normalizedSku || null,
+      barcode: normalizedBarcode || null,
       description: description.trim() || null,
       slug: normalizedSlug || null,
       product_type: productType,
@@ -981,6 +1071,15 @@ export default function ProductForm() {
       return;
     }
 
+    if (normalizedBarcode) {
+      const barcodeError = validateBarcodeValue(normalizedBarcode, barcodeFormat);
+      if (barcodeError) {
+        setErrors((prev) => ({ ...(prev || {}), barcode: barcodeError }));
+        toast({ title: 'Codigo de barras invalido', description: barcodeError, variant: 'destructive' });
+        return;
+      }
+    }
+
     setSaving(true);
 
     if (normalizedSku) {
@@ -988,6 +1087,16 @@ export default function ProductForm() {
       if (!isAvailable) {
         setErrors((prev) => ({ ...(prev || {}), sku: 'SKU já está em uso' }));
         toast({ title: 'SKU já está em uso', variant: 'destructive' });
+        setSaving(false);
+        return;
+      }
+    }
+
+    if (normalizedBarcode) {
+      const isAvailable = await checkBarcodeAvailability(normalizedBarcode);
+      if (!isAvailable) {
+        setErrors((prev) => ({ ...(prev || {}), barcode: 'Codigo de barras ja esta em uso' }));
+        toast({ title: 'Codigo de barras ja esta em uso', variant: 'destructive' });
         setSaving(false);
         return;
       }
@@ -1004,7 +1113,12 @@ export default function ProductForm() {
 
       if (error) {
         if (error.code === '23505') {
-          setErrors((prev) => ({ ...(prev || {}), sku: 'SKU já está em uso' }));
+          const message = String(error.message || (error as any).details || '').toLowerCase();
+          if (message.includes('barcode')) {
+            setErrors((prev) => ({ ...(prev || {}), barcode: 'Codigo de barras ja esta em uso' }));
+          } else {
+            setErrors((prev) => ({ ...(prev || {}), sku: 'SKU ja esta em uso' }));
+          }
         }
         toast({ title: 'Erro ao atualizar produto', description: error.message, variant: 'destructive' });
         setSaving(false);
@@ -1027,7 +1141,12 @@ export default function ProductForm() {
 
       if (error || !product) {
         if (error?.code === '23505') {
-          setErrors((prev) => ({ ...(prev || {}), sku: 'SKU já está em uso' }));
+          const message = String(error?.message || (error as any)?.details || '').toLowerCase();
+          if (message.includes('barcode')) {
+            setErrors((prev) => ({ ...(prev || {}), barcode: 'Codigo de barras ja esta em uso' }));
+          } else {
+            setErrors((prev) => ({ ...(prev || {}), sku: 'SKU ja esta em uso' }));
+          }
         }
         toast({ title: 'Erro ao salvar produto', description: error?.message, variant: 'destructive' });
         setSaving(false);
@@ -1089,6 +1208,10 @@ export default function ProductForm() {
       </div>
     );
   }
+
+  const normalizedBarcodePreview = normalizeBarcodeValue(barcode);
+  const resolvedBarcodeFormat =
+    detectBarcodeFormat(normalizedBarcodePreview) ?? barcodeFormat;
 
   return (
     <div className="page-container w-full max-w-none">
@@ -1167,6 +1290,62 @@ export default function ProductForm() {
                 </Button>
               </div>
               {errors?.sku && <p className="text-xs text-destructive">{errors.sku}</p>}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="barcode">Codigo de barras</Label>
+              <div className="flex flex-col gap-2">
+                <div className="flex flex-wrap gap-2">
+                  <Select value={barcodeFormat} onValueChange={(value) => setBarcodeFormat(value as BarcodeFormat)}>
+                    <SelectTrigger className="w-[140px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ean13">EAN-13</SelectItem>
+                      <SelectItem value="code128">Code 128</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    id="barcode"
+                    value={barcode}
+                    onChange={(e) => {
+                      setBarcode(normalizeBarcodeValue(e.target.value));
+                      clearBarcodeError();
+                    }}
+                    placeholder="Codigo de barras"
+                    className={`flex-1 ${errors?.barcode ? 'border-destructive' : ''}`}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleGenerateBarcode}
+                    disabled={barcodeChecking}
+                    className="shrink-0"
+                  >
+                    {barcodeChecking ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      'Gerar'
+                    )}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  EAN-13: 13 digitos. Code 128: ASCII 32-126.
+                </p>
+                {normalizedBarcodePreview ? (
+                  <div className="flex flex-col gap-1 rounded-md border bg-muted/40 p-2">
+                    <BarcodeSvg
+                      value={normalizedBarcodePreview}
+                      format={resolvedBarcodeFormat}
+                      className="w-full"
+                    />
+                    <span className="text-xs text-muted-foreground tracking-widest">
+                      {normalizedBarcodePreview}
+                    </span>
+                  </div>
+                ) : null}
+              </div>
+              {errors?.barcode && <p className="text-xs text-destructive">{errors.barcode}</p>}
             </div>
 
             <div className="space-y-2">

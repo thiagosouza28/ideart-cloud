@@ -14,6 +14,7 @@ import { Product, Category, ProductType } from '@/types/database';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { isPromotionActive } from '@/lib/pricing';
+import { isValidCode128, isValidEan13, normalizeBarcode } from '@/lib/barcode';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,6 +29,7 @@ import {
 interface CSVRow {
   name: string;
   sku?: string;
+  barcode?: string;
   description?: string;
   product_type: ProductType;
   category?: string;
@@ -107,8 +109,10 @@ export default function Products() {
   };
 
   const filteredProducts = products.filter(p => {
-    const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase()) ||
-      p.sku?.toLowerCase().includes(search.toLowerCase());
+    const term = search.toLowerCase();
+    const matchesSearch = p.name.toLowerCase().includes(term) ||
+      p.sku?.toLowerCase().includes(term) ||
+      p.barcode?.toLowerCase().includes(term);
     const matchesCategory = categoryFilter === 'all' || p.category_id === categoryFilter;
     const matchesType = typeFilter === 'all' || p.product_type === typeFilter;
     return matchesSearch && matchesCategory && matchesType;
@@ -140,14 +144,23 @@ export default function Products() {
     return colors[type] || '';
   };
 
+  const normalizeBarcodeValue = (value: string) => normalizeBarcode(value);
+
+  const validateBarcodeValue = (value: string) => {
+    if (!value) return null;
+    if (isValidEan13(value) || isValidCode128(value)) return null;
+    return 'Codigo de barras invalido. Use EAN-13 ou Code 128.';
+  };
+
   // CSV Import Functions
   const downloadTemplate = () => {
-    const headers = ['nome', 'sku', 'descricao', 'tipo', 'categoria', 'unidade', 'custo_base', 'custo_mao_obra', 'margem_lucro', 'estoque', 'estoque_minimo', 'ativo'];
-    const exampleRow = ['Produto Exemplo', 'SKU001', 'Descrição do produto', 'produto', 'Categoria 1', 'un', '10.00', '5.00', '30', '100', '10', 'sim'];
+    const headers = ['nome', 'sku', 'barcode', 'descricao', 'tipo', 'categoria', 'unidade', 'custo_base', 'custo_mao_obra', 'margem_lucro', 'estoque', 'estoque_minimo', 'ativo'];
+    const exampleRow = ['Produto Exemplo', 'SKU001', '7891234567895', 'Descrição do produto', 'produto', 'Categoria 1', 'un', '10.00', '5.00', '30', '100', '10', 'sim'];
 
     const csvContent = [
       headers.join(';'),
       exampleRow.join(';'),
+      '# Barcode: EAN-13 (13 digitos) ou Code 128',
       '# Tipos válidos: produto, confeccionado, servico',
       '# Ativo: sim ou não',
       '# Use ponto para decimais (ex: 10.50)',
@@ -184,29 +197,30 @@ export default function Products() {
 
     for (let i = 1; i < lines.length; i++) {
       const values = lines[i].split(';').map(v => v.trim());
-      if (values.length < 6) continue;
+      if (values.length < 7) continue;
 
       const getValue = (index: number) => values[index] || '';
       const getNumber = (index: number) => parseFloat(values[index]?.replace(',', '.')) || 0;
 
-      const typeValue = getValue(3).toLowerCase();
+      const typeValue = getValue(4).toLowerCase();
       const validType: ProductType = ['produto', 'confeccionado', 'servico'].includes(typeValue)
         ? typeValue as ProductType
         : 'produto';
 
-      const activeValue = getValue(11).toLowerCase();
+      const activeValue = getValue(12).toLowerCase();
       rows.push({
         name: getValue(0),
         sku: getValue(1) || undefined,
-        description: getValue(2) || undefined,
+        barcode: normalizeBarcodeValue(getValue(2)) || undefined,
+        description: getValue(3) || undefined,
         product_type: validType,
-        category: getValue(4) || undefined,
-        unit: getValue(5) || 'un',
-        base_cost: getNumber(6),
-        labor_cost: getNumber(7),
-        profit_margin: getNumber(8) || 30,
-        stock_quantity: getNumber(9),
-        min_stock: getNumber(10),
+        category: getValue(5) || undefined,
+        unit: getValue(6) || 'un',
+        base_cost: getNumber(7),
+        labor_cost: getNumber(8),
+        profit_margin: getNumber(9) || 30,
+        stock_quantity: getNumber(10),
+        min_stock: getNumber(11),
         is_active: activeValue !== 'nao' && activeValue !== 'não',
       });
     }
@@ -230,6 +244,7 @@ export default function Products() {
 
     setImporting(true);
     const results: ImportResult[] = [];
+    const barcodeSeen = new Set<string>();
 
     for (let i = 0; i < csvData.length; i++) {
       const row = csvData[i];
@@ -238,6 +253,37 @@ export default function Products() {
         if (!row.name || row.name.length < 2) {
           results.push({ row: i + 1, name: row.name || '(sem nome)', status: 'error', message: 'Nome inválido' });
           continue;
+        }
+
+        const normalizedBarcode = normalizeBarcodeValue(row.barcode ?? '');
+        const barcodeError = validateBarcodeValue(normalizedBarcode);
+        if (barcodeError) {
+          results.push({ row: i + 1, name: row.name, status: 'error', message: barcodeError });
+          continue;
+        }
+        if (normalizedBarcode) {
+          if (barcodeSeen.has(normalizedBarcode)) {
+            results.push({ row: i + 1, name: row.name, status: 'error', message: 'Codigo de barras duplicado no arquivo' });
+            continue;
+          }
+          barcodeSeen.add(normalizedBarcode);
+
+          let barcodeQuery = supabase
+            .from('products')
+            .select('id')
+            .eq('barcode', normalizedBarcode);
+          if (profile?.company_id) {
+            barcodeQuery = barcodeQuery.eq('company_id', profile.company_id);
+          }
+          const { data: barcodeExists, error: barcodeLookupError } = await barcodeQuery.maybeSingle();
+          if (barcodeLookupError) {
+            results.push({ row: i + 1, name: row.name, status: 'error', message: barcodeLookupError.message });
+            continue;
+          }
+          if (barcodeExists) {
+            results.push({ row: i + 1, name: row.name, status: 'error', message: 'Codigo de barras ja esta em uso' });
+            continue;
+          }
         }
 
         // Find category ID if provided
@@ -252,6 +298,7 @@ export default function Products() {
         const { error } = await supabase.from('products').insert({
           name: row.name,
           sku: row.sku || null,
+          barcode: normalizedBarcode || null,
           description: row.description || null,
           product_type: row.product_type,
           category_id: categoryId,
@@ -298,13 +345,14 @@ export default function Products() {
       return;
     }
 
-    const headers = ['nome', 'sku', 'descricao', 'tipo', 'categoria', 'unidade', 'custo_base', 'custo_mao_obra', 'margem_lucro', 'estoque', 'estoque_minimo', 'ativo'];
+    const headers = ['nome', 'sku', 'barcode', 'descricao', 'tipo', 'categoria', 'unidade', 'custo_base', 'custo_mao_obra', 'margem_lucro', 'estoque', 'estoque_minimo', 'ativo'];
 
     const rows = filteredProducts.map(product => {
       const categoryName = (product as any).category?.name || '';
       return [
         product.name,
         product.sku || '',
+        product.barcode || '',
         product.description || '',
         product.product_type,
         categoryName,
@@ -356,7 +404,7 @@ export default function Products() {
             <div className="relative flex-1 max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Buscar por nome ou SKU..."
+                placeholder="Buscar por nome, SKU ou codigo de barras..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="pl-9"
@@ -520,7 +568,7 @@ export default function Products() {
                   O arquivo deve usar ponto e vírgula (;) como separador e conter as seguintes colunas:
                 </p>
                 <code className="text-xs block bg-background p-2 rounded overflow-x-auto">
-                  nome;sku;descricao;tipo;categoria;unidade;custo_base;custo_mao_obra;margem_lucro;estoque;estoque_minimo;ativo
+                  nome;sku;barcode;descricao;tipo;categoria;unidade;custo_base;custo_mao_obra;margem_lucro;estoque;estoque_minimo;ativo
                 </code>
               </div>
 
@@ -552,6 +600,7 @@ export default function Products() {
                       <TableHead>#</TableHead>
                       <TableHead>Nome</TableHead>
                       <TableHead>SKU</TableHead>
+                      <TableHead>Barcode</TableHead>
                       <TableHead>Tipo</TableHead>
                       <TableHead>Custo</TableHead>
                       <TableHead>Estoque</TableHead>
@@ -563,6 +612,7 @@ export default function Products() {
                         <TableCell className="text-muted-foreground">{index + 1}</TableCell>
                         <TableCell className="font-medium">{row.name}</TableCell>
                         <TableCell className="text-muted-foreground">{row.sku || '-'}</TableCell>
+                        <TableCell className="text-muted-foreground">{row.barcode || '-'}</TableCell>
                         <TableCell>{getTypeLabel(row.product_type)}</TableCell>
                         <TableCell>{formatCurrency(row.base_cost)}</TableCell>
                         <TableCell>{row.stock_quantity} {row.unit}</TableCell>

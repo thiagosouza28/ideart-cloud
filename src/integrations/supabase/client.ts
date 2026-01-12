@@ -5,6 +5,16 @@ import type { Database } from './types';
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
+const getStorageKey = () => {
+  try {
+    const hostname = new URL(SUPABASE_URL).hostname;
+    const projectRef = hostname.split('.')[0];
+    return projectRef ? `sb-${projectRef}-auth-token` : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   throw new Error("Missing Supabase env: VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY.");
 }
@@ -15,7 +25,9 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
     storage: localStorage,
+    storageKey: getStorageKey(),
     persistSession: true,
     autoRefreshToken: true,
+    detectSessionInUrl: true,
   }
 });

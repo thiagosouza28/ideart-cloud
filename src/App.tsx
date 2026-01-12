@@ -16,6 +16,7 @@ const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Products = lazy(() => import("./pages/Products"));
 const ProductForm = lazy(() => import("./pages/ProductForm"));
+const ProductLabels = lazy(() => import("./pages/ProductLabels"));
 const Customers = lazy(() => import("./pages/Customers"));
 const CustomerForm = lazy(() => import("./pages/CustomerForm"));
 const CustomerHistory = lazy(() => import("./pages/CustomerHistory"));
@@ -174,6 +175,15 @@ const App = () => (
                 element={(
                   <ProtectedRoute allowedRoles={["admin", "atendente"]}>
                     <AppLayout>{withSuspense(<Products />)}</AppLayout>
+                  </ProtectedRoute>
+                )}
+              />
+
+              <Route
+                path="/produtos/etiquetas"
+                element={(
+                  <ProtectedRoute allowedRoles={["admin", "atendente"]}>
+                    <AppLayout>{withSuspense(<ProductLabels />)}</AppLayout>
                   </ProtectedRoute>
                 )}
               />

@@ -30,6 +30,7 @@ import SaleReceipt from '@/components/SaleReceipt';
 import CustomerSearch from '@/components/CustomerSearch';
 import { ensurePublicStorageUrl } from '@/lib/storage';
 import { resolveProductPrice } from '@/lib/pricing';
+import { normalizeBarcode } from '@/lib/barcode';
 
 export default function PDV() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -205,7 +206,7 @@ export default function PDV() {
         .from('products')
         .select('*')
         .eq('is_active', true)
-        .or(`name.ilike.%${term}%,sku.ilike.%${term}%`)
+        .or(`name.ilike.%${term}%,sku.ilike.%${term}%,barcode.ilike.%${term}%`)
         .order('name')
         .limit(20);
 
@@ -231,23 +232,40 @@ export default function PDV() {
     e.preventDefault();
     if (!barcodeInput.trim()) return;
 
-    const code = barcodeInput.trim();
-    const { data, error } = await supabase
+    const code = normalizeBarcode(barcodeInput);
+    const { data: barcodeMatch, error: barcodeError } = await supabase
       .from('products')
       .select('*')
       .eq('is_active', true)
-      .eq('sku', code)
+      .eq('barcode', code)
       .maybeSingle();
 
-    if (error || !data) {
-      toast({ title: 'Produto não encontrado', description: `Código: ${barcodeInput}`, variant: 'destructive' });
+    if (barcodeError) {
+      toast({ title: 'Erro ao buscar produto', variant: 'destructive' });
       barcodeInputRef.current?.focus();
       return;
     }
 
+    let productData = barcodeMatch;
+    if (!productData) {
+      const { data: skuMatch, error: skuError } = await supabase
+        .from('products')
+        .select('*')
+        .eq('is_active', true)
+        .eq('sku', code)
+        .maybeSingle();
+
+      if (skuError || !skuMatch) {
+        toast({ title: 'Produto nao encontrado', description: `Codigo: ${barcodeInput}`, variant: 'destructive' });
+        barcodeInputRef.current?.focus();
+        return;
+      }
+      productData = skuMatch;
+    }
+
     const mapped = {
-      ...(data as Product),
-      image_url: ensurePublicStorageUrl('product-images', data.image_url),
+      ...(productData as Product),
+      image_url: ensurePublicStorageUrl('product-images', productData.image_url),
     };
     addToCart(mapped);
     setBarcodeInput('');

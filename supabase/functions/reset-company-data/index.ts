@@ -47,7 +47,7 @@ const jsonResponse = (headers: HeadersInit, status: number, payload: unknown) =>
 const getSupabaseClient = (authHeader: string) =>
   createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SB_ANON_KEY") ?? "",
+    Deno.env.get("SUPABASE_ANON_KEY") ?? Deno.env.get("SB_ANON_KEY") ?? "",
     {
       auth: { persistSession: false },
       global: {
@@ -65,6 +65,7 @@ const getServiceClient = () =>
 
 type ResetRequest = {
   company_id?: string;
+  companyId?: string;
 };
 
 serve(async (req) => {
@@ -77,7 +78,8 @@ serve(async (req) => {
     if (!authHeader) return jsonResponse(corsHeaders, 401, { error: "No authorization header" });
 
     const supabase = getSupabaseClient(authHeader);
-    const { data: authData, error: authError } = await supabase.auth.getUser();
+    const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : authHeader;
+    const { data: authData, error: authError } = await supabase.auth.getUser(token);
 
     if (authError || !authData.user) {
       return jsonResponse(corsHeaders, 401, { error: "Invalid session" });
@@ -105,7 +107,7 @@ serve(async (req) => {
     }
 
     const body = (await req.json().catch(() => ({}))) as ResetRequest;
-    const targetCompanyId = body.company_id ?? profile.company_id;
+    const targetCompanyId = body.company_id ?? body.companyId ?? profile.company_id;
 
     if (targetCompanyId !== profile.company_id) {
       return jsonResponse(corsHeaders, 403, { error: "Company mismatch" });

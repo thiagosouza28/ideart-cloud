@@ -1,8 +1,8 @@
 import { invokeEdgeFunction } from "@/services/edgeFunctions";
 
 export type ProductDescriptionResponse = {
-  short_description: string;
-  long_description: string;
+  shortDescription: string;
+  longDescription: string;
 };
 
 export async function generateProductDescription(name: string) {

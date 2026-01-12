@@ -17,6 +17,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Category, Supply, Attribute, AttributeValue, Company } from '@/types/database';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
+import { invokeEdgeFunction } from '@/services/edgeFunctions';
 import { z } from 'zod';
 import { ensurePublicStorageUrl } from '@/lib/storage';
 import { useUnsavedChanges } from '@/hooks/use-unsaved-changes';
@@ -468,24 +469,12 @@ export default function Settings() {
       return;
     }
 
-    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-    const accessToken = sessionData?.session?.access_token;
-    if (sessionError || !accessToken) {
+    try {
+      await invokeEdgeFunction('reset-company-data', { companyId: profile.company_id });
+    } catch (error) {
+      console.error('[settings] reset-company-data failed', error);
       setResetLoading(false);
-      setResetError('SessÃ£o invÃ¡lida. FaÃ§a login novamente.');
-      return;
-    }
-
-    const { error: resetInvokeError } = await supabase.functions.invoke('reset-company-data', {
-      body: { company_id: profile.company_id },
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    });
-
-    if (resetInvokeError) {
-      setResetLoading(false);
-      setResetError(resetInvokeError.message || 'Falha ao zerar dados.');
+      setResetError(error instanceof Error ? error.message : 'Falha ao zerar dados.');
       return;
     }
 

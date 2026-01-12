@@ -822,6 +822,7 @@ export default function PublicProductDetails() {
             {activeTab === 'especificacoes' && (
               <div className="space-y-2 text-sm text-slate-600">
                 <p><strong>SKU:</strong> {product.sku || 'Não informado'}</p>
+                <p><strong>Codigo de barras:</strong> {product.barcode || 'Nao informado'}</p>
                 <p><strong>Unidade:</strong> {product.unit || 'Não informada'}</p>
                 <p><strong>Quantidade minima:</strong> {minimumOrderQuantity}</p>
               </div>

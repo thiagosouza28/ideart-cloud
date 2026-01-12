@@ -5,6 +5,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { AppRole, Company, Profile } from '@/types/database';
 import { computeSubscriptionState, type SubscriptionState } from '@/services/subscription';
 import { invokePublicFunction } from '@/services/publicFunctions';
+import { isInvalidRefreshTokenError, resetAuthSession, wasAuthResetRecently } from '@/lib/auth';
 
 interface AuthContextType {
   user: User | null;
@@ -57,11 +58,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (isRecovery) {
       supabase.auth.exchangeCodeForSession(url).catch((error) => {
-        console.error("Failed to exchange recovery code", error);
+        console.error('Failed to exchange recovery code', error);
       }).finally(() => {
         setPasswordRecovery(true);
-        if (window.location.pathname !== "/alterar-senha") {
-          navigate({ pathname: "/alterar-senha", search, hash }, { replace: true });
+        if (window.location.pathname !== '/alterar-senha') {
+          navigate({ pathname: '/alterar-senha', search, hash }, { replace: true });
         }
       });
     }
@@ -70,6 +71,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       (event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
+
+        if (event === 'SIGNED_OUT') {
+          setProfile(null);
+          setCompany(null);
+          setSubscription(null);
+          setRole(null);
+          setNeedsOnboarding(false);
+          setPasswordRecovery(false);
+          setLoading(false);
+
+          if (!wasAuthResetRecently()) {
+            void resetAuthSession({ reason: 'signed_out', skipSignOut: true });
+          }
+          return;
+        }
 
         if (event === 'PASSWORD_RECOVERY') {
           setPasswordRecovery(true);
@@ -96,7 +112,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     );
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data, error }) => {
+      if (error) {
+        console.error('[auth] getSession failed', error);
+        if (isInvalidRefreshTokenError(error)) {
+          void resetAuthSession({ reason: 'invalid_refresh_token' });
+        }
+        setSession(null);
+        setUser(null);
+        setProfile(null);
+        setCompany(null);
+        setSubscription(null);
+        setRole(null);
+        setNeedsOnboarding(false);
+        setPasswordRecovery(false);
+        setLoading(false);
+        return;
+      }
+
+      const session = data.session ?? null;
       setSession(session);
       setUser(session?.user ?? null);
 
@@ -233,7 +267,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    try {
+      await supabase.auth.signOut();
+    } catch (error) {
+      console.warn('[auth] signOut failed', error);
+    }
+    await resetAuthSession({ reason: 'user_signout', skipSignOut: true });
     setPasswordRecovery(false);
   };
 

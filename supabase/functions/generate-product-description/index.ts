@@ -1,7 +1,8 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 
-export const config = { verify_jwt: true };
+// Manual auth handling to avoid failing preflight requests and to return clearer errors.
+export const config = { verify_jwt: false };
 
 const defaultAllowedOrigins = [
   "http://192.168.0.221:8080",
@@ -44,10 +45,10 @@ const jsonResponse = (headers: HeadersInit, status: number, payload: unknown) =>
     headers: { ...headers, "Content-Type": "application/json" },
   });
 
-const getSupabaseClient = (authHeader: string) =>
+const getSupabaseClient = (supabaseUrl: string, anonKey: string, authHeader: string) =>
   createClient(
-    Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SB_ANON_KEY") ?? "",
+    supabaseUrl,
+    anonKey,
     {
       auth: { persistSession: false },
       global: {
@@ -57,6 +58,12 @@ const getSupabaseClient = (authHeader: string) =>
       },
     },
   );
+
+const getAuthHeader = (req: Request) =>
+  req.headers.get("authorization") ??
+  req.headers.get("Authorization") ??
+  req.headers.get("x-supabase-authorization") ??
+  req.headers.get("X-Supabase-Authorization");
 
 const rateBucket: Record<string, { count: number; resetAt: number }> = {};
 const RATE_LIMIT = 10;
@@ -77,20 +84,37 @@ serve(async (req) => {
       return jsonResponse(corsHeaders, 400, { error: "Missing OpenAI config" });
     }
 
-    const authHeader = req.headers.get("authorization");
-    if (!authHeader) return jsonResponse(corsHeaders, 401, { error: "No authorization header" });
-    const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : authHeader;
+    const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? Deno.env.get("SB_ANON_KEY") ?? "";
+    if (!supabaseUrl || !supabaseAnonKey) {
+      console.error("[AI] Missing Supabase config");
+      return jsonResponse(corsHeaders, 500, { error: "Missing Supabase config" });
+    }
 
-    const supabase = getSupabaseClient(authHeader);
-    const { data: authData, error: authError } = await supabase.auth.getUser();
+    const authHeader = getAuthHeader(req);
+    if (!authHeader) {
+      console.error("[AI] No authorization header", {
+        hasAuth: req.headers.has("authorization"),
+        hasSupabaseAuth: req.headers.has("x-supabase-authorization"),
+      });
+      return jsonResponse(corsHeaders, 401, { error: "No authorization header" });
+    }
+    const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : authHeader;
+    if (!token || !token.includes(".")) {
+      return jsonResponse(corsHeaders, 401, { error: "Invalid authorization token" });
+    }
+
+    const supabase = getSupabaseClient(supabaseUrl, supabaseAnonKey, authHeader);
+    const { data: authData, error: authError } = await supabase.auth.getUser(token);
 
     if (authError || !authData.user) {
+      console.error("[AI] Invalid session", authError?.message ?? authError);
       let hint: string | null = null;
       try {
         const payload = token.split(".")[1] ?? "";
         const decoded = JSON.parse(atob(payload));
         const iss = decoded?.iss ?? "";
-        const expected = Deno.env.get("SUPABASE_URL") ?? "";
+        const expected = supabaseUrl;
         if (iss && expected && !iss.startsWith(expected)) {
           hint = "Token issuer mismatch. Check VITE_SUPABASE_URL.";
         }
@@ -170,8 +194,8 @@ serve(async (req) => {
     }
 
     return jsonResponse(corsHeaders, 200, {
-      short_description: shortDescription,
-      long_description: longDescription,
+      shortDescription,
+      longDescription,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
