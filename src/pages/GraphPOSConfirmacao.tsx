@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react';
+﻿import { useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CheckCircle2, Mail, Printer, User, Phone, CreditCard } from 'lucide-react';
 import GraphPOSBreadcrumb from '@/components/graphpos/GraphPOSBreadcrumb';
@@ -8,6 +8,7 @@ import { BotaoPrimario, BotaoSecundario } from '@/components/graphpos/GraphPOSBu
 import { clearGraphPOSCheckoutState, getGraphPOSCheckoutState } from '@/lib/graphposCheckout';
 import SaleReceipt from '@/components/SaleReceipt';
 import { Customer, PaymentMethod } from '@/types/database';
+import { formatAreaM2 } from '@/lib/measurements';
 
 const formatCurrency = (v: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
@@ -179,19 +180,33 @@ export default function GraphPOSConfirmacao() {
             <GraphPOSSidebarResumo title="Resumo do Pedido" badge="PAGO">
               <p className="text-xs text-slate-500">{items.length} itens confirmados</p>
               <div className="mt-4 space-y-4">
-                {items.map((item) => (
-                  <div key={item.id} className="flex items-start justify-between">
-                    <div>
-                      <p className="text-sm font-semibold text-slate-800">{item.name}</p>
-                      <p className="text-xs text-slate-500">
-                        {item.quantity} un x {formatCurrency(item.unitPrice)}
-                      </p>
+                {items.map((item, index) => {
+                  const isM2 = item.unitLabel === 'm\u00B2' || Boolean(item.areaM2) || (item.widthCm && item.heightCm);
+                  const quantityLabel = isM2
+                    ? `${formatAreaM2(item.quantity)} m\u00B2`
+                    : `${item.quantity} un`;
+                  const unitLabel = isM2 ? '/ m\u00B2' : '';
+                  const hasDimensions = Boolean(item.widthCm && item.heightCm);
+
+                  return (
+                    <div key={`${item.id}-${index}`} className="flex items-start justify-between">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-800">{item.name}</p>
+                        <p className="text-xs text-slate-500">
+                          {quantityLabel} x {formatCurrency(item.unitPrice)}{unitLabel}
+                        </p>
+                        {hasDimensions && (
+                          <p className="text-[11px] text-slate-400">
+                            {item.widthCm}cm x {item.heightCm}cm
+                          </p>
+                        )}
+                      </div>
+                      <span className="text-sm font-semibold text-slate-800">
+                        {formatCurrency(item.unitPrice * item.quantity)}
+                      </span>
                     </div>
-                    <span className="text-sm font-semibold text-slate-800">
-                      {formatCurrency(item.unitPrice * item.quantity)}
-                    </span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
               <div className="mt-4 border-t border-slate-200 pt-4 text-sm text-slate-600">
                 <div className="flex items-center justify-between">
@@ -219,6 +234,10 @@ export default function GraphPOSConfirmacao() {
               name: item.name,
               quantity: item.quantity,
               unitPrice: item.unitPrice,
+              unitLabel: item.unitLabel,
+              widthCm: item.widthCm,
+              heightCm: item.heightCm,
+              areaM2: item.areaM2,
             }))}
             subtotal={subtotal}
             discount={discount}
@@ -234,3 +253,4 @@ export default function GraphPOSConfirmacao() {
     </div>
   );
 }
+

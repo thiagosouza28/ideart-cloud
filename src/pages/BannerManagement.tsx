@@ -43,6 +43,7 @@ import { ensurePublicStorageUrl } from '@/lib/storage';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useUnsavedChanges } from '@/hooks/use-unsaved-changes';
+import { useConfirm } from '@/components/ui/confirm-dialog';
 
 interface Banner {
     id: string;
@@ -86,6 +87,7 @@ export default function BannerManagement() {
     const [initialBannerSnapshot, setInitialBannerSnapshot] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const formRef = useRef<HTMLDivElement>(null);
+    const confirm = useConfirm();
 
     const currentSnapshot = useMemo(() => JSON.stringify(currentBanner), [currentBanner]);
     const isDirty = Boolean(
@@ -136,7 +138,14 @@ export default function BannerManagement() {
     };
 
     const handleDelete = async (id: string) => {
-        if (!confirm('Tem certeza que deseja excluir este banner?')) return;
+        const approved = await confirm({
+            title: 'Excluir banner',
+            description: 'Tem certeza que deseja excluir este banner?',
+            confirmText: 'Excluir',
+            cancelText: 'Cancelar',
+            destructive: true,
+        });
+        if (!approved) return;
 
         try {
             const { error } = await supabase

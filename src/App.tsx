@@ -9,6 +9,7 @@ import { CookieConsent } from "@/components/CookieConsent";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { ProtectedRoute } from "@/components/layout/ProtectedRoute";
 import { ThemeProvider } from "next-themes";
+import { ConfirmProvider } from "@/components/ui/confirm-dialog";
 
 const Auth = lazy(() => import("./pages/Auth"));
 const ChangePassword = lazy(() => import("./pages/ChangePassword"));
@@ -48,13 +49,21 @@ const NotFound = lazy(() => import("./pages/NotFound"));
 const SuperAdminDashboard = lazy(() => import("./pages/SuperAdminDashboard"));
 const SuperAdminCompanies = lazy(() => import("./pages/SuperAdminCompanies"));
 const SuperAdminPlans = lazy(() => import("./pages/SuperAdminPlans"));
+const SuperAdminImpersonate = lazy(() => import("./pages/SuperAdminImpersonate"));
 const Profile = lazy(() => import("./pages/Profile"));
 const Reports = lazy(() => import("./pages/Reports"));
 const BannerManagement = lazy(() => import("./pages/BannerManagement"));
 const CatalogManager = lazy(() => import("./pages/CatalogManager"));
 const Landing = lazy(() => import("./pages/Landing"));
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
+    },
+  },
+});
 
 const PageFallback = () => (
   <div className="page-container flex items-center justify-center min-h-[400px]">
@@ -70,12 +79,13 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
       <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-          <AuthProvider>
-            <CookieConsent />
-            <Routes>
+        <ConfirmProvider>
+          <Toaster />
+          <Sonner />
+          <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+            <AuthProvider>
+              <CookieConsent />
+              <Routes>
               <Route path="/auth" element={withSuspense(<Auth />)} />
               <Route path="/alterar-senha" element={withSuspense(<ChangePassword />)} />
               <Route path="/recuperar-senha" element={withSuspense(<ForgotPassword />)} />
@@ -414,6 +424,24 @@ const App = () => (
                 )}
               />
 
+              <Route
+                path="/super-admin/entrar-como-cliente"
+                element={(
+                  <ProtectedRoute allowedRoles={["super_admin"]}>
+                    <AppLayout>{withSuspense(<SuperAdminImpersonate />)}</AppLayout>
+                  </ProtectedRoute>
+                )}
+              />
+
+              <Route
+                path="/admin/entrar-como-cliente"
+                element={(
+                  <ProtectedRoute allowedRoles={["super_admin"]}>
+                    <AppLayout>{withSuspense(<SuperAdminImpersonate />)}</AppLayout>
+                  </ProtectedRoute>
+                )}
+              />
+
               {/* Profile Route */}
               <Route
                 path="/perfil"
@@ -431,9 +459,10 @@ const App = () => (
               <Route path="/pedido/:token" element={withSuspense(<PublicOrder />)} />
 
               <Route path="*" element={withSuspense(<NotFound />)} />
-            </Routes>
-          </AuthProvider>
-        </BrowserRouter>
+              </Routes>
+            </AuthProvider>
+          </BrowserRouter>
+        </ConfirmProvider>
       </TooltipProvider>
     </ThemeProvider>
   </QueryClientProvider>

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+﻿import { useState, useEffect, useRef } from 'react';
 import {
   Search,
   Plus,
@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { CurrencyInput } from '@/components/ui/currency-input';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -31,6 +32,7 @@ import CustomerSearch from '@/components/CustomerSearch';
 import { ensurePublicStorageUrl } from '@/lib/storage';
 import { resolveProductPrice } from '@/lib/pricing';
 import { normalizeBarcode } from '@/lib/barcode';
+import { M2_ATTRIBUTE_KEYS, calculateAreaM2, formatAreaM2, isAreaUnit, parseM2Attributes, parseMeasurementInput } from '@/lib/measurements';
 
 export default function PDV() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -125,6 +127,7 @@ export default function PDV() {
       const parsed = JSON.parse(raw) as CartItem[];
       if (Array.isArray(parsed)) {
         const restored = parsed.map((item) => ({
+          id: item.id || crypto.randomUUID(),
           ...item,
           product: {
             ...item.product,
@@ -274,16 +277,32 @@ export default function PDV() {
   };
 
   const addToCart = (product: Product) => {
+    if (isM2Product(product)) {
+      setCart([
+        ...cart,
+        {
+          id: crypto.randomUUID(),
+          product,
+          quantity: 0,
+          unit_price: getUnitPrice(product, 1),
+          discount: 0,
+          attributes: {},
+        },
+      ]);
+      return;
+    }
+
     const existing = cart.find(i => i.product.id === product.id);
     if (existing) {
-      setCart(cart.map(i => i.product.id === product.id ? { ...i, quantity: i.quantity + 1 } : i));
+      setCart(cart.map(i => i.id === existing.id ? { ...i, quantity: i.quantity + 1 } : i));
     } else {
       setCart([
         ...cart,
         {
+          id: crypto.randomUUID(),
           product,
           quantity: 1,
-          unit_price: getUnitPrice(product),
+          unit_price: getUnitPrice(product, 1),
           discount: 0,
           attributes: {},
         },
@@ -291,9 +310,10 @@ export default function PDV() {
     }
   };
 
-  const updateQuantity = (productId: string, delta: number) => {
+  const updateQuantity = (itemId: string, delta: number) => {
     setCart(cart.map(i => {
-      if (i.product.id === productId) {
+      if (i.id === itemId) {
+        if (isM2Product(i.product)) return i;
         const newQty = Math.max(1, i.quantity + delta);
         return { ...i, quantity: newQty };
       }
@@ -301,7 +321,47 @@ export default function PDV() {
     }));
   };
 
-  const removeFromCart = (productId: string) => setCart(cart.filter(i => i.product.id !== productId));
+  const updateM2Value = (itemId: string, key: string, value: string) => {
+    setCart(prev =>
+      prev.map(item => {
+        if (item.id !== itemId) return item;
+        if (!isM2Product(item.product)) return item;
+
+        const nextAttributes = { ...(item.attributes || {}) };
+        nextAttributes[key] = value;
+
+        const widthCm = parseMeasurementInput(nextAttributes[M2_ATTRIBUTE_KEYS.widthCm]);
+        const heightCm = parseMeasurementInput(nextAttributes[M2_ATTRIBUTE_KEYS.heightCm]);
+        const hasValidDimensions =
+          typeof widthCm === 'number' &&
+          typeof heightCm === 'number' &&
+          widthCm > 0 &&
+          heightCm > 0;
+
+        if (hasValidDimensions) {
+          const area = calculateAreaM2(widthCm, heightCm);
+          nextAttributes[M2_ATTRIBUTE_KEYS.areaM2] = area.toFixed(4);
+          const unitPrice = getUnitPrice(item.product, area);
+          return {
+            ...item,
+            attributes: nextAttributes,
+            quantity: area,
+            unit_price: unitPrice,
+          };
+        }
+
+        delete nextAttributes[M2_ATTRIBUTE_KEYS.areaM2];
+        return {
+          ...item,
+          attributes: nextAttributes,
+          quantity: 0,
+          unit_price: getUnitPrice(item.product, 1),
+        };
+      }),
+    );
+  };
+
+  const removeFromCart = (itemId: string) => setCart(cart.filter(i => i.id !== itemId));
 
   const subtotal = cart.reduce((acc, i) => acc + (i.unit_price * i.quantity - i.discount), 0);
   const total = Math.max(0, subtotal - discount);
@@ -309,10 +369,24 @@ export default function PDV() {
   const change = paymentMethod === 'dinheiro' ? Math.max(0, paidAmount - total) : 0;
 
   const formatCurrency = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
-  const getUnitPrice = (product: Product) => resolveProductPrice(product, 1, [], 0);
+  const formatMeasurement = (v: number) => new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 2 }).format(v);
+  const getUnitPrice = (product: Product, quantity = 1) => resolveProductPrice(product, quantity, [], 0);
+  const isM2Product = (product: Product) => isAreaUnit(product.unit);
 
   const handleFinalizeSale = () => {
     if (cart.length === 0) return toast({ title: 'Carrinho vazio', variant: 'destructive' });
+    const invalidM2Items = cart.filter((item) => {
+      if (!isM2Product(item.product)) return false;
+      const { widthCm, heightCm } = parseM2Attributes(item.attributes);
+      return !widthCm || !heightCm || widthCm <= 0 || heightCm <= 0;
+    });
+    if (invalidM2Items.length > 0) {
+      return toast({
+        title: 'Informe largura e altura válidas',
+        description: invalidM2Items.map((item) => item.product.name).join(', '),
+        variant: 'destructive',
+      });
+    }
     if (!Number.isFinite(total) || total <= 0) {
       return toast({ title: 'Total inválido', variant: 'destructive' });
     }
@@ -376,39 +450,57 @@ export default function PDV() {
         quantity: i.quantity,
         unit_price: i.unit_price,
         discount: i.discount,
-        total: i.unit_price * i.quantity - i.discount
+        total: i.unit_price * i.quantity - i.discount,
+        attributes: i.attributes || null,
       })
     ));
 
-    const trackedItems = cart.filter(i => i.product.track_stock);
-    if (trackedItems.length > 0) {
-      const stockResults = await Promise.all(trackedItems.map(i =>
-        supabase
+    const quantitiesByProduct: Record<string, number> = {};
+    cart.forEach((item) => {
+      quantitiesByProduct[item.product.id] = (quantitiesByProduct[item.product.id] || 0) + item.quantity;
+    });
+
+    const trackedProducts = Object.values(
+      cart.reduce<Record<string, Product>>((acc, item) => {
+        if (item.product.track_stock) {
+          acc[item.product.id] = item.product;
+        }
+        return acc;
+      }, {}),
+    );
+
+    if (trackedProducts.length > 0) {
+      const stockResults = await Promise.all(trackedProducts.map((product) => {
+        const qty = quantitiesByProduct[product.id] || 0;
+        const newStock = Number(product.stock_quantity) - qty;
+        return supabase
           .from('products')
-          .update({ stock_quantity: Number(i.product.stock_quantity) - i.quantity })
-          .eq('id', i.product.id)
-      ));
+          .update({ stock_quantity: newStock })
+          .eq('id', product.id);
+      }));
       const stockError = stockResults.find(r => r.error);
       if (stockError?.error) {
         toast({ title: 'Erro ao atualizar estoque do produto', variant: 'destructive' });
       }
 
-      const movementResults = await Promise.all(trackedItems.map(i =>
-        supabase.from('stock_movements').insert({
-          product_id: i.product.id,
+      const movementResults = await Promise.all(trackedProducts.map((product) => {
+        const qty = quantitiesByProduct[product.id] || 0;
+        if (qty <= 0) return Promise.resolve({ data: null, error: null });
+        return supabase.from('stock_movements').insert({
+          product_id: product.id,
           movement_type: 'saida',
-          quantity: i.quantity,
+          quantity: qty,
           reason: `Venda PDV #${sale.id.slice(0, 8)}`,
-          user_id: user?.id
-        })
-      ));
+          user_id: user?.id,
+        });
+      }));
       const movementError = movementResults.find(r => r.error);
       if (movementError?.error) {
         toast({ title: 'Erro ao registrar movimentacao de estoque', variant: 'destructive' });
       }
     }
 
-    const productIds = cart.map(i => i.product.id);
+    const productIds = Object.keys(quantitiesByProduct);
     const { data: productSupplies, error: productSuppliesError } = await supabase
       .from('product_supplies')
       .select('product_id, supply_id, quantity')
@@ -417,11 +509,10 @@ export default function PDV() {
     if (productSuppliesError) {
       toast({ title: 'Erro ao carregar insumos do produto', variant: 'destructive' });
     } else if (productSupplies && productSupplies.length > 0) {
-      const quantitiesByProduct = new Map(cart.map(i => [i.product.id, i.quantity]));
       const usageBySupply: Record<string, number> = {};
 
       productSupplies.forEach((ps: any) => {
-        const qty = quantitiesByProduct.get(ps.product_id);
+        const qty = quantitiesByProduct[ps.product_id];
         if (!qty) return;
         const usage = Number(ps.quantity) * qty;
         if (usage <= 0) return;
@@ -583,7 +674,10 @@ export default function PDV() {
                             )}
                           </div>
                           <p className="font-medium text-sm truncate">{p.name}</p>
-                          <p className="text-primary font-semibold">{formatCurrency(getUnitPrice(p))}</p>
+                          <p className="text-primary font-semibold">
+                            {formatCurrency(getUnitPrice(p, 1))}
+                            {isM2Product(p) ? ' / m\u00B2' : ''}
+                          </p>
                           <p className="text-xs text-slate-400">
                             {p.track_stock ? `Estoque: ${p.stock_quantity}` : 'Sem controle de estoque'}
                           </p>
@@ -611,33 +705,89 @@ export default function PDV() {
                 <ShoppingCart className="h-10 w-10 text-slate-300 mb-3" />
                 Carrinho vazio
               </div>
-            ) : cart.map((item) => (
-              <div key={item.product.id} className="flex items-center gap-2 p-2 rounded-xl border border-slate-200 bg-white shadow-sm">
-                <div className="h-12 w-12 rounded-lg bg-slate-100 overflow-hidden flex items-center justify-center">
-                  {item.product.image_url ? (
-                    <img src={item.product.image_url} alt={item.product.name} className="h-full w-full object-cover" />
-                  ) : (
-                    <ShoppingCart className="h-5 w-5 text-slate-400" />
+            ) : cart.map((item) => {
+              const isM2 = isM2Product(item.product);
+              const widthRaw = item.attributes?.[M2_ATTRIBUTE_KEYS.widthCm] ?? '';
+              const heightRaw = item.attributes?.[M2_ATTRIBUTE_KEYS.heightCm] ?? '';
+              const widthCm = parseMeasurementInput(widthRaw);
+              const heightCm = parseMeasurementInput(heightRaw);
+              const hasValidDimensions =
+                typeof widthCm === 'number' &&
+                typeof heightCm === 'number' &&
+                widthCm > 0 &&
+                heightCm > 0;
+              const dimensionLabel = hasValidDimensions
+                ? `${formatMeasurement(widthCm as number)}cm x ${formatMeasurement(heightCm as number)}cm`
+                : '';
+
+              return (
+                <div key={item.id} className="rounded-xl border border-slate-200 bg-white p-2 shadow-sm">
+                  <div className="flex items-center gap-2">
+                    <div className="h-12 w-12 rounded-lg bg-slate-100 overflow-hidden flex items-center justify-center">
+                      {item.product.image_url ? (
+                        <img src={item.product.image_url} alt={item.product.name} className="h-full w-full object-cover" />
+                      ) : (
+                        <ShoppingCart className="h-5 w-5 text-slate-400" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm truncate">{item.product.name}</p>
+                      <p className="text-xs text-slate-400">
+                        {formatCurrency(item.unit_price)}{isM2 ? ' / m\u00B2' : ''}{' '}
+                        {isM2 ? (hasValidDimensions ? `${formatAreaM2(item.quantity)} m\u00B2` : 'Informe dimensões') : `x ${item.quantity}`}
+                      </p>
+                      {isM2 && hasValidDimensions && (
+                        <p className="text-[11px] text-slate-500">{dimensionLabel}</p>
+                      )}
+                      <p className="text-xs font-semibold text-slate-700">
+                        {formatCurrency(item.unit_price * item.quantity - item.discount)}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      {!isM2 && (
+                        <>
+                          <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => updateQuantity(item.id, -1)}>
+                            <Minus className="h-3 w-3" />
+                          </Button>
+                          <span className="w-6 text-center text-sm">{item.quantity}</span>
+                          <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => updateQuantity(item.id, 1)}>
+                            <Plus className="h-3 w-3" />
+                          </Button>
+                        </>
+                      )}
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => removeFromCart(item.id)}>
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </div>
+                  {isM2 && (
+                    <div className="mt-2 grid gap-2 text-xs text-slate-600 sm:grid-cols-2">
+                      <div className="space-y-1">
+                        <Label className="text-[10px] uppercase text-muted-foreground">Largura (cm)</Label>
+                        <Input
+                          value={widthRaw}
+                          onChange={(e) => updateM2Value(item.id, M2_ATTRIBUTE_KEYS.widthCm, e.target.value)}
+                          className="h-8 text-xs"
+                          inputMode="decimal"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] uppercase text-muted-foreground">Altura (cm)</Label>
+                        <Input
+                          value={heightRaw}
+                          onChange={(e) => updateM2Value(item.id, M2_ATTRIBUTE_KEYS.heightCm, e.target.value)}
+                          className="h-8 text-xs"
+                          inputMode="decimal"
+                        />
+                      </div>
+                      <div className={`sm:col-span-2 text-[11px] ${hasValidDimensions ? 'text-slate-500' : 'text-destructive'}`}>
+                        Área: {hasValidDimensions ? `${formatAreaM2(item.quantity)} m\u00B2` : 'Informe dimensões válidas'}
+                      </div>
+                    </div>
                   )}
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-sm truncate">{item.product.name}</p>
-                  <p className="text-xs text-slate-400">{formatCurrency(item.unit_price)} x {item.quantity}</p>
-                </div>
-                <div className="flex items-center gap-1">
-                  <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => updateQuantity(item.product.id, -1)}>
-                    <Minus className="h-3 w-3" />
-                  </Button>
-                  <span className="w-6 text-center text-sm">{item.quantity}</span>
-                  <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => updateQuantity(item.product.id, 1)}>
-                    <Plus className="h-3 w-3" />
-                  </Button>
-                  <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => removeFromCart(item.product.id)}>
-                    <Trash2 className="h-3 w-3" />
-                  </Button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </CardContent>
           <CardFooter className="border-t p-2 flex-col gap-2">
             <div className="w-full space-y-2 text-sm">
@@ -739,7 +889,9 @@ export default function PDV() {
               items={lastSale.items.map(item => ({
                 name: item.product.name,
                 quantity: item.quantity,
-                unitPrice: item.unit_price
+                unitPrice: item.unit_price,
+                unitLabel: isM2Product(item.product) ? 'm\u00B2' : 'un',
+                ...parseM2Attributes(item.attributes),
               }))}
               subtotal={lastSale.subtotal}
               discount={lastSale.discount}
@@ -760,3 +912,5 @@ export default function PDV() {
     </div>
   );
 }
+
+

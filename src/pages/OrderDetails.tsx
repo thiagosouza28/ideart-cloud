@@ -11,15 +11,19 @@ import { Textarea } from '@/components/ui/textarea';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
-import { Order, OrderFinalPhoto, OrderArtFile, OrderItem, OrderStatusHistory, OrderStatus, OrderPayment, PaymentMethod, PaymentStatus, Product } from '@/types/database';
+import { Order, OrderFinalPhoto, OrderArtFile, OrderItem, OrderStatusHistory, OrderStatus, OrderPayment, PaymentMethod, PaymentStatus, Product, Customer } from '@/types/database';
 import { ArrowLeft, Loader2, CheckCircle, Clock, Package, Truck, XCircle, User, FileText, Printer, MessageCircle, Link, Copy, CreditCard, PauseCircle, Trash2, Image as ImageIcon, Upload, Paintbrush, Sparkles } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import OrderReceipt from '@/components/OrderReceipt';
+import CustomerSearch from '@/components/CustomerSearch';
+import { buildPaymentReceiptHtml, type PaymentReceiptPayload } from '@/templates/paymentReceiptTemplate';
+import { generateAndUploadPaymentReceipt } from '@/services/paymentReceipts';
+import { M2_ATTRIBUTE_KEYS, buildM2Attributes, calculateAreaM2, formatAreaM2, isAreaUnit, parseM2Attributes, parseMeasurementInput, stripM2Attributes } from '@/lib/measurements';
+import { useConfirm } from '@/components/ui/confirm-dialog';
 import {
-  calculatePaymentSummary,
   cancelOrder,
   deleteOrder,
   cancelOrderPayment,
@@ -29,7 +33,6 @@ import {
   updateOrderStatus,
   updateOrderItems,
   uploadOrderFinalPhoto,
-  type PaymentSummary,
 } from '@/services/orders';
 import { ensurePublicStorageUrl } from '@/lib/storage';
 import { resolveProductPrice } from '@/lib/pricing';
@@ -115,6 +118,7 @@ export default function OrderDetails() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const confirm = useConfirm();
   const { user, hasPermission } = useAuth();
   const [loading, setLoading] = useState(true);
   const [order, setOrder] = useState<Order | null>(null);
@@ -154,7 +158,9 @@ export default function OrderDetails() {
   const [paymentActionType, setPaymentActionType] = useState<'cancel' | 'delete' | null>(null);
   const [receiptDialogOpen, setReceiptDialogOpen] = useState(false);
   const [receiptPayment, setReceiptPayment] = useState<OrderPayment | null>(null);
-  const [receiptSummary, setReceiptSummary] = useState<PaymentSummary | null>(null);
+  const [paymentReceiptHtml, setPaymentReceiptHtml] = useState('');
+  const [paymentReceiptPayload, setPaymentReceiptPayload] = useState<PaymentReceiptPayload | null>(null);
+  const [paymentReceiptLoading, setPaymentReceiptLoading] = useState(false);
 
   const [publicLinkToken, setPublicLinkToken] = useState<string | null>(null);
   const [linkLoading, setLinkLoading] = useState(false);
@@ -167,9 +173,29 @@ export default function OrderDetails() {
   const [products, setProducts] = useState<Product[]>([]);
   const [newItemProductId, setNewItemProductId] = useState('');
   const [newItemQuantity, setNewItemQuantity] = useState(1);
+  const [newItemWidthCm, setNewItemWidthCm] = useState('');
+  const [newItemHeightCm, setNewItemHeightCm] = useState('');
+  const [customerDialogOpen, setCustomerDialogOpen] = useState(false);
+  const [customerSaving, setCustomerSaving] = useState(false);
+  const [customerDraft, setCustomerDraft] = useState<Customer | null>(null);
+  const [customerNameDraft, setCustomerNameDraft] = useState('');
 
   const formatCurrency = (v: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
+
+  const getProductById = (productId?: string | null) =>
+    products.find((product) => product.id === productId);
+
+  const getItemUnit = (item: OrderItem) => getProductById(item.product_id)?.unit;
+
+  const getItemM2Data = (item: OrderItem) => parseM2Attributes(item.attributes);
+
+  const isItemM2 = (item: OrderItem) => {
+    const unit = getItemUnit(item);
+    if (isAreaUnit(unit)) return true;
+    const m2 = getItemM2Data(item);
+    return Boolean(m2.widthCm || m2.heightCm || m2.areaM2);
+  };
 
   const getPaymentStatusLabel = (status: PaymentStatus) => {
     if (status === 'pago') return 'Pago';
@@ -212,6 +238,78 @@ export default function OrderDetails() {
   const calculateOrderTotal = (subtotalValue: number) =>
     Math.max(0, subtotalValue - Number(order?.discount || 0));
 
+  const paymentReceiptMethodLabels: Record<PaymentMethod, string> = {
+    dinheiro: 'Dinheiro',
+    cartao: 'Cartão',
+    pix: 'PIX',
+    boleto: 'Boleto',
+    outro: 'Outro',
+  };
+
+  const buildReceiptNumber = (orderNumber: number, paymentId: string) => {
+    const suffix = paymentId.replace(/-/g, '').slice(0, 8).toUpperCase();
+    return `REC-${orderNumber}-${suffix}`;
+  };
+
+  const buildReceiptDescription = (itemsList: OrderItem[], orderNumber: number) => {
+    const description = itemsList
+      .map((item) => `${item.quantity}x ${item.product_name}`)
+      .filter(Boolean)
+      .join(', ');
+    const fallback = `Pedido #${orderNumber}`;
+    const result = description || fallback;
+    return result.length > 160 ? `${result.slice(0, 157)}...` : result;
+  };
+
+  const buildCompanyAddress = (company?: Order['company'] | null) => {
+    const parts = [company?.address, [company?.city, company?.state].filter(Boolean).join(' - ')]
+      .filter(Boolean);
+    return parts.length > 0 ? parts.join(', ') : '-';
+  };
+
+  const buildPaymentReceiptPayload = (payment: OrderPayment): PaymentReceiptPayload | null => {
+    if (!order) return null;
+    const company = order.company || null;
+    const receiptNumber = buildReceiptNumber(order.order_number, payment.id);
+    const description = buildReceiptDescription(items, order.order_number);
+    const address = buildCompanyAddress(company);
+    const logoUrl = company?.logo_url
+      ? ensurePublicStorageUrl('product-images', company.logo_url)
+      : null;
+    const signatureImageUrl = company?.signature_image_url
+      ? ensurePublicStorageUrl('product-images', company.signature_image_url)
+      : null;
+    const responsibleName = company?.signature_responsible || company?.name || 'Responsável';
+    const responsibleRole = company?.signature_role || 'Responsável';
+    const methodLabel = payment.method
+      ? paymentReceiptMethodLabels[payment.method] || String(payment.method)
+      : 'Não informado';
+    const paidAt = payment.paid_at || payment.created_at || new Date().toISOString();
+
+    return {
+      cliente: {
+        nome: order.customer?.name || order.customer_name || 'Cliente',
+        documento: order.customer?.document || null,
+      },
+      pagamento: {
+        valor: Number(payment.amount || 0),
+        forma: methodLabel,
+        descricao: description,
+        data: paidAt,
+      },
+      loja: {
+        nome: company?.name || 'Loja',
+        documento: company?.document || null,
+        endereco: address,
+        logo: logoUrl,
+        assinaturaImagem: signatureImageUrl,
+        responsavel: responsibleName,
+        cargo: responsibleRole,
+      },
+      numeroRecibo: receiptNumber,
+    };
+  };
+
   const ensureProductsLoaded = async () => {
     if (products.length > 0 || !order?.company_id) return;
     const { data, error } = await supabase
@@ -237,6 +335,8 @@ export default function OrderDetails() {
     setEditableItems(mapped);
     setNewItemProductId('');
     setNewItemQuantity(1);
+    setNewItemWidthCm('');
+    setNewItemHeightCm('');
     setIsEditingItems(true);
   };
 
@@ -245,6 +345,8 @@ export default function OrderDetails() {
     setIsEditingItems(false);
     setNewItemProductId('');
     setNewItemQuantity(1);
+    setNewItemWidthCm('');
+    setNewItemHeightCm('');
   };
 
   const handleChangeItemProduct = (index: number, productId: string) => {
@@ -253,13 +355,41 @@ export default function OrderDetails() {
     setEditableItems((prev) =>
       prev.map((item, idx) => {
         if (idx !== index) return item;
+        const isM2 = isAreaUnit(product.unit);
+        if (isM2) {
+          const m2 = parseM2Attributes(item.attributes);
+          const hasValidDimensions =
+            typeof m2.widthCm === 'number' &&
+            typeof m2.heightCm === 'number' &&
+            m2.widthCm > 0 &&
+            m2.heightCm > 0;
+          const area = hasValidDimensions ? calculateAreaM2(m2.widthCm, m2.heightCm) : 0;
+          const unitPrice = resolveProductPrice(product, area > 0 ? area : 1, [], 0);
+          const attributes = buildM2Attributes(item.attributes ?? {}, {
+            widthCm: m2.widthCm ?? null,
+            heightCm: m2.heightCm ?? null,
+            areaM2: hasValidDimensions ? area : null,
+          });
+          const next = {
+            ...item,
+            product_id: product.id,
+            product_name: product.name,
+            quantity: area,
+            unit_price: unitPrice,
+            attributes,
+          };
+          return { ...next, total: calculateItemTotal(next) };
+        }
+
         const quantity = Math.max(1, Number(item.quantity));
         const unitPrice = resolveProductPrice(product, quantity, [], 0);
+        const cleanedAttributes = stripM2Attributes(item.attributes);
         const next = {
           ...item,
           product_id: product.id,
           product_name: product.name,
           unit_price: unitPrice,
+          attributes: Object.keys(cleanedAttributes).length > 0 ? cleanedAttributes : null,
         };
         return { ...next, total: calculateItemTotal(next) };
       }),
@@ -271,7 +401,48 @@ export default function OrderDetails() {
     setEditableItems((prev) =>
       prev.map((item, idx) => {
         if (idx !== index) return item;
+        if (isItemM2(item)) return item;
         const next = { ...item, quantity };
+        return { ...next, total: calculateItemTotal(next) };
+      }),
+    );
+  };
+
+  const handleChangeItemDimensions = (index: number, key: string, value: string) => {
+    setEditableItems((prev) =>
+      prev.map((item, idx) => {
+        if (idx !== index) return item;
+        if (!isItemM2(item)) return item;
+
+        const nextAttributes = { ...(item.attributes || {}) };
+        nextAttributes[key] = value;
+
+        const widthCm = parseMeasurementInput(nextAttributes[M2_ATTRIBUTE_KEYS.widthCm]);
+        const heightCm = parseMeasurementInput(nextAttributes[M2_ATTRIBUTE_KEYS.heightCm]);
+        const hasValidDimensions =
+          typeof widthCm === 'number' &&
+          typeof heightCm === 'number' &&
+          widthCm > 0 &&
+          heightCm > 0;
+
+        const product = getProductById(item.product_id);
+        const quantity = hasValidDimensions ? calculateAreaM2(widthCm, heightCm) : 0;
+        const unitPrice = product
+          ? resolveProductPrice(product, quantity > 0 ? quantity : 1, [], 0)
+          : Number(item.unit_price);
+
+        const attributes = buildM2Attributes(nextAttributes, {
+          widthCm: widthCm ?? null,
+          heightCm: heightCm ?? null,
+          areaM2: hasValidDimensions ? quantity : null,
+        });
+
+        const next = {
+          ...item,
+          attributes,
+          quantity,
+          unit_price: unitPrice,
+        };
         return { ...next, total: calculateItemTotal(next) };
       }),
     );
@@ -287,8 +458,28 @@ export default function OrderDetails() {
       toast({ title: 'Selecione um produto', variant: 'destructive' });
       return;
     }
-    const quantity = Math.max(1, Number(newItemQuantity) || 1);
-    const unitPrice = resolveProductPrice(product, quantity, [], 0);
+    const isM2 = isAreaUnit(product.unit);
+    const widthCm = parseMeasurementInput(newItemWidthCm);
+    const heightCm = parseMeasurementInput(newItemHeightCm);
+
+    if (isM2) {
+      if (!widthCm || !heightCm || widthCm <= 0 || heightCm <= 0) {
+        toast({ title: 'Informe largura e altura validas', variant: 'destructive' });
+        return;
+      }
+    }
+
+    const quantity = isM2
+      ? calculateAreaM2(widthCm as number, heightCm as number)
+      : Math.max(1, Number(newItemQuantity) || 1);
+    const unitPrice = resolveProductPrice(product, quantity > 0 ? quantity : 1, [], 0);
+    const attributes = isM2
+      ? buildM2Attributes({}, {
+          widthCm: widthCm as number,
+          heightCm: heightCm as number,
+          areaM2: quantity,
+        })
+      : null;
     const newItem: OrderItem = {
       id: crypto.randomUUID(),
       order_id: order?.id || '',
@@ -298,13 +489,15 @@ export default function OrderDetails() {
       unit_price: unitPrice,
       discount: 0,
       total: Math.max(0, quantity * unitPrice),
-      attributes: null,
+      attributes,
       notes: null,
       created_at: new Date().toISOString(),
     };
     setEditableItems((prev) => [...prev, newItem]);
     setNewItemProductId('');
     setNewItemQuantity(1);
+    setNewItemWidthCm('');
+    setNewItemHeightCm('');
   };
 
   const handleSaveItems = async () => {
@@ -313,6 +506,24 @@ export default function OrderDetails() {
       toast({ title: 'Adicione pelo menos um item', variant: 'destructive' });
       return;
     }
+
+    const invalidM2Items = editableItems.filter((item) => {
+      const unit = getProductById(item.product_id)?.unit;
+      const isM2 = isAreaUnit(unit) || isItemM2(item);
+      if (!isM2) return false;
+      const { widthCm, heightCm } = parseM2Attributes(item.attributes);
+      return !widthCm || !heightCm || widthCm <= 0 || heightCm <= 0;
+    });
+
+    if (invalidM2Items.length > 0) {
+      toast({
+        title: 'Informe largura e altura validas',
+        description: invalidM2Items.map((item) => item.product_name).join(', '),
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setSavingItems(true);
     try {
       const payload = editableItems.map((item) => ({
@@ -342,6 +553,83 @@ export default function OrderDetails() {
       });
     } finally {
       setSavingItems(false);
+    }
+  };
+
+  const handleSaveCustomer = async () => {
+    if (!order) return;
+    const trimmedName = customerNameDraft.trim();
+    if (!trimmedName) {
+      toast({ title: 'Informe o nome do cliente', variant: 'destructive' });
+      return;
+    }
+
+    setCustomerSaving(true);
+    try {
+      let customerId = customerDraft?.id || null;
+      let customerRecord = customerDraft;
+
+      if (customerId && customerRecord && customerRecord.name !== trimmedName) {
+        const { data, error } = await supabase
+          .from('customers')
+          .update({ name: trimmedName })
+          .eq('id', customerId)
+          .select('*')
+          .single();
+        if (error) throw error;
+        customerRecord = data as Customer;
+      }
+
+      if (!customerId) {
+        const { data: existingCustomer, error: lookupError } = await supabase
+          .from('customers')
+          .select('*')
+          .ilike('name', trimmedName)
+          .limit(1)
+          .maybeSingle();
+        if (lookupError) throw lookupError;
+
+        if (existingCustomer?.id) {
+          customerId = existingCustomer.id;
+          customerRecord = existingCustomer as Customer;
+        } else {
+          const { data: createdCustomer, error: createError } = await supabase
+            .from('customers')
+            .insert({ name: trimmedName })
+            .select('*')
+            .single();
+          if (createError) throw createError;
+          customerId = createdCustomer.id;
+          customerRecord = createdCustomer as Customer;
+        }
+      }
+
+      const { error: orderError } = await supabase
+        .from('orders')
+        .update({ customer_id: customerId, customer_name: trimmedName })
+        .eq('id', order.id);
+      if (orderError) throw orderError;
+
+      setOrder((prev) =>
+        prev
+          ? {
+              ...prev,
+              customer_id: customerId,
+              customer_name: trimmedName,
+              customer: customerRecord || prev.customer,
+            }
+          : prev,
+      );
+      toast({ title: 'Cliente atualizado com sucesso!' });
+      setCustomerDialogOpen(false);
+    } catch (error: any) {
+      toast({
+        title: 'Erro ao atualizar cliente',
+        description: error?.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setCustomerSaving(false);
     }
   };
 
@@ -486,11 +774,32 @@ const sendWhatsAppMessage = (message: string) => {
   };
 
   const handlePrintPaymentReceipt = () => {
-    if (!receiptPayment) return;
-    printReceipt(
-      paymentReceiptRef.current,
-      `Recibo de pagamento - Pedido #${formatOrderNumber(order?.order_number)}`,
-    );
+    if (!order || !receiptPayment || !paymentReceiptPayload) {
+      toast({ title: 'Recibo indisponível', variant: 'destructive' });
+      return;
+    }
+
+    const safeCompanyId = order.company_id || 'company';
+    const receiptNumber = paymentReceiptPayload.numeroRecibo;
+    const path = `${safeCompanyId}/${order.id}/recibo-${receiptNumber}.pdf`;
+
+    setPaymentReceiptLoading(true);
+    generateAndUploadPaymentReceipt(paymentReceiptPayload, { bucket: 'payment-receipts', path })
+      .then(({ publicUrl }) => {
+        if (publicUrl) {
+          window.open(publicUrl, '_blank', 'noopener');
+        } else {
+          toast({ title: 'Recibo gerado, mas URL indisponível', variant: 'destructive' });
+        }
+      })
+      .catch((error: any) => {
+        toast({
+          title: 'Erro ao gerar recibo',
+          description: error?.message,
+          variant: 'destructive',
+        });
+      })
+      .finally(() => setPaymentReceiptLoading(false));
   };
 
   useEffect(() => {
@@ -686,12 +995,15 @@ const sendWhatsAppMessage = (message: string) => {
 
   const handleOpenPaymentReceipt = (payment: OrderPayment) => {
     if (!order) return;
-    const paidTotal = payments
-      .filter((item) => item.status !== 'pendente')
-      .reduce((sum, item) => sum + Number(item.amount), 0);
-    const summary = calculatePaymentSummary(Number(order.total), paidTotal);
+    const payload = buildPaymentReceiptPayload(payment);
+    if (payload) {
+      setPaymentReceiptPayload(payload);
+      setPaymentReceiptHtml(buildPaymentReceiptHtml(payload));
+    } else {
+      setPaymentReceiptPayload(null);
+      setPaymentReceiptHtml('');
+    }
     setReceiptPayment(payment);
-    setReceiptSummary(summary);
     setReceiptDialogOpen(true);
   };
 
@@ -740,8 +1052,14 @@ const sendWhatsAppMessage = (message: string) => {
 
       toast({ title: 'Pagamento registrado com sucesso!' });
       setPaymentDialogOpen(false);
+      if (result.payment) {
+        const payload = buildPaymentReceiptPayload(result.payment);
+        if (payload) {
+          setPaymentReceiptPayload(payload);
+          setPaymentReceiptHtml(buildPaymentReceiptHtml(payload));
+        }
+      }
       setReceiptPayment(result.payment);
-      setReceiptSummary(result.summary);
       setReceiptDialogOpen(true);
       fetchOrder();
     } catch (error: any) {
@@ -804,7 +1122,13 @@ const sendWhatsAppMessage = (message: string) => {
 
       if (order.customer?.phone) {
         const statusLabel = statusLabels[newStatus] ?? newStatus;
-        if (window.confirm(`Status alterado para "${statusLabel}". Deseja enviar mensagem no WhatsApp para o cliente?`)) {
+        const approved = await confirm({
+          title: 'Enviar WhatsApp?',
+          description: `Status alterado para "${statusLabel}". Deseja enviar mensagem no WhatsApp para o cliente?`,
+          confirmText: 'Enviar',
+          cancelText: 'Agora não',
+        });
+        if (approved) {
           setTimeout(() => handleSendWhatsAppUpdate(), 500);
         }
       }
@@ -922,13 +1246,22 @@ const sendWhatsAppMessage = (message: string) => {
     setReceiptDialogOpen(open);
     if (!open) {
       setReceiptPayment(null);
-      setReceiptSummary(null);
+      setPaymentReceiptPayload(null);
+      setPaymentReceiptHtml('');
+      setPaymentReceiptLoading(false);
     }
   };
 
   const handleCancelPayment = async (paymentId: string) => {
     if (!order) return;
-    if (!window.confirm('Cancelar este pagamento?')) return;
+    const approved = await confirm({
+      title: 'Cancelar pagamento',
+      description: 'Cancelar este pagamento?',
+      confirmText: 'Cancelar',
+      cancelText: 'Voltar',
+      destructive: true,
+    });
+    if (!approved) return;
     setPaymentActionId(paymentId);
     setPaymentActionType('cancel');
     try {
@@ -945,7 +1278,14 @@ const sendWhatsAppMessage = (message: string) => {
 
   const handleDeletePayment = async (paymentId: string) => {
     if (!order) return;
-    if (!window.confirm('Excluir este pagamento? Esta ação não pode ser desfeita.')) return;
+    const approved = await confirm({
+      title: 'Excluir pagamento',
+      description: 'Excluir este pagamento? Esta ação não pode ser desfeita.',
+      confirmText: 'Excluir',
+      cancelText: 'Cancelar',
+      destructive: true,
+    });
+    if (!approved) return;
     setPaymentActionId(paymentId);
     setPaymentActionType('delete');
     try {
@@ -966,6 +1306,7 @@ const sendWhatsAppMessage = (message: string) => {
       quantity: item.quantity,
       unit_price: item.unit_price,
       discount: item.discount,
+      attributes: item.attributes,
     }))
   ), [editableItems]);
   const itemsSnapshot = useMemo(() => (
@@ -974,6 +1315,7 @@ const sendWhatsAppMessage = (message: string) => {
       quantity: item.quantity,
       unit_price: item.unit_price,
       discount: item.discount,
+      attributes: item.attributes,
     }))
   ), [items]);
   const itemsDirty = isEditingItems && JSON.stringify(editableItemsSnapshot) !== JSON.stringify(itemsSnapshot);
@@ -981,12 +1323,17 @@ const sendWhatsAppMessage = (message: string) => {
   const statusDirty = statusDialogOpen && (newStatus || statusNotes.trim() || entryDialogOpen || entryAmount > 0 || entryMethod);
   const paymentDirty = paymentDialogOpen && (paymentNotes.trim() || paymentMethod || paymentAmount > 0);
   const cancelDirty = cancelDialogOpen && (cancelReason.trim() || cancelConfirmPaid);
+  const customerDirty = customerDialogOpen && (
+    customerNameDraft.trim() !== (order?.customer?.name || order?.customer_name || '') ||
+    (customerDraft?.id || null) !== (order?.customer?.id || null)
+  );
   const hasUnsavedChanges = messageDirty
     || itemsDirty
     || pendingItemInput
     || statusDirty
     || paymentDirty
     || cancelDirty
+    || customerDirty
     || uploadingPhoto
     || uploadingArtFile;
 
@@ -1035,6 +1382,18 @@ const canSendWhatsApp = Boolean(order?.customer?.phone);
   const artFilesReady = artFilesWithUrls.filter((file) => file.url);
   const editingSubtotal = calculateSubtotal(isEditingItems ? editableItems : items);
   const editingTotal = calculateOrderTotal(editingSubtotal);
+  const newItemProduct = products.find((product) => product.id === newItemProductId);
+  const newItemIsM2 = newItemProduct ? isAreaUnit(newItemProduct.unit) : false;
+  const newItemWidthValue = parseMeasurementInput(newItemWidthCm);
+  const newItemHeightValue = parseMeasurementInput(newItemHeightCm);
+  const newItemArea =
+    newItemIsM2 &&
+    typeof newItemWidthValue === 'number' &&
+    typeof newItemHeightValue === 'number' &&
+    newItemWidthValue > 0 &&
+    newItemHeightValue > 0
+      ? calculateAreaM2(newItemWidthValue, newItemHeightValue)
+      : 0;
   const artIndicator =
     order.status === 'pendente'
       ? { label: 'Arte: aguardando definição', color: 'bg-slate-100 text-slate-600' }
@@ -1176,11 +1535,22 @@ const canSendWhatsApp = Boolean(order?.customer?.phone);
         <div className="md:col-span-2 space-y-6">
           {/* Customer Info */}
           <Card>
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="flex items-center gap-2">
                 <User className="h-5 w-5" />
                 Cliente
               </CardTitle>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setCustomerDialogOpen(true);
+                  setCustomerDraft(order.customer || null);
+                  setCustomerNameDraft(order.customer?.name || order.customer_name || '');
+                }}
+              >
+                {order.customer || order.customer_name ? 'Editar cliente' : 'Adicionar cliente'}
+              </Button>
             </CardHeader>
             <CardContent>
               {order.customer ? (
@@ -1235,36 +1605,82 @@ const canSendWhatsApp = Boolean(order?.customer?.phone);
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {(isEditingItems ? editableItems : items).map((item, index) => (
-                    <TableRow key={item.id}>
+                  {(isEditingItems ? editableItems : items).map((item, index) => {
+                    const m2Data = parseM2Attributes(item.attributes);
+                    const isM2 = isItemM2(item);
+                    const displayAttributes = stripM2Attributes(item.attributes);
+                    const widthRaw = item.attributes?.[M2_ATTRIBUTE_KEYS.widthCm] ?? '';
+                    const heightRaw = item.attributes?.[M2_ATTRIBUTE_KEYS.heightCm] ?? '';
+                    const hasValidDimensions =
+                      typeof m2Data.widthCm === 'number' &&
+                      typeof m2Data.heightCm === 'number' &&
+                      m2Data.widthCm > 0 &&
+                      m2Data.heightCm > 0;
+
+                    return (
+                      <TableRow key={item.id}>
                       <TableCell>
                         {isEditingItems ? (
-                          <Select
-                            value={item.product_id ?? ""}
-                            onValueChange={(value) => handleChangeItemProduct(index, value)}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="Selecione o produto" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {products.map((product) => (
-                                <SelectItem key={product.id} value={product.id}>
-                                  {product.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                          <div className="space-y-2">
+                            <Select
+                              value={item.product_id ?? ""}
+                              onValueChange={(value) => handleChangeItemProduct(index, value)}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Selecione o produto" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {products.map((product) => (
+                                  <SelectItem key={product.id} value={product.id}>
+                                    {product.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            {isM2 && (
+                              <div className="space-y-2">
+                                <div className="grid gap-2 sm:grid-cols-2">
+                                  <div className="space-y-1">
+                                    <Label className="text-[10px] uppercase text-muted-foreground">Largura (cm)</Label>
+                                    <Input
+                                      value={widthRaw}
+                                      onChange={(e) => handleChangeItemDimensions(index, M2_ATTRIBUTE_KEYS.widthCm, e.target.value)}
+                                      className="h-8 text-xs"
+                                      inputMode="decimal"
+                                    />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <Label className="text-[10px] uppercase text-muted-foreground">Altura (cm)</Label>
+                                    <Input
+                                      value={heightRaw}
+                                      onChange={(e) => handleChangeItemDimensions(index, M2_ATTRIBUTE_KEYS.heightCm, e.target.value)}
+                                      className="h-8 text-xs"
+                                      inputMode="decimal"
+                                    />
+                                  </div>
+                                </div>
+                                <p className={`text-xs ${hasValidDimensions ? 'text-muted-foreground' : 'text-destructive'}`}>
+                                  Area: {hasValidDimensions ? `${formatAreaM2(item.quantity)} m\u00B2` : 'Informe dimensoes validas'}
+                                </p>
+                              </div>
+                            )}
+                          </div>
                         ) : (
                           <div>
                             <p className="font-medium">{item.product_name}</p>
-                            {item.attributes && Object.keys(item.attributes).length > 0 && (
+                            {Object.keys(displayAttributes).length > 0 && (
                               <div className="flex gap-1 mt-1">
-                                {Object.entries(item.attributes).map(([key, value]) => (
+                                {Object.entries(displayAttributes).map(([key, value]) => (
                                   <Badge key={key} variant="outline" className="text-xs">
                                     {value}
                                   </Badge>
                                 ))}
                               </div>
+                            )}
+                            {hasValidDimensions && (
+                              <p className="text-xs text-muted-foreground mt-1">
+                                {m2Data.widthCm}cm x {m2Data.heightCm}cm - Area: {formatAreaM2(item.quantity)} m\u00B2
+                              </p>
                             )}
                             {item.notes && (
                               <p className="text-xs text-muted-foreground mt-1">Obs: {item.notes}</p>
@@ -1274,15 +1690,21 @@ const canSendWhatsApp = Boolean(order?.customer?.phone);
                       </TableCell>
                       <TableCell className="text-center">
                         {isEditingItems ? (
-                          <Input
-                            type="number"
-                            min={1}
-                            value={item.quantity}
-                            onChange={(e) => handleChangeItemQuantity(index, Number(e.target.value))}
-                            className="w-20 text-center"
-                          />
+                          isM2 ? (
+                            <span className={`text-sm ${hasValidDimensions ? 'text-foreground' : 'text-destructive'}`}>
+                              {hasValidDimensions ? `${formatAreaM2(item.quantity)} m\u00B2` : '--'}
+                            </span>
+                          ) : (
+                            <Input
+                              type="number"
+                              min={1}
+                              value={item.quantity}
+                              onChange={(e) => handleChangeItemQuantity(index, Number(e.target.value))}
+                              className="w-20 text-center"
+                            />
+                          )
                         ) : (
-                          item.quantity
+                          isM2 ? `${formatAreaM2(item.quantity)} m\u00B2` : item.quantity
                         )}
                       </TableCell>
                       <TableCell className="text-right">{formatCurrency(Number(item.unit_price))}</TableCell>
@@ -1299,14 +1721,15 @@ const canSendWhatsApp = Boolean(order?.customer?.phone);
                         </TableCell>
                       )}
                     </TableRow>
-                  ))}
+                    );
+                  })}
                 </TableBody>
               </Table>
 
               {isEditingItems && (
                 <div className="mt-4 rounded-lg border p-4">
-                  <div className="grid gap-3 md:grid-cols-[1fr_120px_auto] items-end">
-                    <div className="space-y-2">
+                  <div className="grid gap-3 md:grid-cols-[1fr_140px_140px_auto] items-end">
+                    <div className={`space-y-2 ${newItemIsM2 ? 'md:col-span-2' : ''}`}>
                       <Label>Produto</Label>
                       <Select value={newItemProductId} onValueChange={setNewItemProductId}>
                         <SelectTrigger>
@@ -1321,19 +1744,45 @@ const canSendWhatsApp = Boolean(order?.customer?.phone);
                         </SelectContent>
                       </Select>
                     </div>
-                    <div className="space-y-2">
-                      <Label>Quantidade</Label>
-                      <Input
-                        type="number"
-                        min={1}
-                        value={newItemQuantity}
-                        onChange={(e) => setNewItemQuantity(Number(e.target.value))}
-                      />
-                    </div>
+                    {newItemIsM2 ? (
+                      <>
+                        <div className="space-y-2">
+                          <Label>Largura (cm)</Label>
+                          <Input
+                            value={newItemWidthCm}
+                            onChange={(e) => setNewItemWidthCm(e.target.value)}
+                            inputMode="decimal"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Altura (cm)</Label>
+                          <Input
+                            value={newItemHeightCm}
+                            onChange={(e) => setNewItemHeightCm(e.target.value)}
+                            inputMode="decimal"
+                          />
+                        </div>
+                      </>
+                    ) : (
+                      <div className="space-y-2">
+                        <Label>Quantidade</Label>
+                        <Input
+                          type="number"
+                          min={1}
+                          value={newItemQuantity}
+                          onChange={(e) => setNewItemQuantity(Number(e.target.value))}
+                        />
+                      </div>
+                    )}
                     <Button onClick={handleAddItem} className="mt-6 md:mt-0">
                       Adicionar item
                     </Button>
                   </div>
+                  {newItemIsM2 && (
+                    <p className={`mt-2 text-xs ${newItemArea > 0 ? 'text-muted-foreground' : 'text-destructive'}`}>
+                      Area: {newItemArea > 0 ? `${formatAreaM2(newItemArea)} m\u00B2` : 'Informe dimensoes validas'}
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -1663,6 +2112,47 @@ const canSendWhatsApp = Boolean(order?.customer?.phone);
         </div>
       </div>
 
+      <Dialog open={customerDialogOpen} onOpenChange={setCustomerDialogOpen}>
+        <DialogContent aria-describedby={undefined} className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{order.customer || order.customer_name ? 'Editar cliente' : 'Adicionar cliente'}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Buscar cliente cadastrado</Label>
+              <CustomerSearch
+                selectedCustomer={customerDraft}
+                onSelect={(customer) => {
+                  setCustomerDraft(customer);
+                  setCustomerNameDraft(customer?.name || '');
+                }}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Nome do cliente</Label>
+              <Input
+                value={customerNameDraft}
+                onChange={(e) => setCustomerNameDraft(e.target.value)}
+                placeholder="Nome do cliente"
+              />
+              {customerDraft && customerDraft.name !== customerNameDraft.trim() && (
+                <p className="text-xs text-muted-foreground">
+                  Este nome sera atualizado no cadastro do cliente.
+                </p>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCustomerDialogOpen(false)} disabled={customerSaving}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSaveCustomer} disabled={customerSaving}>
+              {customerSaving ? 'Salvando...' : 'Salvar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Payment Dialog */}
       <Dialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen}>
         <DialogContent aria-describedby={undefined} className="max-w-md">
@@ -1748,20 +2238,22 @@ const canSendWhatsApp = Boolean(order?.customer?.phone);
             <DialogTitle>Recibo de Pagamento</DialogTitle>
           </DialogHeader>
           <div className="flex justify-center">
-            <OrderReceipt
-              ref={paymentReceiptRef}
-              order={order}
-              items={items}
-              payment={receiptPayment}
-              summary={receiptSummary}
-            />
+            {paymentReceiptHtml ? (
+              <div
+                ref={paymentReceiptRef}
+                className="w-full flex justify-center"
+                dangerouslySetInnerHTML={{ __html: paymentReceiptHtml }}
+              />
+            ) : (
+              <p className="text-sm text-muted-foreground">Recibo indisponível.</p>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => handleReceiptDialogChange(false)}>
               Fechar
             </Button>
-            <Button onClick={handlePrintPaymentReceipt} disabled={!receiptPayment}>
-              Baixar PDF
+            <Button onClick={handlePrintPaymentReceipt} disabled={!receiptPayment || paymentReceiptLoading}>
+              {paymentReceiptLoading ? 'Gerando...' : 'Baixar PDF'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1985,6 +2477,8 @@ const canSendWhatsApp = Boolean(order?.customer?.phone);
     </div>
   );
 }
+
+
 
 
 

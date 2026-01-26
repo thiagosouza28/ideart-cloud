@@ -1,6 +1,7 @@
-import { forwardRef } from 'react';
+﻿import { forwardRef } from 'react';
 import { formatOrderNumber } from '@/lib/utils';
 import { Order, OrderItem, OrderPayment, PaymentStatus, PaymentMethod } from '@/types/database';
+import { formatAreaM2, parseM2Attributes, stripM2Attributes } from '@/lib/measurements';
 
 interface OrderReceiptProps {
   order: Order;
@@ -169,12 +170,28 @@ const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
               </thead>
               <tbody>
                 {items.map((item) => {
+                  const m2 = parseM2Attributes(item.attributes);
+                  const hasDimensions =
+                    typeof m2.widthCm === 'number' &&
+                    typeof m2.heightCm === 'number' &&
+                    m2.widthCm > 0 &&
+                    m2.heightCm > 0;
+                  const displayAttributes = stripM2Attributes(item.attributes);
+                  const attributesText = Object.values(displayAttributes).filter(Boolean).join(', ');
+                  const dimensionText = hasDimensions
+                    ? `Dimensoes: ${m2.widthCm}cm x ${m2.heightCm}cm | Area: ${formatAreaM2(Number(item.quantity))} m\u00B2`
+                    : '';
                   const details = [
-                    item.attributes ? Object.values(item.attributes).join(', ') : '',
+                    dimensionText,
+                    attributesText,
                     item.notes ? `Obs: ${item.notes}` : '',
                   ]
                     .filter(Boolean)
                     .join(' | ');
+                  const quantityLabel = hasDimensions
+                    ? `${formatAreaM2(Number(item.quantity))} m\u00B2`
+                    : item.quantity;
+                  const unitLabel = hasDimensions ? ' / m\u00B2' : '';
 
                   return (
                     <tr key={item.id} className="receipt-row border-t border-slate-200">
@@ -184,8 +201,10 @@ const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
                           <div className="text-[10px] text-slate-500 mt-1">{details}</div>
                         )}
                       </td>
-                      <td className="px-3 py-2 text-center">{item.quantity}</td>
-                      <td className="px-3 py-2 text-right">{formatCurrency(Number(item.unit_price))}</td>
+                      <td className="px-3 py-2 text-center">{quantityLabel}</td>
+                      <td className="px-3 py-2 text-right">
+                        {formatCurrency(Number(item.unit_price))}{unitLabel}
+                      </td>
                       <td className="px-3 py-2 text-right font-medium">{formatCurrency(Number(item.total))}</td>
                     </tr>
                   );
@@ -271,3 +290,5 @@ const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
 OrderReceipt.displayName = 'OrderReceipt';
 
 export default OrderReceipt;
+
+

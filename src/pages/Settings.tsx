@@ -44,6 +44,8 @@ export default function Settings() {
   const [companyLoading, setCompanyLoading] = useState(false);
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [signatureFile, setSignatureFile] = useState<File | null>(null);
+  const [signaturePreview, setSignaturePreview] = useState<string | null>(null);
   const [catalogPreviewVisible, setCatalogPreviewVisible] = useState(false);
   const [catalogPreviewKey, setCatalogPreviewKey] = useState(0);
   const [companyForm, setCompanyForm] = useState({
@@ -54,6 +56,8 @@ export default function Settings() {
     whatsapp: "",
     whatsapp_message_template: "",
     birthday_message_template: "",
+    signature_responsible: "",
+    signature_role: "",
     address: "",
     city: "",
     state: "",
@@ -173,9 +177,13 @@ export default function Settings() {
 
     if (data) {
       const normalizedLogoUrl = ensurePublicStorageUrl('product-images', data.logo_url);
+      const normalizedSignatureUrl = data.signature_image_url
+        ? ensurePublicStorageUrl('product-images', data.signature_image_url)
+        : null;
       setCompany({
         ...(data as Company),
         logo_url: normalizedLogoUrl,
+        signature_image_url: normalizedSignatureUrl,
       });
 
       if (!originalForm) {
@@ -209,6 +217,8 @@ export default function Settings() {
           state: data.state || "",
           instagram: data.instagram || "",
           facebook: data.facebook || "",
+          signature_responsible: data.signature_responsible || "",
+          signature_role: data.signature_role || "",
           minimum_order_value: Number(data.minimum_order_value ?? 0),
           catalog_primary_color: catalogButtonBg,
           catalog_secondary_color: catalogHeaderBg,
@@ -235,6 +245,8 @@ export default function Settings() {
         setCompanyForm(formData);
         setOriginalForm(formData);
         setLogoPreview(normalizedLogoUrl);
+        setSignaturePreview(normalizedSignatureUrl);
+        setSignatureFile(null);
         setIsSaved(true);
       }
     }
@@ -253,12 +265,26 @@ export default function Settings() {
     }
   };
 
+  const handleSignatureChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setSignatureFile(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setSignaturePreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   // Check for pending changes
   const hasChanges = useMemo(() => {
     return !!originalForm && (
-      JSON.stringify(companyForm) !== JSON.stringify(originalForm) || logoFile !== null
+      JSON.stringify(companyForm) !== JSON.stringify(originalForm) ||
+      logoFile !== null ||
+      signatureFile !== null
     );
-  }, [originalForm, companyForm, logoFile]);
+  }, [originalForm, companyForm, logoFile, signatureFile]);
 
   // Update isSaved when form changes
   useEffect(() => {
@@ -302,6 +328,7 @@ export default function Settings() {
 
     try {
       let logoUrl = company.logo_url;
+      let signatureUrl = company.signature_image_url || null;
 
       // Upload new logo if changed
       if (logoFile) {
@@ -328,6 +355,30 @@ export default function Settings() {
         logoUrl = ensurePublicStorageUrl('product-images', urlData.publicUrl);
       }
 
+      if (signatureFile) {
+        const fileExt = signatureFile.name.split(".").pop() || "png";
+        const fileName = `${company.id}-${Date.now()}.${fileExt}`;
+        const filePath = `signatures/${fileName}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from("product-images")
+          .upload(filePath, signatureFile, { upsert: true });
+
+        if (uploadError) {
+          throw uploadError;
+        }
+
+        const { data: urlData } = supabase.storage
+          .from("product-images")
+          .getPublicUrl(filePath);
+
+        if (!urlData?.publicUrl) {
+          throw new Error("URL da assinatura não foi retornada.");
+        }
+
+        signatureUrl = ensurePublicStorageUrl('product-images', urlData.publicUrl);
+      }
+
       const { data: updatedCompany, error } = await supabase
         .from('companies')
         .update({
@@ -343,6 +394,9 @@ export default function Settings() {
           facebook: companyForm.facebook || null,
           minimum_order_value: Number(companyForm.minimum_order_value || 0),
           logo_url: logoUrl,
+          signature_image_url: signatureUrl,
+          signature_responsible: companyForm.signature_responsible?.trim() || null,
+          signature_role: companyForm.signature_role?.trim() || null,
           catalog_primary_color: companyForm.catalog_button_bg_color,
           catalog_secondary_color: companyForm.catalog_header_bg_color,
           catalog_accent_color: companyForm.catalog_price_color,
@@ -373,12 +427,18 @@ export default function Settings() {
 
       toast({ title: "Empresa atualizada com sucesso!" });
       const normalizedUpdatedLogo = ensurePublicStorageUrl('product-images', updatedCompany?.logo_url || null);
+      const normalizedUpdatedSignature = updatedCompany?.signature_image_url
+        ? ensurePublicStorageUrl('product-images', updatedCompany.signature_image_url)
+        : null;
       setCompany({
         ...(updatedCompany as Company),
         logo_url: normalizedUpdatedLogo,
+        signature_image_url: normalizedUpdatedSignature,
       });
       setLogoFile(null);
       setLogoPreview(normalizedUpdatedLogo);
+      setSignatureFile(null);
+      setSignaturePreview(normalizedUpdatedSignature);
       setIsSaved(true);
       setOriginalForm(companyForm);
       if (activeTab === 'catalog') {
@@ -622,6 +682,57 @@ export default function Settings() {
                   <p className="text-sm text-muted-foreground">
                     Clique para alterar
                   </p>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-4 rounded-lg border border-muted/60 p-4">
+                <div className="flex items-center gap-6">
+                  <div className="relative">
+                    <div className="h-20 w-32 rounded-md border-2 border-dashed border-muted-foreground/30 flex items-center justify-center overflow-hidden bg-muted/50">
+                      {signaturePreview ? (
+                        <img
+                          src={signaturePreview}
+                          alt="Assinatura"
+                          className="h-full w-full object-contain"
+                        />
+                      ) : (
+                        <Upload className="h-6 w-6 text-muted-foreground/50" />
+                      )}
+                    </div>
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg"
+                      onChange={handleSignatureChange}
+                      className="absolute inset-0 opacity-0 cursor-pointer"
+                    />
+                  </div>
+                  <div>
+                    <p className="font-medium">Assinatura para recibos</p>
+                    <p className="text-sm text-muted-foreground">
+                      Envie uma imagem PNG/JPG (de preferencia com fundo transparente).
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="company-signature-responsible">Responsavel pela assinatura</Label>
+                    <Input
+                      id="company-signature-responsible"
+                      value={companyForm.signature_responsible}
+                      onChange={(e) => setCompanyForm({ ...companyForm, signature_responsible: e.target.value })}
+                      placeholder="Nome do responsavel"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="company-signature-role">Cargo do responsavel</Label>
+                    <Input
+                      id="company-signature-role"
+                      value={companyForm.signature_role}
+                      onChange={(e) => setCompanyForm({ ...companyForm, signature_role: e.target.value })}
+                      placeholder="Cargo"
+                    />
+                  </div>
                 </div>
               </div>
 

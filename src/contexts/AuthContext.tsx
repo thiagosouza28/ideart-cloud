@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
@@ -17,6 +17,8 @@ interface AuthContextType {
   loading: boolean;
   needsOnboarding: boolean;
   passwordRecovery: boolean;
+  isImpersonating: boolean;
+  impersonationAdmin: { id: string; email: string | null } | null;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signUp: (payload: {
     email: string;
@@ -26,6 +28,9 @@ interface AuthContextType {
     companyName?: string;
   }) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
+  startImpersonation: () => Promise<void>;
+  stopImpersonation: () => Promise<boolean>;
+  clearImpersonation: () => void;
   hasPermission: (allowedRoles: AppRole[]) => boolean;
   refreshUserData: () => Promise<void>;
   refreshCompany: () => Promise<void>;
@@ -34,6 +39,31 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+type StoredAdminSession = {
+  access_token: string;
+  refresh_token: string;
+};
+
+type ImpersonationAdmin = {
+  id: string;
+  email: string | null;
+};
+
+const IMPERSONATION_SESSION_KEY = 'admin_impersonation_origin_session';
+const IMPERSONATION_FLAG_KEY = 'admin_impersonation_active';
+const IMPERSONATION_ADMIN_KEY = 'admin_impersonation_admin';
+
+const loadImpersonationAdmin = () => {
+  if (typeof window === 'undefined') return null;
+  const raw = localStorage.getItem(IMPERSONATION_ADMIN_KEY);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as ImpersonationAdmin;
+  } catch {
+    return null;
+  }
+};
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
@@ -46,6 +76,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [needsOnboarding, setNeedsOnboarding] = useState(false);
   const [passwordRecovery, setPasswordRecovery] = useState(false);
+  const [isImpersonating, setIsImpersonating] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem(IMPERSONATION_FLAG_KEY) === 'true';
+  });
+  const [impersonationAdmin, setImpersonationAdmin] = useState<ImpersonationAdmin | null>(
+    () => loadImpersonationAdmin()
+  );
+  const userIdRef = useRef<string | null>(null);
+  const profileIdRef = useRef<string | null>(null);
+  const sessionTokenRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    userIdRef.current = user?.id ?? null;
+  }, [user]);
+
+  useEffect(() => {
+    profileIdRef.current = profile?.id ?? null;
+  }, [profile]);
+
+  useEffect(() => {
+    sessionTokenRef.current = session?.access_token ?? null;
+  }, [session]);
+
+  const clearImpersonationState = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    localStorage.removeItem(IMPERSONATION_SESSION_KEY);
+    localStorage.removeItem(IMPERSONATION_FLAG_KEY);
+    localStorage.removeItem(IMPERSONATION_ADMIN_KEY);
+    setIsImpersonating(false);
+    setImpersonationAdmin(null);
+  }, []);
 
   useEffect(() => {
     const url = window.location.href;
@@ -69,10 +130,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-
         if (event === 'SIGNED_OUT') {
+          setSession(null);
+          setUser(null);
           setProfile(null);
           setCompany(null);
           setSubscription(null);
@@ -80,10 +140,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setNeedsOnboarding(false);
           setPasswordRecovery(false);
           setLoading(false);
+          clearImpersonationState();
 
           if (!wasAuthResetRecently()) {
             void resetAuthSession({ reason: 'signed_out', skipSignOut: true });
           }
+          return;
+        }
+
+        if (event === 'TOKEN_REFRESHED') {
+          // Avoid UI resets on tab focus/token refresh.
           return;
         }
 
@@ -96,17 +162,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         }
 
-        if (session?.user) {
-          setTimeout(() => {
-            fetchUserData(session.user.id);
-          }, 0);
+        const nextUserId = session?.user?.id ?? null;
+        const tokenChanged = (session?.access_token ?? null) !== sessionTokenRef.current;
+        const userChanged = nextUserId !== userIdRef.current;
+        const shouldUpdateUser = userChanged || event === 'USER_UPDATED';
+        const shouldUpdateSession = shouldUpdateUser;
+
+        if (shouldUpdateSession) {
+          setSession(session ?? null);
+        }
+        if (shouldUpdateUser) {
+          setUser(session?.user ?? null);
+        }
+
+        if (nextUserId) {
+          if (profileIdRef.current !== nextUserId) {
+            setTimeout(() => {
+              fetchUserData(nextUserId);
+            }, 0);
+          }
         } else {
+          setSession(null);
+          setUser(null);
           setProfile(null);
           setCompany(null);
           setSubscription(null);
           setRole(null);
           setNeedsOnboarding(false);
           setPasswordRecovery(false);
+          clearImpersonationState();
           setLoading(false);
         }
       }
@@ -126,6 +210,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setRole(null);
         setNeedsOnboarding(false);
         setPasswordRecovery(false);
+        clearImpersonationState();
         setLoading(false);
         return;
       }
@@ -140,11 +225,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setCompany(null);
         setSubscription(null);
         setPasswordRecovery(false);
+        clearImpersonationState();
         setLoading(false);
       }
     });
 
     return () => subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    const refreshIfNeeded = async () => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      const { data } = await supabase.auth.getSession();
+      const session = data.session;
+      if (!session?.expires_at) return;
+      const expiresAtMs = session.expires_at * 1000;
+      if (Date.now() > expiresAtMs - 60_000) {
+        try {
+          await supabase.auth.refreshSession();
+        } catch (error) {
+          console.warn('[auth] silent refresh failed', error);
+        }
+      }
+    };
+
+    refreshIfNeeded();
+    const interval = window.setInterval(refreshIfNeeded, 5 * 60 * 1000);
+    return () => window.clearInterval(interval);
   }, []);
 
   const loadCompany = useCallback(async (companyId?: string | null) => {
@@ -272,9 +379,78 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       console.warn('[auth] signOut failed', error);
     }
+    clearImpersonationState();
     await resetAuthSession({ reason: 'user_signout', skipSignOut: true });
     setPasswordRecovery(false);
   };
+
+  const startImpersonation = useCallback(async () => {
+    if (isImpersonating) {
+      throw new Error('Impersonation already active.');
+    }
+    const { data, error } = await supabase.auth.getSession();
+    const activeSession = data.session ?? null;
+    if (error || !activeSession?.access_token || !activeSession?.refresh_token || !activeSession.user?.id) {
+      throw new Error('Admin session not available.');
+    }
+
+    const storedSession: StoredAdminSession = {
+      access_token: activeSession.access_token,
+      refresh_token: activeSession.refresh_token,
+    };
+    const adminInfo: ImpersonationAdmin = {
+      id: activeSession.user.id,
+      email: activeSession.user.email ?? null,
+    };
+
+    localStorage.setItem(IMPERSONATION_SESSION_KEY, JSON.stringify(storedSession));
+    localStorage.setItem(IMPERSONATION_ADMIN_KEY, JSON.stringify(adminInfo));
+    localStorage.setItem(IMPERSONATION_FLAG_KEY, 'true');
+    setIsImpersonating(true);
+    setImpersonationAdmin(adminInfo);
+  }, [isImpersonating]);
+
+  const stopImpersonation = useCallback(async () => {
+    if (typeof window === 'undefined') return false;
+    const raw = localStorage.getItem(IMPERSONATION_SESSION_KEY);
+    if (!raw) {
+      clearImpersonationState();
+      return false;
+    }
+
+    let stored: StoredAdminSession | null = null;
+    try {
+      stored = JSON.parse(raw) as StoredAdminSession;
+    } catch {
+      clearImpersonationState();
+      return false;
+    }
+
+    const accessToken = stored?.access_token;
+    const refreshToken = stored?.refresh_token;
+    if (!accessToken || !refreshToken) {
+      clearImpersonationState();
+      return false;
+    }
+
+    const { data, error } = await supabase.auth.setSession({
+      access_token: accessToken,
+      refresh_token: refreshToken,
+    });
+
+    clearImpersonationState();
+
+    if (error || !data.session) {
+      await resetAuthSession({ reason: 'impersonation_restore_failed' });
+      return false;
+    }
+
+    return true;
+  }, [clearImpersonationState]);
+
+  const clearImpersonation = useCallback(() => {
+    clearImpersonationState();
+  }, [clearImpersonationState]);
 
   const hasPermission = (allowedRoles: AppRole[]) => {
     if (!role) return false;
@@ -293,9 +469,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       loading,
       needsOnboarding,
       passwordRecovery,
+      isImpersonating,
+      impersonationAdmin,
       signIn,
       signUp,
       signOut,
+      startImpersonation,
+      stopImpersonation,
+      clearImpersonation,
       hasPermission,
       refreshUserData,
       company,

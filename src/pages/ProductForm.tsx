@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect, useRef } from 'react';
+﻿import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { z } from 'zod';
 import { Button } from '@/components/ui/button';
@@ -1399,7 +1399,7 @@ export default function ProductForm() {
                 <SelectContent>
                   <SelectItem value="un">Unidade (un)</SelectItem>
                   <SelectItem value="m">Metro (m)</SelectItem>
-                  <SelectItem value="m²">Metro² (m²)</SelectItem>
+                  <SelectItem value="m\u00B2">Metro2 (m\u00B2)</SelectItem>
                   <SelectItem value="kg">Quilograma (kg)</SelectItem>
                   <SelectItem value="cx">Caixa (cx)</SelectItem>
                   <SelectItem value="pct">Pacote (pct)</SelectItem>
@@ -2172,5 +2172,7 @@ export default function ProductForm() {
     </div>
   );
 }
+
+
 
 

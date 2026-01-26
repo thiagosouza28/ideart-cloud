@@ -30,7 +30,7 @@ const signupSchema = z.object({
 
 export default function Auth() {
   const navigate = useNavigate();
-  const { user, profile, needsOnboarding, subscription, signIn, signUp, loading: authLoading } = useAuth();
+  const { user, profile, needsOnboarding, signIn, signUp, loading: authLoading } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -58,13 +58,11 @@ export default function Auth() {
         navigate('/onboarding');
       } else if (mustChangePassword) {
         navigate('/alterar-senha');
-      } else if (subscription && !subscription.hasAccess) {
-        navigate('/assinatura');
       } else {
         navigate('/dashboard');
       }
     }
-  }, [user, authLoading, needsOnboarding, mustCompleteCompany, mustChangePassword, subscription, navigate]);
+  }, [user, authLoading, needsOnboarding, mustCompleteCompany, mustChangePassword, navigate]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();

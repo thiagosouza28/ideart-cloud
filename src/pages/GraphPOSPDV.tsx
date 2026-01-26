@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+﻿import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, ShoppingCart, Barcode, User, Plus, Minus, Trash2 } from 'lucide-react';
 import GraphPOSCard from '@/components/graphpos/GraphPOSCard';
@@ -12,6 +12,8 @@ import { normalizeBarcode } from '@/lib/barcode';
 import { useToast } from '@/hooks/use-toast';
 import { getGraphPOSCheckoutState, setGraphPOSCheckoutState } from '@/lib/graphposCheckout';
 import { normalizeDigits } from '@/components/ui/masked-input';
+import { useUnsavedChanges } from '@/hooks/use-unsaved-changes';
+import { M2_ATTRIBUTE_KEYS, calculateAreaM2, formatAreaM2, isAreaUnit, parseM2Attributes, parseMeasurementInput } from '@/lib/measurements';
 
 export default function GraphPOSPDV() {
   const navigate = useNavigate();
@@ -28,6 +30,8 @@ export default function GraphPOSPDV() {
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const customerRef = useRef<HTMLDivElement>(null);
+  const draftHydratedRef = useRef(false);
+  const draftStorageKey = 'graphpos_pdv_draft';
   // Mock-only flow for layout navigation.
 
   useEffect(() => {
@@ -39,6 +43,46 @@ export default function GraphPOSPDV() {
     document.addEventListener('mousedown', handleOutside);
     return () => document.removeEventListener('mousedown', handleOutside);
   }, []);
+
+  useEffect(() => {
+    const raw = window.localStorage.getItem(draftStorageKey);
+    if (!raw) {
+      draftHydratedRef.current = true;
+      return;
+    }
+    try {
+      const parsed = JSON.parse(raw) as {
+        cart?: CartItem[];
+        discount?: number;
+        customer?: Customer | null;
+      };
+      if (parsed.cart && Array.isArray(parsed.cart)) {
+        const restored = parsed.cart.map((item) => ({
+          id: item.id || crypto.randomUUID(),
+          ...item,
+          product: {
+            ...item.product,
+            image_url: ensurePublicStorageUrl('product-images', item.product.image_url),
+          },
+          attributes: item.attributes || {},
+        }));
+        setCart(restored);
+      }
+      if (typeof parsed.discount === 'number') {
+        setDiscount(parsed.discount);
+      }
+      if (parsed.customer) {
+        setSelectedCustomer(parsed.customer);
+      }
+      if ((parsed.cart && parsed.cart.length > 0) || parsed.discount || parsed.customer) {
+        toast({ title: 'Rascunho restaurado' });
+      }
+    } catch {
+      window.localStorage.removeItem(draftStorageKey);
+    } finally {
+      draftHydratedRef.current = true;
+    }
+  }, [draftStorageKey, toast]);
 
   useEffect(() => {
     const checkout = getGraphPOSCheckoutState();
@@ -141,21 +185,57 @@ export default function GraphPOSPDV() {
     return () => clearTimeout(timeout);
   }, [customerSearch, toast]);
 
+  useEffect(() => {
+    if (!draftHydratedRef.current) return;
+    const hasData = cart.length > 0 || discount > 0 || Boolean(selectedCustomer);
+    if (!hasData) {
+      window.localStorage.removeItem(draftStorageKey);
+      return;
+    }
+    window.localStorage.setItem(
+      draftStorageKey,
+      JSON.stringify({
+        cart,
+        discount,
+        customer: selectedCustomer,
+      }),
+    );
+  }, [cart, discount, draftStorageKey, selectedCustomer]);
+
   const formatCurrency = (v: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
-  const getUnitPrice = (product: Product) => resolveProductPrice(product, 1, [], 0);
+  const formatMeasurement = (v: number) =>
+    new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 2 }).format(v);
+  const getUnitPrice = (product: Product, quantity = 1) => resolveProductPrice(product, quantity, [], 0);
+  const isM2Product = (product: Product) => isAreaUnit(product.unit);
 
   const addToCart = (product: Product) => {
+    if (isM2Product(product)) {
+      setCart([
+        ...cart,
+        {
+          id: crypto.randomUUID(),
+          product,
+          quantity: 0,
+          unit_price: getUnitPrice(product, 1),
+          discount: 0,
+          attributes: {},
+        },
+      ]);
+      return;
+    }
+
     const existing = cart.find((i) => i.product.id === product.id);
     if (existing) {
-      setCart(cart.map((i) => i.product.id === product.id ? { ...i, quantity: i.quantity + 1 } : i));
+      setCart(cart.map((i) => i.id === existing.id ? { ...i, quantity: i.quantity + 1 } : i));
     } else {
       setCart([
         ...cart,
         {
+          id: crypto.randomUUID(),
           product,
           quantity: 1,
-          unit_price: getUnitPrice(product),
+          unit_price: getUnitPrice(product, 1),
           discount: 0,
           attributes: {},
         },
@@ -163,17 +243,56 @@ export default function GraphPOSPDV() {
     }
   };
 
-  const updateQuantity = (productId: string, delta: number) => {
+  const updateQuantity = (itemId: string, delta: number) => {
     setCart(cart.map((i) => {
-      if (i.product.id === productId) {
-        const newQty = Math.max(1, i.quantity + delta);
-        return { ...i, quantity: newQty };
-      }
-      return i;
+      if (i.id !== itemId) return i;
+      if (isM2Product(i.product)) return i;
+      const newQty = Math.max(1, i.quantity + delta);
+      return { ...i, quantity: newQty };
     }));
   };
 
-  const removeFromCart = (productId: string) => setCart(cart.filter((i) => i.product.id !== productId));
+  const updateM2Value = (itemId: string, key: string, value: string) => {
+    setCart((prev) =>
+      prev.map((item) => {
+        if (item.id !== itemId) return item;
+        if (!isM2Product(item.product)) return item;
+
+        const nextAttributes = { ...(item.attributes || {}) };
+        nextAttributes[key] = value;
+
+        const widthCm = parseMeasurementInput(nextAttributes[M2_ATTRIBUTE_KEYS.widthCm]);
+        const heightCm = parseMeasurementInput(nextAttributes[M2_ATTRIBUTE_KEYS.heightCm]);
+        const hasValidDimensions =
+          typeof widthCm === 'number' &&
+          typeof heightCm === 'number' &&
+          widthCm > 0 &&
+          heightCm > 0;
+
+        if (hasValidDimensions) {
+          const area = calculateAreaM2(widthCm, heightCm);
+          nextAttributes[M2_ATTRIBUTE_KEYS.areaM2] = area.toFixed(4);
+          const unitPrice = getUnitPrice(item.product, area);
+          return {
+            ...item,
+            attributes: nextAttributes,
+            quantity: area,
+            unit_price: unitPrice,
+          };
+        }
+
+        delete nextAttributes[M2_ATTRIBUTE_KEYS.areaM2];
+        return {
+          ...item,
+          attributes: nextAttributes,
+          quantity: 0,
+          unit_price: getUnitPrice(item.product, 1),
+        };
+      }),
+    );
+  };
+
+  const removeFromCart = (itemId: string) => setCart(cart.filter((i) => i.id !== itemId));
 
   const handleBarcodeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -218,10 +337,28 @@ export default function GraphPOSPDV() {
 
   const subtotal = cart.reduce((acc, i) => acc + (i.unit_price * i.quantity - i.discount), 0);
   const total = Math.max(0, subtotal - discount);
+  const hasUnsavedChanges = cart.length > 0 || discount > 0 || Boolean(selectedCustomer);
+
+  useUnsavedChanges(hasUnsavedChanges);
 
   const handleFinalize = () => {
     if (cart.length === 0) {
       toast({ title: 'Carrinho vazio', variant: 'destructive' });
+      return;
+    }
+
+    const invalidM2Items = cart.filter((item) => {
+      if (!isM2Product(item.product)) return false;
+      const { widthCm, heightCm } = parseM2Attributes(item.attributes);
+      return !widthCm || !heightCm || widthCm <= 0 || heightCm <= 0;
+    });
+
+    if (invalidM2Items.length > 0) {
+      toast({
+        title: 'Informe largura e altura',
+        description: invalidM2Items.map((item) => item.product.name).join(', '),
+        variant: 'destructive',
+      });
       return;
     }
 
@@ -231,6 +368,10 @@ export default function GraphPOSPDV() {
         name: item.product.name,
         quantity: item.quantity,
         unitPrice: item.unit_price,
+        unitLabel: isM2Product(item.product) ? 'm\u00B2' : 'un',
+        ...parseM2Attributes(item.attributes),
+        areaM2: isM2Product(item.product) ? item.quantity : undefined,
+        attributes: item.attributes || {},
       })),
       subtotal,
       discount,
@@ -322,7 +463,10 @@ export default function GraphPOSPDV() {
                           )}
                         </div>
                         <p className="text-sm font-semibold text-slate-800">{product.name}</p>
-                        <p className="text-sm font-semibold text-sky-600">{formatCurrency(getUnitPrice(product))}</p>
+                        <p className="text-sm font-semibold text-sky-600">
+                          {formatCurrency(getUnitPrice(product, 1))}
+                          {isM2Product(product) ? ' / m\u00B2' : ''}
+                        </p>
                         <p className="text-xs text-slate-400">
                           {product.track_stock ? `Estoque: ${product.stock_quantity}` : 'Sem controle de estoque'}
                         </p>
@@ -426,42 +570,104 @@ export default function GraphPOSPDV() {
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {cart.map((item) => (
-                      <div key={item.product.id} className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white p-3 shadow-[0_1px_2px_rgba(15,23,42,0.06)]">
-                        <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-xl bg-slate-100">
-                          {item.product.image_url ? (
-                            <img src={item.product.image_url} alt={item.product.name} className="h-full w-full object-cover" />
-                          ) : (
-                            <ShoppingCart className="h-5 w-5 text-slate-400" />
+                    {cart.map((item) => {
+                      const isM2 = isM2Product(item.product);
+                      const widthRaw = item.attributes?.[M2_ATTRIBUTE_KEYS.widthCm] ?? '';
+                      const heightRaw = item.attributes?.[M2_ATTRIBUTE_KEYS.heightCm] ?? '';
+                      const widthCm = parseMeasurementInput(widthRaw);
+                      const heightCm = parseMeasurementInput(heightRaw);
+                      const hasValidDimensions =
+                        typeof widthCm === 'number' &&
+                        typeof heightCm === 'number' &&
+                        widthCm > 0 &&
+                        heightCm > 0;
+                      const areaLabel = hasValidDimensions
+                        ? `${formatAreaM2(item.quantity)} m\u00B2`
+                        : 'Informe largura e altura';
+                      const dimensionLabel = hasValidDimensions
+                        ? `${formatMeasurement(widthCm as number)}cm x ${formatMeasurement(heightCm as number)}cm`
+                        : '';
+
+                      return (
+                        <div key={item.id} className="rounded-lg border border-slate-200 bg-white p-3 shadow-[0_1px_2px_rgba(15,23,42,0.06)]">
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-xl bg-slate-100">
+                              {item.product.image_url ? (
+                                <img src={item.product.image_url} alt={item.product.name} className="h-full w-full object-cover" />
+                              ) : (
+                                <ShoppingCart className="h-5 w-5 text-slate-400" />
+                              )}
+                            </div>
+                            <div className="flex-1">
+                              <p className="text-sm font-semibold text-slate-800">{item.product.name}</p>
+                              <p className="text-xs text-slate-500">
+                                {formatCurrency(item.unit_price)}
+                                {isM2 ? ' / m\u00B2' : ''}{' '}
+                                {isM2 ? areaLabel : `x ${item.quantity}`}
+                              </p>
+                              {isM2 && hasValidDimensions && (
+                                <p className="text-[11px] text-slate-400">
+                                  {dimensionLabel}
+                                </p>
+                              )}
+                              <p className="text-xs font-semibold text-slate-700">
+                                {formatCurrency(item.unit_price * item.quantity - item.discount)}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              {!isM2 && (
+                                <>
+                                  <button
+                                    className="flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 text-slate-500"
+                                    onClick={() => updateQuantity(item.id, -1)}
+                                  >
+                                    <Minus className="h-3 w-3" />
+                                  </button>
+                                  <span className="w-5 text-center text-xs text-slate-600">{item.quantity}</span>
+                                  <button
+                                    className="flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 text-slate-500"
+                                    onClick={() => updateQuantity(item.id, 1)}
+                                  >
+                                    <Plus className="h-3 w-3" />
+                                  </button>
+                                </>
+                              )}
+                              <button
+                                className="flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 text-red-500"
+                                onClick={() => removeFromCart(item.id)}
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </button>
+                            </div>
+                          </div>
+                          {isM2 && (
+                            <div className="mt-3 grid gap-2 text-xs text-slate-600 sm:grid-cols-2">
+                              <label className="flex flex-col gap-1">
+                                <span className="text-[10px] uppercase tracking-wide text-slate-400">Largura (cm)</span>
+                                <input
+                                  className="h-8 rounded-md border border-slate-200 px-2 text-xs"
+                                  inputMode="decimal"
+                                  value={widthRaw}
+                                  onChange={(e) => updateM2Value(item.id, M2_ATTRIBUTE_KEYS.widthCm, e.target.value)}
+                                />
+                              </label>
+                              <label className="flex flex-col gap-1">
+                                <span className="text-[10px] uppercase tracking-wide text-slate-400">Altura (cm)</span>
+                                <input
+                                  className="h-8 rounded-md border border-slate-200 px-2 text-xs"
+                                  inputMode="decimal"
+                                  value={heightRaw}
+                                  onChange={(e) => updateM2Value(item.id, M2_ATTRIBUTE_KEYS.heightCm, e.target.value)}
+                                />
+                              </label>
+                              <div className={`col-span-1 text-[11px] ${hasValidDimensions ? 'text-slate-500' : 'text-red-500'} sm:col-span-2`}>
+                                Área: {hasValidDimensions ? `${formatAreaM2(item.quantity)} m\u00B2` : 'Preencha largura e altura válidas'}
+                              </div>
+                            </div>
                           )}
                         </div>
-                        <div className="flex-1">
-                          <p className="text-sm font-semibold text-slate-800">{item.product.name}</p>
-                          <p className="text-xs text-slate-500">{formatCurrency(item.unit_price)} x {item.quantity}</p>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <button
-                            className="flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 text-slate-500"
-                            onClick={() => updateQuantity(item.product.id, -1)}
-                          >
-                            <Minus className="h-3 w-3" />
-                          </button>
-                          <span className="w-5 text-center text-xs text-slate-600">{item.quantity}</span>
-                          <button
-                            className="flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 text-slate-500"
-                            onClick={() => updateQuantity(item.product.id, 1)}
-                          >
-                            <Plus className="h-3 w-3" />
-                          </button>
-                          <button
-                            className="flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 text-red-500"
-                            onClick={() => removeFromCart(item.product.id)}
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
 
@@ -503,3 +709,5 @@ export default function GraphPOSPDV() {
     </div>
   );
 }
+
+

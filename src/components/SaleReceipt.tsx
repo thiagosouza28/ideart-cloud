@@ -1,11 +1,16 @@
-import { forwardRef } from 'react';
+﻿import { forwardRef } from 'react';
 import { CheckCircle2, CreditCard, Mail, Phone, User } from 'lucide-react';
 import { PaymentMethod, Customer } from '@/types/database';
+import { formatAreaM2 } from '@/lib/measurements';
 
 interface ReceiptItem {
   name: string;
   quantity: number;
   unitPrice: number;
+  unitLabel?: string;
+  widthCm?: number;
+  heightCm?: number;
+  areaM2?: number;
 }
 
 interface SaleReceiptProps {
@@ -145,17 +150,31 @@ const SaleReceipt = forwardRef<HTMLDivElement, SaleReceiptProps>(
                 </span>
               </div>
               <div className="space-y-3">
-                {items.map((item, index) => (
-                  <div key={index} className="flex items-center justify-between text-sm">
-                    <div>
-                      <p className="font-medium text-slate-800">{item.name}</p>
-                      <p className="text-xs text-slate-400">
-                        {item.quantity} x {formatCurrency(item.unitPrice)}
-                      </p>
+                {items.map((item, index) => {
+                  const isM2 = item.unitLabel === 'm\u00B2' || Boolean(item.areaM2) || (item.widthCm && item.heightCm);
+                  const quantityLabel = isM2
+                    ? `${formatAreaM2(item.quantity)} m\u00B2`
+                    : String(item.quantity);
+                  const unitSuffix = isM2 ? ' / m\u00B2' : '';
+                  const hasDimensions = Boolean(item.widthCm && item.heightCm);
+
+                  return (
+                    <div key={index} className="flex items-center justify-between text-sm">
+                      <div>
+                        <p className="font-medium text-slate-800">{item.name}</p>
+                        <p className="text-xs text-slate-400">
+                          {quantityLabel} x {formatCurrency(item.unitPrice)}{unitSuffix}
+                        </p>
+                        {hasDimensions && (
+                          <p className="text-[11px] text-slate-400">
+                            {item.widthCm}cm x {item.heightCm}cm
+                          </p>
+                        )}
+                      </div>
+                      <span className="font-semibold">{formatCurrency(item.unitPrice * item.quantity)}</span>
                     </div>
-                    <span className="font-semibold">{formatCurrency(item.unitPrice * item.quantity)}</span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
               <div className="mt-4 border-t border-slate-200 pt-4 text-sm space-y-2">
                 <div className="flex justify-between text-slate-500">
@@ -182,3 +201,5 @@ const SaleReceipt = forwardRef<HTMLDivElement, SaleReceiptProps>(
 SaleReceipt.displayName = 'SaleReceipt';
 
 export default SaleReceipt;
+
+

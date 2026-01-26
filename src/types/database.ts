@@ -30,6 +30,9 @@ export interface Company {
   name: string;
   slug: string;
   logo_url: string | null;
+  signature_image_url?: string | null;
+  signature_responsible?: string | null;
+  signature_role?: string | null;
   description: string | null;
   phone: string | null;
   whatsapp: string | null;
@@ -511,6 +514,7 @@ export interface OrderArtFile {
 }
 
 export interface CartItem {
+  id: string;
   product: Product;
   quantity: number;
   unit_price: number;

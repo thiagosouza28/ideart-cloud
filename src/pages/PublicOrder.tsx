@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
+﻿import { useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
 import { formatOrderNumber } from '@/lib/utils';
 import { useParams } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
@@ -11,6 +11,7 @@ import { useToast } from '@/hooks/use-toast';
 import { approveArtByToken, approveOrderByToken, fetchPublicOrder } from '@/services/orders';
 import type { OrderStatus, PublicOrderPayload } from '@/types/database';
 import { ensurePublicStorageUrl } from '@/lib/storage';
+import { formatAreaM2, parseM2Attributes } from '@/lib/measurements';
 import { CheckCircle, Clock, Package, Truck, XCircle, FileText, Image as ImageIcon } from 'lucide-react';
 
 const statusLabels: Record<OrderStatus, string> = {
@@ -274,16 +275,33 @@ export default function PublicOrder() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {payload.items.map((item) => (
-                      <TableRow key={item.id}>
-                        <TableCell>
-                          <p className="font-medium">{item.product_name}</p>
-                        </TableCell>
-                        <TableCell className="text-center">{item.quantity}</TableCell>
-                        <TableCell className="text-right">{formatCurrency(Number(item.unit_price))}</TableCell>
-                        <TableCell className="text-right font-medium">{formatCurrency(Number(item.total))}</TableCell>
-                      </TableRow>
-                    ))}
+                    {payload.items.map((item) => {
+                      const m2 = parseM2Attributes(item.attributes);
+                      const hasDimensions =
+                        typeof m2.widthCm === 'number' &&
+                        typeof m2.heightCm === 'number' &&
+                        m2.widthCm > 0 &&
+                        m2.heightCm > 0;
+                      const quantityLabel = hasDimensions
+                        ? `${formatAreaM2(Number(item.quantity))} m\u00B2`
+                        : item.quantity;
+
+                      return (
+                        <TableRow key={item.id}>
+                          <TableCell>
+                            <p className="font-medium">{item.product_name}</p>
+                            {hasDimensions && (
+                              <p className="text-xs text-muted-foreground mt-1">
+                                {m2.widthCm}cm x {m2.heightCm}cm - Area: {formatAreaM2(Number(item.quantity))} m\u00B2
+                              </p>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-center">{quantityLabel}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(Number(item.unit_price))}{hasDimensions ? ' / m\u00B2' : ''}</TableCell>
+                          <TableCell className="text-right font-medium">{formatCurrency(Number(item.total))}</TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
 
@@ -571,3 +589,6 @@ export default function PublicOrder() {
     </div>
   );
 }
+
+
+

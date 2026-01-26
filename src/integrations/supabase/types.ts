@@ -126,6 +126,9 @@ export type Database = {
           instagram: string | null
           is_active: boolean
           logo_url: string | null
+          signature_image_url: string | null
+          signature_responsible: string | null
+          signature_role: string | null
           minimum_order_value: number | null
           name: string
           owner_user_id: string | null
@@ -177,6 +180,9 @@ export type Database = {
           instagram?: string | null
           is_active?: boolean
           logo_url?: string | null
+          signature_image_url?: string | null
+          signature_responsible?: string | null
+          signature_role?: string | null
           minimum_order_value?: number | null
           name: string
           owner_user_id?: string | null
@@ -228,6 +234,9 @@ export type Database = {
           instagram?: string | null
           is_active?: boolean
           logo_url?: string | null
+          signature_image_url?: string | null
+          signature_responsible?: string | null
+          signature_role?: string | null
           minimum_order_value?: number | null
           name?: string
           owner_user_id?: string | null

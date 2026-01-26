@@ -97,6 +97,14 @@ const getActiveSession = async (supabaseUrl: string) => {
   return session;
 };
 
+const shouldResetAuthForEdgeError = (status: number, message: string) => {
+  if (status !== 401) return false;
+  const normalized = message.toLowerCase();
+  const mentionsToken = /token|jwt|sessao|sessão|session/.test(normalized);
+  const invalidToken = /invalid|inválid|expirad|expired|revoked|not found|nao encontrado|não encontrado/.test(normalized);
+  return mentionsToken && invalidToken;
+};
+
 /**
  * Invoke a Supabase Edge Function with optional authentication and error handling.
  */
@@ -177,7 +185,7 @@ export async function invokeEdgeFunction<T>(
         payload,
       });
 
-      if (response.status === 401 && requireAuth) {
+      if (requireAuth && shouldResetAuthForEdgeError(response.status, message)) {
         await resetAuthSession({ reason: `edge_function_401:${functionName}` });
       }
 

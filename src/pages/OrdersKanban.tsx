@@ -21,6 +21,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { fetchOrderStatuses, updateOrderStatus } from '@/services/orders';
 import type { Customer, Order, OrderItem, OrderStatus, PaymentMethod } from '@/types/database';
 import { useNavigate } from 'react-router-dom';
+import { useConfirm } from '@/components/ui/confirm-dialog';
 
 const statusOrder: OrderStatus[] = [
   'orcamento',
@@ -284,6 +285,7 @@ export default function OrdersKanban() {
   const { toast } = useToast();
   const { user, hasPermission } = useAuth();
   const navigate = useNavigate();
+  const confirm = useConfirm();
   const [orders, setOrders] = useState<KanbanOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -427,7 +429,12 @@ export default function OrdersKanban() {
     if (String(order.status) === targetStatus) return;
 
     if (order.status === 'pendente' && targetStatus !== 'cancelado') {
-      const needsArt = window.confirm('Este pedido precisa de criacao ou ajuste de arte?');
+      const needsArt = await confirm({
+        title: 'Arte necessária?',
+        description: 'Este pedido precisa de criação ou ajuste de arte?',
+        confirmText: 'Sim',
+        cancelText: 'Não',
+      });
       targetStatus = needsArt ? 'produzindo_arte' : 'em_producao';
     }
 
@@ -471,9 +478,13 @@ export default function OrdersKanban() {
           item.id === orderId ? { ...item, status: previousStatus } : item
         )
       );
+      const status = (error as any)?.status;
+      let title = 'Erro ao atualizar status';
+      if (status === 401) title = 'Sessão expirada';
+      if (status === 403) title = 'Sem permissão';
       const message = error instanceof Error ? error.message : 'Erro ao atualizar status';
       toast({
-        title: 'Erro ao atualizar status',
+        title,
         description: message,
         variant: 'destructive',
       });

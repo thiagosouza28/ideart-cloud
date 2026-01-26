@@ -11,6 +11,7 @@ import type { Company } from '@/types/database';
 import { toast } from 'sonner';
 import { ensurePublicStorageUrl } from '@/lib/storage';
 import { useAuth } from '@/contexts/AuthContext';
+import { useConfirm } from '@/components/ui/confirm-dialog';
 
 export default function Companies() {
   const navigate = useNavigate();
@@ -19,6 +20,7 @@ export default function Companies() {
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [copiedSlug, setCopiedSlug] = useState<string | null>(null);
+  const confirm = useConfirm();
 
   const loadCompanies = async () => {
     if (!profile?.company_id) {
@@ -49,7 +51,14 @@ export default function Companies() {
   );
 
   const handleDelete = async (id: string, name: string) => {
-    if (!confirm(`Excluir empresa "${name}"?`)) return;
+    const approved = await confirm({
+      title: 'Excluir empresa',
+      description: `Excluir empresa "${name}"?`,
+      confirmText: 'Excluir',
+      cancelText: 'Cancelar',
+      destructive: true,
+    });
+    if (!approved) return;
     const { error } = await supabase.from('companies').delete().eq('id', id);
     if (error) {
       toast.error('Erro ao excluir');

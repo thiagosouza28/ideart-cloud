@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { formatOrderNumber } from '@/lib/utils';
-import { Plus, Search, Eye } from 'lucide-react';
+import { Plus, Search, Eye, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,6 +9,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { supabase } from '@/integrations/supabase/client';
 import { Order, OrderStatus } from '@/types/database';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useToast } from '@/hooks/use-toast';
+import { deleteOrder } from '@/services/orders';
+import { useConfirm } from '@/components/ui/confirm-dialog';
 
 const statusLabels: Record<OrderStatus, string> = {
   orcamento: 'Orçamento',
@@ -41,7 +44,10 @@ export default function Orders() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [loading, setLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const navigate = useNavigate();
+  const { toast } = useToast();
+  const confirm = useConfirm();
 
   useEffect(() => {
     supabase
@@ -79,6 +85,31 @@ export default function Orders() {
   };
 
   const counts = getStatusCounts();
+  const handleDeleteOrder = async (event: React.MouseEvent, orderId: string) => {
+    event.stopPropagation();
+    const approved = await confirm({
+      title: 'Excluir pedido',
+      description: 'Deseja excluir este pedido?',
+      confirmText: 'Excluir',
+      cancelText: 'Cancelar',
+      destructive: true,
+    });
+    if (!approved) return;
+    setDeletingId(orderId);
+    try {
+      await deleteOrder(orderId);
+      setOrders((prev) => prev.filter((item) => item.id !== orderId));
+      toast({ title: 'Pedido excluído com sucesso!' });
+    } catch (error: any) {
+      toast({
+        title: 'Erro ao excluir pedido',
+        description: error?.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -150,7 +181,7 @@ export default function Orders() {
                 <TableHead>Pagamento</TableHead>
                 <TableHead className="text-right">Total</TableHead>
                 <TableHead>Data</TableHead>
-                <TableHead className="w-[80px]">Ações</TableHead>
+                <TableHead className="w-[120px]">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -226,6 +257,15 @@ export default function Orders() {
                         }}
                       >
                         <Eye className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-destructive"
+                        onClick={(event) => handleDeleteOrder(event, order.id)}
+                        disabled={deletingId === order.id}
+                      >
+                        <Trash2 className="h-4 w-4" />
                       </Button>
                     </TableCell>
                   </TableRow>

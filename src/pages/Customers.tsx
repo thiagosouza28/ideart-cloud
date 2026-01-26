@@ -12,9 +12,11 @@ import { toast } from 'sonner';
 import { normalizeDigits } from '@/components/ui/masked-input';
 import { ensurePublicStorageUrl } from '@/lib/storage';
 import { calculateAge, formatDateBr } from '@/lib/birthdays';
+import { useConfirm } from '@/components/ui/confirm-dialog';
 
 export default function Customers() {
   const navigate = useNavigate();
+  const confirm = useConfirm();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
@@ -42,7 +44,14 @@ export default function Customers() {
   );
 
   const handleDelete = async (id: string, name: string) => {
-    if (!confirm(`Excluir cliente "${name}"?`)) return;
+    const approved = await confirm({
+      title: 'Excluir cliente',
+      description: `Excluir cliente "${name}"?`,
+      confirmText: 'Excluir',
+      cancelText: 'Cancelar',
+      destructive: true,
+    });
+    if (!approved) return;
     const { error } = await supabase.from('customers').delete().eq('id', id);
     if (error) {
       toast.error('Erro ao excluir cliente');

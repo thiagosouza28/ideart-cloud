@@ -1,18 +1,27 @@
 import { useCallback, useContext, useEffect } from 'react';
 import { UNSAFE_NavigationContext as NavigationContext } from 'react-router-dom';
+import { useConfirm } from '@/components/ui/confirm-dialog';
 
 const DEFAULT_MESSAGE = 'Você tem alterações não salvas. Deseja sair mesmo assim?';
 
 export const useUnsavedChanges = (isDirty: boolean, message: string = DEFAULT_MESSAGE) => {
   const { navigator } = useContext(NavigationContext);
+  const confirm = useConfirm();
   const blocker = useCallback(
     (tx: { retry: () => void }) => {
-      const shouldLeave = window.confirm(message);
-      if (shouldLeave) {
-        tx.retry();
-      }
+      confirm({
+        title: 'Alterações não salvas',
+        description: message,
+        confirmText: 'Sair',
+        cancelText: 'Continuar',
+        destructive: true,
+      }).then((shouldLeave) => {
+        if (shouldLeave) {
+          tx.retry();
+        }
+      });
     },
-    [message],
+    [confirm, message],
   );
 
   useEffect(() => {

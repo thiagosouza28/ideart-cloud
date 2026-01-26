@@ -3,6 +3,11 @@ export interface GraphPOSCheckoutItem {
   name: string;
   quantity: number;
   unitPrice: number;
+  unitLabel?: string;
+  widthCm?: number;
+  heightCm?: number;
+  areaM2?: number;
+  attributes?: Record<string, string>;
 }
 
 export interface GraphPOSCheckoutState {

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+﻿import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { z } from 'zod';
 import { Button } from '@/components/ui/button';
@@ -22,6 +22,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { resolveProductPrice } from '@/lib/pricing';
 import { normalizeDigits } from '@/components/ui/masked-input';
 import { useUnsavedChanges } from '@/hooks/use-unsaved-changes';
+import { M2_ATTRIBUTE_KEYS, buildM2Attributes, calculateAreaM2, formatAreaM2, isAreaUnit, parseM2Attributes, parseMeasurementInput, stripM2Attributes } from '@/lib/measurements';
 
 interface OrderItemForm {
   product: Product;
@@ -63,6 +64,11 @@ export default function OrderForm() {
   const [productDiscount, setProductDiscount] = useState(0);
   const [productNotes, setProductNotes] = useState('');
   const [selectedAttributes, setSelectedAttributes] = useState<Record<string, string>>({});
+  const [productWidthCm, setProductWidthCm] = useState('');
+  const [productHeightCm, setProductHeightCm] = useState('');
+
+  const draftRestoredRef = useRef(false);
+  const draftStorageKey = 'order_form_draft';
 
   // Customer search
   const [customerSearchOpen, setCustomerSearchOpen] = useState(false);
@@ -99,7 +105,67 @@ export default function OrderForm() {
     }
   }, [loading, initialSnapshot, formSnapshotJson]);
 
-  useUnsavedChanges(isDirty && !saving);
+  const hasDraftData = items.length > 0 || Boolean(customerId || customerName.trim() || notes.trim() || discount > 0);
+
+  useUnsavedChanges((isDirty || hasDraftData) && !saving);
+
+  useEffect(() => {
+    if (loading || draftRestoredRef.current) return;
+    const raw = window.localStorage.getItem(draftStorageKey);
+    if (!raw) {
+      draftRestoredRef.current = true;
+      return;
+    }
+    try {
+      const parsed = JSON.parse(raw) as {
+        customerId?: string;
+        customerName?: string;
+        notes?: string;
+        discount?: number;
+        items?: Array<{
+          productId: string;
+          quantity: number;
+          unit_price: number;
+          discount: number;
+          attributes: Record<string, string>;
+          notes: string;
+        }>;
+      };
+
+      if (parsed.customerId) setCustomerId(parsed.customerId);
+      if (parsed.customerName) setCustomerName(parsed.customerName);
+      if (parsed.notes) setNotes(parsed.notes);
+      if (typeof parsed.discount === 'number') setDiscount(parsed.discount);
+
+      if (parsed.items && Array.isArray(parsed.items)) {
+        const restoredItems = parsed.items
+          .map((item) => {
+            const product = products.find((p) => p.id === item.productId);
+            if (!product) return null;
+            return {
+              product,
+              quantity: Number(item.quantity) || 0,
+              unit_price: Number(item.unit_price) || 0,
+              discount: Number(item.discount) || 0,
+              attributes: item.attributes || {},
+              notes: item.notes || '',
+            };
+          })
+          .filter(Boolean) as OrderItemForm[];
+        if (restoredItems.length > 0) {
+          setItems(restoredItems);
+        }
+      }
+
+      if (parsed.customerId || parsed.customerName || parsed.notes || parsed.discount || (parsed.items && parsed.items.length > 0)) {
+        toast({ title: 'Rascunho restaurado' });
+      }
+    } catch {
+      window.localStorage.removeItem(draftStorageKey);
+    } finally {
+      draftRestoredRef.current = true;
+    }
+  }, [draftStorageKey, loading, products, toast]);
 
   const fetchData = async () => {
     const [custResult, prodResult, attrResult, attrValResult, prodAttrResult, tiersResult, suppliesResult] = await Promise.all([
@@ -137,6 +203,35 @@ export default function OrderForm() {
 
     setLoading(false);
   };
+
+  useEffect(() => {
+    if (!draftRestoredRef.current) return;
+    const payload = {
+      customerId: customerId || undefined,
+      customerName: customerName.trim() || undefined,
+      notes: notes.trim() || undefined,
+      discount,
+      items: items.map((item) => ({
+        productId: item.product.id,
+        quantity: item.quantity,
+        unit_price: item.unit_price,
+        discount: item.discount,
+        attributes: item.attributes,
+        notes: item.notes,
+      })),
+    };
+
+    const hasData =
+      payload.items.length > 0 ||
+      Boolean(payload.customerId || payload.customerName || payload.notes || (payload.discount && payload.discount > 0));
+
+    if (!hasData) {
+      window.localStorage.removeItem(draftStorageKey);
+      return;
+    }
+
+    window.localStorage.setItem(draftStorageKey, JSON.stringify(payload));
+  }, [customerId, customerName, discount, draftStorageKey, items, notes]);
 
   // Calculate price based on quantity and price tiers
   const getProductPrice = (product: Product, quantity: number): number => {
@@ -186,6 +281,8 @@ export default function OrderForm() {
     setProductDiscount(0);
     setProductNotes('');
     setSelectedAttributes({});
+    setProductWidthCm('');
+    setProductHeightCm('');
     setProductDialogOpen(true);
   };
 
@@ -193,16 +290,45 @@ export default function OrderForm() {
   const addProductToOrder = () => {
     if (!selectedProduct) return;
 
-    const unitPrice = getProductPrice(selectedProduct, productQuantity);
-    
-    setItems([...items, {
-      product: selectedProduct,
-      quantity: productQuantity,
-      unit_price: unitPrice,
-      discount: productDiscount,
-      attributes: selectedAttributes,
-      notes: productNotes,
-    }]);
+    const isM2 = isAreaUnit(selectedProduct.unit);
+    const widthCm = parseMeasurementInput(productWidthCm);
+    const heightCm = parseMeasurementInput(productHeightCm);
+
+    if (isM2) {
+      if (!widthCm || !heightCm || widthCm <= 0 || heightCm <= 0) {
+        toast({ title: 'Informe largura e altura válidas', variant: 'destructive' });
+        return;
+      }
+      const area = calculateAreaM2(widthCm, heightCm);
+      const unitPrice = getProductPrice(selectedProduct, area);
+      const attributes = buildM2Attributes(selectedAttributes, {
+        widthCm,
+        heightCm,
+        areaM2: area,
+      });
+      setItems([
+        ...items,
+        {
+          product: selectedProduct,
+          quantity: area,
+          unit_price: unitPrice,
+          discount: productDiscount,
+          attributes,
+          notes: productNotes,
+        },
+      ]);
+    } else {
+      const unitPrice = getProductPrice(selectedProduct, productQuantity);
+
+      setItems([...items, {
+        product: selectedProduct,
+        quantity: productQuantity,
+        unit_price: unitPrice,
+        discount: productDiscount,
+        attributes: selectedAttributes,
+        notes: productNotes,
+      }]);
+    }
 
     setProductDialogOpen(false);
     setSelectedProduct(null);
@@ -216,9 +342,52 @@ export default function OrderForm() {
   // Update item quantity
   const updateItemQuantity = (index: number, quantity: number) => {
     const updated = [...items];
+    if (isAreaUnit(updated[index].product.unit)) {
+      return;
+    }
     updated[index].quantity = quantity;
     updated[index].unit_price = getProductPrice(updated[index].product, quantity);
     setItems(updated);
+  };
+
+  const updateItemDimensions = (index: number, key: string, value: string) => {
+    setItems((prev) =>
+      prev.map((item, idx) => {
+        if (idx !== index) return item;
+        if (!isAreaUnit(item.product.unit)) return item;
+
+        const nextAttributes = { ...(item.attributes || {}) };
+        nextAttributes[key] = value;
+
+        const widthCm = parseMeasurementInput(nextAttributes[M2_ATTRIBUTE_KEYS.widthCm]);
+        const heightCm = parseMeasurementInput(nextAttributes[M2_ATTRIBUTE_KEYS.heightCm]);
+        const hasValidDimensions =
+          typeof widthCm === 'number' &&
+          typeof heightCm === 'number' &&
+          widthCm > 0 &&
+          heightCm > 0;
+
+        if (hasValidDimensions) {
+          const area = calculateAreaM2(widthCm, heightCm);
+          nextAttributes[M2_ATTRIBUTE_KEYS.areaM2] = area.toFixed(4);
+          const unitPrice = getProductPrice(item.product, area);
+          return {
+            ...item,
+            attributes: nextAttributes,
+            quantity: area,
+            unit_price: unitPrice,
+          };
+        }
+
+        delete nextAttributes[M2_ATTRIBUTE_KEYS.areaM2];
+        return {
+          ...item,
+          attributes: nextAttributes,
+          quantity: 0,
+          unit_price: getProductPrice(item.product, 1),
+        };
+      }),
+    );
   };
 
   // Calculations
@@ -233,6 +402,21 @@ export default function OrderForm() {
 
     if (items.length === 0) {
       toast({ title: 'Adicione pelo menos um produto', variant: 'destructive' });
+      return;
+    }
+
+    const invalidM2Items = items.filter((item) => {
+      if (!isAreaUnit(item.product.unit)) return false;
+      const { widthCm, heightCm } = parseM2Attributes(item.attributes);
+      return !widthCm || !heightCm || widthCm <= 0 || heightCm <= 0;
+    });
+
+    if (invalidM2Items.length > 0) {
+      toast({
+        title: 'Informe largura e altura válidas',
+        description: invalidM2Items.map((item) => item.product.name).join(', '),
+        variant: 'destructive',
+      });
       return;
     }
 
@@ -323,9 +507,28 @@ export default function OrderForm() {
       notes: 'Pedido criado como orçamento',
     });
 
+    window.localStorage.removeItem(draftStorageKey);
     toast({ title: 'Pedido criado com sucesso!' });
     navigate('/pedidos');
   };
+
+  const isSelectedM2 = selectedProduct ? isAreaUnit(selectedProduct.unit) : false;
+  const selectedWidthCm = parseMeasurementInput(productWidthCm);
+  const selectedHeightCm = parseMeasurementInput(productHeightCm);
+  const selectedAreaM2 =
+    isSelectedM2 &&
+    typeof selectedWidthCm === 'number' &&
+    typeof selectedHeightCm === 'number' &&
+    selectedWidthCm > 0 &&
+    selectedHeightCm > 0
+      ? calculateAreaM2(selectedWidthCm, selectedHeightCm)
+      : 0;
+  const selectedUnitPrice = selectedProduct
+    ? getProductPrice(selectedProduct, isSelectedM2 ? (selectedAreaM2 > 0 ? selectedAreaM2 : 1) : productQuantity)
+    : 0;
+  const selectedItemTotal = isSelectedM2
+    ? selectedUnitPrice * selectedAreaM2 - productDiscount
+    : selectedUnitPrice * productQuantity - productDiscount;
 
   const searchText = customerSearch.trim().toLowerCase();
   const searchDigits = normalizeDigits(customerSearch);
@@ -467,6 +670,7 @@ export default function OrderForm() {
                             <p>{product.name}</p>
                             <p className="text-xs text-muted-foreground">
                               {formatCurrency(getProductPrice(product, 1))}
+                              {isAreaUnit(product.unit) ? ' / m\u00B2' : ''}
                             </p>
                           </div>
                         </CommandItem>
@@ -492,52 +696,98 @@ export default function OrderForm() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {items.map((item, index) => (
-                    <TableRow key={index}>
-                      <TableCell>
-                        <div>
-                          <p className="font-medium">{item.product.name}</p>
-                          {Object.keys(item.attributes).length > 0 && (
-                            <div className="flex gap-1 mt-1">
-                              {Object.entries(item.attributes).map(([key, value]) => (
-                                <Badge key={key} variant="outline" className="text-xs">
-                                  {value}
-                                </Badge>
-                              ))}
+                  {items.map((item, index) => {
+                    const isM2 = isAreaUnit(item.product.unit);
+                    const m2 = parseM2Attributes(item.attributes);
+                    const displayAttributes = stripM2Attributes(item.attributes);
+                    const widthRaw = item.attributes?.[M2_ATTRIBUTE_KEYS.widthCm] ?? '';
+                    const heightRaw = item.attributes?.[M2_ATTRIBUTE_KEYS.heightCm] ?? '';
+                    const hasValidDimensions =
+                      typeof m2.widthCm === 'number' &&
+                      typeof m2.heightCm === 'number' &&
+                      m2.widthCm > 0 &&
+                      m2.heightCm > 0;
+
+                    return (
+                      <TableRow key={index}>
+                        <TableCell>
+                          <div>
+                            <p className="font-medium">{item.product.name}</p>
+                            {Object.keys(displayAttributes).length > 0 && (
+                              <div className="flex gap-1 mt-1">
+                                {Object.entries(displayAttributes).map(([key, value]) => (
+                                  <Badge key={key} variant="outline" className="text-xs">
+                                    {value}
+                                  </Badge>
+                                ))}
+                              </div>
+                            )}
+                            {item.notes && (
+                              <p className="text-xs text-muted-foreground mt-1">Obs: {item.notes}</p>
+                            )}
+                            {isM2 && (
+                              <div className="mt-2 space-y-2">
+                                <div className="grid gap-2 sm:grid-cols-2">
+                                  <div className="space-y-1">
+                                    <Label className="text-[10px] uppercase text-muted-foreground">Largura (cm)</Label>
+                                    <Input
+                                      value={widthRaw}
+                                      onChange={(e) => updateItemDimensions(index, M2_ATTRIBUTE_KEYS.widthCm, e.target.value)}
+                                      className="h-8 text-xs"
+                                      inputMode="decimal"
+                                    />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <Label className="text-[10px] uppercase text-muted-foreground">Altura (cm)</Label>
+                                    <Input
+                                      value={heightRaw}
+                                      onChange={(e) => updateItemDimensions(index, M2_ATTRIBUTE_KEYS.heightCm, e.target.value)}
+                                      className="h-8 text-xs"
+                                      inputMode="decimal"
+                                    />
+                                  </div>
+                                </div>
+                                <p className={`text-xs ${hasValidDimensions ? 'text-muted-foreground' : 'text-destructive'}`}>
+                                  Area: {hasValidDimensions ? `${formatAreaM2(item.quantity)} m\u00B2` : 'Informe dimensoes validas'}
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {isM2 ? (
+                            <div className={`text-sm ${hasValidDimensions ? 'text-foreground' : 'text-destructive'}`}>
+                              {hasValidDimensions ? `${formatAreaM2(item.quantity)} m\u00B2` : '--'}
                             </div>
+                          ) : (
+                            <Input
+                              type="number"
+                              min="1"
+                              value={item.quantity}
+                              onChange={(e) => updateItemQuantity(index, parseInt(e.target.value) || 1)}
+                              className="w-20"
+                            />
                           )}
-                          {item.notes && (
-                            <p className="text-xs text-muted-foreground mt-1">Obs: {item.notes}</p>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Input
-                          type="number"
-                          min="1"
-                          value={item.quantity}
-                          onChange={(e) => updateItemQuantity(index, parseInt(e.target.value) || 1)}
-                          className="w-20"
-                        />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {formatCurrency(item.unit_price)}
-                      </TableCell>
-                      <TableCell className="text-right font-medium">
-                        {formatCurrency(item.unit_price * item.quantity - item.discount)}
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => removeItem(index)}
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {formatCurrency(item.unit_price)}
+                        </TableCell>
+                        <TableCell className="text-right font-medium">
+                          {formatCurrency(item.unit_price * item.quantity - item.discount)}
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => removeItem(index)}
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             ) : (
@@ -628,23 +878,49 @@ export default function OrderForm() {
               <div className="p-3 bg-muted rounded-lg">
                 <p className="font-medium">{selectedProduct.name}</p>
                 <p className="text-sm text-muted-foreground">
-                  Preço sugerido: {formatCurrency(getProductPrice(selectedProduct, 1))}
+                  {isSelectedM2 ? 'Preco por m\u00B2' : 'Preco sugerido'}: {formatCurrency(getProductPrice(selectedProduct, 1))}
                 </p>
               </div>
 
-              {/* Quantity */}
-              <div className="space-y-2">
-                <Label>Quantidade</Label>
-                <Input
-                  type="number"
-                  min="1"
-                  value={productQuantity}
-                  onChange={(e) => setProductQuantity(parseInt(e.target.value) || 1)}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Preço unitário: {formatCurrency(getProductPrice(selectedProduct, productQuantity))}
-                </p>
-              </div>
+              {/* Quantity / Dimensions */}
+              {isSelectedM2 ? (
+                <div className="space-y-2">
+                  <Label>Dimensoes (cm)</Label>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <Input
+                      placeholder="Largura (cm)"
+                      value={productWidthCm}
+                      onChange={(e) => setProductWidthCm(e.target.value)}
+                      inputMode="decimal"
+                    />
+                    <Input
+                      placeholder="Altura (cm)"
+                      value={productHeightCm}
+                      onChange={(e) => setProductHeightCm(e.target.value)}
+                      inputMode="decimal"
+                    />
+                  </div>
+                  <p className={`text-xs ${selectedAreaM2 > 0 ? 'text-muted-foreground' : 'text-destructive'}`}>
+                    Area: {selectedAreaM2 > 0 ? `${formatAreaM2(selectedAreaM2)} m\u00B2` : 'Informe dimensoes validas'}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Preco por m\u00B2: {formatCurrency(selectedUnitPrice)}
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <Label>Quantidade</Label>
+                  <Input
+                    type="number"
+                    min="1"
+                    value={productQuantity}
+                    onChange={(e) => setProductQuantity(parseInt(e.target.value) || 1)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Preco unitario: {formatCurrency(getProductPrice(selectedProduct, productQuantity))}
+                  </p>
+                </div>
+              )}
 
               {/* Attributes */}
               {getProductAvailableAttributes(selectedProduct.id).map(({ attribute, values }) => (
@@ -693,7 +969,7 @@ export default function OrderForm() {
                 <div className="flex justify-between font-medium">
                   <span>Total do item</span>
                   <span>
-                    {formatCurrency(getProductPrice(selectedProduct, productQuantity) * productQuantity - productDiscount)}
+                    {formatCurrency(Math.max(0, selectedItemTotal))}
                   </span>
                 </div>
               </div>
@@ -714,5 +990,10 @@ export default function OrderForm() {
     </div>
   );
 }
+
+
+
+
+
 
 

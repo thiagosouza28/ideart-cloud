@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Bell, Menu, Moon, Sun, X } from 'lucide-react';
+﻿import { useEffect, useMemo, useState } from 'react';
+import { Bell, Loader2, Menu, Moon, Sun, X } from 'lucide-react';
 import { SidebarProvider, SidebarTrigger, SidebarInset } from '@/components/ui/sidebar';
 import { AppSidebar } from './AppSidebar';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -26,11 +26,21 @@ const roleLabels: Record<AppRole, string> = {
 export function AppLayout({ children }: AppLayoutProps) {
   const location = useLocation();
   const navigate = useNavigate();
-  const { subscription, refreshCompany, role, hasPermission, user, getLoggedCompany } = useAuth();
+  const {
+    subscription,
+    refreshCompany,
+    role,
+    hasPermission,
+    user,
+    getLoggedCompany,
+    isImpersonating,
+    stopImpersonation,
+  } = useAuth();
   const { resolvedTheme, setTheme } = useTheme();
   const [isBannerHidden, setIsBannerHidden] = useState(
     () => localStorage.getItem('subscriptionBannerHidden') === 'true'
   );
+  const [restoringAdmin, setRestoringAdmin] = useState(false);
   const company = getLoggedCompany();
   const logoFromCompany = ensurePublicStorageUrl('product-images', company?.logo_url);
   const logoFromUser = user?.user_metadata?.company_logo as string | undefined;
@@ -144,6 +154,31 @@ export function AppLayout({ children }: AppLayoutProps) {
     );
   })();
 
+  const impersonationBanner = isImpersonating ? (
+    <Alert className="mb-4 border-amber-300 bg-amber-50 text-amber-900">
+      <AlertTitle>Modo administrador</AlertTitle>
+      <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <span>Voce esta acessando esta conta como administrador.</span>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={async () => {
+            if (restoringAdmin) return;
+            setRestoringAdmin(true);
+            const restored = await stopImpersonation();
+            setRestoringAdmin(false);
+            if (restored) {
+              navigate('/super-admin');
+            }
+          }}
+        >
+          {restoringAdmin ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+          Sair da conta do cliente
+        </Button>
+      </AlertDescription>
+    </Alert>
+  ) : null;
+
   return (
     <SidebarProvider defaultOpen={true}>
       <div className="flex min-h-screen w-full">
@@ -201,6 +236,7 @@ export function AppLayout({ children }: AppLayoutProps) {
             </div>
           </header>
           <main className="app-content">
+            {impersonationBanner}
             {subscriptionBanner}
             {children}
           </main>
@@ -225,3 +261,4 @@ export function AppLayout({ children }: AppLayoutProps) {
     </SidebarProvider>
   );
 }
+

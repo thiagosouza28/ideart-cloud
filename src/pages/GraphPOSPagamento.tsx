@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+﻿import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CreditCard, Banknote, Smartphone, Wallet, ChevronRight } from 'lucide-react';
 import GraphPOSBreadcrumb from '@/components/graphpos/GraphPOSBreadcrumb';
@@ -10,6 +10,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { PaymentMethod } from '@/types/database';
+import { buildM2Attributes, formatAreaM2 } from '@/lib/measurements';
 
 const formatCurrency = (v: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
@@ -27,6 +28,7 @@ export default function GraphPOSPagamento() {
     checkout?.amountPaid || checkout?.total || 0,
   );
   const [saving, setSaving] = useState(false);
+  const draftStorageKey = 'graphpos_pdv_draft';
 
   const items = checkout?.items || [];
   const subtotal = checkout?.subtotal || 0;
@@ -170,19 +172,33 @@ export default function GraphPOSPagamento() {
             <GraphPOSSidebarResumo title="Resumo do Pedido">
               <p className="text-xs text-slate-500">{items.length} itens adicionados</p>
               <div className="mt-4 space-y-4">
-                {items.map((item) => (
-                  <div key={item.id} className="flex items-start justify-between">
-                    <div>
-                      <p className="text-sm font-semibold text-slate-800">{item.name}</p>
-                      <p className="text-xs text-slate-500">
-                        {item.quantity} un x {formatCurrency(item.unitPrice)}
-                      </p>
+                {items.map((item, index) => {
+                  const isM2 = item.unitLabel === 'm\u00B2' || Boolean(item.areaM2) || (item.widthCm && item.heightCm);
+                  const quantityLabel = isM2
+                    ? `${formatAreaM2(item.quantity)} m\u00B2`
+                    : `${item.quantity} un`;
+                  const unitLabel = isM2 ? '/ m\u00B2' : '';
+                  const hasDimensions = Boolean(item.widthCm && item.heightCm);
+
+                  return (
+                    <div key={`${item.id}-${index}`} className="flex items-start justify-between">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-800">{item.name}</p>
+                        <p className="text-xs text-slate-500">
+                          {quantityLabel} x {formatCurrency(item.unitPrice)}{unitLabel}
+                        </p>
+                        {hasDimensions && (
+                          <p className="text-[11px] text-slate-400">
+                            {item.widthCm}cm x {item.heightCm}cm
+                          </p>
+                        )}
+                      </div>
+                      <span className="text-sm font-semibold text-slate-800">
+                        {formatCurrency(item.unitPrice * item.quantity)}
+                      </span>
                     </div>
-                    <span className="text-sm font-semibold text-slate-800">
-                      {formatCurrency(item.unitPrice * item.quantity)}
-                    </span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
               <div className="mt-4 border-t border-slate-200 pt-4 text-sm text-slate-600">
                 <div className="flex items-center justify-between">
@@ -237,8 +253,18 @@ export default function GraphPOSPagamento() {
                       return;
                     }
 
-                    await Promise.all(items.map((item) =>
-                      supabase.from('sale_items').insert({
+                    await Promise.all(items.map((item) => {
+                      const attributes = item.attributes && Object.keys(item.attributes).length > 0
+                        ? item.attributes
+                        : (item.widthCm && item.heightCm)
+                          ? buildM2Attributes({}, {
+                              widthCm: item.widthCm,
+                              heightCm: item.heightCm,
+                              areaM2: item.areaM2 ?? item.quantity,
+                            })
+                          : null;
+
+                      return supabase.from('sale_items').insert({
                         sale_id: sale.id,
                         product_id: item.id,
                         product_name: item.name,
@@ -246,10 +272,15 @@ export default function GraphPOSPagamento() {
                         unit_price: item.unitPrice,
                         discount: 0,
                         total: item.unitPrice * item.quantity,
-                      })
-                    ));
+                        attributes,
+                      });
+                    }));
 
-                    const productIds = items.map((item) => item.id);
+                    const quantitiesByProduct: Record<string, number> = {};
+                    items.forEach((item) => {
+                      quantitiesByProduct[item.id] = (quantitiesByProduct[item.id] || 0) + item.quantity;
+                    });
+                    const productIds = Object.keys(quantitiesByProduct);
                     const { data: productsData } = await supabase
                       .from('products')
                       .select('id, track_stock, stock_quantity')
@@ -258,19 +289,19 @@ export default function GraphPOSPagamento() {
                     const trackedProducts = (productsData || []).filter((p) => p.track_stock);
                     if (trackedProducts.length > 0) {
                       await Promise.all(trackedProducts.map((product) => {
-                        const item = items.find((i) => i.id === product.id);
-                        if (!item) return Promise.resolve();
-                        const newStock = Number(product.stock_quantity) - item.quantity;
+                        const qty = quantitiesByProduct[product.id] || 0;
+                        if (qty <= 0) return Promise.resolve();
+                        const newStock = Number(product.stock_quantity) - qty;
                         return supabase.from('products').update({ stock_quantity: newStock }).eq('id', product.id);
                       }));
 
                       await Promise.all(trackedProducts.map((product) => {
-                        const item = items.find((i) => i.id === product.id);
-                        if (!item) return Promise.resolve();
+                        const qty = quantitiesByProduct[product.id] || 0;
+                        if (qty <= 0) return Promise.resolve();
                         return supabase.from('stock_movements').insert({
                           product_id: product.id,
                           movement_type: 'saida',
-                          quantity: item.quantity,
+                          quantity: qty,
                           reason: `Venda PDV #${sale.id.slice(0, 8)}`,
                           user_id: user.id,
                         });
@@ -283,11 +314,10 @@ export default function GraphPOSPagamento() {
                       .in('product_id', productIds);
 
                     if (productSupplies && productSupplies.length > 0) {
-                      const quantitiesByProduct = new Map(items.map((item) => [item.id, item.quantity]));
                       const usageBySupply: Record<string, number> = {};
 
                       productSupplies.forEach((ps: any) => {
-                        const qty = quantitiesByProduct.get(ps.product_id);
+                        const qty = quantitiesByProduct[ps.product_id];
                         if (!qty) return;
                         const usage = Number(ps.quantity) * qty;
                         if (usage <= 0) return;
@@ -318,6 +348,7 @@ export default function GraphPOSPagamento() {
                       saleId: sale.id,
                       createdAt: sale.created_at,
                     });
+                    window.localStorage.removeItem(draftStorageKey);
 
                     setSaving(false);
                     navigate('/confirmacao');
@@ -338,3 +369,4 @@ export default function GraphPOSPagamento() {
     </div>
   );
 }
+
