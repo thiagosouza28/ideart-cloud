@@ -25,6 +25,57 @@ const getRequestIp = (req: Request) => {
   return direct?.trim() || null;
 };
 
+const findUserByEmail = async (
+  supabase: ReturnType<typeof createClient>,
+  email: string,
+) => {
+  const admin = supabase.auth?.admin as {
+    getUserByEmail?: (
+      email: string,
+    ) => Promise<{ data?: { user?: { id: string; email?: string | null } | null }; error?: { message: string } | null }>;
+    listUsers?: (
+      params?: { page?: number; perPage?: number },
+    ) => Promise<{ data?: { users?: { id: string; email?: string | null }[] }; error?: { message: string } | null }>;
+  } | undefined;
+
+  if (!admin) {
+    return { user: null, error: "Supabase admin API is unavailable" };
+  }
+
+  if (admin.getUserByEmail) {
+    const { data, error } = await admin.getUserByEmail(email);
+    if (error) {
+      return { user: null, error: error.message };
+    }
+    return { user: data?.user ?? null, error: null };
+  }
+
+  if (!admin.listUsers) {
+    return { user: null, error: "Supabase admin lookup by email is unavailable" };
+  }
+
+  const normalizedEmail = email.toLowerCase();
+  const perPage = 1000;
+  for (let page = 1; page <= 50; page += 1) {
+    const { data, error } = await admin.listUsers({ page, perPage });
+    if (error) {
+      return { user: null, error: error.message };
+    }
+
+    const users = data?.users ?? [];
+    const match = users.find((user) => user.email?.toLowerCase() === normalizedEmail);
+    if (match) {
+      return { user: match, error: null };
+    }
+
+    if (users.length < perPage) {
+      break;
+    }
+  }
+
+  return { user: null, error: null };
+};
+
 Deno.serve(async (req) => {
   const origin = req.headers.get("origin");
   const corsHeaders = getCorsHeaders(origin);
@@ -77,12 +128,11 @@ Deno.serve(async (req) => {
       return jsonResponse(corsHeaders, 400, { error: "email is required" });
     }
 
-    const { data: targetData, error: targetError } = await supabase.auth.admin.getUserByEmail(email);
-    if (targetError) {
-      return jsonResponse(corsHeaders, 400, { error: targetError.message });
+    const { user: targetUser, error: targetLookupError } = await findUserByEmail(supabase, email);
+    if (targetLookupError) {
+      return jsonResponse(corsHeaders, 400, { error: targetLookupError });
     }
 
-    const targetUser = targetData?.user;
     if (!targetUser) {
       return jsonResponse(corsHeaders, 404, { error: "User not found" });
     }

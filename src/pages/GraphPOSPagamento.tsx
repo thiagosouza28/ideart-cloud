@@ -17,7 +17,7 @@ const formatCurrency = (v: number) =>
 
 export default function GraphPOSPagamento() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, profile, company } = useAuth();
   const { toast } = useToast();
   // Keep navigation flow aligned with the 3-screen demo.
   const checkout = useMemo(() => getGraphPOSCheckoutState(), []);
@@ -36,6 +36,7 @@ export default function GraphPOSPagamento() {
   const total = checkout?.total || 0;
   const change = paymentMethod === 'dinheiro' ? Math.max(0, amountPaid - total) : 0;
   const customer = checkout?.customer;
+  const companyId = profile?.company_id || company?.id || null;
 
   const mapPaymentMethod = (): PaymentMethod => {
     if (paymentMethod === 'dinheiro') return 'dinheiro';
@@ -226,6 +227,10 @@ export default function GraphPOSPagamento() {
                       toast({ title: 'Sessão inválida. Faça login novamente.', variant: 'destructive' });
                       return;
                     }
+                    if (!companyId) {
+                      toast({ title: 'Empresa não encontrada na sessão. Faça login novamente.', variant: 'destructive' });
+                      return;
+                    }
 
                     setSaving(true);
                     const payment = mapPaymentMethod();
@@ -236,6 +241,7 @@ export default function GraphPOSPagamento() {
                       .from('sales')
                       .insert({
                         user_id: user.id,
+                        company_id: companyId,
                         customer_id: customer?.id || null,
                         subtotal,
                         discount,

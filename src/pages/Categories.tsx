@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, Pencil, Trash2, FolderTree } from 'lucide-react';
+import { Plus, Pencil, Trash2, FolderTree, FolderPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -13,6 +13,17 @@ import { toast } from 'sonner';
 import type { Category } from '@/types/database';
 import { useUnsavedChanges } from '@/hooks/use-unsaved-changes';
 
+type CategoryRow = {
+  category: Category;
+  level: number;
+};
+
+type ParentOption = {
+  id: string;
+  name: string;
+  level: number;
+};
+
 export default function Categories() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
@@ -21,10 +32,10 @@ export default function Categories() {
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [saving, setSaving] = useState(false);
   const [initialFormSnapshot, setInitialFormSnapshot] = useState<string | null>(null);
-  
+
   const [formData, setFormData] = useState({
     name: '',
-    parent_id: '' as string | null
+    parent_id: '' as string | null,
   });
 
   useEffect(() => {
@@ -41,23 +52,35 @@ export default function Categories() {
       toast.error('Erro ao carregar categorias');
       return;
     }
+
     setCategories(data || []);
     setLoading(false);
   };
 
   const openDialog = (category?: Category) => {
     if (category) {
-      setSelectedCategory(category);
-      setFormData({
+      const nextForm = {
         name: category.name,
-        parent_id: category.parent_id || ''
-      });
-      setInitialFormSnapshot(JSON.stringify({ name: category.name, parent_id: category.parent_id || '' }));
+        parent_id: category.parent_id || '',
+      };
+      setSelectedCategory(category);
+      setFormData(nextForm);
+      setInitialFormSnapshot(JSON.stringify(nextForm));
     } else {
+      const nextForm = { name: '', parent_id: '' };
       setSelectedCategory(null);
-      setFormData({ name: '', parent_id: '' });
-      setInitialFormSnapshot(JSON.stringify({ name: '', parent_id: '' }));
+      setFormData(nextForm);
+      setInitialFormSnapshot(JSON.stringify(nextForm));
     }
+
+    setDialogOpen(true);
+  };
+
+  const openSubcategoryDialog = (parent: Category) => {
+    const nextForm = { name: '', parent_id: parent.id };
+    setSelectedCategory(null);
+    setFormData(nextForm);
+    setInitialFormSnapshot(JSON.stringify(nextForm));
     setDialogOpen(true);
   };
 
@@ -65,58 +88,6 @@ export default function Categories() {
   const isDirty = dialogOpen && initialFormSnapshot !== null && initialFormSnapshot !== formSnapshotJson;
 
   useUnsavedChanges(isDirty && !saving);
-
-  const handleSave = async () => {
-    if (!formData.name.trim()) {
-      toast.error('Nome é obrigatório');
-      return;
-    }
-    if (selectedCategory && formData.parent_id) {
-      if (formData.parent_id === selectedCategory.id) {
-        toast.error('A categoria não pode ser pai de si mesma');
-        return;
-      }
-      if (descendantIds.has(formData.parent_id)) {
-        toast.error('Categoria pai inválida');
-        return;
-      }
-    }
-
-    setSaving(true);
-
-    const categoryData = {
-      name: formData.name.trim(),
-      parent_id: formData.parent_id || null
-    };
-
-    const { error } = selectedCategory
-      ? await supabase.from('categories').update(categoryData).eq('id', selectedCategory.id)
-      : await supabase.from('categories').insert(categoryData);
-
-    if (error) {
-      toast.error('Erro ao salvar categoria');
-    } else {
-      toast.success(selectedCategory ? 'Categoria atualizada!' : 'Categoria criada!');
-      setDialogOpen(false);
-      loadCategories();
-    }
-
-    setSaving(false);
-  };
-
-  const handleDelete = async () => {
-    if (!selectedCategory) return;
-
-    const { error } = await supabase.from('categories').delete().eq('id', selectedCategory.id);
-
-    if (error) {
-      toast.error('Erro ao excluir categoria');
-    } else {
-      toast.success('Categoria excluída!');
-      setDeleteDialogOpen(false);
-      loadCategories();
-    }
-  };
 
   const categoryMap = useMemo(() => {
     const map = new Map<string, Category>();
@@ -128,6 +99,7 @@ export default function Categories() {
 
   const childrenByParent = useMemo(() => {
     const map = new Map<string | null, Category[]>();
+
     categories.forEach((category) => {
       const key = category.parent_id ?? null;
       const bucket = map.get(key) ?? [];
@@ -142,14 +114,9 @@ export default function Categories() {
     return map;
   }, [categories]);
 
-  const getParentName = (parentId: string | null) => {
-    if (!parentId) return '-';
-    return categoryMap.get(parentId)?.name || '-';
-  };
-
   const rootCategories = useMemo(() => {
     return categories.filter(
-      (category) => !category.parent_id || !categoryMap.has(category.parent_id)
+      (category) => !category.parent_id || !categoryMap.has(category.parent_id),
     );
   }, [categories, categoryMap]);
 
@@ -164,6 +131,7 @@ export default function Categories() {
     while (stack.length > 0) {
       const current = stack.pop();
       if (!current) continue;
+
       const children = childrenByParent.get(current) ?? [];
       children.forEach((child) => {
         if (!collected.has(child.id)) {
@@ -176,8 +144,8 @@ export default function Categories() {
     return collected;
   }, [childrenByParent, selectedCategory]);
 
-    const parentOptions = useMemo(() => {
-    const rows: Array<{ id: string; name: string; level: number }> = [];
+  const parentOptions = useMemo(() => {
+    const rows: ParentOption[] = [];
 
     const walk = (items: Category[], level: number) => {
       items.forEach((item) => {
@@ -200,7 +168,7 @@ export default function Categories() {
   }, [childrenByParent, descendantIds, rootCategories, selectedCategory]);
 
   const displayCategories = useMemo(() => {
-    const rows: Array<{ category: Category; level: number }> = [];
+    const rows: CategoryRow[] = [];
 
     const walk = (items: Category[], level: number) => {
       items.forEach((item) => {
@@ -218,12 +186,75 @@ export default function Categories() {
     return rows;
   }, [childrenByParent, rootCategories]);
 
+  const getParentName = (parentId: string | null) => {
+    if (!parentId) return '-';
+    return categoryMap.get(parentId)?.name || '-';
+  };
+
+  const handleSave = async () => {
+    if (!formData.name.trim()) {
+      toast.error('Nome e obrigatorio');
+      return;
+    }
+
+    if (selectedCategory && formData.parent_id) {
+      if (formData.parent_id === selectedCategory.id) {
+        toast.error('A categoria nao pode ser pai de si mesma');
+        return;
+      }
+      if (descendantIds.has(formData.parent_id)) {
+        toast.error('Categoria pai invalida');
+        return;
+      }
+    }
+
+    setSaving(true);
+
+    const categoryData = {
+      name: formData.name.trim(),
+      parent_id: formData.parent_id || null,
+    };
+
+    const { error } = selectedCategory
+      ? await supabase.from('categories').update(categoryData).eq('id', selectedCategory.id)
+      : await supabase.from('categories').insert(categoryData);
+
+    if (error) {
+      toast.error('Erro ao salvar categoria');
+      setSaving(false);
+      return;
+    }
+
+    toast.success(selectedCategory ? 'Categoria atualizada!' : 'Categoria criada!');
+    setDialogOpen(false);
+    setSaving(false);
+    await loadCategories();
+  };
+
+  const handleDelete = async () => {
+    if (!selectedCategory) return;
+
+    const { error } = await supabase
+      .from('categories')
+      .delete()
+      .eq('id', selectedCategory.id);
+
+    if (error) {
+      toast.error('Erro ao excluir categoria');
+      return;
+    }
+
+    toast.success('Categoria excluida!');
+    setDeleteDialogOpen(false);
+    await loadCategories();
+  };
+
   return (
     <div className="page-container">
       <div className="page-header">
         <div>
           <h1 className="page-title">Categorias</h1>
-          <p className="text-muted-foreground">Organize seus produtos em categorias</p>
+          <p className="text-muted-foreground">Organize seus produtos em categorias e subcategorias</p>
         </div>
         <Button onClick={() => openDialog()}>
           <Plus className="mr-2 h-4 w-4" />
@@ -243,12 +274,12 @@ export default function Categories() {
         </CardHeader>
         <CardContent>
           {loading ? (
-            <div className="text-center py-8 text-muted-foreground">Carregando...</div>
+            <div className="py-8 text-center text-muted-foreground">Carregando...</div>
           ) : categories.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <FolderTree className="mx-auto h-12 w-12 opacity-30 mb-2" />
+            <div className="py-8 text-center text-muted-foreground">
+              <FolderTree className="mx-auto mb-2 h-12 w-12 opacity-30" />
               <p>Nenhuma categoria cadastrada</p>
-              <p className="text-sm">Clique em "Nova Categoria" para começar</p>
+              <p className="text-sm">Clique em "Nova Categoria" para comecar</p>
             </div>
           ) : (
             <Table>
@@ -256,35 +287,44 @@ export default function Categories() {
                 <TableRow>
                   <TableHead>Nome</TableHead>
                   <TableHead>Categoria Pai</TableHead>
-                  <TableHead className="w-24">Ações</TableHead>
+                  <TableHead className="w-40">Acoes</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {displayCategories.map(({ category, level }) => (
                   <TableRow key={category.id}>
                     <TableCell className="font-medium">
-  <span className="inline-flex items-center gap-2" style={{ paddingLeft: level * 16 }}>
-    {level > 0 && <span className="text-muted-foreground">���</span>}
-    {category.name}
-    {category.parent_id && (
-      <Badge variant="secondary" className="text-[11px]">
-        Subcategoria
-      </Badge>
-    )}
-  </span>
-</TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {getParentName(category.parent_id)}
+                      <span className="inline-flex items-center gap-2" style={{ paddingLeft: level * 16 }}>
+                        {level > 0 && <span className="text-muted-foreground">|-</span>}
+                        {category.name}
+                        {category.parent_id && (
+                          <Badge variant="secondary" className="text-[11px]">
+                            Subcategoria
+                          </Badge>
+                        )}
+                      </span>
                     </TableCell>
+                    <TableCell className="text-muted-foreground">{getParentName(category.parent_id)}</TableCell>
                     <TableCell>
                       <div className="flex gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => openSubcategoryDialog(category)}
+                          title="Nova subcategoria"
+                        >
+                          <FolderPlus className="h-4 w-4 text-primary" />
+                        </Button>
                         <Button variant="ghost" size="icon" onClick={() => openDialog(category)}>
                           <Pencil className="h-4 w-4" />
                         </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          onClick={() => { setSelectedCategory(category); setDeleteDialogOpen(true); }}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            setSelectedCategory(category);
+                            setDeleteDialogOpen(true);
+                          }}
                         >
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
@@ -298,11 +338,16 @@ export default function Categories() {
         </CardContent>
       </Card>
 
-      {/* Create/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent aria-describedby={undefined}>
           <DialogHeader>
-            <DialogTitle>{selectedCategory ? 'Editar' : 'Nova'} Categoria</DialogTitle>
+            <DialogTitle>
+              {selectedCategory
+                ? 'Editar Categoria'
+                : formData.parent_id
+                  ? 'Nova Subcategoria'
+                  : 'Nova Categoria'}
+            </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
@@ -310,17 +355,17 @@ export default function Categories() {
               <Input
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="Ex: Impressos, Brindes, Vestuário"
+                placeholder="Ex: Impressos, Brindes, Vestuario"
               />
             </div>
             <div className="space-y-2">
               <Label>Categoria Pai (opcional)</Label>
               <Select
-                value={formData.parent_id || "none"}
-                onValueChange={(v) => setFormData({ ...formData, parent_id: v === "none" ? null : v })}
+                value={formData.parent_id || 'none'}
+                onValueChange={(v) => setFormData({ ...formData, parent_id: v === 'none' ? null : v })}
               >
                 <SelectTrigger>
-                <SelectValue placeholder="Sem categoria pai (categoria principal)" />
+                  <SelectValue placeholder="Sem categoria pai (categoria principal)" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">Sem categoria pai (categoria principal)</SelectItem>
@@ -342,7 +387,6 @@ export default function Categories() {
         </DialogContent>
       </Dialog>
 
-      {/* Delete Dialog */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <DialogContent aria-describedby={undefined}>
           <DialogHeader>
@@ -350,7 +394,7 @@ export default function Categories() {
           </DialogHeader>
           <p>Tem certeza que deseja excluir a categoria "{selectedCategory?.name}"?</p>
           <p className="text-sm text-muted-foreground">
-            Esta ação não pode ser desfeita. Produtos associados ficarão sem categoria.
+            Esta acao nao pode ser desfeita. Produtos associados ficarao sem categoria.
           </p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>Cancelar</Button>
@@ -361,8 +405,3 @@ export default function Categories() {
     </div>
   );
 }
-
-
-
-
-

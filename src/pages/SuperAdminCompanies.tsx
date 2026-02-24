@@ -9,7 +9,8 @@ import {
   Copy,
   Loader2,
   Mail,
-  LayoutGrid
+  LayoutGrid,
+  CalendarPlus
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -78,6 +79,10 @@ export default function SuperAdminCompanies() {
   const [resettingUser, setResettingUser] = useState<string | null>(null);
   const [sendingResetEmail, setSendingResetEmail] = useState<string | null>(null);
   const [resetLinks, setResetLinks] = useState<Record<string, string>>({});
+  const [trialDialogOpen, setTrialDialogOpen] = useState(false);
+  const [selectedTrialCompany, setSelectedTrialCompany] = useState<CompanyWithPlan | null>(null);
+  const [trialDaysInput, setTrialDaysInput] = useState('3');
+  const [addingTrialDays, setAddingTrialDays] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -237,6 +242,70 @@ export default function SuperAdminCompanies() {
     }
   };
 
+  const parseDate = (value?: string | null) => {
+    if (!value) return null;
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  };
+
+  const openTrialDialog = (company: CompanyWithPlan) => {
+    setSelectedTrialCompany(company);
+    setTrialDaysInput('3');
+    setTrialDialogOpen(true);
+  };
+
+  const handleAddTrialDays = async () => {
+    if (!selectedTrialCompany) return;
+
+    const days = Number.parseInt(trialDaysInput, 10);
+    if (!Number.isInteger(days) || days < 1 || days > 365) {
+      toast.error('Informe entre 1 e 365 dias');
+      return;
+    }
+
+    setAddingTrialDays(true);
+    try {
+      const now = new Date();
+      const trialEndDate = parseDate(selectedTrialCompany.trial_ends_at);
+      const trialSubscriptionEnd = (selectedTrialCompany.subscription_status || '').toLowerCase() === 'trial'
+        ? parseDate(selectedTrialCompany.subscription_end_date)
+        : null;
+      const currentEnd = trialEndDate || trialSubscriptionEnd;
+      const baseDate = currentEnd && currentEnd.getTime() > now.getTime()
+        ? currentEnd
+        : now;
+
+      const nextEndDate = new Date(baseDate);
+      nextEndDate.setDate(nextEndDate.getDate() + days);
+      const nextEndIso = nextEndDate.toISOString();
+
+      const { error } = await supabase
+        .from('companies')
+        .update({
+          subscription_status: 'trial',
+          trial_active: true,
+          trial_ends_at: nextEndIso,
+          subscription_start_date: selectedTrialCompany.subscription_start_date || now.toISOString(),
+          subscription_end_date: nextEndIso,
+        })
+        .eq('id', selectedTrialCompany.id);
+
+      if (error) {
+        toast.error(error.message || 'Erro ao adicionar dias de trial');
+        return;
+      }
+
+      toast.success(`Trial atualizado por ${days} dia${days === 1 ? '' : 's'}`);
+      setTrialDialogOpen(false);
+      setSelectedTrialCompany(null);
+      await loadData();
+    } catch (error: any) {
+      toast.error(error?.message || 'Erro ao adicionar dias de trial');
+    } finally {
+      setAddingTrialDays(false);
+    }
+  };
+
   const formatDate = (dateString: string | null) => {
     if (!dateString) return '-';
     return new Date(dateString).toLocaleDateString('pt-BR');
@@ -376,6 +445,10 @@ export default function SuperAdminCompanies() {
                         <DropdownMenuItem onClick={() => openUsersDialog(company)}>
                           Usuários
                         </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => openTrialDialog(company)}>
+                          <CalendarPlus className="h-4 w-4 mr-2" />
+                          Adicionar dias de trial
+                        </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => toggleCompanyStatus(company)}>
                           {company.is_active ? 'Desativar' : 'Ativar'}
                         </DropdownMenuItem>
@@ -440,6 +513,55 @@ export default function SuperAdminCompanies() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
             <Button onClick={handleSave}>Salvar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={trialDialogOpen} onOpenChange={setTrialDialogOpen}>
+        <DialogContent aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle>Adicionar dias de trial</DialogTitle>
+            <DialogDescription>
+              Prorroga o periodo de teste da empresa selecionada.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
+              <p className="font-medium text-slate-900">{selectedTrialCompany?.name || '-'}</p>
+              <p className="text-slate-500">
+                Trial atual ate: {formatDate(selectedTrialCompany?.trial_ends_at || selectedTrialCompany?.subscription_end_date || null)}
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="trial-days">Dias para adicionar</Label>
+              <Input
+                id="trial-days"
+                type="number"
+                min={1}
+                max={365}
+                value={trialDaysInput}
+                onChange={(event) => setTrialDaysInput(event.target.value)}
+                placeholder="Ex: 7"
+              />
+              <p className="text-xs text-slate-500">Valor permitido: de 1 a 365 dias.</p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setTrialDialogOpen(false)}
+              disabled={addingTrialDays}
+            >
+              Cancelar
+            </Button>
+            <Button onClick={handleAddTrialDays} disabled={addingTrialDays}>
+              {addingTrialDays ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <CalendarPlus className="mr-2 h-4 w-4" />
+              )}
+              Adicionar dias
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -536,3 +658,4 @@ export default function SuperAdminCompanies() {
     </div>
   );
 }
+
