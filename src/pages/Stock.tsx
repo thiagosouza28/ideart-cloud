@@ -22,7 +22,7 @@ const typeColors: Record<StockMovementType, string> = {
 };
 
 export default function Stock() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
   const [movements, setMovements] = useState<StockMovement[]>([]);
   const [search, setSearch] = useState('');
@@ -55,18 +55,35 @@ export default function Stock() {
   const isEditingMovement = Boolean(editingMovement);
 
   const loadData = async () => {
+    setLoading(true);
+    let productsQuery = supabase.from('products').select('*').eq('track_stock', true).order('name');
+    if (profile?.company_id) {
+      productsQuery = productsQuery.eq('company_id', profile.company_id);
+    }
+
     const [p, m] = await Promise.all([
-      supabase.from('products').select('*').eq('track_stock', true).order('name'),
+      productsQuery,
       supabase.from('stock_movements').select('*, product:products(name)').order('created_at', { ascending: false }).limit(50)
     ]);
-    setProducts(p.data as Product[] || []);
-    setMovements(m.data as StockMovement[] || []);
+
+    if (p.error || m.error) {
+      toast.error('Erro ao carregar dados de estoque');
+      setLoading(false);
+      return;
+    }
+
+    const trackedProducts = ((p.data as Product[]) || []).filter((product) => product.track_stock === true);
+    const trackedProductIds = new Set(trackedProducts.map((product) => product.id));
+    const trackedMovements = ((m.data as StockMovement[]) || []).filter((movement) => trackedProductIds.has(movement.product_id));
+
+    setProducts(trackedProducts);
+    setMovements(trackedMovements);
     setLoading(false);
   };
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [profile?.company_id]);
 
   const filteredProducts = products.filter(p => p.name.toLowerCase().includes(search.toLowerCase()));
   const formatDate = (d: string) => new Date(d).toLocaleString('pt-BR');

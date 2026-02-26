@@ -1,23 +1,28 @@
-﻿import { useMemo, useRef } from 'react';
+import { RefObject, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CheckCircle2, Mail, Printer, User, Phone, CreditCard } from 'lucide-react';
+import { CheckCircle2, CreditCard, Phone, Printer, User } from 'lucide-react';
 import GraphPOSBreadcrumb from '@/components/graphpos/GraphPOSBreadcrumb';
 import GraphPOSCard from '@/components/graphpos/GraphPOSCard';
 import GraphPOSSidebarResumo from '@/components/graphpos/GraphPOSSidebarResumo';
 import { BotaoPrimario, BotaoSecundario } from '@/components/graphpos/GraphPOSButtons';
 import { clearGraphPOSCheckoutState, getGraphPOSCheckoutState } from '@/lib/graphposCheckout';
-import SaleReceipt from '@/components/SaleReceipt';
-import { Customer, PaymentMethod } from '@/types/database';
+import SaleReceipt, { SaleReceiptCustomer, SaleReceiptLayout } from '@/components/SaleReceipt';
+import { PaymentMethod } from '@/types/database';
 import { formatAreaM2 } from '@/lib/measurements';
+import { useAuth } from '@/contexts/AuthContext';
 
 const formatCurrency = (v: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
 
 export default function GraphPOSConfirmacao() {
   const navigate = useNavigate();
-  // Keep mock navigation consistent with the demo flow.
+  const { company } = useAuth();
   const checkout = useMemo(() => getGraphPOSCheckoutState(), []);
-  const receiptRef = useRef<HTMLDivElement>(null);
+
+  const receiptA4Ref = useRef<HTMLDivElement>(null);
+  const receipt80Ref = useRef<HTMLDivElement>(null);
+  const receipt58Ref = useRef<HTMLDivElement>(null);
+
   const items = checkout?.items || [];
   const subtotal = checkout?.subtotal || 0;
   const discount = checkout?.discount || 0;
@@ -27,6 +32,16 @@ export default function GraphPOSConfirmacao() {
   const paymentLabel = checkout?.paymentMethod || 'dinheiro';
   const saleId = checkout?.saleId || '00000000';
   const createdAt = checkout?.createdAt ? new Date(checkout.createdAt) : new Date();
+
+  const hasCheckoutCustomer = Boolean(customer?.name?.trim());
+  const [useRealCustomer, setUseRealCustomer] = useState(hasCheckoutCustomer);
+  const [customerForm, setCustomerForm] = useState({
+    name: customer?.name || '',
+    document: customer?.document || '',
+    email: customer?.email || '',
+    phone: customer?.phone || '',
+  });
+
   const paymentLabelMap: Record<string, string> = {
     dinheiro: 'Dinheiro',
     credito: 'Credito',
@@ -34,6 +49,7 @@ export default function GraphPOSConfirmacao() {
     pix: 'Pix',
     outros: 'Outros',
   };
+
   const receiptPaymentMethod: PaymentMethod = paymentLabel === 'pix'
     ? 'pix'
     : paymentLabel === 'dinheiro'
@@ -42,29 +58,75 @@ export default function GraphPOSConfirmacao() {
         ? 'outro'
         : 'cartao';
 
-  const receiptCustomer: Customer | null = customer
-    ? {
-        id: customer.id,
-        name: customer.name,
-        document: customer.document || null,
-        email: customer.email || null,
-        phone: customer.phone || null,
-        date_of_birth: null,
-        photo_url: null,
-        address: null,
-        city: null,
-        state: null,
-        zip_code: null,
-        notes: null,
-        created_at: createdAt.toISOString(),
-        updated_at: createdAt.toISOString(),
-      }
-    : null;
+  const receiptCustomer: SaleReceiptCustomer = useMemo(() => {
+    if (!useRealCustomer || !hasCheckoutCustomer) {
+      return {
+        name: 'Consumidor final',
+        document: null,
+        email: null,
+        phone: null,
+      };
+    }
 
-  const handlePrint = () => {
-    if (!receiptRef.current) return;
-    const printContent = receiptRef.current.innerHTML;
-    const printWindow = window.open('', '', 'width=900,height=700');
+    const normalizedName = customerForm.name.trim() || 'Consumidor final';
+
+    return {
+      name: normalizedName,
+      document: customerForm.document.trim() || null,
+      email: customerForm.email.trim() || null,
+      phone: customerForm.phone.trim() || null,
+    };
+  }, [customerForm.document, customerForm.email, customerForm.name, customerForm.phone, hasCheckoutCustomer, useRealCustomer]);
+
+  const handleCustomerField = (field: keyof typeof customerForm, value: string) => {
+    setCustomerForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const printConfigs: Record<SaleReceiptLayout, {
+    ref: RefObject<HTMLDivElement>;
+    title: string;
+    pageStyle: string;
+    windowFeatures: string;
+  }> = {
+    a4: {
+      ref: receiptA4Ref,
+      title: 'Recibo A4',
+      windowFeatures: 'width=1000,height=900',
+      pageStyle: `
+        @page { size: A4 portrait; margin: 12mm; }
+        html, body { margin: 0; padding: 0; background: #fff; }
+        * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      `,
+    },
+    thermal80: {
+      ref: receipt80Ref,
+      title: 'Cupom Não Fiscal 80mm',
+      windowFeatures: 'width=520,height=900',
+      pageStyle: `
+        @page { size: 80mm auto; margin: 0; }
+        html, body { margin: 0; padding: 0; background: #fff; }
+        * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      `,
+    },
+    thermal58: {
+      ref: receipt58Ref,
+      title: 'Cupom Não Fiscal 58mm',
+      windowFeatures: 'width=420,height=900',
+      pageStyle: `
+        @page { size: 58mm auto; margin: 0; }
+        html, body { margin: 0; padding: 0; background: #fff; }
+        * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      `,
+    },
+  };
+
+  const handlePrint = (layout: SaleReceiptLayout) => {
+    const config = printConfigs[layout];
+    const receiptNode = config.ref.current;
+    if (!receiptNode) return;
+
+    const printContent = receiptNode.outerHTML;
+    const printWindow = window.open('', '', config.windowFeatures);
     if (!printWindow) return;
 
     const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
@@ -74,14 +136,16 @@ export default function GraphPOSConfirmacao() {
     printWindow.document.write(`
       <html>
         <head>
-          <title>Recibo</title>
+          <title>${config.title}</title>
           ${styles}
+          <style>${config.pageStyle}</style>
         </head>
         <body>${printContent}</body>
       </html>
     `);
     printWindow.document.close();
     printWindow.onload = () => {
+      printWindow.focus();
       printWindow.print();
       printWindow.close();
     };
@@ -104,19 +168,25 @@ export default function GraphPOSConfirmacao() {
               </div>
               <h1 className="mt-5 text-[32px] font-bold">Venda Confirmada!</h1>
               <p className="mt-2 text-sm text-slate-500">
-                O pedido #10234 foi processado e registrado no sistema com sucesso.
+                O pedido #{saleId.slice(0, 8).toUpperCase()} foi processado e registrado com sucesso.
               </p>
               <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-                <BotaoSecundario className="w-auto px-6" onClick={handlePrint}>
+                <BotaoSecundario className="h-11 w-auto px-5" onClick={() => handlePrint('a4')}>
                   <span className="flex items-center gap-2">
                     <Printer className="h-4 w-4" />
-                    Imprimir Recibo
+                    Imprimir A4
                   </span>
                 </BotaoSecundario>
-                <BotaoSecundario className="w-auto px-6">
+                <BotaoSecundario className="h-11 w-auto px-5" onClick={() => handlePrint('thermal80')}>
                   <span className="flex items-center gap-2">
-                    <Mail className="h-4 w-4" />
-                    Enviar por e-mail
+                    <Printer className="h-4 w-4" />
+                    Cupom 80mm
+                  </span>
+                </BotaoSecundario>
+                <BotaoSecundario className="h-11 w-auto px-5" onClick={() => handlePrint('thermal58')}>
+                  <span className="flex items-center gap-2">
+                    <Printer className="h-4 w-4" />
+                    Cupom 58mm
                   </span>
                 </BotaoSecundario>
               </div>
@@ -124,26 +194,85 @@ export default function GraphPOSConfirmacao() {
 
             <div className="grid gap-6 lg:grid-cols-2">
               <GraphPOSCard>
-                <p className="text-xs font-semibold uppercase text-slate-400">Dados do Cliente</p>
-                <div className="mt-4 space-y-3 text-sm text-slate-600">
-                  <div className="flex items-center gap-2">
-                    <User className="h-4 w-4 text-slate-400" />
-                    <span className="font-semibold text-slate-800">{customer?.name || 'Joao Silva'}</span>
+                <p className="text-xs font-semibold uppercase text-slate-400">Cliente no recibo</p>
+
+                {hasCheckoutCustomer ? (
+                  <>
+                    <label className="mt-4 flex items-center gap-2 text-sm text-slate-700">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 rounded border-slate-300"
+                        checked={useRealCustomer}
+                        onChange={(e) => setUseRealCustomer(e.target.checked)}
+                      />
+                      Usar cliente real da venda
+                    </label>
+
+                    {useRealCustomer ? (
+                      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                        <label className="flex flex-col gap-1 text-xs text-slate-500">
+                          Nome
+                          <input
+                            className="h-10 rounded-xl border border-slate-200 px-3 text-sm text-slate-800"
+                            value={customerForm.name}
+                            onChange={(e) => handleCustomerField('name', e.target.value)}
+                            placeholder="Nome do cliente"
+                          />
+                        </label>
+                        <label className="flex flex-col gap-1 text-xs text-slate-500">
+                          CPF/CNPJ
+                          <input
+                            className="h-10 rounded-xl border border-slate-200 px-3 text-sm text-slate-800"
+                            value={customerForm.document}
+                            onChange={(e) => handleCustomerField('document', e.target.value)}
+                            placeholder="Documento"
+                          />
+                        </label>
+                        <label className="flex flex-col gap-1 text-xs text-slate-500">
+                          Telefone
+                          <input
+                            className="h-10 rounded-xl border border-slate-200 px-3 text-sm text-slate-800"
+                            value={customerForm.phone}
+                            onChange={(e) => handleCustomerField('phone', e.target.value)}
+                            placeholder="Telefone"
+                          />
+                        </label>
+                        <label className="flex flex-col gap-1 text-xs text-slate-500">
+                          E-mail
+                          <input
+                            className="h-10 rounded-xl border border-slate-200 px-3 text-sm text-slate-800"
+                            value={customerForm.email}
+                            onChange={(e) => handleCustomerField('email', e.target.value)}
+                            placeholder="E-mail"
+                          />
+                        </label>
+                      </div>
+                    ) : (
+                      <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
+                        O recibo sera emitido como <span className="font-semibold">Consumidor final</span>.
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
+                    Nenhum cliente selecionado na venda. O recibo sera emitido como <span className="font-semibold">Consumidor final</span>.
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Mail className="h-4 w-4 text-slate-400" />
-                    <span>{customer?.email || 'joao.silva@email.com'}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Phone className="h-4 w-4 text-slate-400" />
-                    <span>{customer?.phone || '(11) 98765-4321'}</span>
-                  </div>
-                </div>
+                )}
               </GraphPOSCard>
 
               <GraphPOSCard>
-                <p className="text-xs font-semibold uppercase text-slate-400">Detalhes do Pagamento</p>
+                <p className="text-xs font-semibold uppercase text-slate-400">Detalhes do pagamento</p>
                 <div className="mt-4 space-y-3 text-sm text-slate-600">
+                  <div className="flex items-center gap-2">
+                    <User className="h-4 w-4 text-slate-400" />
+                    <span className="font-semibold text-slate-800">{receiptCustomer.name}</span>
+                  </div>
+                  {receiptCustomer.phone && (
+                    <div className="flex items-center gap-2">
+                      <Phone className="h-4 w-4 text-slate-400" />
+                      <span>{receiptCustomer.phone}</span>
+                    </div>
+                  )}
                   <div className="flex items-center gap-2">
                     <CreditCard className="h-4 w-4 text-slate-400" />
                     <span className="font-semibold text-slate-800">{paymentLabelMap[paymentLabel] || 'Dinheiro'}</span>
@@ -226,9 +355,10 @@ export default function GraphPOSConfirmacao() {
           </div>
         </div>
 
-        <div className="sr-only">
+        <div className="sr-only" aria-hidden="true">
           <SaleReceipt
-            ref={receiptRef}
+            ref={receiptA4Ref}
+            layout="a4"
             saleId={saleId}
             items={items.map((item) => ({
               name: item.name,
@@ -245,6 +375,53 @@ export default function GraphPOSConfirmacao() {
             paymentMethod={receiptPaymentMethod}
             amountPaid={amountPaid}
             change={Math.max(0, amountPaid - total)}
+            company={company}
+            customer={receiptCustomer}
+            createdAt={createdAt}
+          />
+          <SaleReceipt
+            ref={receipt80Ref}
+            layout="thermal80"
+            saleId={saleId}
+            items={items.map((item) => ({
+              name: item.name,
+              quantity: item.quantity,
+              unitPrice: item.unitPrice,
+              unitLabel: item.unitLabel,
+              widthCm: item.widthCm,
+              heightCm: item.heightCm,
+              areaM2: item.areaM2,
+            }))}
+            subtotal={subtotal}
+            discount={discount}
+            total={total}
+            paymentMethod={receiptPaymentMethod}
+            amountPaid={amountPaid}
+            change={Math.max(0, amountPaid - total)}
+            company={company}
+            customer={receiptCustomer}
+            createdAt={createdAt}
+          />
+          <SaleReceipt
+            ref={receipt58Ref}
+            layout="thermal58"
+            saleId={saleId}
+            items={items.map((item) => ({
+              name: item.name,
+              quantity: item.quantity,
+              unitPrice: item.unitPrice,
+              unitLabel: item.unitLabel,
+              widthCm: item.widthCm,
+              heightCm: item.heightCm,
+              areaM2: item.areaM2,
+            }))}
+            subtotal={subtotal}
+            discount={discount}
+            total={total}
+            paymentMethod={receiptPaymentMethod}
+            amountPaid={amountPaid}
+            change={Math.max(0, amountPaid - total)}
+            company={company}
             customer={receiptCustomer}
             createdAt={createdAt}
           />
@@ -253,4 +430,3 @@ export default function GraphPOSConfirmacao() {
     </div>
   );
 }
-

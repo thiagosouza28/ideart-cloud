@@ -171,7 +171,7 @@ export interface Plan {
 }
 
 export interface Product {
-  track_stock: unknown;
+  track_stock: boolean;
   id: string;
   name: string;
   sku: string | null;

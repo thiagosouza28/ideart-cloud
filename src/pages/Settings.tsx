@@ -120,7 +120,7 @@ export default function Settings() {
     { value: '{cliente_nome}', label: 'Cliente', description: 'Nome do cliente' },
     { value: '{cliente_telefone}', label: 'Telefone', description: 'Telefone do cliente' },
     { value: '{pedido_id}', label: 'ID', description: 'Identificador do pedido' },
-    { value: '{pedido_numero}', label: 'Pedido', description: 'Numero do pedido' },
+    { value: '{pedido_numero}', label: 'Pedido', description: 'Número do pedido' },
     { value: '{pedido_status}', label: 'Status', description: 'Status do pedido' },
     { value: '{pedido_total}', label: 'Total', description: 'Total do pedido' },
     { value: '{total}', label: 'Total curto', description: 'Alias do total do pedido' },
@@ -1530,7 +1530,7 @@ export default function Settings() {
               <div>
                 <p className="font-medium">Zerar dados da empresa</p>
                 <p className="text-sm text-muted-foreground">
-                  Remove pedidos, produtos, clientes e movimentacoes da empresa.
+                  Remove pedidos, produtos, clientes e movimentações da empresa.
                 </p>
               </div>
               <Button variant="destructive" onClick={() => setDangerOpen(true)}>

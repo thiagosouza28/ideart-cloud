@@ -15,6 +15,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { isPromotionActive } from '@/lib/pricing';
 import { isValidCode128, isValidEan13, normalizeBarcode } from '@/lib/barcode';
+import { ensurePublicStorageUrl } from '@/lib/storage';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -78,14 +79,20 @@ export default function Products() {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [profile?.company_id]);
 
   const fetchData = async () => {
+    let productsQuery = supabase
+      .from('products')
+      .select('*, category:categories(name), product_supplies(quantity, supply:supplies(cost_per_unit))')
+      .order('name');
+
+    if (profile?.company_id) {
+      productsQuery = productsQuery.eq('company_id', profile.company_id);
+    }
+
     const [productsResult, categoriesResult] = await Promise.all([
-      supabase
-        .from('products')
-        .select('*, category:categories(name), product_supplies(quantity, supply:supplies(cost_per_unit))')
-        .order('name'),
+      productsQuery,
       supabase.from('categories').select('*').order('name'),
     ]);
 
@@ -97,7 +104,11 @@ export default function Products() {
   const handleDelete = async () => {
     if (!deleteId) return;
 
-    const { error } = await supabase.from('products').delete().eq('id', deleteId);
+    let deleteQuery = supabase.from('products').delete().eq('id', deleteId);
+    if (profile?.company_id) {
+      deleteQuery = deleteQuery.eq('company_id', profile.company_id);
+    }
+    const { error } = await deleteQuery;
 
     if (error) {
       toast({ title: 'Erro ao excluir produto', variant: 'destructive' });
@@ -142,6 +153,13 @@ export default function Products() {
       servico: 'bg-green-100 text-green-800'
     };
     return colors[type] || '';
+  };
+
+  const getProductThumbnail = (product: ProductWithSupplies) => {
+    const urls = Array.isArray(product.image_urls) ? product.image_urls : [];
+    const firstImage = urls.find((url) => typeof url === 'string' && url.trim() !== '');
+    const source = firstImage || product.image_url;
+    return ensurePublicStorageUrl('product-images', source) || '/placeholder.svg';
   };
 
   const normalizeBarcodeValue = (value: string) => normalizeBarcode(value);
@@ -441,6 +459,7 @@ export default function Products() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-[84px]">Foto</TableHead>
                 <TableHead>Nome</TableHead>
                 <TableHead>SKU</TableHead>
                 <TableHead>Tipo</TableHead>
@@ -454,17 +473,29 @@ export default function Products() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8">Carregando...</TableCell>
+                  <TableCell colSpan={9} className="text-center py-8">Carregando...</TableCell>
                 </TableRow>
               ) : filteredProducts.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
                     Nenhum produto encontrado
                   </TableCell>
                 </TableRow>
               ) : (
                 filteredProducts.map((product) => (
                   <TableRow key={product.id}>
+                    <TableCell>
+                      <img
+                        src={getProductThumbnail(product)}
+                        alt={product.name}
+                        className="h-12 w-12 rounded-md border object-cover bg-muted"
+                        onError={(event) => {
+                          if (event.currentTarget.dataset.fallbackApplied === 'true') return;
+                          event.currentTarget.dataset.fallbackApplied = 'true';
+                          event.currentTarget.src = '/placeholder.svg';
+                        }}
+                      />
+                    </TableCell>
                     <TableCell className="font-medium">
                       <div className="flex flex-col">
                         <div className="flex items-center gap-2">
@@ -487,7 +518,13 @@ export default function Products() {
                     <TableCell>{(product as any).category?.name || '-'}</TableCell>
                     <TableCell className="text-right">{formatCurrency(getProductCost(product))}</TableCell>
                     <TableCell className={product.track_stock && product.stock_quantity <= product.min_stock ? 'text-destructive font-medium' : ''}>
-                      {product.track_stock ? `${product.stock_quantity} ${product.unit}` : 'Sem controle'}
+                      {product.track_stock ? (
+                        `${product.stock_quantity} ${product.unit}`
+                      ) : (
+                        <Badge variant="outline" className="border-slate-200 bg-slate-100 text-slate-600">
+                          Não controla estoque
+                        </Badge>
+                      )}
                     </TableCell>
                     <TableCell>
                       <Badge variant={product.is_active ? 'default' : 'secondary'}>

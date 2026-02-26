@@ -317,7 +317,7 @@ export default function Reports() {
             </Card>
             <Card>
               <CardContent className="pt-6 space-y-2">
-                <p className="text-sm text-muted-foreground">Total saidas</p>
+                <p className="text-sm text-muted-foreground">Total saídas</p>
                 <p className="text-2xl font-semibold">
                   {reportData ? currency(reportData.cash.summary.totalOut) : 'R$ 0,00'}
                 </p>
@@ -361,7 +361,7 @@ export default function Reports() {
               <ChartContainer
                 config={{
                   inflow: { label: 'Entradas', color: '#2563eb' },
-                  outflow: { label: 'Saidas', color: '#f97316' },
+                  outflow: { label: 'Saídas', color: '#f97316' },
                   net: { label: 'Saldo', color: '#16a34a' },
                 }}
                 className="h-[280px]"
@@ -469,7 +469,7 @@ export default function Reports() {
                 <ChartContainer
                   config={{
                     inflow: { label: 'Entradas', color: '#2563eb' },
-                    outflow: { label: 'Saidas', color: '#f97316' },
+                    outflow: { label: 'Saídas', color: '#f97316' },
                     net: { label: 'Saldo', color: '#16a34a' },
                   }}
                   className="h-[260px]"

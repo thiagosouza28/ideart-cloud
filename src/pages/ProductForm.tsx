@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Category, Supply, Attribute, AttributeValue, ProductColor, ProductType } from '@/types/database';
@@ -65,6 +66,7 @@ const productSchema = z.object({
 });
 
 const MAX_PRODUCT_IMAGES = 5;
+const ALLOWED_IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
 function generateSlug(name: string): string {
   return name
@@ -437,7 +439,12 @@ export default function ProductForm() {
     let rejectedSize = false;
 
     for (const file of filesToUpload) {
-      if (!file.type.startsWith('image/')) {
+      const mimeType = file.type.toLowerCase();
+      const extension = file.name.split('.').pop()?.toLowerCase() || '';
+      const hasValidExtension = ['jpg', 'jpeg', 'png', 'webp'].includes(extension);
+      const hasValidMimeType = ALLOWED_IMAGE_MIME_TYPES.has(mimeType);
+
+      if (!hasValidMimeType && !hasValidExtension) {
         rejectedType = true;
         continue;
       }
@@ -449,7 +456,7 @@ export default function ProductForm() {
     }
 
     if (rejectedType) {
-      toast({ title: 'Selecione apenas imagens validas', variant: 'destructive' });
+      toast({ title: 'Selecione imagens JPG, PNG ou WEBP', variant: 'destructive' });
     }
     if (rejectedSize) {
       toast({ title: 'Imagem deve ter no máximo 5MB', variant: 'destructive' });
@@ -902,7 +909,7 @@ export default function ProductForm() {
 
     const { data, error } = await query.maybeSingle();
     if (error) {
-      toast({ title: 'Erro ao validar codigo de barras', description: error.message, variant: 'destructive' });
+      toast({ title: 'Erro ao validar código de barras', description: error.message, variant: 'destructive' });
       return false;
     }
     if (!data) return true;
@@ -912,11 +919,16 @@ export default function ProductForm() {
 
   const checkSkuAvailability = async (value: string) => {
     if (!value) return true;
-    const { data, error } = await supabase
+    let query = supabase
       .from('products')
       .select('id')
-      .eq('sku', value)
-      .maybeSingle();
+      .eq('sku', value);
+
+    if (profile?.company_id) {
+      query = query.eq('company_id', profile.company_id);
+    }
+
+    const { data, error } = await query.maybeSingle();
 
     if (error) {
       toast({ title: 'Erro ao validar SKU', description: error.message, variant: 'destructive' });
@@ -1230,21 +1242,20 @@ export default function ProductForm() {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Basic Info */}
-        <Card>
+        <Tabs defaultValue="informacoes" className="space-y-6">
+          <TabsList className="grid h-auto w-full grid-cols-1 gap-2 sm:h-10 sm:grid-cols-3">
+            <TabsTrigger value="informacoes">Informações Gerais</TabsTrigger>
+            <TabsTrigger value="estoque">Estoque</TabsTrigger>
+            <TabsTrigger value="valores">Valores</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="informacoes" className="space-y-6">
+            {/* Basic Info */}
+            <Card>
           <CardHeader>
-            <CardTitle>Informações Básicas</CardTitle>
+            <CardTitle>Informações Gerais</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-4 md:grid-cols-2">
-            <div className="md:col-span-2 flex items-center justify-between rounded-lg border p-3">
-              <div className="space-y-1">
-                <Label className="text-sm font-medium">Controlar estoque</Label>
-                <p className="text-xs text-muted-foreground">
-                  Ative para controlar quantidade e alertas de estoque.
-                </p>
-              </div>
-              <Switch checked={trackStock} onCheckedChange={setTrackStock} />
-            </div>
             <div className="space-y-2">
               <Label htmlFor="name">Nome *</Label>
               <Input
@@ -1389,42 +1400,6 @@ export default function ProductForm() {
                 </SelectContent>
               </Select>
             </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="unit">Unidade *</Label>
-              <Select value={unit} onValueChange={setUnit}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="un">Unidade (un)</SelectItem>
-                  <SelectItem value="m">Metro (m)</SelectItem>
-                  <SelectItem value="m\u00B2">Metro2 (m\u00B2)</SelectItem>
-                  <SelectItem value="kg">Quilograma (kg)</SelectItem>
-                  <SelectItem value="cx">Caixa (cx)</SelectItem>
-                  <SelectItem value="pct">Pacote (pct)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="minOrderQuantity">Quantidade mínima para pedido</Label>
-              <Input
-                id="minOrderQuantity"
-                type="number"
-                min="1"
-                step="1"
-                value={minOrderQuantity}
-                onChange={(e) =>
-                  setMinOrderQuantity(Math.max(1, parseInt(e.target.value, 10) || 1))
-                }
-                className={errors?.min_order_quantity ? 'border-destructive' : ''}
-              />
-              {errors?.min_order_quantity && (
-                <p className="text-xs text-destructive">{errors.min_order_quantity}</p>
-              )}
-            </div>
-
 
             <div className="flex items-center gap-3 pt-6">
               <Switch checked={isActive} onCheckedChange={setIsActive} />
@@ -1599,8 +1574,8 @@ export default function ProductForm() {
           </CardContent>
         </Card>
 
-        {/* Product Image */}
-        <Card>
+            {/* Product Image */}
+            <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Image className="h-5 w-5" />
@@ -1614,7 +1589,7 @@ export default function ProductForm() {
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/*"
+              accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
               multiple
               onChange={handleImageUpload}
               className="hidden"
@@ -1697,10 +1672,12 @@ export default function ProductForm() {
               </p>
             </div>
           </CardContent>
-        </Card>
+            </Card>
+          </TabsContent>
 
-        {/* Cost Composition */}
-        <Card>
+          <TabsContent value="valores" className="space-y-6">
+            {/* Cost Composition */}
+            <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Calculator className="h-5 w-5" />
@@ -1917,8 +1894,8 @@ export default function ProductForm() {
           </CardContent>
         </Card>
 
-        {/* Price Tiers */}
-        <Card>
+            {/* Price Tiers */}
+            <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
@@ -1986,8 +1963,8 @@ export default function ProductForm() {
           </CardContent>
         </Card>
 
-        {/* Promotion */}
-        <Card>
+            {/* Promotion */}
+            <Card>
           <CardHeader>
             <div className="flex items-center gap-2">
               <Tag className="h-5 w-5 text-primary" />
@@ -2032,8 +2009,8 @@ export default function ProductForm() {
           </CardContent>
         </Card>
 
-        {/* Attributes */}
-        <Card>
+            {/* Attributes */}
+            <Card>
           <CardHeader>
             <CardTitle>Atributos do Produto</CardTitle>
             <CardDescription>
@@ -2071,40 +2048,98 @@ export default function ProductForm() {
               </div>
             ))}
           </CardContent>
-        </Card>
+            </Card>
+          </TabsContent>
 
-        {/* Stock */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Estoque Inicial</CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="stockQuantity">Quantidade em Estoque</Label>
-              <Input
-                id="stockQuantity"
-                type="number"
-                step="0.01"
-                min="0"
-                value={stockQuantity}
-                onChange={(e) => setStockQuantity(parseFloat(e.target.value) || 0)}
-                disabled={!trackStock}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="minStock">Estoque Mínimo (alerta)</Label>
-              <Input
-                id="minStock"
-                type="number"
-                step="0.01"
-                min="0"
-                value={minStock}
-                onChange={(e) => setMinStock(parseFloat(e.target.value) || 0)}
-                disabled={!trackStock}
-              />
-            </div>
-          </CardContent>
-        </Card>
+          <TabsContent value="estoque" className="space-y-6">
+            {/* Stock */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Estoque</CardTitle>
+                <CardDescription>
+                  Configure como este produto será controlado no estoque.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-4 md:grid-cols-2">
+                <div className="md:col-span-2 flex items-center justify-between rounded-lg border p-3">
+                  <div className="space-y-1">
+                    <Label className="text-sm font-medium">Controlar estoque</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Desative para que o produto não apareça no controle de estoque.
+                    </p>
+                  </div>
+                  <Switch checked={trackStock} onCheckedChange={setTrackStock} />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="unit">Unidade *</Label>
+                  <Select value={unit} onValueChange={setUnit}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="un">Unidade (un)</SelectItem>
+                      <SelectItem value="m">Metro (m)</SelectItem>
+                      <SelectItem value="m\u00B2">Metro2 (m\u00B2)</SelectItem>
+                      <SelectItem value="kg">Quilograma (kg)</SelectItem>
+                      <SelectItem value="cx">Caixa (cx)</SelectItem>
+                      <SelectItem value="pct">Pacote (pct)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="minOrderQuantity">Quantidade mínima para pedido</Label>
+                  <Input
+                    id="minOrderQuantity"
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={minOrderQuantity}
+                    onChange={(e) =>
+                      setMinOrderQuantity(Math.max(1, parseInt(e.target.value, 10) || 1))
+                    }
+                    className={errors?.min_order_quantity ? 'border-destructive' : ''}
+                  />
+                  {errors?.min_order_quantity && (
+                    <p className="text-xs text-destructive">{errors.min_order_quantity}</p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="stockQuantity">Quantidade em Estoque</Label>
+                  <Input
+                    id="stockQuantity"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={stockQuantity}
+                    onChange={(e) => setStockQuantity(parseFloat(e.target.value) || 0)}
+                    disabled={!trackStock}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="minStock">Estoque Mínimo (alerta)</Label>
+                  <Input
+                    id="minStock"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={minStock}
+                    onChange={(e) => setMinStock(parseFloat(e.target.value) || 0)}
+                    disabled={!trackStock}
+                  />
+                </div>
+
+                {!trackStock && (
+                  <p className="md:col-span-2 text-xs text-muted-foreground">
+                    Este produto ficará marcado como "Não controla estoque" na listagem.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
 
         {/* Actions */}
         <div className="flex justify-end gap-3">

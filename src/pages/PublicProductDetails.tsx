@@ -818,7 +818,7 @@ export default function PublicProductDetails() {
                   </div>
                   <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
                     <h4 className="font-semibold text-slate-800 mb-2">Personalização</h4>
-                    <p className="text-xs text-slate-500">Gravacao com qualidade premium para destacar sua marca.</p>
+                    <p className="text-xs text-slate-500">Gravação com qualidade premium para destacar sua marca.</p>
                   </div>
                 </div>
               </div>
@@ -837,7 +837,7 @@ export default function PublicProductDetails() {
               </div>
             )}
             {activeTab === 'avaliacoes' && (
-              <div className="text-sm text-slate-600">Avaliacoes em breve.</div>
+              <div className="text-sm text-slate-600">Avaliações em breve.</div>
             )}
           </div>
         </div>

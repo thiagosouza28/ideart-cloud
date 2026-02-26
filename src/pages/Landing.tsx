@@ -281,7 +281,7 @@ export default function Landing() {
             },
             {
               title: "Catálogo eficiente",
-              text: "Destaque produtos, personalize layout e compartilhe rapido.",
+              text: "Destaque produtos, personalize layout e compartilhe rápido.",
             },
             {
               title: "Financeiro simples",

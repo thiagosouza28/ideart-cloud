@@ -10,6 +10,7 @@ import { ensurePublicStorageUrl } from '@/lib/storage';
 import { resolveProductPrice } from '@/lib/pricing';
 import { normalizeBarcode } from '@/lib/barcode';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
 import { getGraphPOSCheckoutState, setGraphPOSCheckoutState } from '@/lib/graphposCheckout';
 import { normalizeDigits } from '@/components/ui/masked-input';
 import { useUnsavedChanges } from '@/hooks/use-unsaved-changes';
@@ -56,6 +57,7 @@ const productMatchesSearch = (product: Product, rawTerm: string) => {
 export default function GraphPOSPDV() {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { profile } = useAuth();
   const [search, setSearch] = useState('');
   const [barcodeInput, setBarcodeInput] = useState('');
   const [products, setProducts] = useState<Product[]>([]);
@@ -82,6 +84,10 @@ export default function GraphPOSPDV() {
     document.addEventListener('mousedown', handleOutside);
     return () => document.removeEventListener('mousedown', handleOutside);
   }, []);
+
+  useEffect(() => {
+    setProductSearchCache(null);
+  }, [profile?.company_id]);
 
   useEffect(() => {
     const raw = window.localStorage.getItem(draftStorageKey);
@@ -138,6 +144,8 @@ export default function GraphPOSPDV() {
         state: null,
         zip_code: null,
         notes: null,
+        date_of_birth: null,
+        photo_url: null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       });
@@ -167,13 +175,17 @@ export default function GraphPOSPDV() {
 
       let directMatches: Product[] = [];
       if (safeTerm) {
-        const { data, error } = await supabase
+        let directQuery = supabase
           .from('products')
           .select('*')
           .eq('is_active', true)
           .or(`name.ilike.%${safeTerm}%,sku.ilike.%${safeTerm}%,barcode.ilike.%${safeTerm}%`)
           .order('name')
           .limit(60);
+        if (profile?.company_id) {
+          directQuery = directQuery.eq('company_id', profile.company_id);
+        }
+        const { data, error } = await directQuery;
 
         if (error) {
           toast({ title: 'Erro ao buscar produtos', variant: 'destructive' });
@@ -182,7 +194,7 @@ export default function GraphPOSPDV() {
           return;
         }
 
-        directMatches = (data as Product[]) || [];
+        directMatches = (data as unknown as Product[]) || [];
       }
 
       const mappedDirect = directMatches.map((product) => ({
@@ -195,12 +207,16 @@ export default function GraphPOSPDV() {
       if (filtered.length === 0) {
         let cache = productSearchCache;
         if (!cache) {
-          const { data: allData, error: allError } = await supabase
+          let allProductsQuery = supabase
             .from('products')
             .select('*')
             .eq('is_active', true)
             .order('name')
             .limit(500);
+          if (profile?.company_id) {
+            allProductsQuery = allProductsQuery.eq('company_id', profile.company_id);
+          }
+          const { data: allData, error: allError } = await allProductsQuery;
 
           if (allError) {
             toast({ title: 'Erro ao buscar produtos', variant: 'destructive' });
@@ -209,7 +225,7 @@ export default function GraphPOSPDV() {
             return;
           }
 
-          cache = ((allData as Product[]) || []).map((product) => ({
+          cache = ((allData as unknown as Product[]) || []).map((product) => ({
             ...product,
             image_url: ensurePublicStorageUrl('product-images', product.image_url),
           }));
@@ -225,7 +241,7 @@ export default function GraphPOSPDV() {
     }, 300);
 
     return () => clearTimeout(timeout);
-  }, [productSearchCache, search, toast]);
+  }, [productSearchCache, profile?.company_id, search, toast]);
 
   useEffect(() => {
     const term = customerSearch.trim();
@@ -377,12 +393,15 @@ export default function GraphPOSPDV() {
     if (!barcodeInput.trim()) return;
 
     const code = normalizeBarcode(barcodeInput);
-    const { data: barcodeMatch, error: barcodeError } = await supabase
+    let barcodeQuery = supabase
       .from('products')
       .select('*')
       .eq('is_active', true)
-      .eq('barcode', code)
-      .maybeSingle();
+      .eq('barcode', code);
+    if (profile?.company_id) {
+      barcodeQuery = barcodeQuery.eq('company_id', profile.company_id);
+    }
+    const { data: barcodeMatch, error: barcodeError } = await barcodeQuery.maybeSingle();
 
     if (barcodeError) {
       toast({ title: 'Erro ao buscar produto', variant: 'destructive' });
@@ -391,12 +410,15 @@ export default function GraphPOSPDV() {
 
     let productData = barcodeMatch;
     if (!productData) {
-      const { data: skuMatch, error: skuError } = await supabase
+      let skuQuery = supabase
         .from('products')
         .select('*')
         .eq('is_active', true)
-        .eq('sku', code)
-        .maybeSingle();
+        .eq('sku', code);
+      if (profile?.company_id) {
+        skuQuery = skuQuery.eq('company_id', profile.company_id);
+      }
+      const { data: skuMatch, error: skuError } = await skuQuery.maybeSingle();
 
       if (skuError || !skuMatch) {
         toast({ title: 'Produto não encontrado', description: `Código: ${barcodeInput}`, variant: 'destructive' });
@@ -406,7 +428,7 @@ export default function GraphPOSPDV() {
     }
 
     const mapped = {
-      ...(productData as Product),
+      ...(productData as unknown as Product),
       image_url: ensurePublicStorageUrl('product-images', productData.image_url),
     };
     addToCart(mapped);
@@ -470,17 +492,17 @@ export default function GraphPOSPDV() {
   };
 
   return (
-    <div className="w-full bg-slate-50 font-sans text-slate-900">
-      <main className="w-full pb-14 pt-2">
-        <div className="mb-7 flex items-center justify-between">
+    <div className="w-full bg-slate-50 font-sans text-slate-900 lg:h-full lg:min-h-0 lg:overflow-hidden">
+      <main className="w-full pb-14 pt-2 lg:flex lg:h-full lg:min-h-0 lg:flex-col lg:pb-0">
+        <div className="mb-4 flex items-center justify-between lg:shrink-0">
           <div>
             <h1 className="text-3xl font-semibold tracking-tight">PDV</h1>
             <p className="text-sm text-slate-500">Ponto de venda</p>
           </div>
         </div>
 
-        <div className="grid gap-7 lg:grid-cols-[minmax(0,1fr)_30%] lg:items-start">
-          <div className="space-y-4 min-h-0">
+        <div className="grid gap-5 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_380px] lg:items-stretch">
+          <div className="flex min-h-0 flex-col gap-4">
             <div className="grid gap-4 md:grid-cols-2">
               <form className="relative" onSubmit={handleBarcodeSubmit}>
                 <Barcode className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -502,8 +524,8 @@ export default function GraphPOSPDV() {
               </div>
             </div>
 
-            <GraphPOSCard className="p-0">
-              <div className="h-[62vh] min-h-[420px] overflow-hidden rounded-xl border border-dashed border-slate-200 bg-white p-6 shadow-[0_6px_20px_rgba(15,23,42,0.06)] bg-[radial-gradient(circle,_#e2e8f0_0.8px,_transparent_0.8px)] [background-size:20px_20px] lg:h-[calc(100svh-16.5rem)]">
+            <GraphPOSCard className="flex min-h-0 flex-1 p-0">
+              <div className="h-[52vh] min-h-[320px] w-full flex-1 overflow-hidden rounded-xl border border-dashed border-slate-200 bg-white p-6 shadow-[0_6px_20px_rgba(15,23,42,0.06)] bg-[radial-gradient(circle,_#e2e8f0_0.8px,_transparent_0.8px)] [background-size:20px_20px] lg:h-full lg:min-h-0">
                 {!search.trim() ? (
                   <div className="flex h-full items-center justify-center text-center">
                     <div className="flex max-w-md flex-col items-center gap-4 text-slate-500">
@@ -558,7 +580,7 @@ export default function GraphPOSPDV() {
             </GraphPOSCard>
           </div>
 
-          <div className="h-[62vh] min-h-[420px] lg:sticky lg:top-8 lg:h-[calc(100svh-8.5rem)]">
+          <div className="h-[52vh] min-h-[320px] lg:h-full lg:min-h-0">
             <GraphPOSSidebarResumo
               title="Carrinho"
               className="flex h-full min-h-0 flex-col rounded-xl shadow-[0_8px_24px_rgba(15,23,42,0.08)]"
@@ -753,7 +775,7 @@ export default function GraphPOSPDV() {
                   )}
                 </div>
 
-                <div className="shrink-0 border-t border-slate-200 pt-3">
+                <div className="mt-auto shrink-0 border-t border-slate-200 pt-3">
                   <div className="space-y-3 text-sm text-slate-600">
                     <div className="flex items-center justify-between">
                       <span>Subtotal</span>
@@ -791,5 +813,3 @@ export default function GraphPOSPDV() {
     </div>
   );
 }
-
-

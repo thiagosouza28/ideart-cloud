@@ -271,6 +271,11 @@ const generateReceiptForPayment = async ({
       cargo: responsibleRole,
     },
     numeroRecibo: receiptNumber,
+    referencia: {
+      tipo: 'pedido',
+      numero: `#${order.order_number}`,
+      codigo: payment.id.slice(0, 8).toUpperCase(),
+    },
   };
 
   const safeCompanyId = order.company_id || 'company';

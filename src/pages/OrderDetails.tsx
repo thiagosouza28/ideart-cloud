@@ -21,6 +21,7 @@ import OrderReceipt from '@/components/OrderReceipt';
 import CustomerSearch from '@/components/CustomerSearch';
 import { buildPaymentReceiptHtml, type PaymentReceiptPayload } from '@/templates/paymentReceiptTemplate';
 import { generateAndUploadPaymentReceipt } from '@/services/paymentReceipts';
+import { buildReceiptA5Url } from '@/lib/receiptA5';
 import { M2_ATTRIBUTE_KEYS, buildM2Attributes, calculateAreaM2, formatAreaM2, isAreaUnit, parseM2Attributes, parseMeasurementInput, stripM2Attributes } from '@/lib/measurements';
 import { useConfirm } from '@/components/ui/confirm-dialog';
 import {
@@ -307,6 +308,11 @@ export default function OrderDetails() {
         cargo: responsibleRole,
       },
       numeroRecibo: receiptNumber,
+      referencia: {
+        tipo: 'pedido',
+        numero: `#${formatOrderNumber(order.order_number)}`,
+        codigo: payment.id.slice(0, 8).toUpperCase(),
+      },
     };
   };
 
@@ -785,12 +791,9 @@ const sendWhatsAppMessage = (message: string) => {
 
     setPaymentReceiptLoading(true);
     generateAndUploadPaymentReceipt(paymentReceiptPayload, { bucket: 'payment-receipts', path })
-      .then(({ publicUrl }) => {
-        if (publicUrl) {
-          window.open(publicUrl, '_blank', 'noopener');
-        } else {
-          toast({ title: 'Recibo gerado, mas URL indisponível', variant: 'destructive' });
-        }
+      .then(() => {
+        const receiptA5Url = buildReceiptA5Url(paymentReceiptPayload);
+        window.open(receiptA5Url, '_blank', 'noopener,noreferrer');
       })
       .catch((error: any) => {
         toast({
@@ -2233,27 +2236,32 @@ const canSendWhatsApp = Boolean(order?.customer?.phone);
 
       {/* Payment Receipt Dialog */}
       <Dialog open={receiptDialogOpen} onOpenChange={handleReceiptDialogChange}>
-        <DialogContent aria-describedby={undefined} className="max-w-3xl max-h-[90vh] overflow-auto">
+        <DialogContent
+          aria-describedby={undefined}
+          className="w-[calc(100vw-1.5rem)] max-w-[700px] max-h-[92vh] overflow-hidden"
+        >
           <DialogHeader>
             <DialogTitle>Recibo de Pagamento</DialogTitle>
           </DialogHeader>
-          <div className="flex justify-center">
-            {paymentReceiptHtml ? (
-              <div
-                ref={paymentReceiptRef}
-                className="w-full flex justify-center"
-                dangerouslySetInnerHTML={{ __html: paymentReceiptHtml }}
-              />
-            ) : (
-              <p className="text-sm text-muted-foreground">Recibo indisponível.</p>
-            )}
+          <div className="max-h-[calc(92vh-190px)] overflow-y-auto overflow-x-hidden pr-1">
+            <div className="flex justify-center">
+              {paymentReceiptHtml ? (
+                <div
+                  ref={paymentReceiptRef}
+                  className="w-full max-w-[560px]"
+                  dangerouslySetInnerHTML={{ __html: paymentReceiptHtml }}
+                />
+              ) : (
+                <p className="text-sm text-muted-foreground">Recibo indisponível.</p>
+              )}
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => handleReceiptDialogChange(false)}>
               Fechar
             </Button>
             <Button onClick={handlePrintPaymentReceipt} disabled={!receiptPayment || paymentReceiptLoading}>
-              {paymentReceiptLoading ? 'Gerando...' : 'Baixar PDF'}
+              {paymentReceiptLoading ? 'Gerando...' : 'Abrir A5'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2268,7 +2276,7 @@ const canSendWhatsApp = Boolean(order?.customer?.phone);
           <div className="space-y-4">
             {order.status === 'pendente' ? (
               <div className="space-y-2">
-                <Label>Este pedido precisa de criacao ou ajuste de arte?</Label>
+                <Label>Este pedido precisa de criação ou ajuste de arte?</Label>
                 <div className="grid gap-2 sm:grid-cols-2">
                   <Button
                     type="button"

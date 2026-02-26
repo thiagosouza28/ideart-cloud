@@ -31,7 +31,7 @@ export default function SuperAdminImpersonate() {
     }
 
     if (isImpersonating) {
-      toast.error('Finalize a sessao atual antes de entrar em outra conta.');
+      toast.error('Finalize a sessão atual antes de entrar em outra conta.');
       return;
     }
 
@@ -77,7 +77,7 @@ export default function SuperAdminImpersonate() {
 
       <Card className="border-slate-200">
         <CardHeader>
-          <CardTitle>Impersonacao administrativa</CardTitle>
+          <CardTitle>Impersonação administrativa</CardTitle>
           <CardDescription>
             Use este acesso apenas para suporte. Ao sair, voce retorna para sua conta admin.
           </CardDescription>
@@ -101,7 +101,7 @@ export default function SuperAdminImpersonate() {
               Entrar na conta
             </Button>
             <p className="text-xs text-slate-500">
-              A sessao do admin fica salva e pode ser restaurada no banner superior.
+              A sessão do admin fica salva e pode ser restaurada no banner superior.
             </p>
           </div>
         </CardContent>

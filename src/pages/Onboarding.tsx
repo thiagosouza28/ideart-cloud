@@ -342,7 +342,7 @@ export default function Onboarding() {
                 Endereço *
               </Label>
               <Input
-                placeholder="Rua, numero, bairro"
+                placeholder="Rua, número, bairro"
                 value={formData.address}
                 onChange={(e) => setFormData({ ...formData, address: e.target.value })}
                 required

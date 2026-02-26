@@ -52,6 +52,7 @@ const SuperAdminPlans = lazy(() => import("./pages/SuperAdminPlans"));
 const SuperAdminImpersonate = lazy(() => import("./pages/SuperAdminImpersonate"));
 const Profile = lazy(() => import("./pages/Profile"));
 const Reports = lazy(() => import("./pages/Reports"));
+const Receipts = lazy(() => import("./pages/Receipts"));
 const BannerManagement = lazy(() => import("./pages/BannerManagement"));
 const CatalogManager = lazy(() => import("./pages/CatalogManager"));
 const Landing = lazy(() => import("./pages/Landing"));
@@ -311,6 +312,15 @@ const App = () => (
                 element={(
                   <ProtectedRoute allowedRoles={["admin"]}>
                     <AppLayout>{withSuspense(<Reports />)}</AppLayout>
+                  </ProtectedRoute>
+                )}
+              />
+
+              <Route
+                path="/comprovantes"
+                element={(
+                  <ProtectedRoute allowedRoles={["admin", "atendente", "caixa"]}>
+                    <AppLayout>{withSuspense(<Receipts />)}</AppLayout>
                   </ProtectedRoute>
                 )}
               />

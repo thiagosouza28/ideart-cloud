@@ -15,6 +15,7 @@ import { Product } from '@/types/database';
 import { resolveProductPrice } from '@/lib/pricing';
 import { BarcodeSvg } from '@/components/BarcodeSvg';
 import { buildBarcodeSvgMarkup, detectBarcodeFormat, normalizeBarcode } from '@/lib/barcode';
+import { useAuth } from '@/contexts/AuthContext';
 
 type LabelSize = {
   id: string;
@@ -45,6 +46,7 @@ const getBarcodeSizing = (size: LabelSize) => {
 
 export default function ProductLabels() {
   const { toast } = useToast();
+  const { profile } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -55,10 +57,14 @@ export default function ProductLabels() {
   useEffect(() => {
     const loadProducts = async () => {
       setLoading(true);
-      const { data, error } = await supabase
+      let query = supabase
         .from('products')
         .select('*')
         .order('name');
+      if (profile?.company_id) {
+        query = query.eq('company_id', profile.company_id);
+      }
+      const { data, error } = await query;
       if (error) {
         toast({ title: 'Erro ao carregar produtos', variant: 'destructive' });
         setProducts([]);
@@ -70,7 +76,7 @@ export default function ProductLabels() {
     };
 
     loadProducts();
-  }, [toast]);
+  }, [profile?.company_id, toast]);
 
   const filteredProducts = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -399,7 +405,7 @@ export default function ProductLabels() {
                               <div className="text-[9px] text-muted-foreground">Sem código</div>
                             )}
                             <div className="text-[8px] tracking-[0.2em] text-muted-foreground">
-                              {barcodeValue || 'SEM CODIGO'}
+                              {barcodeValue || 'SEM CÓDIGO'}
                             </div>
                           </div>
                           <div className="text-right text-[10px] font-semibold">

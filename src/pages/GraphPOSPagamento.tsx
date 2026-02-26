@@ -15,18 +15,42 @@ import { buildM2Attributes, formatAreaM2 } from '@/lib/measurements';
 const formatCurrency = (v: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
 
+const formatAmountInput = (value: number) =>
+  new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
+
+const parseAmountInput = (rawValue: string) => {
+  const cleaned = rawValue.replace(/[^\d.,]/g, '');
+  if (!cleaned) return 0;
+
+  const lastComma = cleaned.lastIndexOf(',');
+  const lastDot = cleaned.lastIndexOf('.');
+  const decimalIndex = Math.max(lastComma, lastDot);
+
+  if (decimalIndex === -1) {
+    const integerDigits = cleaned.replace(/[^\d]/g, '');
+    return integerDigits ? Number(integerDigits) : 0;
+  }
+
+  const integerPart = cleaned.slice(0, decimalIndex).replace(/[^\d]/g, '') || '0';
+  const decimalPart = cleaned.slice(decimalIndex + 1).replace(/[^\d]/g, '').slice(0, 2);
+  const normalized = decimalPart.length > 0 ? `${integerPart}.${decimalPart}` : integerPart;
+  const parsed = Number(normalized);
+
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
 export default function GraphPOSPagamento() {
   const navigate = useNavigate();
   const { user, profile, company } = useAuth();
   const { toast } = useToast();
   // Keep navigation flow aligned with the 3-screen demo.
   const checkout = useMemo(() => getGraphPOSCheckoutState(), []);
+  const initialAmountPaid = checkout?.amountPaid || checkout?.total || 0;
   const [paymentMethod, setPaymentMethod] = useState(
     checkout?.paymentMethod || 'dinheiro',
   );
-  const [amountPaid, setAmountPaid] = useState(
-    checkout?.amountPaid || checkout?.total || 0,
-  );
+  const [amountPaid, setAmountPaid] = useState(initialAmountPaid);
+  const [amountPaidInput, setAmountPaidInput] = useState(() => formatAmountInput(initialAmountPaid));
   const [saving, setSaving] = useState(false);
   const draftStorageKey = 'graphpos_pdv_draft';
 
@@ -43,6 +67,11 @@ export default function GraphPOSPagamento() {
     if (paymentMethod === 'pix') return 'pix';
     if (paymentMethod === 'outros') return 'outro';
     return 'cartao';
+  };
+
+  const updateAmountPaid = (value: number) => {
+    setAmountPaid(value);
+    setAmountPaidInput(formatAmountInput(value));
   };
 
   return (
@@ -143,20 +172,25 @@ export default function GraphPOSPagamento() {
                   <p className="text-sm font-semibold text-slate-700">Valor Recebido (R$)</p>
                   <input
                     className="mt-2 h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-lg font-semibold text-slate-900"
-                    value={amountPaid.toFixed(2)}
+                    value={amountPaidInput}
+                    inputMode="decimal"
+                    placeholder="0,00"
+                    onFocus={(e) => e.target.select()}
                     onChange={(e) => {
-                      const parsed = Number(e.target.value);
-                      setAmountPaid(Number.isNaN(parsed) ? 0 : parsed);
+                      const raw = e.target.value.replace(/[^\d.,]/g, '');
+                      setAmountPaidInput(raw);
+                      setAmountPaid(parseAmountInput(raw));
                     }}
+                    onBlur={() => setAmountPaidInput(formatAmountInput(amountPaid))}
                   />
                   <div className="mt-3 flex flex-wrap gap-2">
-                    <BotaoSecundario className="h-9 w-auto px-4 text-xs" onClick={() => setAmountPaid(total)}>
+                    <BotaoSecundario className="h-9 w-auto px-4 text-xs" onClick={() => updateAmountPaid(total)}>
                       Exato
                     </BotaoSecundario>
-                    <BotaoSecundario className="h-9 w-auto px-4 text-xs" onClick={() => setAmountPaid(total + 10)}>
+                    <BotaoSecundario className="h-9 w-auto px-4 text-xs" onClick={() => updateAmountPaid(total + 10)}>
                       + R$ 10
                     </BotaoSecundario>
-                    <BotaoSecundario className="h-9 w-auto px-4 text-xs" onClick={() => setAmountPaid(total + 50)}>
+                    <BotaoSecundario className="h-9 w-auto px-4 text-xs" onClick={() => updateAmountPaid(total + 50)}>
                       + R$ 50
                     </BotaoSecundario>
                   </div>
@@ -287,10 +321,14 @@ export default function GraphPOSPagamento() {
                       quantitiesByProduct[item.id] = (quantitiesByProduct[item.id] || 0) + item.quantity;
                     });
                     const productIds = Object.keys(quantitiesByProduct);
-                    const { data: productsData } = await supabase
+                    let productsStockQuery = supabase
                       .from('products')
                       .select('id, track_stock, stock_quantity')
                       .in('id', productIds);
+                    if (companyId) {
+                      productsStockQuery = productsStockQuery.eq('company_id', companyId);
+                    }
+                    const { data: productsData } = await productsStockQuery;
 
                     const trackedProducts = (productsData || []).filter((p) => p.track_stock);
                     if (trackedProducts.length > 0) {
@@ -298,7 +336,11 @@ export default function GraphPOSPagamento() {
                         const qty = quantitiesByProduct[product.id] || 0;
                         if (qty <= 0) return Promise.resolve();
                         const newStock = Number(product.stock_quantity) - qty;
-                        return supabase.from('products').update({ stock_quantity: newStock }).eq('id', product.id);
+                        let updateProductQuery = supabase.from('products').update({ stock_quantity: newStock }).eq('id', product.id);
+                        if (companyId) {
+                          updateProductQuery = updateProductQuery.eq('company_id', companyId);
+                        }
+                        return updateProductQuery;
                       }));
 
                       await Promise.all(trackedProducts.map((product) => {

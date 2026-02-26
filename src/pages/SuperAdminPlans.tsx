@@ -572,7 +572,7 @@ export default function SuperAdminPlans() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Duracao do Ciclo</Label>
+                <Label>Duração do Ciclo</Label>
                 <div className="flex gap-2">
                   <Input
                     type="number"

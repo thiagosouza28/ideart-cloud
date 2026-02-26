@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Comprovante A5 - Ideart</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,600&family=Outfit:wght@300;400;500&family=Space+Mono:wght@400;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #1c1c1c;
+        --paper: #fffef9;
+        --ink: #1f1f1f;
+        --muted: #888;
+        --muted-soft: #aaa;
+        --panel: #f3f0e8;
+        --black: #111111;
+        --gold: #c8b99a;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      @page {
+        size: A5;
+        margin: 0;
+      }
+
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        min-height: 100%;
+      }
+
+      body {
+        background: var(--bg);
+        font-family: "Outfit", sans-serif;
+        color: var(--ink);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+
+      .page {
+        width: 148mm;
+        height: 210mm;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 10mm 8mm;
+      }
+
+      .ticket {
+        width: 132mm;
+        background: var(--paper);
+        border: 1px solid #ded7c8;
+        border-radius: 7px 7px 0 0;
+        position: relative;
+        box-shadow: 0 20px 48px rgba(0, 0, 0, 0.35);
+      }
+
+      .ticket-head {
+        background: var(--black);
+        border-radius: 7px 7px 0 0;
+        padding: 10px 14px 9px;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .brand-mark {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        background: #1a1a1a;
+        border: 1px solid #3a3429;
+        display: grid;
+        place-items: center;
+        flex: 0 0 auto;
+      }
+
+      .brand-logo-image {
+        display: none;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        border-radius: 50%;
+      }
+
+      .brand-mark.has-logo {
+        background: #f2e9d8;
+        border-color: #6c5f49;
+      }
+
+      .brand-mark.has-logo svg {
+        display: none;
+      }
+
+      .brand-mark.has-logo .brand-logo-image {
+        display: block;
+      }
+
+      .brand-text h1 {
+        margin: 0;
+        font-family: "Cormorant Garamond", serif;
+        font-size: 24px;
+        line-height: 1;
+        font-weight: 600;
+        letter-spacing: 4px;
+        color: #f3f0e8;
+        text-transform: uppercase;
+      }
+
+      .brand-text h1 .accent-e {
+        font-style: italic;
+        color: var(--gold);
+        text-transform: none;
+      }
+
+      .brand-text p {
+        margin: 4px 0 0;
+        font-size: 9px;
+        letter-spacing: 1.8px;
+        color: #666;
+        text-transform: uppercase;
+      }
+
+      .divider {
+        border-top: 1px solid #2c2c2c;
+        margin-top: 8px;
+      }
+
+      .ticket-body {
+        padding: 12px 14px 14px;
+      }
+
+      .store-meta {
+        margin-bottom: 10px;
+        font-family: "Space Mono", monospace;
+        font-size: 9.5px;
+        color: #58544d;
+        line-height: 1.45;
+      }
+
+      .store-meta .line {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+      }
+
+      .store-meta .line strong {
+        color: #2e2b27;
+      }
+
+      .topline {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+
+      .doc-label {
+        margin: 0;
+        font-size: 12px;
+        color: #2a2a2a;
+        letter-spacing: 0.4px;
+      }
+
+      .order-badge {
+        font-family: "Space Mono", monospace;
+        font-size: 10.5px;
+        background: var(--panel);
+        color: #3c3a35;
+        border: 1px solid #e3decf;
+        border-radius: 999px;
+        padding: 3px 10px;
+        letter-spacing: 0.6px;
+      }
+
+      .confirm-bar {
+        margin-top: 9px;
+        background: var(--black);
+        border-radius: 999px;
+        color: #f1eee6;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 7px 11px;
+        font-size: 10.8px;
+      }
+
+      .confirm-bar strong {
+        color: var(--gold);
+        font-weight: 500;
+      }
+
+      .amount-block {
+        margin-top: 11px;
+        border-top: 1px dashed #d5ccbb;
+        border-bottom: 1px dashed #d5ccbb;
+        text-align: center;
+        padding: 11px 6px 12px;
+      }
+
+      .amount-label {
+        display: block;
+        font-size: 9px;
+        color: var(--muted);
+        letter-spacing: 1.8px;
+        text-transform: uppercase;
+      }
+
+      .amount-value {
+        margin: 3px 0 0;
+        font-family: "Cormorant Garamond", serif;
+        font-size: 52px;
+        line-height: 0.95;
+        font-weight: 600;
+        color: #1f1f1f;
+      }
+
+      .pay-badge {
+        margin-top: 8px;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        border-radius: 999px;
+        border: 1px solid #ddd3c0;
+        background: #f7f3e8;
+        color: #3f3a32;
+        font-family: "Space Mono", monospace;
+        font-size: 11px;
+        padding: 4px 10px;
+      }
+
+      .details {
+        margin-top: 10px;
+        border: 1px solid #e3dccd;
+        border-radius: 6px;
+        overflow: hidden;
+      }
+
+      .detail-row {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 6px 10px;
+        border-bottom: 1px solid #ece5d6;
+      }
+
+      .detail-row:last-child {
+        border-bottom: 0;
+      }
+
+      .detail-label {
+        color: var(--muted-soft);
+        font-size: 9.5px;
+        letter-spacing: 1.1px;
+        text-transform: uppercase;
+        white-space: nowrap;
+      }
+
+      .detail-value {
+        text-align: right;
+        font-family: "Space Mono", monospace;
+        font-size: 11.1px;
+        color: #222;
+      }
+
+      .sign-area {
+        margin-top: 10px;
+        border-top: 1px dashed #d9cfbe;
+        padding-top: 10px;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+      }
+
+      .sign-label {
+        color: var(--muted);
+        font-size: 9.5px;
+        letter-spacing: 1.1px;
+        text-transform: uppercase;
+      }
+
+      .sign-right {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+      }
+
+      .signature-image {
+        display: none;
+        max-width: 140px;
+        max-height: 46px;
+        object-fit: contain;
+        margin-bottom: 2px;
+      }
+
+      .sign-right.has-signature .signature-image {
+        display: block;
+      }
+
+      .sign-right.has-signature .sign-name {
+        transform: none;
+        font-size: 16px;
+        line-height: 1.1;
+        color: #71695f;
+      }
+
+      .sign-name {
+        font-family: "Cormorant Garamond", serif;
+        font-size: 34px;
+        font-style: italic;
+        line-height: 0.9;
+        color: #3b352d;
+        transform: rotate(-3deg);
+        transform-origin: right bottom;
+      }
+
+      .ticket-foot {
+        margin-top: 9px;
+        text-align: center;
+        color: #7f7a72;
+      }
+
+      .foot-line {
+        margin: 0;
+        font-size: 9.4px;
+        line-height: 1.38;
+      }
+
+      .foot-sep {
+        margin-top: 4px;
+        font-family: "Space Mono", monospace;
+        font-size: 9px;
+        letter-spacing: 3px;
+        color: #a49d90;
+      }
+
+      .scallop {
+        position: absolute;
+        left: -1px;
+        right: -1px;
+        bottom: -7px;
+        height: 8px;
+        background: radial-gradient(circle at 6px -3px, var(--paper) 8px, transparent 8.2px) repeat-x;
+        background-size: 12px 8px;
+        pointer-events: none;
+      }
+
+      @media print {
+        body {
+          background: #ffffff;
+          display: block;
+        }
+
+        .page {
+          width: 148mm;
+          height: 210mm;
+          margin: 0;
+          padding: 10mm 8mm;
+        }
+
+        .ticket {
+          box-shadow: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <section class="page" aria-label="Comprovante de pagamento A5">
+      <article class="ticket">
+        <header class="ticket-head">
+          <div class="brand">
+            <div class="brand-mark" id="brand-mark">
+              <img id="store-logo" class="brand-logo-image" alt="Logo da loja" />
+              <svg width="30" height="30" viewBox="0 0 48 48" fill="none">
+                <circle cx="24" cy="24" r="22.3" stroke="#c8b99a" stroke-opacity="0.55" />
+                <path d="M9 30.5c4.2-5.5 10.5-8.4 17.3-8.7" stroke="#fff2de" stroke-width="2.2" stroke-linecap="round" />
+                <path d="M15.5 16.5c5 2.7 10.5 3 16.2 1.1" stroke="#c8b99a" stroke-width="2" stroke-linecap="round" />
+                <path d="M18 36c6.2-3.9 11.4-4.8 20-4" stroke="#f6efe3" stroke-width="1.8" stroke-linecap="round" opacity="0.9" />
+              </svg>
+            </div>
+            <div class="brand-text">
+              <h1 id="store-name">ID<span class="accent-e">e</span>ART</h1>
+              <p>Personalizados &amp; Cria&ccedil;&atilde;o</p>
+            </div>
+          </div>
+          <div class="divider"></div>
+        </header>
+
+        <main class="ticket-body">
+          <section class="store-meta" aria-label="Dados da loja">
+            <div class="line"><span id="store-docline">CPF: 042.292.442-31 | Tipo: PF</span><strong>N&ordm; <span id="receipt-number">REC-16-63CB5518</span></strong></div>
+            <div id="store-address">Rod PA 252 Km 36 Ramal Da Campina, Moju - PA</div>
+          </section>
+
+          <div class="topline">
+            <p class="doc-label" id="doc-title">Comprovante de Pagamento</p>
+            <span class="order-badge" id="order-badge">PEDIDO #16</span>
+          </div>
+
+          <div class="confirm-bar">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <circle cx="12" cy="12" r="10.4" stroke="#c8b99a" stroke-width="1.8" />
+              <path d="M7 12.4l3.2 3.2L17.4 8.5" stroke="#f8efdf" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+            <span>Pagamento confirmado de <strong id="confirm-client">Iane Teles</strong> por <strong id="confirm-description">2x Agenda Personalizada</strong></span>
+          </div>
+
+          <section class="amount-block">
+            <span class="amount-label">Valor Recebido</span>
+            <p class="amount-value" id="amount-value">R$ 140,00</p>
+            <span class="pay-badge">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M12 1.8 2.3 12 12 22.2 21.7 12 12 1.8Z" stroke="#9f8d69" stroke-width="1.8" />
+                <path d="M9 12h6M12 9v6" stroke="#9f8d69" stroke-width="1.6" stroke-linecap="round" />
+              </svg>
+              <span id="payment-label">via Pix</span>
+            </span>
+          </section>
+
+          <section class="details" role="table" aria-label="Detalhes do comprovante">
+            <div class="detail-row" role="row">
+              <span class="detail-label">Data</span>
+              <span class="detail-value" id="detail-date">25/02/2026 as 20:32:14</span>
+            </div>
+            <div class="detail-row" role="row">
+              <span class="detail-label">Cliente</span>
+              <span class="detail-value" id="detail-client">Iane Teles</span>
+            </div>
+            <div class="detail-row" role="row">
+              <span class="detail-label">Descricao</span>
+              <span class="detail-value" id="detail-description">2x Agenda Personalizada</span>
+            </div>
+            <div class="detail-row" role="row">
+              <span class="detail-label">N&ordm; Recibo</span>
+              <span class="detail-value" id="detail-receipt">REC-16-63CB5518</span>
+            </div>
+            <div class="detail-row" role="row">
+              <span class="detail-label">Codigo interno</span>
+              <span class="detail-value" id="detail-code">63CB5518</span>
+            </div>
+          </section>
+
+          <section class="sign-area">
+            <span class="sign-label">Assinatura da loja</span>
+            <div class="sign-right" id="sign-right">
+              <img id="signature-image" class="signature-image" alt="Assinatura cadastrada da loja" />
+              <span class="sign-name" id="signature-name">Ideart</span>
+            </div>
+          </section>
+
+          <footer class="ticket-foot">
+            <p class="foot-line" id="footer-address">Rod PA 252 Km 36 Ramal Da Campina, Moju - PA</p>
+            <p class="foot-line" id="footer-doc">CPF: 042.292.442-31 | Tipo: PF</p>
+            <div class="foot-sep">&middot; &middot; &middot;</div>
+          </footer>
+        </main>
+
+        <div class="scallop" aria-hidden="true"></div>
+      </article>
+    </section>
+
+    <script>
+      (function () {
+        var params = new URLSearchParams(window.location.search);
+        var byId = function (id) { return document.getElementById(id); };
+        var get = function (key, fallback) {
+          var value = params.get(key);
+          if (value === null || value === undefined || value === "") return fallback;
+          return value;
+        };
+        var setText = function (id, value) {
+          var el = byId(id);
+          if (!el) return;
+          el.textContent = value;
+        };
+
+        var store = get("store", "Ideart");
+        var doc = get("doc", "042.292.442-31");
+        var personType = get("personType", "PF");
+        var address = get("address", "Rod PA 252 Km 36 Ramal Da Campina, Moju - PA");
+        var receipt = get("receipt", "REC-16-63CB5518");
+        var referenceType = get("referenceType", "pedido").toLowerCase();
+        var referenceNumber = get("referenceNumber", "#16");
+        var client = get("client", "Iane Teles");
+        var description = get("description", "2x Agenda Personalizada");
+        var amount = get("amount", "R$ 140,00");
+        var payment = get("payment", "Pix");
+        var date = get("date", "25/02/2026 as 20:32:14");
+        var internalCode = get("internalCode", "63CB5518");
+        var signature = get("signature", store);
+        var logo = get("logo", "");
+        var signatureImage = get("signatureImage", "");
+
+        var isSafeAssetUrl = function (url) {
+          if (!url) return false;
+          return /^https?:\/\//i.test(url) || url.indexOf("/") === 0 || /^data:image\//i.test(url);
+        };
+
+        var typeLabel = personType === "PJ" ? "CNPJ" : "CPF";
+        var title = referenceType === "pdv" || referenceType === "venda" ? "Recibo de Venda" : "Comprovante de Pagamento";
+        var badgePrefix = referenceType === "pdv" || referenceType === "venda" ? "VENDA PDV" : "PEDIDO";
+
+        setText("store-name", store.toUpperCase());
+        setText("store-docline", typeLabel + ": " + doc + " | Tipo: " + personType);
+        setText("store-address", address);
+        setText("receipt-number", receipt);
+        setText("doc-title", title);
+        setText("order-badge", badgePrefix + " " + referenceNumber);
+        setText("confirm-client", client);
+        setText("confirm-description", description);
+        setText("amount-value", amount);
+        setText("payment-label", "via " + payment);
+        setText("detail-date", date);
+        setText("detail-client", client);
+        setText("detail-description", description);
+        setText("detail-receipt", receipt);
+        setText("detail-code", internalCode);
+        setText("signature-name", signature);
+        setText("footer-address", address);
+        setText("footer-doc", typeLabel + ": " + doc + " | Tipo: " + personType);
+
+        var brandMark = byId("brand-mark");
+        var logoEl = byId("store-logo");
+        if (logoEl && brandMark && isSafeAssetUrl(logo)) {
+          logoEl.src = logo;
+          logoEl.onload = function () {
+            brandMark.classList.add("has-logo");
+          };
+          logoEl.onerror = function () {
+            brandMark.classList.remove("has-logo");
+            logoEl.removeAttribute("src");
+          };
+        }
+
+        var signRight = byId("sign-right");
+        var signatureImageEl = byId("signature-image");
+        if (signatureImageEl && signRight && isSafeAssetUrl(signatureImage)) {
+          signatureImageEl.src = signatureImage;
+          signatureImageEl.onload = function () {
+            signRight.classList.add("has-signature");
+          };
+          signatureImageEl.onerror = function () {
+            signRight.classList.remove("has-signature");
+            signatureImageEl.removeAttribute("src");
+          };
+        }
+
+        if (get("print", "0") === "1") {
+          window.addEventListener("load", function () {
+            setTimeout(function () { window.print(); }, 150);
+          });
+        }
+      })();
+    </script>
+  </body>
+</html>

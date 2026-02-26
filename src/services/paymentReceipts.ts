@@ -12,6 +12,7 @@ export type ReceiptPdfOptions = {
   theme?: PaymentReceiptTheme;
   widthPx?: number;
   marginPt?: number;
+  fitSinglePage?: boolean;
 };
 
 export type ReceiptUploadResult = {
@@ -20,8 +21,36 @@ export type ReceiptUploadResult = {
   publicUrl: string | null;
 };
 
-const defaultWidth = 540;
+const defaultWidth = 560;
 const defaultMargin = 32;
+const defaultFitSinglePage = true;
+
+const generateUniqueStorageSuffix = () => {
+  const iso = new Date().toISOString();
+  const stamp = iso
+    .replaceAll("-", "")
+    .replaceAll(":", "")
+    .replaceAll(".", "")
+    .replace("T", "")
+    .replace("Z", "")
+    .slice(0, 14);
+  const random = Math.random().toString(36).slice(2, 8).toUpperCase();
+  return `${stamp}-${random}`;
+};
+
+const appendSuffixToPath = (path: string, suffix: string) => {
+  const normalized = String(path || "").trim().replace(/^\/+/, "");
+  const lastSlash = normalized.lastIndexOf("/");
+  const dir = lastSlash >= 0 ? normalized.slice(0, lastSlash + 1) : "";
+  const file = lastSlash >= 0 ? normalized.slice(lastSlash + 1) : normalized;
+  const dotIndex = file.lastIndexOf(".");
+
+  if (dotIndex <= 0) {
+    return `${dir}${file}-${suffix}`;
+  }
+
+  return `${dir}${file.slice(0, dotIndex)}-${suffix}${file.slice(dotIndex)}`;
+};
 
 const generateReceiptNumber = () => {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -39,7 +68,14 @@ const ensureReceiptNumber = (payload: PaymentReceiptPayload) => {
 const formatDateTime = (value: string) => {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleString("pt-BR");
+  return parsed.toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
 };
 
 const buildPdfHtml = (payload: PaymentReceiptPayload, options?: ReceiptPdfOptions) => {
@@ -77,9 +113,11 @@ const waitForImages = async (container: HTMLElement) => {
 const createHiddenContainer = (html: string, widthPx: number) => {
   const container = document.createElement("div");
   container.style.position = "fixed";
-  container.style.left = "-10000px";
+  container.style.left = "0";
   container.style.top = "0";
   container.style.width = `${widthPx}px`;
+  container.style.opacity = "0";
+  container.style.pointerEvents = "none";
   container.style.background = "#ffffff";
   container.innerHTML = html;
   document.body.appendChild(container);
@@ -96,46 +134,125 @@ export const generatePaymentReceiptPdf = async (
 
   const widthPx = options?.widthPx ?? defaultWidth;
   const marginPt = options?.marginPt ?? defaultMargin;
+  const fitSinglePage = options?.fitSinglePage ?? defaultFitSinglePage;
   const { html, receiptNumber } = buildPdfHtml(payload, options);
 
   const container = createHiddenContainer(html, widthPx);
-  const root = container.querySelector(".receipt-root") as HTMLElement | null;
-  if (!root) {
-    container.remove();
-    throw new Error("Receipt template root not found.");
-  }
+  try {
+    const root = container.querySelector(".receipt-root") as HTMLElement | null;
+    if (!root) {
+      throw new Error("Receipt template root not found.");
+    }
 
-  await waitForImages(container);
-  if (document.fonts?.ready) {
-    await document.fonts.ready;
-  }
+    await waitForImages(container);
+    if (document.fonts?.ready) {
+      await document.fonts.ready;
+    }
 
-  if (typeof window !== "undefined" && !(window as { html2canvas?: unknown }).html2canvas) {
-    (window as { html2canvas?: typeof html2canvas }).html2canvas = html2canvas;
-  }
-
-  const pdf = new jsPDF({ orientation: "portrait", unit: "pt", format: "a4" });
-  await pdf.html(root, {
-    margin: [marginPt, marginPt, marginPt, marginPt],
-    autoPaging: "text",
-    html2canvas: {
+    const canvas = await html2canvas(root, {
       scale: 2,
       useCORS: true,
       backgroundColor: "#ffffff",
-    },
-    windowWidth: widthPx,
-  });
+      width: root.scrollWidth,
+      height: root.scrollHeight,
+      windowWidth: Math.max(widthPx, root.scrollWidth),
+      windowHeight: Math.max(root.scrollHeight, root.clientHeight),
+      scrollX: 0,
+      scrollY: 0,
+    });
 
-  const blob = pdf.output("blob");
-  container.remove();
+    const pdf = new jsPDF({ orientation: "portrait", unit: "pt", format: "a4" });
+    const pageWidthPt = pdf.internal.pageSize.getWidth();
+    const pageHeightPt = pdf.internal.pageSize.getHeight();
+    const contentWidthPt = pageWidthPt - marginPt * 2;
+    const contentHeightPt = pageHeightPt - marginPt * 2;
+    const imgData = canvas.toDataURL("image/png");
 
-  return { blob, receiptNumber };
+    if (fitSinglePage) {
+      const safeInsetPt = 6;
+      const safeContentWidthPt = Math.max(1, contentWidthPt - safeInsetPt * 2);
+      const safeContentHeightPt = Math.max(1, contentHeightPt - safeInsetPt * 2);
+      const scaleByWidth = safeContentWidthPt / canvas.width;
+      const scaleByHeight = safeContentHeightPt / canvas.height;
+      const scale = Math.min(scaleByWidth, scaleByHeight);
+      const renderWidthPt = canvas.width * scale;
+      const renderHeightPt = canvas.height * scale;
+      const renderX = marginPt + safeInsetPt + (safeContentWidthPt - renderWidthPt) / 2;
+      const renderY = marginPt + safeInsetPt + (safeContentHeightPt - renderHeightPt) / 2;
+
+      pdf.addImage(
+        imgData,
+        "PNG",
+        renderX,
+        renderY,
+        renderWidthPt,
+        renderHeightPt,
+        undefined,
+        "FAST",
+      );
+    } else {
+      const pxPerPt = canvas.width / contentWidthPt;
+      const pageHeightPx = Math.max(1, Math.floor(contentHeightPt * pxPerPt));
+
+      let offsetY = 0;
+      let page = 0;
+
+      while (offsetY < canvas.height) {
+        const sliceHeightPx = Math.min(pageHeightPx, canvas.height - offsetY);
+        const pageCanvas = document.createElement("canvas");
+        pageCanvas.width = canvas.width;
+        pageCanvas.height = sliceHeightPx;
+
+        const ctx = pageCanvas.getContext("2d");
+        if (!ctx) {
+          throw new Error("Unable to render receipt PDF page.");
+        }
+
+        ctx.drawImage(
+          canvas,
+          0,
+          offsetY,
+          canvas.width,
+          sliceHeightPx,
+          0,
+          0,
+          canvas.width,
+          sliceHeightPx,
+        );
+
+        const pageImgData = pageCanvas.toDataURL("image/png");
+        if (page > 0) {
+          pdf.addPage();
+        }
+
+        const sliceHeightPt = sliceHeightPx / pxPerPt;
+        pdf.addImage(
+          pageImgData,
+          "PNG",
+          marginPt,
+          marginPt,
+          contentWidthPt,
+          sliceHeightPt,
+          undefined,
+          "FAST",
+        );
+
+        offsetY += sliceHeightPx;
+        page += 1;
+      }
+    }
+
+    const blob = pdf.output("blob");
+    return { blob, receiptNumber };
+  } finally {
+    container.remove();
+  }
 };
 
 export const uploadPaymentReceiptPdf = async (blob: Blob, path: string, bucket = "payment-receipts") => {
   const { error } = await supabase.storage.from(bucket).upload(path, blob, {
     contentType: "application/pdf",
-    upsert: true,
+    upsert: false,
   });
 
   if (error) {
@@ -152,7 +269,8 @@ export const generateAndUploadPaymentReceipt = async (
 ): Promise<ReceiptUploadResult> => {
   const { blob, receiptNumber } = await generatePaymentReceiptPdf(payload, options);
   const bucket = options?.bucket || "payment-receipts";
-  const path = options?.path || `receipts/recibo-${receiptNumber}.pdf`;
+  const basePath = options?.path || `receipts/recibo-${receiptNumber}.pdf`;
+  const path = appendSuffixToPath(basePath, generateUniqueStorageSuffix());
   const { publicUrl } = await uploadPaymentReceiptPdf(blob, path, bucket);
   return { number: receiptNumber, path, publicUrl };
 };

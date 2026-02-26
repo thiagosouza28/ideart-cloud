@@ -61,10 +61,100 @@ const statusColors: Record<OrderStatus, string> = {
   cancelado: 'bg-red-100 text-red-800',
 };
 
+type ColumnStyle = {
+  container: string;
+  header: string;
+  countBadge: string;
+  empty: string;
+  overRing: string;
+};
+
+const defaultColumnStyle: ColumnStyle = {
+  container: 'border-slate-200 bg-slate-50/60',
+  header: 'border-slate-200 bg-slate-100/80',
+  countBadge: 'border-slate-200 bg-slate-100 text-slate-700',
+  empty: 'border-slate-200 bg-slate-100/60 text-slate-500',
+  overRing: 'ring-slate-300/80',
+};
+
+const statusColumnStyles: Record<OrderStatus, ColumnStyle> = {
+  orcamento: {
+    container: 'border-blue-200 bg-blue-50/45',
+    header: 'border-blue-200 bg-blue-100/65',
+    countBadge: 'border-blue-200 bg-blue-100 text-blue-800',
+    empty: 'border-blue-200 bg-blue-50/70 text-blue-700',
+    overRing: 'ring-blue-300/80',
+  },
+  pendente: {
+    container: 'border-orange-200 bg-orange-50/45',
+    header: 'border-orange-200 bg-orange-100/65',
+    countBadge: 'border-orange-200 bg-orange-100 text-orange-800',
+    empty: 'border-orange-200 bg-orange-50/70 text-orange-700',
+    overRing: 'ring-orange-300/80',
+  },
+  produzindo_arte: {
+    container: 'border-indigo-200 bg-indigo-50/45',
+    header: 'border-indigo-200 bg-indigo-100/65',
+    countBadge: 'border-indigo-200 bg-indigo-100 text-indigo-800',
+    empty: 'border-indigo-200 bg-indigo-50/70 text-indigo-700',
+    overRing: 'ring-indigo-300/80',
+  },
+  arte_aprovada: {
+    container: 'border-emerald-200 bg-emerald-50/45',
+    header: 'border-emerald-200 bg-emerald-100/65',
+    countBadge: 'border-emerald-200 bg-emerald-100 text-emerald-800',
+    empty: 'border-emerald-200 bg-emerald-50/70 text-emerald-700',
+    overRing: 'ring-emerald-300/80',
+  },
+  em_producao: {
+    container: 'border-amber-200 bg-amber-50/45',
+    header: 'border-amber-200 bg-amber-100/65',
+    countBadge: 'border-amber-200 bg-amber-100 text-amber-800',
+    empty: 'border-amber-200 bg-amber-50/70 text-amber-700',
+    overRing: 'ring-amber-300/80',
+  },
+  finalizado: {
+    container: 'border-green-200 bg-green-50/45',
+    header: 'border-green-200 bg-green-100/65',
+    countBadge: 'border-green-200 bg-green-100 text-green-800',
+    empty: 'border-green-200 bg-green-50/70 text-green-700',
+    overRing: 'ring-green-300/80',
+  },
+  pronto: {
+    container: 'border-green-200 bg-green-50/45',
+    header: 'border-green-200 bg-green-100/65',
+    countBadge: 'border-green-200 bg-green-100 text-green-800',
+    empty: 'border-green-200 bg-green-50/70 text-green-700',
+    overRing: 'ring-green-300/80',
+  },
+  aguardando_retirada: {
+    container: 'border-sky-200 bg-sky-50/45',
+    header: 'border-sky-200 bg-sky-100/65',
+    countBadge: 'border-sky-200 bg-sky-100 text-sky-800',
+    empty: 'border-sky-200 bg-sky-50/70 text-sky-700',
+    overRing: 'ring-sky-300/80',
+  },
+  entregue: {
+    container: 'border-slate-200 bg-slate-50/45',
+    header: 'border-slate-200 bg-slate-100/65',
+    countBadge: 'border-slate-200 bg-slate-100 text-slate-800',
+    empty: 'border-slate-200 bg-slate-50/70 text-slate-700',
+    overRing: 'ring-slate-300/80',
+  },
+  cancelado: {
+    container: 'border-red-200 bg-red-50/45',
+    header: 'border-red-200 bg-red-100/65',
+    countBadge: 'border-red-200 bg-red-100 text-red-800',
+    empty: 'border-red-200 bg-red-50/70 text-red-700',
+    overRing: 'ring-red-300/80',
+  },
+};
+
 type ColumnConfig = {
   id: string;
   label: string;
   color: string;
+  columnStyle: ColumnStyle;
 };
 
 type KanbanOrder = Order & {
@@ -80,6 +170,7 @@ const formatStatusLabel = (value: string) => {
 const getStatusMeta = (status: string) => ({
   label: statusLabels[status as OrderStatus] ?? formatStatusLabel(status),
   color: statusColors[status as OrderStatus] ?? 'bg-muted text-muted-foreground',
+  columnStyle: statusColumnStyles[status as OrderStatus] ?? defaultColumnStyle,
 });
 
 const formatCurrency = (value: number) =>
@@ -251,19 +342,33 @@ const KanbanColumn = ({ column, orders, updatingIds, onOpenOrder }: KanbanColumn
     <div
       ref={setNodeRef}
       className={cn(
-        'flex h-full w-full min-w-0 flex-col rounded-lg border bg-muted/20',
-        isOver && 'ring-2 ring-primary/40'
+        'flex h-full w-full min-w-0 flex-col rounded-lg border',
+        column.columnStyle.container,
+        isOver && 'ring-2',
+        isOver && column.columnStyle.overRing
       )}
     >
-      <div className="flex items-center justify-between border-b px-3 py-2">
+      <div
+        className={cn(
+          'flex items-center justify-between border-b px-3 py-2',
+          column.columnStyle.header
+        )}
+      >
         <div className="flex items-center gap-2">
           <span className="text-sm font-semibold">{column.label}</span>
         </div>
-        <Badge variant="secondary">{orders.length}</Badge>
+        <Badge variant="secondary" className={column.columnStyle.countBadge}>
+          {orders.length}
+        </Badge>
       </div>
       <div className="flex-1 space-y-2 overflow-y-auto px-2 pb-3 pt-2 scrollbar-thin">
         {orders.length === 0 ? (
-          <div className="rounded-md border border-dashed bg-muted/40 px-3 py-4 text-center text-xs text-muted-foreground">
+          <div
+            className={cn(
+              'rounded-md border border-dashed px-3 py-4 text-center text-xs',
+              column.columnStyle.empty
+            )}
+          >
             Sem pedidos
           </div>
         ) : (
@@ -510,7 +615,7 @@ export default function OrdersKanban() {
           <div className="relative w-full sm:w-72">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              placeholder="Buscar por numero ou cliente..."
+              placeholder="Buscar por número ou cliente..."
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               className="pl-9"

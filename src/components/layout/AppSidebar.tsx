@@ -22,6 +22,7 @@
   BarChart3,
   Image as ImageIcon,
   Gift,
+  FileText,
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -56,6 +57,7 @@ const primaryMenu: MenuItem[] = [
 
 const secondaryMenu: MenuItem[] = [
   { title: 'PDV', url: '/pdv', icon: ShoppingCart, roles: ['admin', 'caixa'] },
+  { title: 'Comprovantes', url: '/comprovantes', icon: FileText, roles: ['admin', 'atendente', 'caixa'] },
   { title: 'Kanban de Pedidos', url: '/pedidos/kanban', icon: Kanban, roles: ['admin', 'atendente', 'caixa', 'producao'] },
   { title: 'Catálogo', url: '/catalogo-admin', icon: LayoutGrid, roles: ['admin'] },
   { title: 'Produtos', url: '/produtos', icon: Package, roles: ['admin', 'atendente'] },
@@ -98,6 +100,11 @@ export function AppSidebar() {
     navigate('/auth');
   };
 
+  const navButtonClass =
+    'min-h-11 h-auto rounded-2xl px-3 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100 data-[active=true]:bg-purple-600 data-[active=true]:text-white [&>span:last-child]:whitespace-normal [&>span:last-child]:overflow-visible [&>span:last-child]:text-clip [&>span:last-child]:leading-tight';
+  const neutralNavButtonClass =
+    'min-h-11 h-auto rounded-2xl px-3 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100 [&>span:last-child]:whitespace-normal [&>span:last-child]:overflow-visible [&>span:last-child]:text-clip [&>span:last-child]:leading-tight';
+
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border bg-sidebar">
       <SidebarHeader className="border-b border-sidebar-border">
@@ -129,9 +136,7 @@ export function AppSidebar() {
                     asChild
                     isActive={location.pathname === item.url}
                     tooltip={item.title}
-                    className={
-                      'h-11 rounded-2xl px-3 text-sm font-medium text-slate-600 hover:bg-slate-100 data-[active=true]:bg-purple-600 data-[active=true]:text-white'
-                    }
+                    className={navButtonClass}
                   >
                     <a
                       href={item.url}
@@ -165,9 +170,7 @@ export function AppSidebar() {
                       asChild
                       isActive={location.pathname === item.url}
                       tooltip={item.title}
-                      className={
-                        'h-11 rounded-2xl px-3 text-sm font-medium text-slate-600 hover:bg-slate-100 data-[active=true]:bg-purple-600 data-[active=true]:text-white'
-                      }
+                      className={navButtonClass}
                     >
                       <a
                         href={item.url}
@@ -202,9 +205,7 @@ export function AppSidebar() {
                       asChild
                       isActive={location.pathname === item.url || location.pathname.startsWith(`${item.url}/`)}
                       tooltip={item.title}
-                      className={
-                        'h-11 rounded-2xl px-3 text-sm font-medium text-slate-600 hover:bg-slate-100 data-[active=true]:bg-purple-600 data-[active=true]:text-white'
-                      }
+                      className={navButtonClass}
                     >
                       <a
                         href={item.url}
@@ -232,9 +233,7 @@ export function AppSidebar() {
               <SidebarMenuButton
                 asChild
                 tooltip="Configurações"
-                className={
-                  'h-11 rounded-2xl px-3 text-sm font-medium text-slate-600 hover:bg-slate-100 data-[active=true]:bg-purple-600 data-[active=true]:text-white'
-                }
+                className={navButtonClass}
                 isActive={location.pathname === '/configuracoes'}
               >
                 <a
@@ -254,7 +253,7 @@ export function AppSidebar() {
             <SidebarMenuButton
               onClick={handleSignOut}
               tooltip="Sair"
-              className="h-11 rounded-2xl px-3 text-sm font-medium text-slate-600 hover:bg-slate-100"
+              className={neutralNavButtonClass}
             >
               <LogOut className="h-5 w-5" />
               {!collapsed && <span>Sair</span>}

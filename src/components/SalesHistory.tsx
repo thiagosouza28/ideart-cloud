@@ -43,7 +43,7 @@ const paymentIcons = {
 
 const paymentLabels = {
   dinheiro: 'Dinheiro',
-  cartao: 'Cartão',
+  cartao: 'Cartao',
   pix: 'PIX'
 };
 
@@ -130,7 +130,7 @@ export default function SalesHistory({ company }: SalesHistoryProps) {
                           <p className="text-xs text-muted-foreground flex items-center gap-1">
                             <Calendar className="h-3 w-3" />
                             {format(new Date(sale.created_at), "HH:mm", { locale: ptBR })}
-                            <span className="mx-1">•</span>
+                            <span className="mx-1">|</span>
                             {paymentLabels[sale.payment_method]}
                           </p>
                         </div>
@@ -178,5 +178,6 @@ export default function SalesHistory({ company }: SalesHistoryProps) {
     </>
   );
 }
+
 
 

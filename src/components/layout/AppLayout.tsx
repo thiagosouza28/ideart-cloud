@@ -240,7 +240,7 @@ export function AppLayout({ children }: AppLayoutProps) {
             {subscriptionBanner}
             {children}
           </main>
-          <nav className="app-bottom-nav md:hidden" aria-label="Navegacao principal">
+          <nav className="app-bottom-nav md:hidden" aria-label="Navegação principal">
             {visibleNavItems.map((item) => {
               const isActive = location.pathname === item.url || location.pathname.startsWith(`${item.url}/`);
               return (

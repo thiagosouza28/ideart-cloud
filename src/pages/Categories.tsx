@@ -199,7 +199,7 @@ export default function Categories() {
 
     if (selectedCategory && formData.parent_id) {
       if (formData.parent_id === selectedCategory.id) {
-        toast.error('A categoria nao pode ser pai de si mesma');
+        toast.error('A categoria não pode ser pai de si mesma');
         return;
       }
       if (descendantIds.has(formData.parent_id)) {
@@ -279,7 +279,7 @@ export default function Categories() {
             <div className="py-8 text-center text-muted-foreground">
               <FolderTree className="mx-auto mb-2 h-12 w-12 opacity-30" />
               <p>Nenhuma categoria cadastrada</p>
-              <p className="text-sm">Clique em "Nova Categoria" para comecar</p>
+              <p className="text-sm">Clique em "Nova Categoria" para começar</p>
             </div>
           ) : (
             <Table>
@@ -287,7 +287,7 @@ export default function Categories() {
                 <TableRow>
                   <TableHead>Nome</TableHead>
                   <TableHead>Categoria Pai</TableHead>
-                  <TableHead className="w-40">Acoes</TableHead>
+                  <TableHead className="w-40">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -394,7 +394,7 @@ export default function Categories() {
           </DialogHeader>
           <p>Tem certeza que deseja excluir a categoria "{selectedCategory?.name}"?</p>
           <p className="text-sm text-muted-foreground">
-            Esta acao nao pode ser desfeita. Produtos associados ficarao sem categoria.
+            Esta ação não pode ser desfeita. Produtos associados ficarão sem categoria.
           </p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>Cancelar</Button>

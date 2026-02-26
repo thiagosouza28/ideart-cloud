@@ -76,7 +76,7 @@ export default function OrderForm() {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [profile?.company_id]);
 
   const itemsSnapshot = useMemo(() => (
     items.map((item) => ({
@@ -168,9 +168,14 @@ export default function OrderForm() {
   }, [draftStorageKey, loading, products, toast]);
 
   const fetchData = async () => {
+    let productsQuery = supabase.from('products').select('*').eq('is_active', true).order('name');
+    if (profile?.company_id) {
+      productsQuery = productsQuery.eq('company_id', profile.company_id);
+    }
+
     const [custResult, prodResult, attrResult, attrValResult, prodAttrResult, tiersResult, suppliesResult] = await Promise.all([
       supabase.from('customers').select('*').order('name'),
-      supabase.from('products').select('*').eq('is_active', true).order('name'),
+      productsQuery,
       supabase.from('attributes').select('*').order('name'),
       supabase.from('attribute_values').select('*').order('value'),
       supabase.from('product_attributes').select('product_id, attribute_value_id'),
