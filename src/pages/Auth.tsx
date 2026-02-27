@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -30,6 +30,7 @@ const signupSchema = z.object({
 
 export default function Auth() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { user, profile, needsOnboarding, signIn, signUp, loading: authLoading } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -63,6 +64,17 @@ export default function Auth() {
       }
     }
   }, [user, authLoading, needsOnboarding, mustCompleteCompany, mustChangePassword, navigate]);
+
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (tab === 'signup' || tab === 'login') {
+      setActiveTab(tab);
+    }
+
+    if (searchParams.get('trial') === '3') {
+      setNotice((prev) => prev ?? 'Teste gratis de 3 dias liberado. Crie sua conta para comecar.');
+    }
+  }, [searchParams]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -254,6 +266,12 @@ export default function Auth() {
 
             <TabsContent value="signup" className="mt-4">
               <form onSubmit={handleSignup} className="space-y-5">
+                {notice && (
+                  <Alert className="border-primary/30 bg-primary/10 text-primary">
+                    <AlertDescription>{notice}</AlertDescription>
+                  </Alert>
+                )}
+
                 {error && (
                   <Alert variant="destructive">
                     <AlertCircle className="h-4 w-4" />
