@@ -115,6 +115,16 @@ const statusLabels: Record<OrderStatus, string> = {
   cancelado: 'Cancelado',
 };
 
+const extractVisibleNotes = (value?: string | null) => {
+  if (!value) return '';
+  return value
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !line.startsWith('[meta]'))
+    .join('\n')
+    .trim();
+};
+
 export default function OrderDetails() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -229,6 +239,7 @@ export default function OrderDetails() {
   };
 
   const isBudget = order?.status === 'orcamento' || order?.status === 'pendente';
+  const orderVisibleNotes = useMemo(() => extractVisibleNotes(order?.notes), [order?.notes]);
 
   const calculateItemTotal = (item: Pick<OrderItem, 'quantity' | 'unit_price' | 'discount'>) =>
     Math.max(0, Number(item.quantity) * Number(item.unit_price) - Number(item.discount || 0));
@@ -713,8 +724,8 @@ const sendWhatsAppMessage = (message: string) => {
 
     **/*7entStatusLabel(order.payment_status)}\n`;
 
-    if (order.notes) {
-      text += `\nObs: ${order.notes}`;
+    if (orderVisibleNotes) {
+      text += `\nObs: ${orderVisibleNotes}`;
     }
 
     return text;
@@ -754,6 +765,28 @@ const sendWhatsAppMessage = (message: string) => {
     const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
       .map((node) => node.outerHTML)
       .join('\n');
+    const printOverrides = `
+      <style>
+        @page { size: A4 portrait; margin: 8mm; }
+        html, body { margin: 0; padding: 0; background: #ffffff; }
+        body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        .receipt-root {
+          border: none !important;
+          box-shadow: none !important;
+          border-radius: 0 !important;
+          max-width: none !important;
+          width: 100% !important;
+          margin: 0 !important;
+          padding: 0 !important;
+        }
+        .receipt-block, .receipt-row, .receipt-table tr, .receipt-table td, .receipt-table th {
+          break-inside: avoid;
+          page-break-inside: avoid;
+        }
+        .receipt-table thead { display: table-header-group; }
+      </style>
+    `;
+    const receiptMarkup = content.outerHTML;
 
     printWindow.document.write(`
       <!DOCTYPE html>
@@ -761,17 +794,45 @@ const sendWhatsAppMessage = (message: string) => {
         <head>
           <title>${title}</title>
           ${styles}
+          ${printOverrides}
         </head>
         <body>
-          ${content.innerHTML}
+          ${receiptMarkup}
         </body>
       </html>
     `);
     printWindow.document.close();
-    printWindow.focus();
     printWindow.onload = () => {
-      printWindow.print();
-      printWindow.close();
+      const waitForReady = async () => {
+        try {
+          if (printWindow.document.fonts?.ready) {
+            await printWindow.document.fonts.ready;
+          }
+        } catch {
+          // ignore font readiness errors
+        }
+
+        const images = Array.from(printWindow.document.images || []);
+        await Promise.all(
+          images.map(
+            (image) =>
+              new Promise<void>((resolve) => {
+                if (image.complete) {
+                  resolve();
+                  return;
+                }
+                image.onload = () => resolve();
+                image.onerror = () => resolve();
+              }),
+          ),
+        );
+      };
+
+      waitForReady().finally(() => {
+        printWindow.focus();
+        printWindow.print();
+        printWindow.close();
+      });
     };
   };
 
@@ -838,10 +899,15 @@ const sendWhatsAppMessage = (message: string) => {
     }
 
     const orderData = orderResult.data as Order;
-    if (orderData.company?.logo_url) {
+    if (orderData.company) {
       orderData.company = {
         ...orderData.company,
-        logo_url: ensurePublicStorageUrl('product-images', orderData.company.logo_url),
+        logo_url: orderData.company.logo_url
+          ? ensurePublicStorageUrl('product-images', orderData.company.logo_url)
+          : null,
+        signature_image_url: orderData.company.signature_image_url
+          ? ensurePublicStorageUrl('product-images', orderData.company.signature_image_url)
+          : null,
       };
     }
     setOrder(orderData);
@@ -1950,13 +2016,13 @@ const canSendWhatsApp = Boolean(order?.customer?.phone);
           )}
 
           {/* Notes */}
-          {order.notes && (
+          {orderVisibleNotes && (
             <Card>
               <CardHeader>
                 <CardTitle>Observações</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-muted-foreground">{order.notes}</p>
+                <p className="text-muted-foreground whitespace-pre-line">{orderVisibleNotes}</p>
               </CardContent>
             </Card>
           )}

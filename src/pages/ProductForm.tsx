@@ -15,7 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Category, Supply, Attribute, AttributeValue, ProductColor, ProductType } from '@/types/database';
-import { ArrowLeft, Plus, Trash2, Calculator, Save, Loader2, Upload, Image, Globe, Package, FolderPlus, Tag } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Calculator, Save, Loader2, Upload, Image, Globe, Package, FolderPlus, Tag, CopyPlus, ShieldAlert } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useAuth } from '@/contexts/AuthContext';
 import { generateProductDescription } from '@/services/ai';
@@ -143,6 +143,12 @@ interface ProductAttributeItem {
   values: { id: string; value: string; selected: boolean; price_modifier: number }[];
 }
 
+type CopyAttributeSource = {
+  attributeName: string;
+  value: string;
+  priceModifier: number;
+};
+
 export default function ProductForm() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
@@ -190,6 +196,11 @@ export default function ProductForm() {
   const [promoPrice, setPromoPrice] = useState<number | null>(null);
   const [promoStartAt, setPromoStartAt] = useState<string>('');
   const [promoEndAt, setPromoEndAt] = useState<string>('');
+  const [isPublicProduct, setIsPublicProduct] = useState(false);
+  const [isCopyProduct, setIsCopyProduct] = useState(false);
+  const [originalProductId, setOriginalProductId] = useState<string | null>(null);
+  const [productOwnerId, setProductOwnerId] = useState<string | null>(profile?.id || null);
+  const [copyingProduct, setCopyingProduct] = useState(false);
 
   // Related data
   const [categories, setCategories] = useState<Category[]>([]);
@@ -211,6 +222,11 @@ export default function ProductForm() {
   const [draftReady, setDraftReady] = useState(false);
 
   const [errors, setErrors] = useState<Record<string, string>>();
+  const currentUserId = profile?.id || null;
+  const isProductOwner = !isEditing || (Boolean(currentUserId) && productOwnerId === currentUserId);
+  const isReadOnlyPublicProduct = isEditing && isPublicProduct && !isProductOwner;
+  const canCreateCopy = isReadOnlyPublicProduct;
+  const canControlPublicToggle = isProductOwner;
   const productLinkPreview = company?.slug
     ? `/catalogo/${company.slug}/produto/${productSlug || 'slug-do-produto'}`
     : `/catalogo/produto/${productSlug || 'slug-do-produto'}`;
@@ -279,6 +295,12 @@ export default function ProductForm() {
     setDraftReady(false);
   }, [id]);
 
+  useEffect(() => {
+    if (!isEditing && currentUserId) {
+      setProductOwnerId(currentUserId);
+    }
+  }, [isEditing, currentUserId]);
+
   const fetchData = async () => {
     setLoading(true);
     const [catResult, supResult, attrResult, attrValResult] = await Promise.all([
@@ -313,7 +335,7 @@ export default function ProductForm() {
     if (isEditing && id) {
       const { data: product, error } = await supabase
         .from('products')
-        .select('*')
+        .select('*, category:categories(name)')
         .eq('id', id)
         .maybeSingle();
 
@@ -363,6 +385,10 @@ export default function ProductForm() {
       setPromoPrice(product.promo_price !== null ? Number(product.promo_price) : null);
       setPromoStartAt(product.promo_start_at ? new Date(product.promo_start_at).toISOString().slice(0, 16) : '');
       setPromoEndAt(product.promo_end_at ? new Date(product.promo_end_at).toISOString().slice(0, 16) : '');
+      setIsPublicProduct(Boolean((product as any).is_public));
+      setIsCopyProduct(Boolean((product as any).is_copy));
+      setOriginalProductId((product as any).original_product_id ?? null);
+      setProductOwnerId((product as any).owner_id ?? null);
 
       // Load product supplies
       const { data: prodSupplies } = await supabase
@@ -416,6 +442,10 @@ export default function ProductForm() {
       setProductColors([]);
       setPersonalizationEnabled(false);
       setImageUrls([]);
+      setIsPublicProduct(false);
+      setIsCopyProduct(false);
+      setOriginalProductId(null);
+      setProductOwnerId(currentUserId);
     }
 
     setProductAttributes(productAttrSelection);
@@ -564,6 +594,10 @@ export default function ProductForm() {
     promoPrice,
     promoStartAt,
     promoEndAt,
+    isPublicProduct,
+    isCopyProduct,
+    originalProductId,
+    productOwnerId,
     productColors,
     personalizationEnabled,
     productSupplies: productSupplies.map((ps) => ({
@@ -607,6 +641,10 @@ export default function ProductForm() {
     promoPrice,
     promoStartAt,
     promoEndAt,
+    isPublicProduct,
+    isCopyProduct,
+    originalProductId,
+    productOwnerId,
     productColors,
     personalizationEnabled,
     productSupplies,
@@ -685,6 +723,10 @@ export default function ProductForm() {
       setPromoPrice(draftData.promoPrice ?? null);
       setPromoStartAt(draftData.promoStartAt ?? '');
       setPromoEndAt(draftData.promoEndAt ?? '');
+      setIsPublicProduct(Boolean((draftData as any).isPublicProduct));
+      setIsCopyProduct(Boolean((draftData as any).isCopyProduct));
+      setOriginalProductId((draftData as any).originalProductId ?? null);
+      setProductOwnerId((draftData as any).productOwnerId ?? currentUserId);
       setProductColors(normalizeProductColors(draftData.productColors));
       setPersonalizationEnabled(Boolean(draftData.personalizationEnabled));
 
@@ -727,7 +769,7 @@ export default function ProductForm() {
     } finally {
       setDraftReady(true);
     }
-  }, [loading, draftReady, initialSnapshot, draftStorageKey, isEditing, id, supplies]);
+  }, [loading, draftReady, initialSnapshot, draftStorageKey, isEditing, id, supplies, currentUserId]);
 
   useUnsavedChanges(isDirty && !saving);
 
@@ -1031,9 +1073,341 @@ export default function ProductForm() {
     toast({ title: 'Categoria criada com sucesso!' });
   };
 
+  const resolveCopyCategoryId = async (categoryName?: string | null) => {
+    const normalizedName = String(categoryName || '').trim();
+    if (!normalizedName) return null;
+
+    const { data: existingCategory, error: existingError } = await supabase
+      .from('categories')
+      .select('id')
+      .eq('name', normalizedName)
+      .maybeSingle();
+
+    if (existingError) {
+      throw existingError;
+    }
+
+    if (existingCategory?.id) {
+      return existingCategory.id as string;
+    }
+
+    const { data: createdCategory, error: createError } = await supabase
+      .from('categories')
+      .insert({ name: normalizedName, parent_id: null })
+      .select('id')
+      .single();
+
+    if (createError) {
+      throw createError;
+    }
+
+    return createdCategory.id as string;
+  };
+
+  const copyPublicAttributesToCompany = async (
+    targetProductId: string,
+    sourceAttributes: CopyAttributeSource[],
+  ) => {
+    if (!sourceAttributes.length) return;
+
+    const normalizedAttributes = sourceAttributes
+      .map((item) => ({
+        attributeName: item.attributeName.trim(),
+        value: item.value.trim(),
+        priceModifier: Number(item.priceModifier || 0),
+      }))
+      .filter((item) => item.attributeName && item.value);
+
+    if (!normalizedAttributes.length) return;
+
+    const uniqueAttributeNames = Array.from(
+      new Set(normalizedAttributes.map((item) => item.attributeName))
+    );
+
+    const { data: existingAttributes, error: existingAttributesError } = await supabase
+      .from('attributes')
+      .select('id, name')
+      .in('name', uniqueAttributeNames);
+
+    if (existingAttributesError) {
+      throw existingAttributesError;
+    }
+
+    const attributeIdByName = new Map<string, string>();
+    (existingAttributes || []).forEach((row: any) => {
+      attributeIdByName.set(String(row.name).toLowerCase(), row.id);
+    });
+
+    const missingAttributeNames = uniqueAttributeNames.filter(
+      (name) => !attributeIdByName.has(name.toLowerCase())
+    );
+
+    if (missingAttributeNames.length > 0) {
+      const { data: createdAttributes, error: createAttributesError } = await supabase
+        .from('attributes')
+        .insert(missingAttributeNames.map((name) => ({ name })))
+        .select('id, name');
+
+      if (createAttributesError) {
+        throw createAttributesError;
+      }
+
+      (createdAttributes || []).forEach((row: any) => {
+        attributeIdByName.set(String(row.name).toLowerCase(), row.id);
+      });
+    }
+
+    const targetAttributeIds = Array.from(attributeIdByName.values());
+    if (!targetAttributeIds.length) return;
+
+    const { data: existingValues, error: existingValuesError } = await supabase
+      .from('attribute_values')
+      .select('id, attribute_id, value')
+      .in('attribute_id', targetAttributeIds);
+
+    if (existingValuesError) {
+      throw existingValuesError;
+    }
+
+    const valueIdByKey = new Map<string, string>();
+    (existingValues || []).forEach((row: any) => {
+      const key = `${row.attribute_id}::${String(row.value).toLowerCase()}`;
+      valueIdByKey.set(key, row.id);
+    });
+
+    const valuesToCreate = normalizedAttributes
+      .map((item) => {
+        const attributeId = attributeIdByName.get(item.attributeName.toLowerCase());
+        if (!attributeId) return null;
+        const key = `${attributeId}::${item.value.toLowerCase()}`;
+        if (valueIdByKey.has(key)) return null;
+        return { attribute_id: attributeId, value: item.value, key };
+      })
+      .filter((item): item is { attribute_id: string; value: string; key: string } => Boolean(item));
+
+    const dedupedValuesToCreate = Array.from(
+      new Map(valuesToCreate.map((item) => [item.key, item])).values()
+    );
+
+    if (dedupedValuesToCreate.length > 0) {
+      const { data: createdValues, error: createValuesError } = await supabase
+        .from('attribute_values')
+        .insert(dedupedValuesToCreate.map((item) => ({
+          attribute_id: item.attribute_id,
+          value: item.value,
+        })))
+        .select('id, attribute_id, value');
+
+      if (createValuesError) {
+        throw createValuesError;
+      }
+
+      (createdValues || []).forEach((row: any) => {
+        const key = `${row.attribute_id}::${String(row.value).toLowerCase()}`;
+        valueIdByKey.set(key, row.id);
+      });
+    }
+
+    const productAttributesRows = normalizedAttributes
+      .map((item) => {
+        const attributeId = attributeIdByName.get(item.attributeName.toLowerCase());
+        if (!attributeId) return null;
+        const valueId = valueIdByKey.get(`${attributeId}::${item.value.toLowerCase()}`);
+        if (!valueId) return null;
+        return {
+          product_id: targetProductId,
+          attribute_value_id: valueId,
+          price_modifier: item.priceModifier,
+        };
+      })
+      .filter((item): item is { product_id: string; attribute_value_id: string; price_modifier: number } => Boolean(item));
+
+    const dedupedProductAttributes = Array.from(
+      new Map(
+        productAttributesRows.map((row) => [
+          `${row.attribute_value_id}::${row.price_modifier}`,
+          row,
+        ])
+      ).values()
+    );
+
+    if (dedupedProductAttributes.length > 0) {
+      const { error: insertAttributesError } = await supabase
+        .from('product_attributes')
+        .insert(dedupedProductAttributes);
+
+      if (insertAttributesError) {
+        throw insertAttributesError;
+      }
+    }
+  };
+
+  const handleCreateCopy = async () => {
+    if (!id || !profile?.company_id || !currentUserId) {
+      toast({ title: 'Sessão inválida para copiar produto', variant: 'destructive' });
+      return;
+    }
+
+    setCopyingProduct(true);
+    try {
+      const { data: sourceProduct, error: sourceProductError } = await supabase
+        .from('products')
+        .select('*, category:categories(name)')
+        .eq('id', id)
+        .maybeSingle();
+
+      if (sourceProductError || !sourceProduct) {
+        throw sourceProductError || new Error('Produto de origem não encontrado.');
+      }
+
+      const sourceCategoryName = (sourceProduct as any).category?.name as string | undefined;
+      const targetCategoryId = await resolveCopyCategoryId(sourceCategoryName);
+
+      const baseName = String(sourceProduct.name || 'Produto').trim();
+      const copySuffix = ' (Copia)';
+      const safeBaseName = baseName.slice(0, Math.max(0, 100 - copySuffix.length)).trim() || 'Produto';
+      const copyName = `${safeBaseName}${copySuffix}`;
+      const normalizedImageUrls = normalizeProductImages(
+        (sourceProduct as any).image_urls,
+        (sourceProduct as any).image_url,
+      );
+      const primaryImageUrl = normalizedImageUrls[0] ?? null;
+
+      const copyPayload = {
+        name: copyName,
+        sku: null,
+        barcode: null,
+        description: sourceProduct.description || null,
+        slug: generateSlug(copyName),
+        product_type: sourceProduct.product_type as ProductType,
+        category_id: targetCategoryId,
+        company_id: profile.company_id,
+        owner_id: currentUserId,
+        is_public: false,
+        is_copy: true,
+        original_product_id: sourceProduct.id,
+        image_url: primaryImageUrl,
+        image_urls: normalizedImageUrls,
+        show_in_catalog: false,
+        catalog_enabled: false,
+        catalog_featured: false,
+        catalog_price: (sourceProduct as any).catalog_price ?? null,
+        catalog_short_description: (sourceProduct as any).catalog_short_description ?? null,
+        catalog_long_description: (sourceProduct as any).catalog_long_description ?? null,
+        catalog_min_order: (sourceProduct as any).catalog_min_order ?? sourceProduct.min_order_quantity ?? 1,
+        product_colors: (sourceProduct as any).product_colors ?? [],
+        personalization_enabled: (sourceProduct as any).personalization_enabled ?? false,
+        unit: sourceProduct.unit || 'un',
+        is_active: Boolean(sourceProduct.is_active),
+        base_cost: Number(sourceProduct.base_cost || 0),
+        labor_cost: Number(sourceProduct.labor_cost || 0),
+        waste_percentage: Number(sourceProduct.waste_percentage || 0),
+        profit_margin: Number(sourceProduct.profit_margin || 0),
+        final_price: sourceProduct.final_price !== null ? Number(sourceProduct.final_price) : null,
+        stock_quantity: Number(sourceProduct.stock_quantity || 0),
+        min_stock: Number(sourceProduct.min_stock || 0),
+        min_order_quantity: Number(sourceProduct.min_order_quantity || 1),
+        track_stock: Boolean(sourceProduct.track_stock),
+        promo_price: sourceProduct.promo_price !== null ? Number(sourceProduct.promo_price) : null,
+        promo_start_at: sourceProduct.promo_start_at || null,
+        promo_end_at: sourceProduct.promo_end_at || null,
+      };
+
+      const { data: createdProduct, error: createProductError } = await supabase
+        .from('products')
+        .insert(copyPayload)
+        .select('id')
+        .single();
+
+      if (createProductError || !createdProduct) {
+        throw createProductError || new Error('Falha ao criar cópia do produto.');
+      }
+
+      const copiedProductId = createdProduct.id as string;
+
+      const { data: sourceTiers, error: sourceTiersError } = await supabase
+        .from('price_tiers')
+        .select('min_quantity, max_quantity, price')
+        .eq('product_id', sourceProduct.id);
+
+      if (sourceTiersError) {
+        throw sourceTiersError;
+      }
+
+      if (sourceTiers && sourceTiers.length > 0) {
+        const { error: insertTiersError } = await supabase
+          .from('price_tiers')
+          .insert(sourceTiers.map((tier) => ({
+            product_id: copiedProductId,
+            min_quantity: tier.min_quantity,
+            max_quantity: tier.max_quantity,
+            price: tier.price,
+          })));
+
+        if (insertTiersError) {
+          throw insertTiersError;
+        }
+      }
+
+      const { data: sourceAttributeRows, error: sourceAttributesError } = await supabase
+        .from('product_attributes')
+        .select('price_modifier, attribute_value:attribute_values(value, attribute:attributes(name))')
+        .eq('product_id', sourceProduct.id);
+
+      if (sourceAttributesError) {
+        throw sourceAttributesError;
+      }
+
+      const sourceAttributes: CopyAttributeSource[] = (sourceAttributeRows || [])
+        .map((row: any) => {
+          const attributeValue = Array.isArray(row.attribute_value)
+            ? row.attribute_value[0]
+            : row.attribute_value;
+          const attribute = Array.isArray(attributeValue?.attribute)
+            ? attributeValue.attribute[0]
+            : attributeValue?.attribute;
+          const attributeName = String(attribute?.name || '').trim();
+          const value = String(attributeValue?.value || '').trim();
+          if (!attributeName || !value) return null;
+          return {
+            attributeName,
+            value,
+            priceModifier: Number(row.price_modifier || 0),
+          };
+        })
+        .filter((item): item is CopyAttributeSource => Boolean(item));
+
+      await copyPublicAttributesToCompany(copiedProductId, sourceAttributes);
+
+      toast({ title: 'Cópia criada com sucesso!' });
+      navigate(`/produtos/${copiedProductId}`);
+    } catch (error: any) {
+      toast({
+        title: 'Erro ao criar cópia',
+        description: error?.message || 'Não foi possível copiar o produto público.',
+        variant: 'destructive',
+      });
+    } finally {
+      setCopyingProduct(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrors({});
+
+    if (isReadOnlyPublicProduct) {
+      toast({
+        title: 'Produto público em modo visualização',
+        description: 'Crie uma cópia para sua loja antes de editar.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (!currentUserId) {
+      toast({ title: 'Sessão inválida. Faça login novamente.', variant: 'destructive' });
+      return;
+    }
 
     const normalizedSku = normalizeSku(sku);
     const normalizedBarcode = normalizeBarcodeValue(barcode);
@@ -1060,6 +1434,10 @@ export default function ProductForm() {
       product_type: productType,
       category_id: categoryId || null,
       company_id: profile?.company_id || null,
+      owner_id: currentUserId,
+      is_public: isPublicProduct,
+      is_copy: isCopyProduct,
+      original_product_id: isCopyProduct ? originalProductId : null,
       image_url: primaryImageUrl,
       image_urls: normalizedImageUrls,
       show_in_catalog: showInCatalog,
@@ -1252,12 +1630,53 @@ export default function ProductForm() {
             <p className="text-muted-foreground">
               {isEditing ? 'Atualize os dados do produto' : 'Cadastre um novo produto com preços e atributos'}
             </p>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              {isPublicProduct && (
+                <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100 border-blue-200">
+                  Público
+                </Badge>
+              )}
+              {isCopyProduct && (
+                <Badge className="bg-violet-100 text-violet-800 hover:bg-violet-100 border-violet-200">
+                  Cópia de produto público
+                </Badge>
+              )}
+            </div>
           </div>
         </div>
       </div>
 
+      {isReadOnlyPublicProduct && (
+        <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-4 text-blue-900">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="flex items-start gap-2">
+              <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
+              <p className="text-sm">
+                Este é um produto público. Para editar, crie uma cópia para sua loja.
+              </p>
+            </div>
+            {canCreateCopy && (
+              <Button
+                type="button"
+                onClick={handleCreateCopy}
+                disabled={copyingProduct}
+                className="w-full md:w-auto"
+              >
+                {copyingProduct ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <CopyPlus className="mr-2 h-4 w-4" />
+                )}
+                Criar cópia para minha loja
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+
       <form onSubmit={handleSubmit} className="space-y-6">
-        <Tabs defaultValue="informacoes" className="space-y-6">
+        <div className={isReadOnlyPublicProduct ? 'pointer-events-none select-none opacity-95' : ''}>
+          <Tabs defaultValue="informacoes" className="space-y-6">
           <TabsList className="grid h-auto w-full grid-cols-1 gap-2 sm:h-10 sm:grid-cols-3">
             <TabsTrigger value="informacoes">Informações Gerais</TabsTrigger>
             <TabsTrigger value="estoque">Estoque</TabsTrigger>
@@ -1428,6 +1847,27 @@ export default function ProductForm() {
                 Exibir no catálogo público
               </Label>
             </div>
+
+            {canControlPublicToggle && (
+              <div className="md:col-span-2 rounded-lg border p-3">
+                <div className="flex items-center gap-3">
+                  <Switch
+                    checked={isPublicProduct}
+                    onCheckedChange={setIsPublicProduct}
+                    disabled={isCopyProduct}
+                  />
+                  <Label>Tornar este produto público (Disponível para todos os usuários)</Label>
+                </div>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Outros usuários poderão visualizar este produto e criar uma cópia para suas lojas. Eles não poderão editar o original.
+                </p>
+                {isCopyProduct && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Cópias de produto público não podem ser publicadas como produto compartilhado.
+                  </p>
+                )}
+              </div>
+            )}
 
             <div className="flex items-center gap-3 pt-4">
               <Switch checked={catalogFeatured} onCheckedChange={setCatalogFeatured} />
@@ -2154,18 +2594,21 @@ export default function ProductForm() {
               </CardContent>
             </Card>
           </TabsContent>
-        </Tabs>
+          </Tabs>
+        </div>
 
         {/* Actions */}
         <div className="flex justify-end gap-3">
           <Button type="button" variant="outline" onClick={() => navigate('/produtos')}>
             Cancelar
           </Button>
-          <Button type="submit" disabled={saving}>
-            {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            <Save className="mr-2 h-4 w-4" />
-            Salvar Produto
-          </Button>
+          {!isReadOnlyPublicProduct && (
+            <Button type="submit" disabled={saving}>
+              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              <Save className="mr-2 h-4 w-4" />
+              Salvar Produto
+            </Button>
+          )}
         </div>
       </form>
 

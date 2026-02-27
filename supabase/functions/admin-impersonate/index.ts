@@ -128,6 +128,19 @@ Deno.serve(async (req) => {
       return jsonResponse(corsHeaders, 400, { error: "email is required" });
     }
 
+    const rawRedirectTo = String(body?.redirect_to ?? "").trim();
+    let redirectTo: string | undefined;
+    if (rawRedirectTo) {
+      try {
+        const parsed = new URL(rawRedirectTo);
+        if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+          redirectTo = rawRedirectTo;
+        }
+      } catch {
+        return jsonResponse(corsHeaders, 400, { error: "Invalid redirect_to URL" });
+      }
+    }
+
     const { user: targetUser, error: targetLookupError } = await findUserByEmail(supabase, email);
     if (targetLookupError) {
       return jsonResponse(corsHeaders, 400, { error: targetLookupError });
@@ -155,6 +168,7 @@ Deno.serve(async (req) => {
     const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
       type: "magiclink",
       email,
+      ...(redirectTo ? { options: { redirectTo } } : {}),
     });
 
     if (linkError) {
@@ -163,6 +177,8 @@ Deno.serve(async (req) => {
 
     const tokenValue = linkData?.properties?.email_otp;
     const actionLink = linkData?.properties?.action_link;
+    const tokenHash = linkData?.properties?.hashed_token ?? null;
+    const verificationType = linkData?.properties?.verification_type ?? "magiclink";
     if (!tokenValue) {
       return jsonResponse(corsHeaders, 400, { error: "Failed to generate impersonation token" });
     }
@@ -178,7 +194,7 @@ Deno.serve(async (req) => {
       });
 
     if (logError) {
-      return jsonResponse(corsHeaders, 400, { error: "Failed to write audit log" });
+      console.error("[admin-impersonate] audit log insert failed", logError);
     }
 
     return jsonResponse(corsHeaders, 200, {
@@ -186,6 +202,8 @@ Deno.serve(async (req) => {
       user_id: targetUser.id,
       token: tokenValue,
       action_link: actionLink ?? null,
+      token_hash: tokenHash,
+      verification_type: verificationType,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

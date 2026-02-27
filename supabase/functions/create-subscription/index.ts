@@ -103,9 +103,14 @@ serve(async (req) => {
     }
 
     // Fetch plan to get cakto_plan_id
-    const { data: plan } = await supabase.from('plans').select('*').eq('id', planId).maybeSingle();
+    const { data: plan } = await supabase
+      .from('plans')
+      .select('*')
+      .eq('id', planId)
+      .eq('is_active', true)
+      .maybeSingle();
     if (!plan || !plan.cakto_plan_id) {
-      return jsonResponse(corsHeaders, 400, { error: 'Plano não encontrado ou não vinculado ao CAKTO' });
+      return jsonResponse(corsHeaders, 400, { error: 'Plano inativo, excluido ou nao vinculado ao CAKTO' });
     }
 
     const checkoutUrl = buildCheckoutUrl(plan.cakto_plan_id);

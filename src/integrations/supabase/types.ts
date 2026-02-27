@@ -937,11 +937,15 @@ export type Database = {
           id: string
           image_url: string | null
           image_urls: Json
+          is_copy: boolean
           is_active: boolean
+          is_public: boolean
           labor_cost: number
           min_order_quantity: number
           min_stock: number
           name: string
+          original_product_id: string | null
+          owner_id: string
           product_type: Database["public"]["Enums"]["product_type"]
           personalization_enabled: boolean
           product_colors: Json
@@ -969,11 +973,15 @@ export type Database = {
           id?: string
           image_url?: string | null
           image_urls?: Json
+          is_copy?: boolean
           is_active?: boolean
+          is_public?: boolean
           labor_cost?: number
           min_order_quantity?: number
           min_stock?: number
           name: string
+          original_product_id?: string | null
+          owner_id?: string
           product_type?: Database["public"]["Enums"]["product_type"]
           personalization_enabled?: boolean
           product_colors?: Json
@@ -1001,11 +1009,15 @@ export type Database = {
           id?: string
           image_url?: string | null
           image_urls?: Json
+          is_copy?: boolean
           is_active?: boolean
+          is_public?: boolean
           labor_cost?: number
           min_order_quantity?: number
           min_stock?: number
           name?: string
+          original_product_id?: string | null
+          owner_id?: string
           product_type?: Database["public"]["Enums"]["product_type"]
           personalization_enabled?: boolean
           product_colors?: Json
@@ -1035,6 +1047,13 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "products_original_product_id_fkey"
+            columns: ["original_product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
             referencedColumns: ["id"]
           },
         ]

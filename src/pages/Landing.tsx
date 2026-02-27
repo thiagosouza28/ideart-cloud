@@ -41,20 +41,6 @@ type DisplayPlan = {
   checkoutUrl: string | null;
 };
 
-const fallbackPlans: PlanWithCakto[] = [
-  {
-    id: "fallback-monthly",
-    name: "Plano Mensal",
-    description: "30 dias de acesso completo",
-    price: 19.9,
-    billing_period: "monthly",
-    features: ["Acesso ilimitado", "Suporte prioritário", "Backup diário"],
-    is_active: true,
-    created_at: "",
-    updated_at: "",
-  },
-];
-
 const heroStats = [
   { value: "+1.200", label: "usuários ativos" },
   { value: "99,9%", label: "uptime mensal" },
@@ -120,24 +106,19 @@ export default function Landing() {
 
   useEffect(() => {
     const loadPlans = async () => {
-      const query = supabase
+      const { data, error } = await supabase
         .from("plans")
         .select("id,name,description,price,billing_period,features,is_active,cakto_plan_id")
         .eq("is_active", true)
         .order("price", { ascending: true });
 
-      const { data, error } = await query;
-      if (!error && data && data.length > 0) {
-        setPlans(data as PlanWithCakto[]);
+      if (error) {
+        console.error("Erro ao carregar planos ativos", error);
+        setPlans([]);
         return;
       }
 
-      const { data: allPlans } = await supabase
-        .from("plans")
-        .select("id,name,description,price,billing_period,features,is_active,cakto_plan_id")
-        .order("price", { ascending: true });
-
-      setPlans((allPlans || []) as PlanWithCakto[]);
+      setPlans((data || []) as PlanWithCakto[]);
     };
     loadPlans();
   }, []);
@@ -223,8 +204,7 @@ export default function Landing() {
       });
     }
 
-    const basePlans = plans.length ? plans : fallbackPlans;
-    return basePlans.map((plan) => ({
+    return plans.map((plan) => ({
       id: plan.id,
       name: plan.name,
       description: plan.description ?? null,

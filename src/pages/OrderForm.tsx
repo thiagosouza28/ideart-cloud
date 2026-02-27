@@ -1,28 +1,41 @@
-﻿import { useState, useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { z } from 'zod';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { CurrencyInput } from '@/components/ui/currency-input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
-import { Customer, Product, Attribute, AttributeValue, PriceTier, OrderStatus, PaymentMethod } from '@/types/database';
-import { ArrowLeft, Plus, Trash2, Save, Loader2, Search, User, ShoppingBag, Package } from 'lucide-react';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Customer, PaymentMethod, PriceTier, Product, type OrderStatus } from '@/types/database';
 import { resolveProductPrice } from '@/lib/pricing';
 import { normalizeDigits } from '@/components/ui/masked-input';
 import { useUnsavedChanges } from '@/hooks/use-unsaved-changes';
-import { M2_ATTRIBUTE_KEYS, buildM2Attributes, calculateAreaM2, formatAreaM2, isAreaUnit, parseM2Attributes, parseMeasurementInput, stripM2Attributes } from '@/lib/measurements';
+import { ensurePublicStorageUrl } from '@/lib/storage';
+import {
+  AlertCircle,
+  ArrowLeft,
+  Box,
+  BriefcaseBusiness,
+  CalendarDays,
+  Check,
+  ChevronDown,
+  ClipboardList,
+  Clock3,
+  CreditCard,
+  FileText,
+  Loader2,
+  Mail,
+  Minus,
+  Phone,
+  Plus,
+  QrCode,
+  RefreshCcw,
+  ReceiptText,
+  Search,
+  ShoppingCart,
+  Truck,
+  Trash2,
+  UserRound,
+  Wallet,
+} from 'lucide-react';
 
 interface OrderItemForm {
   product: Product;
@@ -33,71 +46,195 @@ interface OrderItemForm {
   notes: string;
 }
 
+type DocumentType = 'orcamento' | 'pedido_venda' | 'pedido_compra';
+type PriorityLevel = 'baixa' | 'normal' | 'alta';
+
+type SalespersonOption = {
+  id: string;
+  full_name: string | null;
+};
+
+const documentTypeOptions: Array<{
+  id: DocumentType;
+  label: string;
+  icon: ComponentType<{ className?: string }>;
+}> = [
+  { id: 'orcamento', label: 'Orçamento', icon: ClipboardList },
+  { id: 'pedido_venda', label: 'Pedido de Venda', icon: ShoppingCart },
+  { id: 'pedido_compra', label: 'Pedido de Compra', icon: RefreshCcw },
+];
+
+const paymentMethodOptions: Array<{
+  id: PaymentMethod;
+  label: string;
+  icon: ComponentType<{ className?: string }>;
+}> = [
+  { id: 'cartao', label: 'Cartão', icon: CreditCard },
+  { id: 'pix', label: 'PIX', icon: QrCode },
+  { id: 'dinheiro', label: 'Dinheiro', icon: Wallet },
+  { id: 'boleto', label: 'Boleto', icon: CalendarDays },
+];
+
+const deliveryMethods = [
+  { value: 'retirada', label: 'Retirada na loja' },
+  { value: 'entrega', label: 'Entrega' },
+  { value: 'motoboy', label: 'Motoboy' },
+];
+
+const paymentConditions = [
+  { value: 'avista', label: 'À vista' },
+  { value: '7dias', label: '7 dias' },
+  { value: '15dias', label: '15 dias' },
+  { value: '30dias', label: '30 dias' },
+  { value: '45dias', label: '45 dias' },
+  { value: 'entrada_saldo', label: 'Entrada + saldo' },
+];
+
+const steps = ['Tipo', 'Detalhes', 'Revisão', 'Confirmação'];
+
 export default function OrderForm() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user, profile } = useAuth();
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [initialSnapshot, setInitialSnapshot] = useState<string | null>(null);
 
-  // Data
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
-  const [attributes, setAttributes] = useState<Attribute[]>([]);
-  const [attributeValues, setAttributeValues] = useState<AttributeValue[]>([]);
-  const [productAttributes, setProductAttributes] = useState<Record<string, string[]>>({});
   const [priceTiers, setPriceTiers] = useState<PriceTier[]>([]);
   const [suppliesCostMap, setSuppliesCostMap] = useState<Record<string, number>>({});
+  const [salespeople, setSalespeople] = useState<SalespersonOption[]>([]);
 
-  // Form state
-  const [customerId, setCustomerId] = useState<string>('');
+  const [documentType, setDocumentType] = useState<DocumentType>('orcamento');
+  const [customerId, setCustomerId] = useState('');
   const [customerName, setCustomerName] = useState('');
+  const [customerPhone, setCustomerPhone] = useState('');
+  const [customerEmail, setCustomerEmail] = useState('');
   const [notes, setNotes] = useState('');
+  const [deliveryDate, setDeliveryDate] = useState('');
+  const [deliveryMethod, setDeliveryMethod] = useState('retirada');
   const [discount, setDiscount] = useState(0);
-  const [items, setItems] = useState<OrderItemForm[]>([]);
+  const [freight, setFreight] = useState(0);
+  const [paymentCondition, setPaymentCondition] = useState('avista');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('pix');
+  const [priority, setPriorityLevel] = useState<PriorityLevel>('normal');
+  const [responsibleId, setResponsibleId] = useState('');
 
-  // Product selection dialog
-  const [productDialogOpen, setProductDialogOpen] = useState(false);
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [productQuantity, setProductQuantity] = useState(1);
-  const [productDiscount, setProductDiscount] = useState(0);
-  const [productNotes, setProductNotes] = useState('');
-  const [selectedAttributes, setSelectedAttributes] = useState<Record<string, string>>({});
-  const [productWidthCm, setProductWidthCm] = useState('');
-  const [productHeightCm, setProductHeightCm] = useState('');
+  const [items, setItems] = useState<OrderItemForm[]>([]);
+  const [totals, setTotals] = useState({
+    itemCount: 0,
+    subtotal: 0,
+    total: 0,
+  });
+
+  const [customerSearchTerm, setCustomerSearchTerm] = useState('');
+  const [customerDropdownOpen, setCustomerDropdownOpen] = useState(false);
+  const customerBlurTimerRef = useRef<number | null>(null);
+  const customerInputRef = useRef<HTMLInputElement | null>(null);
+
+  const [productSearchTerm, setProductSearchTerm] = useState('');
+  const [productDropdownOpen, setProductDropdownOpen] = useState(false);
+  const productBlurTimerRef = useRef<number | null>(null);
 
   const draftRestoredRef = useRef(false);
   const draftStorageKey = 'order_form_draft';
 
-  // Customer search
-  const [customerSearchOpen, setCustomerSearchOpen] = useState(false);
-  const [customerSearch, setCustomerSearch] = useState('');
+  const fmt = (n: number) =>
+    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(n || 0));
+
+  const getProductPrice = (product: Product, quantity: number): number => {
+    const safeQuantity = Number.isFinite(quantity) && quantity > 0 ? quantity : 1;
+    const suppliesCost = suppliesCostMap[product.id] || 0;
+    return resolveProductPrice(product, safeQuantity, priceTiers, suppliesCost);
+  };
+
+  const calculateItemTotal = (item: OrderItemForm) =>
+    Math.max(0, Number(item.unit_price) * Number(item.quantity) - Number(item.discount || 0));
+
+  const updateTotals = (
+    nextItems: OrderItemForm[] = items,
+    nextDiscount: number = discount,
+    nextFreight: number = freight,
+  ) => {
+    const subtotal = nextItems.reduce((sum, item) => sum + calculateItemTotal(item), 0);
+    const total = Math.max(0, subtotal - Number(nextDiscount || 0) + Number(nextFreight || 0));
+    setTotals({
+      itemCount: nextItems.length,
+      subtotal,
+      total,
+    });
+  };
 
   useEffect(() => {
-    fetchData();
-  }, [profile?.company_id]);
+    updateTotals();
+  }, [items, discount, freight]);
 
-  const itemsSnapshot = useMemo(() => (
-    items.map((item) => ({
-      product_id: item.product.id,
-      quantity: item.quantity,
-      unit_price: item.unit_price,
-      discount: item.discount,
-      attributes: item.attributes,
-      notes: item.notes,
-    }))
-  ), [items]);
+  const itemsSnapshot = useMemo(
+    () =>
+      items.map((item) => ({
+        product_id: item.product.id,
+        quantity: item.quantity,
+        unit_price: item.unit_price,
+        discount: item.discount,
+        attributes: item.attributes,
+        notes: item.notes,
+      })),
+    [items],
+  );
 
-  const formSnapshot = useMemo(() => ({
-    customerId,
-    customerName,
-    notes,
-    discount,
-    items: itemsSnapshot,
-  }), [customerId, customerName, notes, discount, itemsSnapshot]);
+  const formSnapshot = useMemo(
+    () => ({
+      documentType,
+      customerId,
+      customerName,
+      customerPhone,
+      customerEmail,
+      notes,
+      deliveryDate,
+      deliveryMethod,
+      discount,
+      freight,
+      paymentCondition,
+      paymentMethod,
+      priority,
+      responsibleId,
+      items: itemsSnapshot,
+    }),
+    [
+      documentType,
+      customerId,
+      customerName,
+      customerPhone,
+      customerEmail,
+      notes,
+      deliveryDate,
+      deliveryMethod,
+      discount,
+      freight,
+      paymentCondition,
+      paymentMethod,
+      priority,
+      responsibleId,
+      itemsSnapshot,
+    ],
+  );
+
   const formSnapshotJson = useMemo(() => JSON.stringify(formSnapshot), [formSnapshot]);
   const isDirty = initialSnapshot !== null && initialSnapshot !== formSnapshotJson;
+  const hasDraftData = Boolean(
+    items.length > 0 ||
+      customerId ||
+      customerName.trim() ||
+      customerPhone.trim() ||
+      customerEmail.trim() ||
+      notes.trim() ||
+      discount > 0 ||
+      freight > 0,
+  );
+
+  useUnsavedChanges((isDirty || hasDraftData) && !saving);
 
   useEffect(() => {
     if (!loading && initialSnapshot === null) {
@@ -105,23 +242,98 @@ export default function OrderForm() {
     }
   }, [loading, initialSnapshot, formSnapshotJson]);
 
-  const hasDraftData = items.length > 0 || Boolean(customerId || customerName.trim() || notes.trim() || discount > 0);
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        let customersQuery = supabase.from('customers').select('*').order('name');
+        let productsQuery = supabase.from('products').select('*').eq('is_active', true).order('name');
+        let salespeopleQuery = supabase.from('profiles').select('id, full_name').order('full_name');
 
-  useUnsavedChanges((isDirty || hasDraftData) && !saving);
+        if (profile?.company_id) {
+          customersQuery = customersQuery.eq('company_id', profile.company_id);
+          productsQuery = productsQuery.eq('company_id', profile.company_id);
+          salespeopleQuery = salespeopleQuery.eq('company_id', profile.company_id);
+        }
+
+        const [custResult, prodResult, tiersResult, suppliesResult, salespeopleResult] = await Promise.all([
+          customersQuery,
+          productsQuery,
+          supabase.from('price_tiers').select('*').order('min_quantity'),
+          supabase.from('product_supplies').select('product_id, quantity, supply:supplies(cost_per_unit)'),
+          salespeopleQuery,
+        ]);
+
+        if (custResult.error) throw custResult.error;
+        if (prodResult.error) throw prodResult.error;
+        if (tiersResult.error) throw tiersResult.error;
+        if (suppliesResult.error) throw suppliesResult.error;
+        if (salespeopleResult.error) throw salespeopleResult.error;
+
+        setCustomers((custResult.data as Customer[]) || []);
+        setProducts((prodResult.data as Product[]) || []);
+        setPriceTiers((tiersResult.data as PriceTier[]) || []);
+        setSalespeople((salespeopleResult.data as SalespersonOption[]) || []);
+
+        const suppliesCostByProduct: Record<string, number> = {};
+        const suppliesRows = (suppliesResult.data || []) as Array<{
+          product_id: string | null;
+          quantity: number | null;
+          supply: { cost_per_unit: number | null } | null;
+        }>;
+        suppliesRows.forEach((row) => {
+          if (!row.product_id) return;
+          const costPerUnit = Number(row.supply?.cost_per_unit ?? 0);
+          const quantity = Number(row.quantity ?? 0);
+          suppliesCostByProduct[row.product_id] =
+            (suppliesCostByProduct[row.product_id] || 0) + costPerUnit * quantity;
+        });
+        setSuppliesCostMap(suppliesCostByProduct);
+
+        if (!responsibleId) {
+          const people = (salespeopleResult.data as SalespersonOption[] | null) || [];
+          const defaultResponsible = people.find((person) => person.id === user?.id)?.id || people[0]?.id || '';
+          setResponsibleId(defaultResponsible);
+        }
+      } catch (error) {
+        toast({
+          title: 'Erro ao carregar dados',
+          description: error instanceof Error ? error.message : 'Não foi possível carregar os dados',
+          variant: 'destructive',
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [profile?.company_id, toast, user?.id]);
 
   useEffect(() => {
     if (loading || draftRestoredRef.current) return;
+
     const raw = window.localStorage.getItem(draftStorageKey);
     if (!raw) {
       draftRestoredRef.current = true;
       return;
     }
+
     try {
       const parsed = JSON.parse(raw) as {
+        documentType?: DocumentType;
         customerId?: string;
         customerName?: string;
+        customerPhone?: string;
+        customerEmail?: string;
         notes?: string;
+        deliveryDate?: string;
+        deliveryMethod?: string;
         discount?: number;
+        freight?: number;
+        paymentCondition?: string;
+        paymentMethod?: PaymentMethod;
+        priority?: PriorityLevel;
+        responsibleId?: string;
         items?: Array<{
           productId: string;
           quantity: number;
@@ -132,90 +344,71 @@ export default function OrderForm() {
         }>;
       };
 
+      if (parsed.documentType) setDocumentType(parsed.documentType);
       if (parsed.customerId) setCustomerId(parsed.customerId);
       if (parsed.customerName) setCustomerName(parsed.customerName);
+      if (parsed.customerPhone) setCustomerPhone(parsed.customerPhone);
+      if (parsed.customerEmail) setCustomerEmail(parsed.customerEmail);
       if (parsed.notes) setNotes(parsed.notes);
+      if (parsed.deliveryDate) setDeliveryDate(parsed.deliveryDate);
+      if (parsed.deliveryMethod) setDeliveryMethod(parsed.deliveryMethod);
       if (typeof parsed.discount === 'number') setDiscount(parsed.discount);
+      if (typeof parsed.freight === 'number') setFreight(parsed.freight);
+      if (parsed.paymentCondition) setPaymentCondition(parsed.paymentCondition);
+      if (parsed.paymentMethod) setPaymentMethod(parsed.paymentMethod);
+      if (parsed.priority) setPriorityLevel(parsed.priority);
+      if (parsed.responsibleId) setResponsibleId(parsed.responsibleId);
 
       if (parsed.items && Array.isArray(parsed.items)) {
         const restoredItems = parsed.items
           .map((item) => {
-            const product = products.find((p) => p.id === item.productId);
+            const product = products.find((productEntry) => productEntry.id === item.productId);
             if (!product) return null;
             return {
               product,
-              quantity: Number(item.quantity) || 0,
-              unit_price: Number(item.unit_price) || 0,
+              quantity: Number(item.quantity) || 1,
+              unit_price: Number(item.unit_price) || getProductPrice(product, Number(item.quantity) || 1),
               discount: Number(item.discount) || 0,
               attributes: item.attributes || {},
               notes: item.notes || '',
-            };
+            } as OrderItemForm;
           })
           .filter(Boolean) as OrderItemForm[];
+
         if (restoredItems.length > 0) {
           setItems(restoredItems);
         }
       }
 
-      if (parsed.customerId || parsed.customerName || parsed.notes || parsed.discount || (parsed.items && parsed.items.length > 0)) {
-        toast({ title: 'Rascunho restaurado' });
+      if (parsed.customerName) {
+        setCustomerSearchTerm(parsed.customerName);
       }
+
+      toast({ title: 'Rascunho restaurado' });
     } catch {
       window.localStorage.removeItem(draftStorageKey);
     } finally {
       draftRestoredRef.current = true;
     }
-  }, [draftStorageKey, loading, products, toast]);
-
-  const fetchData = async () => {
-    let productsQuery = supabase.from('products').select('*').eq('is_active', true).order('name');
-    if (profile?.company_id) {
-      productsQuery = productsQuery.eq('company_id', profile.company_id);
-    }
-
-    const [custResult, prodResult, attrResult, attrValResult, prodAttrResult, tiersResult, suppliesResult] = await Promise.all([
-      supabase.from('customers').select('*').order('name'),
-      productsQuery,
-      supabase.from('attributes').select('*').order('name'),
-      supabase.from('attribute_values').select('*').order('value'),
-      supabase.from('product_attributes').select('product_id, attribute_value_id'),
-      supabase.from('price_tiers').select('*').order('min_quantity'),
-      supabase.from('product_supplies').select('product_id, quantity, supply:supplies(cost_per_unit)'),
-    ]);
-
-    setCustomers(custResult.data as Customer[] || []);
-    setProducts(prodResult.data as Product[] || []);
-    setAttributes(attrResult.data as Attribute[] || []);
-    setAttributeValues(attrValResult.data as AttributeValue[] || []);
-    setPriceTiers(tiersResult.data as PriceTier[] || []);
-
-    // Map product attributes
-    const prodAttrMap: Record<string, string[]> = {};
-    (prodAttrResult.data || []).forEach((pa: any) => {
-      if (!prodAttrMap[pa.product_id]) prodAttrMap[pa.product_id] = [];
-      prodAttrMap[pa.product_id].push(pa.attribute_value_id);
-    });
-    setProductAttributes(prodAttrMap);
-
-    const suppliesCostByProduct: Record<string, number> = {};
-    (suppliesResult.data || []).forEach((ps: any) => {
-      const productId = ps.product_id as string;
-      const costPerUnit = Number(ps.supply?.cost_per_unit ?? 0);
-      const quantity = Number(ps.quantity ?? 0);
-      suppliesCostByProduct[productId] = (suppliesCostByProduct[productId] || 0) + costPerUnit * quantity;
-    });
-    setSuppliesCostMap(suppliesCostByProduct);
-
-    setLoading(false);
-  };
+  }, [loading, products, toast]);
 
   useEffect(() => {
     if (!draftRestoredRef.current) return;
     const payload = {
+      documentType,
       customerId: customerId || undefined,
       customerName: customerName.trim() || undefined,
+      customerPhone: customerPhone.trim() || undefined,
+      customerEmail: customerEmail.trim() || undefined,
       notes: notes.trim() || undefined,
+      deliveryDate: deliveryDate || undefined,
+      deliveryMethod: deliveryMethod || undefined,
       discount,
+      freight,
+      paymentCondition,
+      paymentMethod,
+      priority,
+      responsibleId: responsibleId || undefined,
       items: items.map((item) => ({
         productId: item.product.id,
         quantity: item.quantity,
@@ -228,7 +421,15 @@ export default function OrderForm() {
 
     const hasData =
       payload.items.length > 0 ||
-      Boolean(payload.customerId || payload.customerName || payload.notes || (payload.discount && payload.discount > 0));
+      Boolean(
+        payload.customerId ||
+          payload.customerName ||
+          payload.customerPhone ||
+          payload.customerEmail ||
+          payload.notes ||
+          payload.discount > 0 ||
+          payload.freight > 0,
+      );
 
     if (!hasData) {
       window.localStorage.removeItem(draftStorageKey);
@@ -236,769 +437,976 @@ export default function OrderForm() {
     }
 
     window.localStorage.setItem(draftStorageKey, JSON.stringify(payload));
-  }, [customerId, customerName, discount, draftStorageKey, items, notes]);
+  }, [
+    customerId,
+    customerName,
+    customerPhone,
+    customerEmail,
+    deliveryDate,
+    deliveryMethod,
+    discount,
+    documentType,
+    draftStorageKey,
+    freight,
+    items,
+    notes,
+    paymentCondition,
+    paymentMethod,
+    priority,
+    responsibleId,
+  ]);
 
-  // Calculate price based on quantity and price tiers
-  const getProductPrice = (product: Product, quantity: number): number => {
-    const suppliesCost = suppliesCostMap[product.id] || 0;
-    return resolveProductPrice(product, quantity, priceTiers, suppliesCost);
-  };
-
-  // Get available attributes for a product
-  const getProductAvailableAttributes = (productId: string) => {
-    const attrValueIds = productAttributes[productId] || [];
-    const availableValues = attributeValues.filter(v => attrValueIds.includes(v.id));
-    
-    const grouped: Record<string, { attribute: Attribute; values: AttributeValue[] }> = {};
-    
-    availableValues.forEach(val => {
-      const attr = attributes.find(a => a.id === val.attribute_id);
-      if (attr) {
-        if (!grouped[attr.id]) {
-          grouped[attr.id] = { attribute: attr, values: [] };
-        }
-        grouped[attr.id].values.push(val);
+  useEffect(() => {
+    return () => {
+      if (customerBlurTimerRef.current) {
+        window.clearTimeout(customerBlurTimerRef.current);
       }
-    });
-    
-    return Object.values(grouped);
-  };
-
-  const formatCurrency = (v: number) => 
-    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
-
-  // Customer selection
-  const handleSelectCustomer = (customer: Customer) => {
-    setCustomerId(customer.id);
-    setCustomerName(customer.name);
-    setCustomerSearchOpen(false);
-  };
-
-  const clearCustomer = () => {
-    setCustomerId('');
-    setCustomerName('');
-  };
-
-  // Open product dialog
-  const openProductDialog = (product: Product) => {
-    setSelectedProduct(product);
-    setProductQuantity(1);
-    setProductDiscount(0);
-    setProductNotes('');
-    setSelectedAttributes({});
-    setProductWidthCm('');
-    setProductHeightCm('');
-    setProductDialogOpen(true);
-  };
-
-  // Add product to order
-  const addProductToOrder = () => {
-    if (!selectedProduct) return;
-
-    const isM2 = isAreaUnit(selectedProduct.unit);
-    const widthCm = parseMeasurementInput(productWidthCm);
-    const heightCm = parseMeasurementInput(productHeightCm);
-
-    if (isM2) {
-      if (!widthCm || !heightCm || widthCm <= 0 || heightCm <= 0) {
-        toast({ title: 'Informe largura e altura válidas', variant: 'destructive' });
-        return;
+      if (productBlurTimerRef.current) {
+        window.clearTimeout(productBlurTimerRef.current);
       }
-      const area = calculateAreaM2(widthCm, heightCm);
-      const unitPrice = getProductPrice(selectedProduct, area);
-      const attributes = buildM2Attributes(selectedAttributes, {
-        widthCm,
-        heightCm,
-        areaM2: area,
-      });
-      setItems([
-        ...items,
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleKeydown = (event: KeyboardEvent) => {
+      const isShortcut = (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k';
+      if (!isShortcut) return;
+      event.preventDefault();
+      customerInputRef.current?.focus();
+      setCustomerDropdownOpen(true);
+    };
+    window.addEventListener('keydown', handleKeydown);
+    return () => window.removeEventListener('keydown', handleKeydown);
+  }, []);
+
+  const filteredCustomers = useMemo(() => {
+    const text = customerSearchTerm.trim().toLowerCase();
+    const digits = normalizeDigits(customerSearchTerm);
+    if (!text && !digits) return customers.slice(0, 5);
+    return customers
+      .filter((customer) => {
+        const byName = customer.name.toLowerCase().includes(text);
+        const byDigits = digits
+          ? Boolean(
+              customer.document?.includes(digits) ||
+                customer.phone?.includes(digits) ||
+                customer.email?.toLowerCase().includes(text),
+            )
+          : false;
+        return byName || byDigits;
+      })
+      .slice(0, 5);
+  }, [customerSearchTerm, customers]);
+
+  const filteredProducts = useMemo(() => {
+    const text = productSearchTerm.trim().toLowerCase();
+    if (!text) return products.slice(0, 5);
+    return products
+      .filter((product) => {
+        const byName = product.name.toLowerCase().includes(text);
+        const bySku = (product.sku || '').toLowerCase().includes(text);
+        return byName || bySku;
+      })
+      .slice(0, 5);
+  }, [productSearchTerm, products]);
+
+  const stepStates = useMemo(() => {
+    const detailsDone = Boolean((customerId || customerName.trim()) && items.length > 0);
+    const reviewDone = Boolean(items.length > 0 && paymentMethod && paymentCondition);
+    const confirmationDone = false;
+    const doneMap = [true, detailsDone, reviewDone, confirmationDone];
+    const activeIndex = saving ? 3 : doneMap.findIndex((isDone) => !isDone);
+    return {
+      doneMap,
+      activeIndex: activeIndex === -1 ? 3 : activeIndex,
+    };
+  }, [customerId, customerName, items.length, paymentMethod, paymentCondition, saving]);
+
+  const totalQuantity = useMemo(
+    () => items.reduce((sum, item) => sum + Number(item.quantity || 0), 0),
+    [items],
+  );
+
+  const setType = (type: DocumentType) => {
+    setDocumentType(type);
+  };
+
+  const selectPayment = (method: PaymentMethod) => {
+    setPaymentMethod(method);
+  };
+
+  const setPriority = (value: PriorityLevel) => {
+    setPriorityLevel(value);
+  };
+
+  const addItem = (productId: string) => {
+    const product = products.find((entry) => entry.id === productId);
+    if (!product) return;
+
+    setItems((prev) => {
+      const existingIndex = prev.findIndex((item) => item.product.id === product.id);
+      if (existingIndex >= 0) {
+        const next = [...prev];
+        const nextQty = Math.max(1, Number(next[existingIndex].quantity || 1) + 1);
+        next[existingIndex] = {
+          ...next[existingIndex],
+          quantity: nextQty,
+          unit_price: getProductPrice(product, nextQty),
+        };
+        return next;
+      }
+
+      const quantity = 1;
+      return [
+        ...prev,
         {
-          product: selectedProduct,
-          quantity: area,
-          unit_price: unitPrice,
-          discount: productDiscount,
-          attributes,
-          notes: productNotes,
+          product,
+          quantity,
+          unit_price: getProductPrice(product, quantity),
+          discount: 0,
+          attributes: {},
+          notes: '',
         },
-      ]);
-    } else {
-      const unitPrice = getProductPrice(selectedProduct, productQuantity);
+      ];
+    });
 
-      setItems([...items, {
-        product: selectedProduct,
-        quantity: productQuantity,
-        unit_price: unitPrice,
-        discount: productDiscount,
-        attributes: selectedAttributes,
-        notes: productNotes,
-      }]);
-    }
-
-    setProductDialogOpen(false);
-    setSelectedProduct(null);
+    setProductSearchTerm('');
+    setProductDropdownOpen(false);
   };
 
-  // Remove item from order
-  const removeItem = (index: number) => {
-    setItems(items.filter((_, i) => i !== index));
+  const removeItem = (productId: string) => {
+    setItems((prev) => prev.filter((item) => item.product.id !== productId));
   };
 
-  // Update item quantity
-  const updateItemQuantity = (index: number, quantity: number) => {
-    const updated = [...items];
-    if (isAreaUnit(updated[index].product.unit)) {
-      return;
-    }
-    updated[index].quantity = quantity;
-    updated[index].unit_price = getProductPrice(updated[index].product, quantity);
-    setItems(updated);
-  };
-
-  const updateItemDimensions = (index: number, key: string, value: string) => {
+  const changeQty = (productId: string, delta: number) => {
     setItems((prev) =>
-      prev.map((item, idx) => {
-        if (idx !== index) return item;
-        if (!isAreaUnit(item.product.unit)) return item;
-
-        const nextAttributes = { ...(item.attributes || {}) };
-        nextAttributes[key] = value;
-
-        const widthCm = parseMeasurementInput(nextAttributes[M2_ATTRIBUTE_KEYS.widthCm]);
-        const heightCm = parseMeasurementInput(nextAttributes[M2_ATTRIBUTE_KEYS.heightCm]);
-        const hasValidDimensions =
-          typeof widthCm === 'number' &&
-          typeof heightCm === 'number' &&
-          widthCm > 0 &&
-          heightCm > 0;
-
-        if (hasValidDimensions) {
-          const area = calculateAreaM2(widthCm, heightCm);
-          nextAttributes[M2_ATTRIBUTE_KEYS.areaM2] = area.toFixed(4);
-          const unitPrice = getProductPrice(item.product, area);
-          return {
-            ...item,
-            attributes: nextAttributes,
-            quantity: area,
-            unit_price: unitPrice,
-          };
-        }
-
-        delete nextAttributes[M2_ATTRIBUTE_KEYS.areaM2];
+      prev.map((item) => {
+        if (item.product.id !== productId) return item;
+        const nextQty = Math.max(1, Number(item.quantity || 1) + delta);
         return {
           ...item,
-          attributes: nextAttributes,
-          quantity: 0,
-          unit_price: getProductPrice(item.product, 1),
+          quantity: nextQty,
+          unit_price: getProductPrice(item.product, nextQty),
         };
       }),
     );
   };
 
-  // Calculations
-  const subtotal = items.reduce((acc, item) => 
-    acc + (item.unit_price * item.quantity - item.discount), 0
-  );
-  const total = subtotal - discount;
+  const setQty = (productId: string, value: number) => {
+    const nextValue = Number.isFinite(value) ? Math.max(1, value) : 1;
+    setItems((prev) =>
+      prev.map((item) => {
+        if (item.product.id !== productId) return item;
+        return {
+          ...item,
+          quantity: nextValue,
+          unit_price: getProductPrice(item.product, nextValue),
+        };
+      }),
+    );
+  };
 
-  // Submit order
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleCustomerSelect = (customer: Customer) => {
+    setCustomerId(customer.id);
+    setCustomerName(customer.name || '');
+    setCustomerPhone(customer.phone || '');
+    setCustomerEmail(customer.email || '');
+    setCustomerSearchTerm(customer.name || '');
+    setCustomerDropdownOpen(false);
+  };
 
-    if (items.length === 0) {
-      toast({ title: 'Adicione pelo menos um produto', variant: 'destructive' });
+  const clearCustomerSelection = () => {
+    setCustomerId('');
+    setCustomerSearchTerm('');
+  };
+
+  const persistDraftNow = () => {
+    const payload = {
+      documentType,
+      customerId: customerId || undefined,
+      customerName: customerName.trim() || undefined,
+      customerPhone: customerPhone.trim() || undefined,
+      customerEmail: customerEmail.trim() || undefined,
+      notes: notes.trim() || undefined,
+      deliveryDate: deliveryDate || undefined,
+      deliveryMethod: deliveryMethod || undefined,
+      discount,
+      freight,
+      paymentCondition,
+      paymentMethod,
+      priority,
+      responsibleId: responsibleId || undefined,
+      items: items.map((item) => ({
+        productId: item.product.id,
+        quantity: item.quantity,
+        unit_price: item.unit_price,
+        discount: item.discount,
+        attributes: item.attributes,
+        notes: item.notes,
+      })),
+    };
+    window.localStorage.setItem(draftStorageKey, JSON.stringify(payload));
+  };
+
+  const handleSaveDraft = () => {
+    persistDraftNow();
+    toast({ title: 'Rascunho salvo' });
+  };
+
+  const buildOrderNotes = () => {
+    const sanitizedNotes = notes.trim();
+    return sanitizedNotes.length > 0 ? sanitizedNotes : null;
+  };
+
+  const handleSubmit = async () => {
+    if (saving) return;
+    if (!user?.id) {
+      toast({ title: 'Sessão inválida', description: 'Faça login novamente', variant: 'destructive' });
       return;
     }
-
-    const invalidM2Items = items.filter((item) => {
-      if (!isAreaUnit(item.product.unit)) return false;
-      const { widthCm, heightCm } = parseM2Attributes(item.attributes);
-      return !widthCm || !heightCm || widthCm <= 0 || heightCm <= 0;
-    });
-
-    if (invalidM2Items.length > 0) {
-      toast({
-        title: 'Informe largura e altura válidas',
-        description: invalidM2Items.map((item) => item.product.name).join(', '),
-        variant: 'destructive',
-      });
+    if (items.length === 0) {
+      toast({ title: 'Adicione ao menos um produto', variant: 'destructive' });
       return;
     }
 
     setSaving(true);
+    let createdOrderId: string | null = null;
 
-    let resolvedCustomerId = customerId || null;
-    const trimmedCustomerName = customerName.trim();
+    try {
+      let resolvedCustomerId = customerId || null;
+      const trimmedCustomerName = customerName.trim();
 
-    if (!resolvedCustomerId && trimmedCustomerName) {
-      const { data: existingCustomer, error: lookupError } = await supabase
-        .from('customers')
-        .select('id')
-        .ilike('name', trimmedCustomerName)
-        .limit(1)
-        .maybeSingle();
-
-      if (lookupError) {
-        toast({ title: 'Erro ao buscar cliente', description: lookupError.message, variant: 'destructive' });
-        setSaving(false);
-        return;
-      }
-
-      if (existingCustomer?.id) {
-        resolvedCustomerId = existingCustomer.id;
-      } else {
-        const { data: createdCustomer, error: createCustomerError } = await supabase
+      if (!resolvedCustomerId && trimmedCustomerName) {
+        const { data: existingCustomer, error: lookupError } = await supabase
           .from('customers')
-          .insert({ name: trimmedCustomerName })
           .select('id')
-          .single();
+          .ilike('name', trimmedCustomerName)
+          .limit(1)
+          .maybeSingle();
 
-        if (createCustomerError || !createdCustomer?.id) {
-          toast({ title: 'Erro ao criar cliente', description: createCustomerError?.message, variant: 'destructive' });
-          setSaving(false);
-          return;
+        if (lookupError) throw lookupError;
+
+        if (existingCustomer?.id) {
+          resolvedCustomerId = existingCustomer.id;
+        } else {
+          const { data: createdCustomer, error: createCustomerError } = await supabase
+            .from('customers')
+            .insert({
+              name: trimmedCustomerName,
+              phone: customerPhone.trim() || null,
+              email: customerEmail.trim() || null,
+            })
+            .select('id')
+            .single();
+
+          if (createCustomerError || !createdCustomer?.id) {
+            throw createCustomerError || new Error('Não foi possível criar cliente');
+          }
+
+          resolvedCustomerId = createdCustomer.id;
         }
-
-        resolvedCustomerId = createdCustomer.id;
       }
-    }
 
-    // Create order
-    const { data: order, error } = await supabase
-      .from('orders')
-      .insert({
-        company_id: profile?.company_id || null,
-        customer_id: resolvedCustomerId,
-        customer_name: trimmedCustomerName || null,
-        status: 'pendente' as OrderStatus,
-        subtotal,
-        discount,
-        total,
-        amount_paid: 0,
-        payment_status: 'pendente',
-        payment_method: null,
-        notes,
-        created_by: user?.id,
-      })
-      .select()
-      .single();
+      const status: OrderStatus = documentType === 'orcamento' ? 'orcamento' : 'pendente';
 
-    if (error || !order) {
-      toast({ title: 'Erro ao criar pedido', description: error?.message, variant: 'destructive' });
+      const { data: createdOrder, error: orderError } = await supabase
+        .from('orders')
+        .insert({
+          company_id: profile?.company_id || null,
+          customer_id: resolvedCustomerId,
+          customer_name: customerName.trim() || null,
+          status,
+          subtotal: totals.subtotal,
+          discount,
+          total: totals.total,
+          amount_paid: 0,
+          payment_status: 'pendente',
+          payment_method: paymentMethod,
+          notes: buildOrderNotes(),
+          created_by: user.id,
+        })
+        .select('id')
+        .single();
+
+      if (orderError || !createdOrder?.id) {
+        throw orderError || new Error('Não foi possível criar pedido');
+      }
+
+      createdOrderId = createdOrder.id;
+
+      const orderItemsPayload = items.map((item) => ({
+        order_id: createdOrder.id,
+        product_id: item.product.id,
+        product_name: item.product.name,
+        quantity: item.quantity,
+        unit_price: item.unit_price,
+        discount: item.discount,
+        total: calculateItemTotal(item),
+        attributes: item.attributes,
+        notes: item.notes || null,
+      }));
+
+      const { error: itemsError } = await supabase.from('order_items').insert(orderItemsPayload);
+      if (itemsError) throw itemsError;
+
+      const { error: historyError } = await supabase.from('order_status_history').insert({
+        order_id: createdOrder.id,
+        status,
+        user_id: user.id,
+        notes: status === 'orcamento' ? 'Orçamento criado' : 'Pedido criado',
+      });
+      if (historyError) throw historyError;
+
+      window.localStorage.removeItem(draftStorageKey);
+      setInitialSnapshot(JSON.stringify({ ...formSnapshot, items: [] }));
+
+      toast({ title: 'Pedido criado com sucesso' });
+      navigate(`/pedidos/${createdOrder.id}`);
+    } catch (error) {
+      if (createdOrderId) {
+        await supabase.from('order_items').delete().eq('order_id', createdOrderId);
+        await supabase.from('orders').delete().eq('id', createdOrderId);
+      }
+      toast({
+        title: 'Erro ao criar pedido',
+        description: error instanceof Error ? error.message : 'Não foi possível concluir o cadastro',
+        variant: 'destructive',
+      });
+    } finally {
       setSaving(false);
-      return;
     }
-
-    // Insert order items
-    const orderItems = items.map(item => ({
-      order_id: order.id,
-      product_id: item.product.id,
-      product_name: item.product.name,
-      quantity: item.quantity,
-      unit_price: item.unit_price,
-      discount: item.discount,
-      total: item.unit_price * item.quantity - item.discount,
-      attributes: item.attributes,
-      notes: item.notes || null,
-    }));
-
-    await supabase.from('order_items').insert(orderItems);
-
-    // Insert initial status history
-    await supabase.from('order_status_history').insert({
-      order_id: order.id,
-      status: 'pendente',
-      user_id: user?.id,
-      notes: 'Pedido criado como orçamento',
-    });
-
-    window.localStorage.removeItem(draftStorageKey);
-    toast({ title: 'Pedido criado com sucesso!' });
-    navigate('/pedidos');
   };
-
-  const isSelectedM2 = selectedProduct ? isAreaUnit(selectedProduct.unit) : false;
-  const selectedWidthCm = parseMeasurementInput(productWidthCm);
-  const selectedHeightCm = parseMeasurementInput(productHeightCm);
-  const selectedAreaM2 =
-    isSelectedM2 &&
-    typeof selectedWidthCm === 'number' &&
-    typeof selectedHeightCm === 'number' &&
-    selectedWidthCm > 0 &&
-    selectedHeightCm > 0
-      ? calculateAreaM2(selectedWidthCm, selectedHeightCm)
-      : 0;
-  const selectedUnitPrice = selectedProduct
-    ? getProductPrice(selectedProduct, isSelectedM2 ? (selectedAreaM2 > 0 ? selectedAreaM2 : 1) : productQuantity)
-    : 0;
-  const selectedItemTotal = isSelectedM2
-    ? selectedUnitPrice * selectedAreaM2 - productDiscount
-    : selectedUnitPrice * productQuantity - productDiscount;
-
-  const searchText = customerSearch.trim().toLowerCase();
-  const searchDigits = normalizeDigits(customerSearch);
-  const filteredCustomers = customers.filter(c =>
-    c.name.toLowerCase().includes(searchText) ||
-    (searchDigits
-      ? (c.document?.includes(searchDigits) || c.phone?.includes(searchDigits))
-      : false)
-  );
 
   if (loading) {
     return (
-      <div className="page-container flex items-center justify-center min-h-[400px]">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="order-new-page">
+        <div className="order-loading-card">
+          <Loader2 className="h-5 w-5 animate-spin" />
+          <span>Carregando formulário...</span>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="page-container w-full max-w-none">
-      <div className="page-header">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate('/pedidos')}>
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
+    <div className="order-new-page">
+      <div className="order-page-shell">
+        <div className="order-page-header order-fade-up order-fade-delay-1">
+          <button type="button" className="order-back-btn" onClick={() => navigate('/pedidos')}>
+            <ArrowLeft className="h-4 w-4" />
+          </button>
           <div>
-            <h1 className="page-title">Novo Pedido / Orçamento</h1>
-            <p className="text-muted-foreground">Crie um novo pedido ou orçamento</p>
+            <h1 className="order-page-title">Novo Pedido / Orçamento</h1>
+            <p className="order-page-subtitle">Monte os itens, configure pagamento e confirme o documento.</p>
           </div>
+        </div>
+
+        <div className="order-steps order-fade-up order-fade-delay-2" aria-label="Etapas do formulário">
+          {steps.map((label, index) => {
+            const isDone = stepStates.doneMap[index];
+            const isActive = stepStates.activeIndex === index;
+            const showDoneIcon = isDone && !isActive;
+            return (
+              <div key={label} className="order-step-wrap">
+                <div className={`order-step ${isDone ? 'is-done' : ''} ${isActive ? 'is-active' : ''}`}>
+                  <span className="order-step-circle">
+                    {showDoneIcon ? <Check className="h-3.5 w-3.5" /> : index + 1}
+                  </span>
+                  <span className="order-step-label">{label}</span>
+                </div>
+                {index < steps.length - 1 ? (
+                  <span
+                    className={`order-step-line ${stepStates.doneMap[index + 1] ? 'is-done' : ''}`}
+                    aria-hidden="true"
+                  />
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="order-layout order-fade-up order-fade-delay-3">
+          <div className="order-main-column">
+            <section className="order-card">
+              <div className="order-card-header">
+                <h2 className="order-card-title">
+                  <ClipboardList className="order-card-title-icon" />
+                  Tipo de Documento
+                </h2>
+              </div>
+              <div className="order-card-body">
+                <div className="order-type-toggle">
+                  {documentTypeOptions.map((option) => {
+                    const Icon = option.icon;
+                    const active = documentType === option.id;
+                    return (
+                      <button
+                        type="button"
+                        key={option.id}
+                        className={`order-type-btn ${active ? 'is-active' : ''}`}
+                        onClick={() => setType(option.id)}
+                      >
+                        <Icon className="h-4 w-4" />
+                        <span>{option.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </section>
+
+            <section className="order-card">
+              <div className="order-card-header">
+                <h2 className="order-card-title">
+                  <UserRound className="order-card-title-icon" />
+                  Cliente
+                </h2>
+              </div>
+              <div className="order-card-body">
+                <div className="order-form-grid-2">
+                  <div className="order-field-group">
+                    <label className="order-field-label" htmlFor="customer-search">
+                      Buscar cliente
+                    </label>
+                    <div className="order-search-field">
+                      <Search className="order-field-icon" />
+                      <input
+                        id="customer-search"
+                        ref={customerInputRef}
+                        value={customerSearchTerm}
+                        onChange={(event) => {
+                          setCustomerSearchTerm(event.target.value);
+                          setCustomerDropdownOpen(true);
+                        }}
+                        onFocus={() => {
+                          if (customerBlurTimerRef.current) {
+                            window.clearTimeout(customerBlurTimerRef.current);
+                          }
+                          setCustomerDropdownOpen(true);
+                        }}
+                        onBlur={() => {
+                          customerBlurTimerRef.current = window.setTimeout(() => {
+                            setCustomerDropdownOpen(false);
+                          }, 150);
+                        }}
+                        placeholder="Buscar por nome, CPF/CNPJ ou contato"
+                        className="order-input order-search-input"
+                      />
+                      <span className="order-kbd-hint">Ctrl+K</span>
+                    </div>
+                    {customerDropdownOpen ? (
+                      <div className="order-dropdown">
+                        {filteredCustomers.length === 0 ? (
+                          <div className="order-dropdown-empty">Nenhum cliente encontrado</div>
+                        ) : (
+                          filteredCustomers.map((customer) => (
+                            <button
+                              key={customer.id}
+                              type="button"
+                              className="order-dropdown-row"
+                              onMouseDown={(event) => event.preventDefault()}
+                              onClick={() => handleCustomerSelect(customer)}
+                            >
+                              <div className="order-dropdown-main">
+                                <strong>{customer.name}</strong>
+                                <span>{customer.document || customer.phone || customer.email || '-'}</span>
+                              </div>
+                              <span className="order-dropdown-action">Selecionar</span>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    ) : null}
+                    {customerId ? (
+                      <button type="button" className="order-link-btn" onClick={clearCustomerSelection}>
+                        Limpar cliente selecionado
+                      </button>
+                    ) : null}
+                  </div>
+
+                  <div className="order-field-group">
+                    <label className="order-field-label" htmlFor="customer-name">
+                      Nome do cliente (opcional)
+                    </label>
+                    <input
+                      id="customer-name"
+                      value={customerName}
+                      onChange={(event) => {
+                        setCustomerName(event.target.value);
+                        if (customerId) setCustomerId('');
+                      }}
+                      placeholder="Ex.: Maria Silva"
+                      className="order-input"
+                    />
+                  </div>
+                </div>
+
+                <div className="order-form-grid-2">
+                  <div className="order-field-group">
+                    <label className="order-field-label" htmlFor="customer-phone">
+                      Telefone
+                    </label>
+                    <div className="order-icon-input-wrap">
+                      <Phone className="order-field-icon" />
+                      <input
+                        id="customer-phone"
+                        value={customerPhone}
+                        onChange={(event) => setCustomerPhone(event.target.value)}
+                        placeholder="(00) 00000-0000"
+                        className="order-input order-input-with-icon"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="order-field-group">
+                    <label className="order-field-label" htmlFor="customer-email">
+                      E-mail
+                    </label>
+                    <div className="order-icon-input-wrap">
+                      <Mail className="order-field-icon" />
+                      <input
+                        id="customer-email"
+                        value={customerEmail}
+                        onChange={(event) => setCustomerEmail(event.target.value)}
+                        placeholder="cliente@email.com"
+                        className="order-input order-input-with-icon"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section className="order-card">
+              <div className="order-card-header">
+                <h2 className="order-card-title">
+                  <ShoppingCart className="order-card-title-icon" />
+                  Produtos e Serviços
+                </h2>
+                <span className="order-count-badge">{totals.itemCount} itens</span>
+              </div>
+              <div className="order-card-body">
+                <div className="order-field-group">
+                  <label className="order-field-label" htmlFor="product-search">
+                    Buscar produto
+                  </label>
+                  <div className="order-search-field">
+                    <Search className="order-field-icon" />
+                    <input
+                      id="product-search"
+                      value={productSearchTerm}
+                      onChange={(event) => {
+                        setProductSearchTerm(event.target.value);
+                        setProductDropdownOpen(true);
+                      }}
+                      onFocus={() => {
+                        if (productBlurTimerRef.current) {
+                          window.clearTimeout(productBlurTimerRef.current);
+                        }
+                        setProductDropdownOpen(true);
+                      }}
+                      onBlur={() => {
+                        productBlurTimerRef.current = window.setTimeout(() => {
+                          setProductDropdownOpen(false);
+                        }, 150);
+                      }}
+                      placeholder="Buscar por nome ou SKU"
+                      className="order-input order-search-input"
+                    />
+                  </div>
+
+                  {productDropdownOpen ? (
+                    <div className="order-dropdown">
+                      {filteredProducts.length === 0 ? (
+                        <div className="order-dropdown-empty">Nenhum produto encontrado</div>
+                      ) : (
+                        filteredProducts.map((product) => {
+                          const thumbUrl = ensurePublicStorageUrl('product-images', product.image_url);
+                          return (
+                            <div key={product.id} className="order-product-result">
+                              <div className="order-product-result-left">
+                                <div className="order-product-thumb">
+                                  {thumbUrl ? <img src={thumbUrl} alt={product.name} loading="lazy" /> : <Box className="h-4 w-4" />}
+                                </div>
+                                <div className="order-product-meta">
+                                  <strong>{product.name}</strong>
+                                  <span>SKU: {product.sku || '-'}</span>
+                                </div>
+                              </div>
+                              <div className="order-product-result-right">
+                                <span>{fmt(getProductPrice(product, 1))}</span>
+                                <button
+                                  type="button"
+                                  className="order-add-btn"
+                                  onMouseDown={(event) => event.preventDefault()}
+                                  onClick={() => addItem(product.id)}
+                                >
+                                  <Plus className="h-3.5 w-3.5" />
+                                  Adicionar
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  ) : null}
+                </div>
+
+                {items.length === 0 ? (
+                  <div className="order-empty-state">
+                    <div className="order-empty-icon">
+                      <Box className="h-5 w-5" />
+                    </div>
+                    <h3>Nenhum produto adicionado</h3>
+                    <p>Pesquise por nome ou SKU e clique em adicionar.</p>
+                  </div>
+                ) : (
+                  <div className="order-table-wrap">
+                    <table className="order-items-table">
+                      <thead>
+                        <tr>
+                          <th>Produto</th>
+                          <th>Qtd</th>
+                          <th>Preco Unit.</th>
+                          <th>Total</th>
+                          <th />
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {items.map((item) => (
+                          <tr key={item.product.id}>
+                            <td>
+                              <div className="order-product-cell">
+                                <strong>{item.product.name}</strong>
+                                <span>{item.product.sku || 'Sem SKU'}</span>
+                              </div>
+                            </td>
+                            <td>
+                              <div className="order-qty-control">
+                                <button
+                                  type="button"
+                                  onClick={() => changeQty(item.product.id, -1)}
+                                  disabled={saving || item.quantity <= 1}
+                                >
+                                  <Minus className="h-3.5 w-3.5" />
+                                </button>
+                                <input
+                                  type="number"
+                                  min={1}
+                                  value={item.quantity}
+                                  onChange={(event) => {
+                                    const parsed = Number(event.target.value);
+                                    setQty(item.product.id, Number.isFinite(parsed) ? parsed : 1);
+                                  }}
+                                />
+                                <button type="button" onClick={() => changeQty(item.product.id, 1)} disabled={saving}>
+                                  <Plus className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            </td>
+                            <td>{fmt(item.unit_price)}</td>
+                            <td>{fmt(calculateItemTotal(item))}</td>
+                            <td>
+                              <button
+                                type="button"
+                                className="order-delete-btn"
+                                onClick={() => removeItem(item.product.id)}
+                                disabled={saving}
+                                aria-label={`Remover ${item.product.name}`}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </section>
+
+            <div className="order-sub-grid">
+              <section className="order-card">
+                <div className="order-card-header">
+                  <h2 className="order-card-title">
+                    <FileText className="order-card-title-icon" />
+                    Observações
+                  </h2>
+                </div>
+                <div className="order-card-body">
+                  <textarea
+                    value={notes}
+                    onChange={(event) => setNotes(event.target.value)}
+                    placeholder="Observações internas, detalhes de arte, acabamento..."
+                    className="order-textarea"
+                    rows={6}
+                  />
+                </div>
+              </section>
+
+              <section className="order-card">
+                <div className="order-card-header">
+                  <h2 className="order-card-title">
+                    <Truck className="order-card-title-icon" />
+                    Entrega e Prazo
+                  </h2>
+                </div>
+                <div className="order-card-body">
+                  <div className="order-field-group">
+                    <label className="order-field-label" htmlFor="delivery-date">
+                      Data prevista
+                    </label>
+                    <input
+                      id="delivery-date"
+                      type="date"
+                      value={deliveryDate}
+                      onChange={(event) => setDeliveryDate(event.target.value)}
+                      className="order-input"
+                    />
+                  </div>
+                  <div className="order-field-group">
+                    <label className="order-field-label" htmlFor="delivery-method">
+                      Método de entrega
+                    </label>
+                    <div className="order-select-wrap">
+                      <select
+                        id="delivery-method"
+                        value={deliveryMethod}
+                        onChange={(event) => setDeliveryMethod(event.target.value)}
+                        className="order-input order-select"
+                      >
+                        {deliveryMethods.map((method) => (
+                          <option key={method.value} value={method.value}>
+                            {method.label}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown className="order-select-icon" />
+                    </div>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </div>
+
+          <aside className="order-side-column">
+            <section className="order-card">
+              <div className="order-card-header">
+                <h2 className="order-card-title">
+                  <ReceiptText className="order-card-title-icon" />
+                  Resumo
+                </h2>
+              </div>
+              <div className="order-card-body">
+                <div className="order-summary-row">
+                  <span>Subtotal ({totals.itemCount} itens)</span>
+                  <strong>{fmt(totals.subtotal)}</strong>
+                </div>
+                <div className="order-summary-row order-summary-edit">
+                  <label htmlFor="discount-input">Desconto</label>
+                  <CurrencyInput
+                    id="discount-input"
+                    value={discount}
+                    onChange={setDiscount}
+                    className="order-input order-currency-input"
+                  />
+                </div>
+                <div className="order-summary-row order-summary-edit">
+                  <label htmlFor="freight-input">Frete</label>
+                  <CurrencyInput
+                    id="freight-input"
+                    value={freight}
+                    onChange={setFreight}
+                    className="order-input order-currency-input"
+                  />
+                </div>
+                <div className="order-total-row">
+                  <span>Total</span>
+                  <strong>{fmt(totals.total)}</strong>
+                </div>
+
+                <div className="order-status-block">
+                  <div className="order-status-icon">
+                    <Clock3 className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <p>Status: Pendente</p>
+                    <small>O pedido sera criado aguardando processamento.</small>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section className="order-card">
+              <div className="order-card-header">
+                <h2 className="order-card-title">
+                  <Wallet className="order-card-title-icon" />
+                  Pagamento
+                </h2>
+              </div>
+              <div className="order-card-body">
+                <div className="order-field-group">
+                  <label className="order-field-label" htmlFor="payment-condition">
+                    Condição
+                  </label>
+                  <div className="order-select-wrap">
+                    <select
+                      id="payment-condition"
+                      value={paymentCondition}
+                      onChange={(event) => setPaymentCondition(event.target.value)}
+                      className="order-input order-select"
+                    >
+                      {paymentConditions.map((condition) => (
+                        <option key={condition.value} value={condition.value}>
+                          {condition.label}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="order-select-icon" />
+                  </div>
+                </div>
+
+                <div className="order-payment-grid">
+                  {paymentMethodOptions.map((option) => {
+                    const Icon = option.icon;
+                    const active = paymentMethod === option.id;
+                    return (
+                      <button
+                        key={option.id}
+                        type="button"
+                        className={`order-payment-btn ${active ? 'is-active' : ''}`}
+                        onClick={() => selectPayment(option.id)}
+                      >
+                        <Icon className="h-4 w-4" />
+                        <span>{option.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </section>
+
+            <section className="order-card">
+              <div className="order-card-header">
+                <h2 className="order-card-title">
+                  <AlertCircle className="order-card-title-icon" />
+                  Prioridade
+                </h2>
+              </div>
+              <div className="order-card-body">
+                <div className="order-priority-grid">
+                  <button
+                    type="button"
+                    className={`order-priority-btn priority-low ${priority === 'baixa' ? 'is-active' : ''}`}
+                    onClick={() => setPriority('baixa')}
+                  >
+                    ? Baixa
+                  </button>
+                  <button
+                    type="button"
+                    className={`order-priority-btn priority-normal ${priority === 'normal' ? 'is-active' : ''}`}
+                    onClick={() => setPriority('normal')}
+                  >
+                    ? Normal
+                  </button>
+                  <button
+                    type="button"
+                    className={`order-priority-btn priority-high ${priority === 'alta' ? 'is-active' : ''}`}
+                    onClick={() => setPriority('alta')}
+                  >
+                    ? Alta
+                  </button>
+                </div>
+              </div>
+            </section>
+
+            <section className="order-card">
+              <div className="order-card-header">
+                <h2 className="order-card-title">
+                  <BriefcaseBusiness className="order-card-title-icon" />
+                  Responsável
+                </h2>
+              </div>
+              <div className="order-card-body">
+                <div className="order-select-wrap">
+                  <select
+                    id="responsible"
+                    value={responsibleId}
+                    onChange={(event) => setResponsibleId(event.target.value)}
+                    className="order-input order-select"
+                  >
+                    {salespeople.length === 0 ? (
+                      <option value="">Sem usuários</option>
+                    ) : (
+                      salespeople.map((person) => (
+                        <option key={person.id} value={person.id}>
+                          {person.full_name || 'Usuario'}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                  <ChevronDown className="order-select-icon" />
+                </div>
+              </div>
+            </section>
+          </aside>
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Customer Selection */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <User className="h-5 w-5" />
-              Cliente
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {customerId ? (
-              <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
-                <div>
-                  <p className="font-medium">{customerName}</p>
-                  <p className="text-sm text-muted-foreground">
-                    {customers.find(c => c.id === customerId)?.phone || 'Sem telefone'}
-                  </p>
-                </div>
-                <Button type="button" variant="outline" size="sm" onClick={clearCustomer}>
-                  Trocar Cliente
-                </Button>
-              </div>
-            ) : (
-              <div className="grid gap-4 md:grid-cols-2 items-end">
-                <Popover open={customerSearchOpen} onOpenChange={setCustomerSearchOpen}>
-                  <PopoverTrigger asChild>
-                    <Button variant="outline" className="justify-start w-full">
-                      <Search className="mr-2 h-4 w-4" />
-                      Buscar cliente cadastrado
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-[520px] max-w-[90vw] p-0" align="start">
-                    <Command>
-                      <CommandInput 
-                        placeholder="Buscar por nome, CPF ou telefone..." 
-                        value={customerSearch}
-                        onValueChange={setCustomerSearch}
-                      />
-                      <CommandList>
-                        <CommandEmpty>Nenhum cliente encontrado</CommandEmpty>
-                        <CommandGroup>
-                          {filteredCustomers.slice(0, 10).map((customer) => (
-                            <CommandItem
-                              key={customer.id}
-                              value={customer.id}
-                              onSelect={() => handleSelectCustomer(customer)}
-                            >
-                              <div>
-                                <p className="font-medium">{customer.name}</p>
-                                <p className="text-xs text-muted-foreground">
-                                  {customer.document || customer.phone || 'Sem dados'}
-                                </p>
-                              </div>
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
-
-                <div className="space-y-2">
-                  <Label>Ou digite o nome do cliente</Label>
-                  <Input
-                    placeholder="Nome do cliente (opcional)"
-                    value={customerName}
-                    onChange={(e) => setCustomerName(e.target.value)}
-                  />
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Products */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center gap-2">
-                <ShoppingBag className="h-5 w-5" />
-                Produtos e Serviços
-              </CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button type="button" variant="outline" className="w-full">
-                  <Search className="mr-2 h-4 w-4" />
-                  Buscar produtos ou serviços
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-[520px] max-w-[90vw] p-0" align="start">
-                <Command>
-                  <CommandInput placeholder="Buscar produto ou serviço..." />
-                  <CommandList>
-                    <CommandEmpty>Nenhum produto encontrado</CommandEmpty>
-                    <CommandGroup>
-                      {products.map((product) => (
-                        <CommandItem
-                          key={product.id}
-                          value={product.name}
-                          onSelect={() => openProductDialog(product)}
-                        >
-                          <Package className="mr-2 h-4 w-4" />
-                          <div className="flex-1">
-                            <p>{product.name}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {formatCurrency(getProductPrice(product, 1))}
-                              {isAreaUnit(product.unit) ? ' / m\u00B2' : ''}
-                            </p>
-                          </div>
-                        </CommandItem>
-                      ))}
-                    </CommandGroup>
-                  </CommandList>
-                </Command>
-              </PopoverContent>
-            </Popover>
-
-            <Separator />
-
-            {/* Order Items */}
-            {items.length > 0 ? (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Produto</TableHead>
-                    <TableHead className="w-24">Qtd</TableHead>
-                    <TableHead className="text-right">Preço Unit.</TableHead>
-                    <TableHead className="text-right">Subtotal</TableHead>
-                    <TableHead className="w-12"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {items.map((item, index) => {
-                    const isM2 = isAreaUnit(item.product.unit);
-                    const m2 = parseM2Attributes(item.attributes);
-                    const displayAttributes = stripM2Attributes(item.attributes);
-                    const widthRaw = item.attributes?.[M2_ATTRIBUTE_KEYS.widthCm] ?? '';
-                    const heightRaw = item.attributes?.[M2_ATTRIBUTE_KEYS.heightCm] ?? '';
-                    const hasValidDimensions =
-                      typeof m2.widthCm === 'number' &&
-                      typeof m2.heightCm === 'number' &&
-                      m2.widthCm > 0 &&
-                      m2.heightCm > 0;
-
-                    return (
-                      <TableRow key={index}>
-                        <TableCell>
-                          <div>
-                            <p className="font-medium">{item.product.name}</p>
-                            {Object.keys(displayAttributes).length > 0 && (
-                              <div className="flex gap-1 mt-1">
-                                {Object.entries(displayAttributes).map(([key, value]) => (
-                                  <Badge key={key} variant="outline" className="text-xs">
-                                    {value}
-                                  </Badge>
-                                ))}
-                              </div>
-                            )}
-                            {item.notes && (
-                              <p className="text-xs text-muted-foreground mt-1">Obs: {item.notes}</p>
-                            )}
-                            {isM2 && (
-                              <div className="mt-2 space-y-2">
-                                <div className="grid gap-2 sm:grid-cols-2">
-                                  <div className="space-y-1">
-                                    <Label className="text-[10px] uppercase text-muted-foreground">Largura (cm)</Label>
-                                    <Input
-                                      value={widthRaw}
-                                      onChange={(e) => updateItemDimensions(index, M2_ATTRIBUTE_KEYS.widthCm, e.target.value)}
-                                      className="h-8 text-xs"
-                                      inputMode="decimal"
-                                    />
-                                  </div>
-                                  <div className="space-y-1">
-                                    <Label className="text-[10px] uppercase text-muted-foreground">Altura (cm)</Label>
-                                    <Input
-                                      value={heightRaw}
-                                      onChange={(e) => updateItemDimensions(index, M2_ATTRIBUTE_KEYS.heightCm, e.target.value)}
-                                      className="h-8 text-xs"
-                                      inputMode="decimal"
-                                    />
-                                  </div>
-                                </div>
-                                <p className={`text-xs ${hasValidDimensions ? 'text-muted-foreground' : 'text-destructive'}`}>
-                                  Area: {hasValidDimensions ? `${formatAreaM2(item.quantity)} m\u00B2` : 'Informe dimensoes validas'}
-                                </p>
-                              </div>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          {isM2 ? (
-                            <div className={`text-sm ${hasValidDimensions ? 'text-foreground' : 'text-destructive'}`}>
-                              {hasValidDimensions ? `${formatAreaM2(item.quantity)} m\u00B2` : '--'}
-                            </div>
-                          ) : (
-                            <Input
-                              type="number"
-                              min="1"
-                              value={item.quantity}
-                              onChange={(e) => updateItemQuantity(index, parseInt(e.target.value) || 1)}
-                              className="w-20"
-                            />
-                          )}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {formatCurrency(item.unit_price)}
-                        </TableCell>
-                        <TableCell className="text-right font-medium">
-                          {formatCurrency(item.unit_price * item.quantity - item.discount)}
-                        </TableCell>
-                        <TableCell>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => removeItem(index)}
-                          >
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            ) : (
-              <div className="text-center py-8 text-muted-foreground">
-                <ShoppingBag className="mx-auto h-12 w-12 opacity-30 mb-2" />
-                <p>Nenhum produto adicionado</p>
-                <p className="text-sm">Clique em um produto acima para adicionar</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Totals and Notes */}
-        <div className="grid gap-6 md:grid-cols-2">
-          <Card>
-            <CardHeader>
-              <CardTitle>Observações</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Textarea
-                placeholder="Observações gerais do pedido..."
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                rows={4}
-              />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Resumo</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Subtotal ({items.length} itens)</span>
-                  <span>{formatCurrency(subtotal)}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Desconto</span>
-                  <CurrencyInput
-                    value={discount}
-                    onChange={setDiscount}
-                    className="w-28"
-                  />
-                </div>
-                <Separator />
-                <div className="flex justify-between text-lg font-bold">
-                  <span>Total</span>
-                  <span className="text-primary">{formatCurrency(total)}</span>
-                </div>
-              </div>
-
-              <div className="pt-2">
-                <Badge variant="outline" className="text-sm">
-                  Status: Pendente
-                </Badge>
-                <p className="text-xs text-muted-foreground mt-2">
-                  O pedido será criado como orçamento e enviado para aprovação.
-                </p>
-              </div>
-            </CardContent>
-          </Card>
+      <footer className="order-bottom-bar">
+        <div className="order-bottom-stats">
+          <div className="order-bottom-stat">
+            <span>Itens</span>
+            <strong>{totals.itemCount}</strong>
+          </div>
+          <span className="order-bottom-sep" />
+          <div className="order-bottom-stat">
+            <span>Quantidade</span>
+            <strong>{new Intl.NumberFormat('pt-BR').format(totalQuantity)}</strong>
+          </div>
+          <span className="order-bottom-sep" />
+          <div className="order-bottom-stat">
+            <span>Subtotal</span>
+            <strong>{fmt(totals.subtotal)}</strong>
+          </div>
+          <span className="order-bottom-sep" />
+          <div className="order-bottom-stat is-total">
+            <span>Total</span>
+            <strong>{fmt(totals.total)}</strong>
+          </div>
         </div>
 
-        {/* Actions */}
-        <div className="flex justify-end gap-3">
-          <Button type="button" variant="outline" onClick={() => navigate('/pedidos')}>
+        <div className="order-bottom-actions">
+          <button type="button" className="order-btn order-btn-ghost" onClick={() => navigate('/pedidos')} disabled={saving}>
             Cancelar
-          </Button>
-          <Button type="submit" disabled={saving || items.length === 0}>
-            {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            <Save className="mr-2 h-4 w-4" />
-            Criar Pedido
-          </Button>
+          </button>
+          <button type="button" className="order-btn order-btn-outline" onClick={handleSaveDraft} disabled={saving}>
+            Salvar Rascunho
+          </button>
+          <button type="button" className="order-btn order-btn-primary" onClick={handleSubmit} disabled={saving}>
+            {saving ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Salvando...
+              </>
+            ) : (
+              <>
+                <Check className="h-4 w-4" />
+                Criar Pedido
+              </>
+            )}
+          </button>
         </div>
-      </form>
+      </footer>
 
-      {/* Product Configuration Dialog */}
-      <Dialog open={productDialogOpen} onOpenChange={setProductDialogOpen}>
-        <DialogContent aria-describedby={undefined} className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Adicionar Produto</DialogTitle>
-          </DialogHeader>
-          
-          {selectedProduct && (
-            <div className="space-y-4">
-              <div className="p-3 bg-muted rounded-lg">
-                <p className="font-medium">{selectedProduct.name}</p>
-                <p className="text-sm text-muted-foreground">
-                  {isSelectedM2 ? 'Preco por m\u00B2' : 'Preco sugerido'}: {formatCurrency(getProductPrice(selectedProduct, 1))}
-                </p>
-              </div>
-
-              {/* Quantity / Dimensions */}
-              {isSelectedM2 ? (
-                <div className="space-y-2">
-                  <Label>Dimensoes (cm)</Label>
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    <Input
-                      placeholder="Largura (cm)"
-                      value={productWidthCm}
-                      onChange={(e) => setProductWidthCm(e.target.value)}
-                      inputMode="decimal"
-                    />
-                    <Input
-                      placeholder="Altura (cm)"
-                      value={productHeightCm}
-                      onChange={(e) => setProductHeightCm(e.target.value)}
-                      inputMode="decimal"
-                    />
-                  </div>
-                  <p className={`text-xs ${selectedAreaM2 > 0 ? 'text-muted-foreground' : 'text-destructive'}`}>
-                    Area: {selectedAreaM2 > 0 ? `${formatAreaM2(selectedAreaM2)} m\u00B2` : 'Informe dimensoes validas'}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Preco por m\u00B2: {formatCurrency(selectedUnitPrice)}
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <Label>Quantidade</Label>
-                  <Input
-                    type="number"
-                    min="1"
-                    value={productQuantity}
-                    onChange={(e) => setProductQuantity(parseInt(e.target.value) || 1)}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Preco unitario: {formatCurrency(getProductPrice(selectedProduct, productQuantity))}
-                  </p>
-                </div>
-              )}
-
-              {/* Attributes */}
-              {getProductAvailableAttributes(selectedProduct.id).map(({ attribute, values }) => (
-                <div key={attribute.id} className="space-y-2">
-                  <Label>{attribute.name}</Label>
-                  <Select
-                    value={selectedAttributes[attribute.name] || ''}
-                    onValueChange={(v) => setSelectedAttributes({ ...selectedAttributes, [attribute.name]: v })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder={`Selecione ${attribute.name.toLowerCase()}`} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {values.map((val) => (
-                        <SelectItem key={val.id} value={val.value}>
-                          {val.value}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              ))}
-
-              {/* Discount */}
-              <div className="space-y-2">
-                <Label>Desconto no item (R$)</Label>
-                <CurrencyInput
-                  value={productDiscount}
-                  onChange={setProductDiscount}
-                />
-              </div>
-
-              {/* Notes */}
-              <div className="space-y-2">
-                <Label>Observações do item</Label>
-                <Textarea
-                  placeholder="Especificações, detalhes..."
-                  value={productNotes}
-                  onChange={(e) => setProductNotes(e.target.value)}
-                  rows={2}
-                />
-              </div>
-
-              {/* Total */}
-              <div className="p-3 bg-primary/10 rounded-lg">
-                <div className="flex justify-between font-medium">
-                  <span>Total do item</span>
-                  <span>
-                    {formatCurrency(Math.max(0, selectedItemTotal))}
-                  </span>
-                </div>
-              </div>
-            </div>
-          )}
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setProductDialogOpen(false)}>
-              Cancelar
-            </Button>
-            <Button onClick={addProductToOrder}>
-              <Plus className="mr-2 h-4 w-4" />
-              Adicionar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {items.length === 0 ? (
+        <div className="order-floating-alert">
+          <AlertCircle className="h-4 w-4" />
+          <span>Adicione pelo menos um item para criar o pedido.</span>
+        </div>
+      ) : null}
     </div>
   );
 }
-
-
-
-
-
-
-

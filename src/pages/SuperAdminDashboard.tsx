@@ -53,7 +53,7 @@ export default function SuperAdminDashboard() {
   const loadData = async () => {
     const [companiesResult, plansResult] = await Promise.all([
       supabase.from('companies').select('*').order('created_at', { ascending: false }),
-      supabase.from('plans').select('*'),
+      supabase.from('plans').select('*').eq('is_active', true),
     ]);
 
     const companies = (companiesResult.data || []) as Company[];

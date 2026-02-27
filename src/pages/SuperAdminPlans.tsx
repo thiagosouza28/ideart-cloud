@@ -97,6 +97,7 @@ export default function SuperAdminPlans() {
     const { data, error } = await supabase
       .from('plans')
       .select('*')
+      .eq('is_active', true)
       .order('price', { ascending: true });
 
     if (error) {

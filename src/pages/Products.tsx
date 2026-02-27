@@ -82,14 +82,10 @@ export default function Products() {
   }, [profile?.company_id]);
 
   const fetchData = async () => {
-    let productsQuery = supabase
+    const productsQuery = supabase
       .from('products')
       .select('*, category:categories(name), product_supplies(quantity, supply:supplies(cost_per_unit))')
       .order('name');
-
-    if (profile?.company_id) {
-      productsQuery = productsQuery.eq('company_id', profile.company_id);
-    }
 
     const [productsResult, categoriesResult] = await Promise.all([
       productsQuery,
@@ -105,8 +101,8 @@ export default function Products() {
     if (!deleteId) return;
 
     let deleteQuery = supabase.from('products').delete().eq('id', deleteId);
-    if (profile?.company_id) {
-      deleteQuery = deleteQuery.eq('company_id', profile.company_id);
+    if (profile?.id) {
+      deleteQuery = deleteQuery.eq('owner_id', profile.id);
     }
     const { error } = await deleteQuery;
 
@@ -321,6 +317,10 @@ export default function Products() {
           product_type: row.product_type,
           category_id: categoryId,
           company_id: profile?.company_id || null,
+          owner_id: profile?.id || null,
+          is_public: false,
+          is_copy: false,
+          original_product_id: null,
           unit: row.unit,
           base_cost: row.base_cost,
           labor_cost: row.labor_cost,
@@ -500,6 +500,16 @@ export default function Products() {
                       <div className="flex flex-col">
                         <div className="flex items-center gap-2">
                           {product.name}
+                          {product.is_public && (
+                            <Badge variant="secondary" className="bg-blue-100 text-blue-800 hover:bg-blue-100 border-blue-200 py-0 h-5 px-1.5">
+                              Público
+                            </Badge>
+                          )}
+                          {product.is_copy && (
+                            <Badge variant="secondary" className="bg-violet-100 text-violet-800 hover:bg-violet-100 border-violet-200 py-0 h-5 px-1.5">
+                              Cópia
+                            </Badge>
+                          )}
                           {isPromotionActive(product) && (
                             <Badge variant="secondary" className="bg-amber-100 text-amber-800 hover:bg-amber-100 border-amber-200 py-0 h-5 px-1.5 gap-1">
                               <Tag className="h-3 w-3" />
@@ -536,9 +546,11 @@ export default function Products() {
                         <Button variant="ghost" size="icon" onClick={() => navigate(`/produtos/${product.id}`)}>
                           <Edit className="h-4 w-4" />
                         </Button>
-                        <Button variant="ghost" size="icon" onClick={() => setDeleteId(product.id)}>
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
+                        {product.owner_id === profile?.id && (
+                          <Button variant="ghost" size="icon" onClick={() => setDeleteId(product.id)}>
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>

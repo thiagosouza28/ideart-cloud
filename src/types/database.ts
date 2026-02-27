@@ -180,6 +180,10 @@ export interface Product {
   product_type: ProductType;
   category_id: string | null;
   company_id: string | null;
+  owner_id?: string | null;
+  is_public?: boolean;
+  is_copy?: boolean;
+  original_product_id?: string | null;
   image_url: string | null;
   image_urls?: string[] | null;
   unit: string;

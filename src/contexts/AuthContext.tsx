@@ -54,6 +54,14 @@ const IMPERSONATION_SESSION_KEY = 'admin_impersonation_origin_session';
 const IMPERSONATION_FLAG_KEY = 'admin_impersonation_active';
 const IMPERSONATION_ADMIN_KEY = 'admin_impersonation_admin';
 
+const hasStoredImpersonationState = () => {
+  if (typeof window === 'undefined') return false;
+  return (
+    localStorage.getItem(IMPERSONATION_FLAG_KEY) === 'true' &&
+    Boolean(localStorage.getItem(IMPERSONATION_SESSION_KEY))
+  );
+};
+
 const loadImpersonationAdmin = () => {
   if (typeof window === 'undefined') return null;
   const raw = localStorage.getItem(IMPERSONATION_ADMIN_KEY);
@@ -131,6 +139,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         if (event === 'SIGNED_OUT') {
+          const preserveImpersonationState = hasStoredImpersonationState();
           setSession(null);
           setUser(null);
           setProfile(null);
@@ -140,9 +149,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setNeedsOnboarding(false);
           setPasswordRecovery(false);
           setLoading(false);
-          clearImpersonationState();
+          if (!preserveImpersonationState) {
+            clearImpersonationState();
+          }
 
-          if (!wasAuthResetRecently()) {
+          if (!preserveImpersonationState && !wasAuthResetRecently()) {
             void resetAuthSession({ reason: 'signed_out', skipSignOut: true });
           }
           return;

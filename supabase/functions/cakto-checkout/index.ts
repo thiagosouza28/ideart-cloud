@@ -99,10 +99,11 @@ serve(async (req) => {
       .from("plans")
       .select("id, cakto_plan_id, name")
       .eq("id", planId)
+      .eq("is_active", true)
       .maybeSingle();
 
     if (!plan?.cakto_plan_id) {
-      return jsonResponse(corsHeaders, 400, { error: "Plan not available for CAKTO" });
+      return jsonResponse(corsHeaders, 400, { error: "Plano inativo, excluido ou indisponivel para CAKTO" });
     }
 
     const { data: existingCheckout } = await supabase
