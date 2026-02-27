@@ -35,16 +35,26 @@ interface SalesHistoryProps {
   company: Company | null;
 }
 
-const paymentIcons = {
+const paymentIcons: Record<PaymentMethod, typeof CreditCard> = {
   dinheiro: Banknote,
   cartao: CreditCard,
-  pix: Smartphone
+  credito: CreditCard,
+  debito: CreditCard,
+  transferencia: CreditCard,
+  pix: Smartphone,
+  boleto: CreditCard,
+  outro: CreditCard,
 };
 
-const paymentLabels = {
+const paymentLabels: Record<PaymentMethod, string> = {
   dinheiro: 'Dinheiro',
   cartao: 'Cartao',
-  pix: 'PIX'
+  credito: 'Cartao credito',
+  debito: 'Cartao debito',
+  transferencia: 'Transferencia',
+  pix: 'PIX',
+  boleto: 'Boleto',
+  outro: 'Outro',
 };
 
 export default function SalesHistory({ company }: SalesHistoryProps) {

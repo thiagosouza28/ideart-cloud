@@ -119,6 +119,7 @@ type ReceiptInfo = {
 const roleLabels: Record<AppRole, string> = {
   super_admin: 'Super admin',
   admin: 'Administrador',
+  financeiro: 'Financeiro',
   atendente: 'Atendente',
   caixa: 'Caixa',
   producao: 'ProduÃ§Ã£o',
@@ -127,6 +128,9 @@ const roleLabels: Record<AppRole, string> = {
 const paymentMethodLabels: Record<PaymentMethod, string> = {
   dinheiro: 'Dinheiro',
   cartao: 'CartÃ£o',
+  credito: 'Cartão crédito',
+  debito: 'Cartão débito',
+  transferencia: 'Transferência',
   pix: 'PIX',
   boleto: 'Boleto',
   outro: 'Outro',
@@ -556,13 +560,16 @@ export const createOrderPayment = async ({
       .insert({
         company_id: companyId,
         type: 'receita',
-        origin: 'order_payment',
+        origin: 'venda',
         amount,
         status: 'pago',
         payment_method: method,
-        description: `Pagamento pedido #${order.order_number}`,
+        description: `Receita de pedido #${order.order_number}`,
         occurred_at: paidAt || new Date().toISOString(),
+        related_id: orderId,
+        is_automatic: true,
         created_by: createdBy || null,
+        updated_by: createdBy || null,
       } as any);
 
     if (financialError) {
@@ -932,12 +939,14 @@ export const cancelOrderPayment = async (
     await supabase.from('financial_entries').insert({
       company_id: order.company_id,
       type: 'despesa',
-      origin: 'order_payment_cancel',
+      origin: 'reembolso',
       amount: Number(originalPayment.amount || 0),
       status: 'pago',
       payment_method: originalPayment.method,
       description: `Estorno pagamento pedido #${order.order_number}`,
       occurred_at: new Date().toISOString(),
+      related_id: orderId,
+      is_automatic: true,
     } as any);
   }
 
@@ -983,12 +992,14 @@ export const deleteOrderPayment = async (
     await supabase.from('financial_entries').insert({
       company_id: order.company_id,
       type: 'despesa',
-      origin: 'order_payment_delete',
+      origin: 'reembolso',
       amount: Number(originalPayment.amount || 0),
       status: 'pago',
       payment_method: originalPayment.method,
       description: `Estorno pagamento pedido #${order.order_number}`,
       occurred_at: new Date().toISOString(),
+      related_id: orderId,
+      is_automatic: true,
     } as any);
   }
 
@@ -1076,3 +1087,7 @@ export const uploadOrderArtFile = async (
 
   return artFile;
 };
+
+
+
+

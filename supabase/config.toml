@@ -5,3 +5,15 @@ verify_jwt = false
 
 [functions.cakto-offers]
 verify_jwt = false
+
+[functions.trial-signup]
+verify_jwt = false
+
+[functions.password-recovery]
+verify_jwt = false
+
+[functions.cakto-checkout]
+verify_jwt = false
+
+[functions.cakto-success]
+verify_jwt = false

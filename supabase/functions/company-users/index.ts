@@ -41,7 +41,7 @@ type CreateUserPayload = {
   company_id?: string;
 };
 
-const allowedRoles = new Set(["super_admin", "admin", "atendente", "caixa", "producao"]);
+const allowedRoles = new Set(["super_admin", "admin", "financeiro", "atendente", "caixa", "producao"]);
 
 Deno.serve(async (req) => {
   const origin = req.headers.get("origin");

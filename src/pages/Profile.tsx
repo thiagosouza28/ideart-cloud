@@ -14,6 +14,7 @@ import { useUnsavedChanges } from '@/hooks/use-unsaved-changes';
 const roleLabels: Record<AppRole, string> = {
   super_admin: 'Super Admin',
   admin: 'Administrador',
+  financeiro: 'Financeiro',
   atendente: 'Atendente',
   caixa: 'Caixa',
   producao: 'Produção',
@@ -172,3 +173,4 @@ export default function Profile() {
     </div>
   );
 }
+

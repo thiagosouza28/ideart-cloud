@@ -2,6 +2,7 @@ import { supabase } from '@/integrations/supabase/client';
 import type {
   Customer,
   ExpenseCategory,
+  FinancialEntryOrigin,
   FinancialEntry,
   Order,
   OrderItem,
@@ -19,6 +20,12 @@ export type ReportFilters = {
   endDate?: string;
   status?: OrderStatus | 'all';
   companyId?: string | null;
+  cashType?: 'all' | 'receita' | 'despesa';
+  cashOrigin?: FinancialEntryOrigin | 'all';
+  cashPaymentMethod?: PaymentMethod | 'all';
+  cashCreatedBy?: string | 'all';
+  cashSortBy?: 'date' | 'amount' | 'type';
+  cashSortOrder?: 'asc' | 'desc';
 };
 
 export type SalesPeriod = 'daily' | 'weekly' | 'monthly' | 'annual';
@@ -27,11 +34,15 @@ export type CashTransaction = {
   id: string;
   date: string;
   type: 'entrada' | 'saida';
+  rawType: 'receita' | 'despesa';
   origin: string;
   description: string;
   amount: number;
   method: PaymentMethod | null;
   status: string;
+  relatedId: string | null;
+  createdBy: string | null;
+  isAutomatic: boolean;
 };
 
 export type CashSummary = {
@@ -39,11 +50,14 @@ export type CashSummary = {
   totalOut: number;
   openingBalance: number;
   closingBalance: number;
+  balanceByMethod: Record<string, number>;
 };
 
 export type CashReport = {
   transactions: CashTransaction[];
   summary: CashSummary;
+  revenueByMethod: Record<string, number>;
+  monthlyComparison: Array<{ label: string; inflow: number; outflow: number; net: number }>;
 };
 
 export type FinancialReport = {
@@ -221,19 +235,72 @@ export const buildPeriodSeries = (
     .map(({ sortKey, ...rest }) => rest);
 };
 
+const orderOriginAliases = new Set(['order_payment', 'order_payment_cancel', 'order_payment_delete']);
+const duplicatedFinancialOrigins = new Set(['order_payment', 'order_payment_cancel', 'order_payment_delete', 'venda', 'reembolso', 'pdv']);
+
+const normalizeCashOrigin = (value: string | null | undefined) => {
+  const normalized = (value || '').toLowerCase();
+  if (orderOriginAliases.has(normalized)) return normalized.includes('cancel') || normalized.includes('delete') ? 'reembolso' : 'venda';
+  if (!normalized) return 'outros';
+  return normalized;
+};
+
+const applyCashFilters = (transactions: CashTransaction[], filters: ReportFilters) => {
+  const typeFilter = filters.cashType || 'all';
+  const originFilter = filters.cashOrigin || 'all';
+  const methodFilter = filters.cashPaymentMethod || 'all';
+  const createdByFilter = filters.cashCreatedBy || 'all';
+  const sortBy = filters.cashSortBy || 'date';
+  const sortOrder = filters.cashSortOrder || 'desc';
+  const sortFactor = sortOrder === 'asc' ? 1 : -1;
+
+  let rows = [...transactions];
+
+  if (typeFilter !== 'all') {
+    rows = rows.filter((tx) => (typeFilter === 'receita' ? tx.type === 'entrada' : tx.type === 'saida'));
+  }
+
+  if (originFilter !== 'all') {
+    rows = rows.filter((tx) => tx.origin === originFilter);
+  }
+
+  if (methodFilter !== 'all') {
+    rows = rows.filter((tx) => tx.method === methodFilter);
+  }
+
+  if (createdByFilter !== 'all') {
+    rows = rows.filter((tx) => tx.createdBy === createdByFilter);
+  }
+
+  rows.sort((a, b) => {
+    if (sortBy === 'amount') {
+      return (a.amount - b.amount) * sortFactor;
+    }
+    if (sortBy === 'type') {
+      return a.type.localeCompare(b.type) * sortFactor;
+    }
+    return (new Date(a.date).getTime() - new Date(b.date).getTime()) * sortFactor;
+  });
+
+  return rows;
+};
+
 const buildCashTransactions = (sources: ReportSources) => {
-  const ignoredOrigins = new Set(['order_payment', 'pdv']);
   const paymentTransactions: CashTransaction[] = sources.orderPayments
     .filter((payment) => payment.status !== 'pendente')
     .map((payment) => ({
       id: payment.id,
       date: payment.paid_at || payment.created_at,
       type: 'entrada',
-      origin: 'pedido',
+      rawType: 'receita',
+      origin: 'venda',
       description: `Pagamento pedido ${payment.order_id}`,
       amount: Number(payment.amount),
       method: payment.method || null,
       status: payment.status,
+      relatedId: payment.order_id,
+      createdBy: payment.created_by || null,
+      isAutomatic: true,
     }));
 
   const saleTransactions: CashTransaction[] = sources.sales
@@ -242,24 +309,32 @@ const buildCashTransactions = (sources: ReportSources) => {
       id: sale.id,
       date: sale.created_at,
       type: 'entrada',
+      rawType: 'receita',
       origin: 'pdv',
       description: `Venda PDV ${sale.id}`,
       amount: Number(sale.total),
       method: sale.payment_method || null,
       status: 'pago',
+      relatedId: sale.id,
+      createdBy: sale.user_id,
+      isAutomatic: true,
     }));
 
   const entryTransactions: CashTransaction[] = sources.financialEntries
-    .filter((entry) => entry.status === 'pago' && !ignoredOrigins.has(entry.origin || ''))
+    .filter((entry) => entry.status === 'pago' && !duplicatedFinancialOrigins.has(normalizeCashOrigin(entry.origin)))
     .map((entry) => ({
       id: entry.id,
       date: entry.paid_at || entry.occurred_at,
       type: entry.type === 'receita' ? 'entrada' : 'saida',
-      origin: entry.origin || 'manual',
+      rawType: entry.type,
+      origin: normalizeCashOrigin(entry.origin),
       description: entry.description || entry.notes || 'Lancamento manual',
       amount: Number(entry.amount),
       method: entry.payment_method || null,
       status: entry.status,
+      relatedId: entry.related_id || null,
+      createdBy: entry.created_by || null,
+      isAutomatic: Boolean(entry.is_automatic),
     }));
 
   return [...paymentTransactions, ...saleTransactions, ...entryTransactions].sort(
@@ -286,10 +361,43 @@ const calculateOpeningBalance = async (filters: ReportFilters) => {
     .select('amount, type, status, paid_at, occurred_at, origin')
     .lt('occurred_at', startDate.toISOString());
 
+  const cashPaymentMethod = filters.cashPaymentMethod && filters.cashPaymentMethod !== 'all'
+    ? filters.cashPaymentMethod
+    : null;
+  const cashCreatedBy = filters.cashCreatedBy && filters.cashCreatedBy !== 'all'
+    ? filters.cashCreatedBy
+    : null;
+  const cashType = filters.cashType && filters.cashType !== 'all'
+    ? filters.cashType
+    : null;
+  const cashOrigin = filters.cashOrigin && filters.cashOrigin !== 'all'
+    ? filters.cashOrigin
+    : null;
+
   if (companyId) {
     paymentsQuery = paymentsQuery.eq('company_id', companyId);
     salesQuery = salesQuery.eq('company_id', companyId);
     entriesQuery = entriesQuery.eq('company_id', companyId);
+  }
+
+  if (cashPaymentMethod) {
+    paymentsQuery = paymentsQuery.eq('method', cashPaymentMethod);
+    salesQuery = salesQuery.eq('payment_method', cashPaymentMethod);
+    entriesQuery = entriesQuery.eq('payment_method', cashPaymentMethod);
+  }
+
+  if (cashCreatedBy) {
+    paymentsQuery = paymentsQuery.eq('created_by', cashCreatedBy);
+    salesQuery = salesQuery.eq('user_id', cashCreatedBy);
+    entriesQuery = entriesQuery.eq('created_by', cashCreatedBy);
+  }
+
+  if (cashType) {
+    entriesQuery = entriesQuery.eq('type', cashType);
+  }
+
+  if (cashOrigin) {
+    entriesQuery = entriesQuery.eq('origin', cashOrigin);
   }
 
   const [paymentsResult, salesResult, entriesResult] = await Promise.all([
@@ -310,9 +418,9 @@ const calculateOpeningBalance = async (filters: ReportFilters) => {
     paidSales.filter((sale) => Number(sale.amount_paid) >= Number(sale.total)),
     (sale) => Number(sale.total),
   );
-  const ignoredOrigins = new Set(['order_payment', 'pdv']);
+  const ignoredOrigins = duplicatedFinancialOrigins;
   const entryTotal = sumBy(
-    entries.filter((entry) => entry.status === 'pago' && !ignoredOrigins.has(entry.origin || '')),
+    entries.filter((entry) => entry.status === 'pago' && !ignoredOrigins.has(normalizeCashOrigin(entry.origin))),
     (entry) => (entry.type === 'receita' ? Number(entry.amount) : -Number(entry.amount)),
   );
 
@@ -320,11 +428,28 @@ const calculateOpeningBalance = async (filters: ReportFilters) => {
 };
 
 const buildCashReport = async (sources: ReportSources, filters: ReportFilters): Promise<CashReport> => {
-  const transactions = buildCashTransactions(sources);
+  const transactions = applyCashFilters(buildCashTransactions(sources), filters);
   const totalIn = sumBy(transactions, (tx) => (tx.type === 'entrada' ? tx.amount : 0));
   const totalOut = sumBy(transactions, (tx) => (tx.type === 'saida' ? tx.amount : 0));
   const openingBalance = await calculateOpeningBalance(filters);
   const closingBalance = openingBalance + totalIn - totalOut;
+
+  const balanceByMethod = transactions.reduce((acc, tx) => {
+    const key = tx.method || 'indefinido';
+    const current = acc[key] || 0;
+    acc[key] = tx.type === 'entrada' ? current + tx.amount : current - tx.amount;
+    return acc;
+  }, {} as Record<string, number>);
+
+  const revenueByMethod = transactions
+    .filter((tx) => tx.type === 'entrada')
+    .reduce((acc, tx) => {
+      const key = tx.method || 'indefinido';
+      acc[key] = (acc[key] || 0) + tx.amount;
+      return acc;
+    }, {} as Record<string, number>);
+
+  const monthlyComparison = buildPeriodSeries(transactions, 'monthly');
 
   return {
     transactions,
@@ -333,12 +458,15 @@ const buildCashReport = async (sources: ReportSources, filters: ReportFilters): 
       totalOut,
       openingBalance,
       closingBalance,
+      balanceByMethod,
     },
+    revenueByMethod,
+    monthlyComparison,
   };
 };
 
 const buildFinancialReport = (sources: ReportSources): FinancialReport => {
-  const ignoredOrigins = new Set(['order_payment', 'pdv']);
+  const ignoredOrigins = duplicatedFinancialOrigins;
   const paidPayments = sources.orderPayments.filter((payment) => payment.status !== 'pendente');
   const paidEntries = sources.financialEntries.filter((entry) => entry.status === 'pago');
 
@@ -348,7 +476,7 @@ const buildFinancialReport = (sources: ReportSources): FinancialReport => {
     (sale) => Number(sale.total),
   );
   const revenueFromManual = sumBy(
-    paidEntries.filter((entry) => entry.type === 'receita' && !ignoredOrigins.has(entry.origin || '')),
+    paidEntries.filter((entry) => entry.type === 'receita' && !ignoredOrigins.has(normalizeCashOrigin(entry.origin))),
     (entry) => Number(entry.amount),
   );
 
@@ -382,7 +510,7 @@ const buildFinancialReport = (sources: ReportSources): FinancialReport => {
     });
 
   paidEntries
-    .filter((entry) => entry.type === 'receita' && !ignoredOrigins.has(entry.origin || ''))
+    .filter((entry) => entry.type === 'receita' && !ignoredOrigins.has(normalizeCashOrigin(entry.origin)))
     .forEach((entry) => {
       const key = entry.payment_method || 'indefinido';
       revenueByMethod[key] = (revenueByMethod[key] || 0) + Number(entry.amount);
@@ -488,21 +616,29 @@ const buildSalesReport = (sources: ReportSources): SalesReport => {
       id: order.id,
       date: order.created_at,
       type: 'entrada',
+      rawType: 'receita',
       origin: 'pedido',
       description: `Pedido #${order.order_number}`,
       amount: Number(order.total),
       method: order.payment_method || null,
       status: order.status,
+      relatedId: order.id,
+      createdBy: order.created_by || null,
+      isAutomatic: true,
     })),
     ...paidSales.map((sale) => ({
       id: sale.id,
       date: sale.created_at,
       type: 'entrada',
+      rawType: 'receita',
       origin: 'pdv',
       description: `Venda PDV ${sale.id}`,
       amount: Number(sale.total),
       method: sale.payment_method || null,
       status: 'pago',
+      relatedId: sale.id,
+      createdBy: sale.user_id,
+      isAutomatic: true,
     })),
   ];
 
@@ -701,12 +837,45 @@ const loadSources = async (filters: ReportFilters): Promise<ReportSources> => {
     .from('products')
     .select('id, name, base_cost, labor_cost, waste_percentage, profit_margin');
 
+  const cashPaymentMethod = filters.cashPaymentMethod && filters.cashPaymentMethod !== 'all'
+    ? filters.cashPaymentMethod
+    : null;
+  const cashCreatedBy = filters.cashCreatedBy && filters.cashCreatedBy !== 'all'
+    ? filters.cashCreatedBy
+    : null;
+  const cashType = filters.cashType && filters.cashType !== 'all'
+    ? filters.cashType
+    : null;
+  const cashOrigin = filters.cashOrigin && filters.cashOrigin !== 'all'
+    ? filters.cashOrigin
+    : null;
+
   if (companyId) {
     paymentsQuery = paymentsQuery.eq('company_id', companyId);
     salesQuery = salesQuery.eq('company_id', companyId);
     entriesQuery = entriesQuery.eq('company_id', companyId);
     categoriesQuery = categoriesQuery.eq('company_id', companyId);
     productsQuery = productsQuery.eq('company_id', companyId);
+  }
+
+  if (cashPaymentMethod) {
+    paymentsQuery = paymentsQuery.eq('method', cashPaymentMethod);
+    salesQuery = salesQuery.eq('payment_method', cashPaymentMethod);
+    entriesQuery = entriesQuery.eq('payment_method', cashPaymentMethod);
+  }
+
+  if (cashCreatedBy) {
+    paymentsQuery = paymentsQuery.eq('created_by', cashCreatedBy);
+    salesQuery = salesQuery.eq('user_id', cashCreatedBy);
+    entriesQuery = entriesQuery.eq('created_by', cashCreatedBy);
+  }
+
+  if (cashType) {
+    entriesQuery = entriesQuery.eq('type', cashType);
+  }
+
+  if (cashOrigin) {
+    entriesQuery = entriesQuery.eq('origin', cashOrigin);
   }
 
   const [orderItemsResult, paymentsResult, salesResult, entriesResult, categoriesResult, productsResult] =

@@ -253,6 +253,9 @@ export default function OrderDetails() {
   const paymentReceiptMethodLabels: Record<PaymentMethod, string> = {
     dinheiro: 'Dinheiro',
     cartao: 'Cartão',
+    credito: 'Cartão crédito',
+    debito: 'Cartão débito',
+    transferencia: 'Transferência',
     pix: 'PIX',
     boleto: 'Boleto',
     outro: 'Outro',

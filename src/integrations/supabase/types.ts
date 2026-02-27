@@ -359,13 +359,17 @@ export type Database = {
           description: string | null
           due_date: string | null
           id: string
+          is_automatic: boolean
           notes: string | null
           occurred_at: string
-          origin: string
+          origin: Database["public"]["Enums"]["financial_entry_origin"]
           paid_at: string | null
           payment_method: Database["public"]["Enums"]["payment_method"] | null
+          related_id: string | null
           status: Database["public"]["Enums"]["financial_entry_status"]
           type: Database["public"]["Enums"]["financial_entry_type"]
+          updated_at: string
+          updated_by: string | null
         }
         Insert: {
           amount: number
@@ -376,13 +380,17 @@ export type Database = {
           description?: string | null
           due_date?: string | null
           id?: string
+          is_automatic?: boolean
           notes?: string | null
           occurred_at?: string
-          origin?: string
+          origin?: Database["public"]["Enums"]["financial_entry_origin"]
           paid_at?: string | null
           payment_method?: Database["public"]["Enums"]["payment_method"] | null
+          related_id?: string | null
           status?: Database["public"]["Enums"]["financial_entry_status"]
           type: Database["public"]["Enums"]["financial_entry_type"]
+          updated_at?: string
+          updated_by?: string | null
         }
         Update: {
           amount?: number
@@ -393,13 +401,17 @@ export type Database = {
           description?: string | null
           due_date?: string | null
           id?: string
+          is_automatic?: boolean
           notes?: string | null
           occurred_at?: string
-          origin?: string
+          origin?: Database["public"]["Enums"]["financial_entry_origin"]
           paid_at?: string | null
           payment_method?: Database["public"]["Enums"]["payment_method"] | null
+          related_id?: string | null
           status?: Database["public"]["Enums"]["financial_entry_status"]
           type?: Database["public"]["Enums"]["financial_entry_type"]
+          updated_at?: string
+          updated_by?: string | null
         }
         Relationships: [
           {
@@ -1473,7 +1485,19 @@ export type Database = {
       }
     }
     Enums: {
-      app_role: "admin" | "atendente" | "caixa" | "producao" | "super_admin"
+      app_role: "admin" | "financeiro" | "atendente" | "caixa" | "producao" | "super_admin"
+      financial_entry_origin:
+      | "venda"
+      | "assinatura"
+      | "custo"
+      | "reembolso"
+      | "ajuste"
+      | "manual"
+      | "pdv"
+      | "order_payment"
+      | "order_payment_cancel"
+      | "order_payment_delete"
+      | "outros"
       financial_entry_status: "pendente" | "pago" | "atrasado"
       financial_entry_type: "receita" | "despesa"
       order_status:
@@ -1487,7 +1511,15 @@ export type Database = {
       | "aguardando_retirada"
       | "entregue"
       | "cancelado"
-      payment_method: "dinheiro" | "cartao" | "pix" | "boleto" | "outro"
+      payment_method:
+      | "dinheiro"
+      | "cartao"
+      | "credito"
+      | "debito"
+      | "pix"
+      | "boleto"
+      | "transferencia"
+      | "outro"
       payment_status: "pendente" | "parcial" | "pago"
       product_type: "produto" | "confeccionado" | "servico"
       stock_movement_type: "entrada" | "saida" | "ajuste"
@@ -1618,7 +1650,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "atendente", "caixa", "producao", "super_admin"],
+      app_role: ["admin", "financeiro", "atendente", "caixa", "producao", "super_admin"],
       order_status: [
         "orcamento",
         "pendente",
@@ -1631,7 +1663,20 @@ export const Constants = {
         "entregue",
         "cancelado",
       ],
-      payment_method: ["dinheiro", "cartao", "pix", "boleto", "outro"],
+      payment_method: ["dinheiro", "cartao", "credito", "debito", "pix", "boleto", "transferencia", "outro"],
+      financial_entry_origin: [
+        "venda",
+        "assinatura",
+        "custo",
+        "reembolso",
+        "ajuste",
+        "manual",
+        "pdv",
+        "order_payment",
+        "order_payment_cancel",
+        "order_payment_delete",
+        "outros",
+      ],
       payment_status: ["pendente", "parcial", "pago"],
       financial_entry_status: ["pendente", "pago", "atrasado"],
       financial_entry_type: ["receita", "despesa"],

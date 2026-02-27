@@ -52,6 +52,7 @@ const SuperAdminPlans = lazy(() => import("./pages/SuperAdminPlans"));
 const SuperAdminImpersonate = lazy(() => import("./pages/SuperAdminImpersonate"));
 const Profile = lazy(() => import("./pages/Profile"));
 const Reports = lazy(() => import("./pages/Reports"));
+const CashFlow = lazy(() => import("./pages/CashFlow"));
 const Receipts = lazy(() => import("./pages/Receipts"));
 const BannerManagement = lazy(() => import("./pages/BannerManagement"));
 const CatalogManager = lazy(() => import("./pages/CatalogManager"));
@@ -310,7 +311,25 @@ const App = () => (
               <Route
                 path="/relatorios"
                 element={(
-                  <ProtectedRoute allowedRoles={["admin"]}>
+                  <ProtectedRoute allowedRoles={["super_admin", "admin", "financeiro", "atendente", "producao"]}>
+                    <AppLayout>{withSuspense(<Reports />)}</AppLayout>
+                  </ProtectedRoute>
+                )}
+              />
+
+              <Route
+                path="/financeiro/fluxo-caixa"
+                element={(
+                  <ProtectedRoute allowedRoles={["super_admin", "admin", "financeiro", "atendente", "producao"]}>
+                    <AppLayout>{withSuspense(<CashFlow />)}</AppLayout>
+                  </ProtectedRoute>
+                )}
+              />
+
+              <Route
+                path="/financeiro/relatorios"
+                element={(
+                  <ProtectedRoute allowedRoles={["super_admin", "admin", "financeiro", "atendente", "producao"]}>
                     <AppLayout>{withSuspense(<Reports />)}</AppLayout>
                   </ProtectedRoute>
                 )}
@@ -382,7 +401,7 @@ const App = () => (
               <Route
                 path="/assinatura"
                 element={(
-                  <ProtectedRoute allowedRoles={["admin", "atendente", "caixa", "producao", "super_admin"]}>
+                  <ProtectedRoute allowedRoles={["admin", "financeiro", "atendente", "caixa", "producao", "super_admin"]}>
                     <AppLayout>{withSuspense(<Subscription />)}</AppLayout>
                   </ProtectedRoute>
                 )}

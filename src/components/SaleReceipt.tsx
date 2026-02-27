@@ -62,6 +62,9 @@ const formatDate = (d: Date) =>
 const paymentLabels: Record<PaymentMethod, string> = {
   dinheiro: 'Dinheiro',
   cartao: 'Cartao',
+  credito: 'Cartao credito',
+  debito: 'Cartao debito',
+  transferencia: 'Transferencia',
   pix: 'PIX',
   boleto: 'Boleto',
   outro: 'Outro',

@@ -18,6 +18,7 @@ interface AppLayoutProps {
 const roleLabels: Record<AppRole, string> = {
   super_admin: 'SUPER ADMIN',
   admin: 'ADMIN',
+  financeiro: 'FINANCEIRO',
   atendente: 'ATENDENTE',
   caixa: 'CAIXA',
   producao: 'PRODUÇÃO',
@@ -68,11 +69,11 @@ export function AppLayout({ children }: AppLayoutProps) {
   }, []);
 
   const navItems = useMemo(() => ([
-    { label: 'Início', url: '/dashboard', roles: ['super_admin', 'admin', 'atendente', 'caixa', 'producao'] as AppRole[] },
+    { label: 'Início', url: '/dashboard', roles: ['super_admin', 'admin', 'financeiro', 'atendente', 'caixa', 'producao'] as AppRole[] },
     { label: 'Pedidos', url: '/pedidos', roles: ['admin', 'atendente', 'caixa'] as AppRole[] },
     { label: 'Catálogo', url: '/catalogo-admin', roles: ['admin'] as AppRole[] },
-    { label: 'Financeiro', url: '/relatorios', roles: ['admin'] as AppRole[] },
-    { label: 'Perfil', url: '/perfil', roles: ['super_admin', 'admin', 'atendente', 'caixa', 'producao'] as AppRole[] },
+    { label: 'Financeiro', url: '/financeiro/fluxo-caixa', roles: ['super_admin', 'admin', 'financeiro', 'atendente', 'producao'] as AppRole[] },
+    { label: 'Perfil', url: '/perfil', roles: ['super_admin', 'admin', 'financeiro', 'atendente', 'caixa', 'producao'] as AppRole[] },
   ]), []);
 
   const visibleNavItems = navItems.filter((item) => hasPermission(item.roles));

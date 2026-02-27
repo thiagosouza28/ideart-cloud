@@ -48,6 +48,9 @@ const paymentStatusLabels: Record<PaymentStatus, string> = {
 const paymentMethodLabels: Record<PaymentMethod, string> = {
   dinheiro: 'Dinheiro',
   cartao: 'Cartão',
+  credito: 'Cartão crédito',
+  debito: 'Cartão débito',
+  transferencia: 'Transferência',
   pix: 'PIX',
   boleto: 'Boleto',
   outro: 'Outro',

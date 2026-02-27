@@ -114,6 +114,50 @@ const resolvePeriodDays = (planPeriodDays?: number | null, intervalType?: string
   return 30 * count;
 };
 
+const resolvePaidAmount = (data: any) => {
+  const candidates = [
+    data?.amount,
+    data?.total_amount,
+    data?.paid_amount,
+    data?.purchase?.amount,
+    data?.purchase?.total,
+    data?.payment?.amount,
+    data?.offer?.price,
+    data?.offer?.amount,
+  ];
+
+  for (const candidate of candidates) {
+    const value = Number(candidate);
+    if (Number.isFinite(value) && value > 0) return value;
+  }
+
+  return 0;
+};
+
+const resolvePaymentMethod = (data: any): string | null => {
+  const raw = (
+    data?.payment_method ??
+    data?.payment?.method ??
+    data?.payment?.type ??
+    data?.transaction?.payment_method ??
+    data?.transaction?.method ??
+    ''
+  )
+    .toString()
+    .trim()
+    .toLowerCase();
+
+  if (!raw) return null;
+  if (raw.includes('pix')) return 'pix';
+  if (raw.includes('boleto')) return 'boleto';
+  if (raw.includes('dinheiro') || raw.includes('cash')) return 'dinheiro';
+  if (raw.includes('transfer')) return 'transferencia';
+  if (raw.includes('debito') || raw.includes('debit')) return 'debito';
+  if (raw.includes('credito') || raw.includes('credit')) return 'credito';
+  if (raw.includes('cartao') || raw.includes('card')) return 'cartao';
+  return 'outro';
+};
+
 const generatePassword = () => {
   const lower = 'abcdefghjkmnpqrstuvwxyz';
   const upper = 'ABCDEFGHJKMNPQRSTUVWXYZ';
@@ -839,10 +883,25 @@ serve(async (req) => {
 
     const targetSubscriptionId = existingSubscription?.id ?? activeSubscription?.id ?? null;
 
+    let persistedSubscriptionId = targetSubscriptionId;
     if (targetSubscriptionId) {
       await supabase.from('subscriptions').update(subscriptionPayload).eq('id', targetSubscriptionId);
     } else {
-      await supabase.from('subscriptions').insert(subscriptionPayload);
+      const { data: insertedSubscription } = await supabase
+        .from('subscriptions')
+        .insert(subscriptionPayload)
+        .select('id')
+        .maybeSingle();
+      persistedSubscriptionId = insertedSubscription?.id ?? null;
+    }
+
+    if (!persistedSubscriptionId && caktoSubId) {
+      const { data: subscriptionRow } = await supabase
+        .from('subscriptions')
+        .select('id')
+        .eq('gateway_subscription_id', caktoSubId)
+        .maybeSingle();
+      persistedSubscriptionId = subscriptionRow?.id ?? null;
     }
 
     if (companyId) {
@@ -864,6 +923,48 @@ serve(async (req) => {
         companyUpdate.email = email;
       }
       await supabase.from('companies').update(companyUpdate).eq('id', companyId);
+    }
+
+    const paidAmount = resolvePaidAmount(data);
+    const paymentMethod = resolvePaymentMethod(data);
+    const paidAt =
+      toIso(
+        data?.paid_at ??
+        data?.paidAt ??
+        data?.approved_at ??
+        data?.approvedAt ??
+        data?.payment_date ??
+        data?.paymentDate,
+      ) ?? new Date().toISOString();
+
+    if (companyId && persistedSubscriptionId && paidAmount > 0) {
+      const eventTag = `cakto_event:${eventId}`;
+      const { data: existingCashEntry } = await supabase
+        .from('financial_entries')
+        .select('id')
+        .eq('company_id', companyId)
+        .eq('origin', 'assinatura')
+        .eq('notes', eventTag)
+        .maybeSingle();
+
+      if (!existingCashEntry) {
+        await supabase.from('financial_entries').insert({
+          company_id: companyId,
+          type: 'receita',
+          origin: 'assinatura',
+          amount: paidAmount,
+          status: 'pago',
+          payment_method: paymentMethod,
+          description: `Pagamento de assinatura (${planInfo?.name ?? 'Plano'})`,
+          occurred_at: paidAt,
+          paid_at: paidAt,
+          related_id: persistedSubscriptionId,
+          is_automatic: true,
+          created_by: userId,
+          updated_by: userId,
+          notes: eventTag,
+        } as any);
+      }
     }
 
     let shouldSendEmail = !hadPaidSubscription;

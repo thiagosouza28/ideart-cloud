@@ -38,6 +38,7 @@ interface UserWithRole {
 const roleLabels: Record<AppRole, string> = {
   super_admin: 'Super Admin',
   admin: 'Administrador',
+  financeiro: 'Financeiro',
   atendente: 'Atendente',
   caixa: 'Caixa',
   producao: 'Produção',
@@ -46,6 +47,7 @@ const roleLabels: Record<AppRole, string> = {
 const roleBadgeColors: Record<AppRole, string> = {
   super_admin: 'bg-slate-200 text-slate-700 border-slate-200',
   admin: 'bg-rose-100 text-rose-700 border-rose-200',
+  financeiro: 'bg-violet-100 text-violet-700 border-violet-200',
   atendente: 'bg-blue-100 text-blue-700 border-blue-200',
   caixa: 'bg-emerald-100 text-emerald-700 border-emerald-200',
   producao: 'bg-yellow-100 text-yellow-700 border-yellow-200',
@@ -507,6 +509,7 @@ export default function UserManagement() {
                         <SelectContent>
                           <SelectItem value="super_admin">Super Admin</SelectItem>
                           <SelectItem value="admin">Administrador</SelectItem>
+                          <SelectItem value="financeiro">Financeiro</SelectItem>
                           <SelectItem value="atendente">Atendente</SelectItem>
                           <SelectItem value="caixa">Caixa</SelectItem>
                           <SelectItem value="producao">Produção</SelectItem>
@@ -650,6 +653,7 @@ export default function UserManagement() {
                 <SelectContent>
                   <SelectItem value="super_admin">Super Admin</SelectItem>
                   <SelectItem value="admin">Administrador</SelectItem>
+                          <SelectItem value="financeiro">Financeiro</SelectItem>
                   <SelectItem value="atendente">Atendente</SelectItem>
                   <SelectItem value="caixa">Caixa</SelectItem>
                   <SelectItem value="producao">Produção</SelectItem>
@@ -757,3 +761,6 @@ export default function UserManagement() {
     </div>
   );
 }
+
+
+

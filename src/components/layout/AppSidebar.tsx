@@ -49,10 +49,11 @@ interface MenuItem {
 }
 
 const primaryMenu: MenuItem[] = [
-  { title: 'Dashboard', url: '/dashboard', icon: LayoutDashboard, roles: ['super_admin', 'admin', 'atendente', 'caixa', 'producao'] },
+  { title: 'Dashboard', url: '/dashboard', icon: LayoutDashboard, roles: ['super_admin', 'admin', 'financeiro', 'atendente', 'caixa', 'producao'] },
   { title: 'Pedidos', url: '/pedidos', icon: ClipboardList, roles: ['admin', 'atendente', 'caixa'] },
   { title: 'Produção', url: '/producao', icon: Factory, roles: ['admin', 'producao'] },
-  { title: 'Relatórios', url: '/relatorios', icon: BarChart3, roles: ['admin'] },
+  { title: 'Fluxo de Caixa', url: '/financeiro/fluxo-caixa', icon: CreditCard, roles: ['admin', 'financeiro', 'atendente', 'producao'] },
+  { title: 'Relatórios', url: '/financeiro/relatorios', icon: BarChart3, roles: ['admin', 'financeiro', 'atendente', 'producao'] },
 ];
 
 const secondaryMenu: MenuItem[] = [
@@ -71,11 +72,13 @@ const secondaryMenu: MenuItem[] = [
   { title: 'Empresas', url: '/empresas', icon: Building2, roles: ['admin'] },
   { title: 'Banners', url: '/banners', icon: ImageIcon, roles: ['admin'] },
   { title: 'Usuários', url: '/usuarios', icon: User, roles: ['admin'] },
-  { title: 'Assinatura', url: '/assinatura', icon: Crown, roles: ['admin'] },
+  { title: 'Assinatura', url: '/assinatura', icon: Crown, roles: ['admin', 'financeiro'] },
 ];
 
 const superAdminMenu: MenuItem[] = [
   { title: 'Painel', url: '/super-admin', icon: LayoutDashboard, roles: ['super_admin'] },
+  { title: 'Fluxo de Caixa', url: '/financeiro/fluxo-caixa', icon: CreditCard, roles: ['super_admin'] },
+  { title: 'Relatórios', url: '/financeiro/relatorios', icon: BarChart3, roles: ['super_admin'] },
   { title: 'Empresas SaaS', url: '/super-admin/empresas', icon: Building2, roles: ['super_admin'] },
   { title: 'Planos', url: '/super-admin/planos', icon: CreditCard, roles: ['super_admin'] },
   { title: 'Entrar como cliente', url: '/admin/entrar-como-cliente', icon: Shield, roles: ['super_admin'] },

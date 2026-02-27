@@ -1,4 +1,4 @@
-export type AppRole = 'super_admin' | 'admin' | 'atendente' | 'caixa' | 'producao';
+export type AppRole = 'super_admin' | 'admin' | 'financeiro' | 'atendente' | 'caixa' | 'producao';
 export type ProductType = 'produto' | 'confeccionado' | 'servico';
 export type OrderStatus =
   | 'orcamento'
@@ -12,10 +12,30 @@ export type OrderStatus =
   | 'entregue'
   | 'cancelado';
 export type StockMovementType = 'entrada' | 'saida' | 'ajuste';
-export type PaymentMethod = 'dinheiro' | 'cartao' | 'pix' | 'boleto' | 'outro';
+export type PaymentMethod =
+  | 'dinheiro'
+  | 'cartao'
+  | 'credito'
+  | 'debito'
+  | 'pix'
+  | 'boleto'
+  | 'transferencia'
+  | 'outro';
 export type PaymentStatus = 'pendente' | 'parcial' | 'pago';
 export type FinancialEntryType = 'receita' | 'despesa';
 export type FinancialEntryStatus = 'pendente' | 'pago' | 'atrasado';
+export type FinancialEntryOrigin =
+  | 'venda'
+  | 'assinatura'
+  | 'custo'
+  | 'reembolso'
+  | 'ajuste'
+  | 'manual'
+  | 'pdv'
+  | 'order_payment'
+  | 'order_payment_cancel'
+  | 'order_payment_delete'
+  | 'outros';
 export type SubscriptionStatus = 'trial' | 'active' | 'cancelled' | 'expired' | 'canceled' | 'past_due' | 'unpaid' | 'incomplete';
 export type BillingPeriod = 'monthly' | 'yearly';
 
@@ -350,7 +370,7 @@ export interface FinancialEntry {
   id: string;
   company_id: string | null;
   type: FinancialEntryType;
-  origin: string;
+  origin: FinancialEntryOrigin;
   category_id: string | null;
   amount: number;
   status: FinancialEntryStatus;
@@ -360,8 +380,12 @@ export interface FinancialEntry {
   occurred_at: string;
   due_date: string | null;
   paid_at: string | null;
+  related_id: string | null;
+  is_automatic: boolean;
   created_at: string;
   created_by: string | null;
+  updated_at: string;
+  updated_by: string | null;
   category?: ExpenseCategory | null;
 }
 
