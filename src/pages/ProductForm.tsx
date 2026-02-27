@@ -831,15 +831,30 @@ export default function ProductForm() {
 
     setGeneratingDescription(true);
     try {
-      const resp = await generateProductDescription(trimmedName);
+      const selectedCategory = categories.find((item) => item.id === categoryId)?.name;
+      const resp = await generateProductDescription({
+        name: trimmedName,
+        category: selectedCategory,
+        productType,
+        unit,
+        personalizationEnabled,
+        existingDescription: description.trim() || undefined,
+      });
+
+      setDescription(resp.description || '');
       setCatalogShortDescription(resp.shortDescription || '');
       setCatalogLongDescription(resp.longDescription || '');
-      if (!description.trim()) {
-        setDescription(resp.longDescription || '');
-      }
-      toast({ title: 'Descrição gerada com sucesso' });
+      toast({ title: 'Descrições geradas com sucesso' });
     } catch (error: any) {
-      toast({ title: 'Erro ao gerar descrição', description: error?.message, variant: 'destructive' });
+      const status = Number(error?.status || 0);
+      const extraHelp = status === 401
+        ? ' Verifique login/sessão e se a função generate-product-description está deployada no mesmo projeto.'
+        : '';
+      toast({
+        title: 'Erro ao gerar descrição',
+        description: `${error?.message || 'Falha na geração com IA.'}${extraHelp}`,
+        variant: 'destructive',
+      });
     } finally {
       setGeneratingDescription(false);
     }

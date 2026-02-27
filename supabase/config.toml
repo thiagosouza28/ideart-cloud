@@ -1,1 +1,4 @@
 project_id = "hlebwwbwnvwblujuxfxe"
+
+[functions.generate-product-description]
+verify_jwt = false

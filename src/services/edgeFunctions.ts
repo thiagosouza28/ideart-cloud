@@ -6,6 +6,7 @@ type InvokeOptions = {
   method?: string;
   path?: string;
   requireAuth?: boolean;
+  resetAuthOn401?: boolean;
 };
 
 const SESSION_EXPIRY_BUFFER_MS = 60_000;
@@ -18,10 +19,17 @@ const decodeJwtPayload = (token: string) => {
   try {
     const payload = token.split('.')[1] ?? '';
     const normalized = payload.replace(/-/g, '+').replace(/_/g, '/');
-    return JSON.parse(atob(normalized));
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
+    return JSON.parse(atob(padded)) as { role?: string; iss?: string } | null;
   } catch {
     return null;
   }
+};
+
+const isServiceRoleToken = (token?: string) => {
+  if (!token) return false;
+  const payload = decodeJwtPayload(token);
+  return payload?.role === 'service_role';
 };
 
 const isSessionExpiring = (session: Session) => {
@@ -46,7 +54,7 @@ const refreshSessionSafely = async () => {
         await resetAuthSession({ reason: 'invalid_refresh_token' });
         return null;
       }
-      throw new Error('Não foi possível atualizar a sessão. Tente novamente.');
+      throw new Error('Nao foi possivel atualizar a sessao. Tente novamente.');
     }
     return data.session ?? null;
   })();
@@ -69,7 +77,7 @@ const getActiveSession = async (supabaseUrl: string) => {
     if (isInvalidRefreshTokenError(error)) {
       await resetAuthSession({ reason: 'invalid_refresh_token' });
     }
-    throw new Error('Sessão expirada. Faça login novamente.');
+    throw new Error('Sessao expirada. Faca login novamente.');
   }
 
   let session = data.session ?? null;
@@ -80,7 +88,7 @@ const getActiveSession = async (supabaseUrl: string) => {
   if (isSessionExpiring(session)) {
     const refreshed = await refreshSessionSafely();
     if (!refreshed) {
-      throw new Error('Sessão expirada. Faça login novamente.');
+      throw new Error('Sessao expirada. Faca login novamente.');
     }
     session = refreshed;
   }
@@ -91,7 +99,7 @@ const getActiveSession = async (supabaseUrl: string) => {
 
   const payload = decodeJwtPayload(session.access_token);
   if (payload?.iss && !String(payload.iss).startsWith(supabaseUrl)) {
-    throw new Error('Sessão inválida para este projeto. Saia e entre novamente.');
+    throw new Error('Sessao invalida para este projeto. Saia e entre novamente.');
   }
 
   return session;
@@ -100,9 +108,19 @@ const getActiveSession = async (supabaseUrl: string) => {
 const shouldResetAuthForEdgeError = (status: number, message: string) => {
   if (status !== 401) return false;
   const normalized = message.toLowerCase();
-  const mentionsToken = /token|jwt|sessao|sessão|session/.test(normalized);
-  const invalidToken = /invalid|inválid|expirad|expired|revoked|not found|nao encontrado|não encontrado/.test(normalized);
+  const mentionsToken = /token|jwt|sessao|session/.test(normalized);
+  const invalidToken = /invalid|inval|expirad|expired|revoked|not found|nao encontrado/.test(normalized);
   return mentionsToken && invalidToken;
+};
+
+const shouldRetryWithRefresh = (status: number, payload: unknown) => {
+  if (status !== 401) return false;
+  if (!payload || typeof payload !== 'object') return true;
+
+  const message = String((payload as any).error || (payload as any).message || '').toLowerCase();
+  if (!message) return true;
+
+  return /auth|token|jwt|sessao|session|authorization/.test(message);
 };
 
 /**
@@ -118,11 +136,14 @@ export async function invokeEdgeFunction<T>(
     ? `${name}${options.path.startsWith('/') ? options.path : `/${options.path}`}`
     : name;
   const requireAuth = options.requireAuth ?? true;
+  const resetAuthOn401 = options.resetAuthOn401 ?? true;
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY ?? (supabase as any).supabaseKey;
+  const publishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+  const anonCandidate = import.meta.env.VITE_SUPABASE_ANON_KEY;
+  const anonKey = publishableKey || (!isServiceRoleToken(anonCandidate) ? anonCandidate : undefined) || (supabase as any).supabaseKey;
 
-  if (!supabaseUrl) {
-    throw new Error('Variável do Supabase ausente: VITE_SUPABASE_URL.');
+  if (!supabaseUrl || !anonKey) {
+    throw new Error('Configuracao do Supabase ausente/invalida para Edge Functions.');
   }
 
   let activeSession: Session | null = null;
@@ -130,37 +151,57 @@ export async function invokeEdgeFunction<T>(
   if (requireAuth) {
     activeSession = await getActiveSession(supabaseUrl);
     if (!activeSession?.access_token) {
-      throw new Error('Sessão não encontrada. Faça login novamente.');
+      throw new Error('Sessao nao encontrada. Faca login novamente.');
     }
   }
 
   try {
-    const authHeader = activeSession?.access_token ? `Bearer ${activeSession.access_token}` : undefined;
-    const headers: Record<string, string> = {};
-
-    if (anonKey) headers.apikey = anonKey;
-    if (authHeader) {
-      headers.Authorization = authHeader;
-      headers['x-supabase-authorization'] = authHeader;
-    }
-
     const hasBody = Boolean(body && Object.keys(body).length);
-    if (method !== 'GET' && method !== 'HEAD' && hasBody) {
-      headers['Content-Type'] = 'application/json';
-    }
+    let sessionForRequest = activeSession;
+    let retriedAfterRefresh = false;
 
-    const response = await fetch(`${supabaseUrl}/functions/v1/${functionName}`, {
-      method,
-      headers,
-      body: method !== 'GET' && method !== 'HEAD' && hasBody ? JSON.stringify(body) : undefined,
-    });
+    for (;;) {
+      const authHeader = sessionForRequest?.access_token ? `Bearer ${sessionForRequest.access_token}` : undefined;
+      const headers: Record<string, string> = {};
 
-    const contentType = response.headers.get('content-type') || '';
-    const payload = contentType.includes('application/json')
-      ? await response.json().catch(() => null)
-      : await response.text().catch(() => '');
+      if (anonKey) headers.apikey = anonKey;
+      if (authHeader) {
+        headers.Authorization = authHeader;
+        headers['x-supabase-authorization'] = authHeader;
+      }
 
-    if (!response.ok) {
+      if (method !== 'GET' && method !== 'HEAD' && hasBody) {
+        headers['Content-Type'] = 'application/json';
+      }
+
+      const response = await fetch(`${supabaseUrl}/functions/v1/${functionName}`, {
+        method,
+        headers,
+        body: method !== 'GET' && method !== 'HEAD' && hasBody ? JSON.stringify(body) : undefined,
+      });
+
+      const contentType = response.headers.get('content-type') || '';
+      const payload = contentType.includes('application/json')
+        ? await response.json().catch(() => null)
+        : await response.text().catch(() => '');
+
+      if (response.ok) {
+        return payload as T;
+      }
+
+      if (
+        requireAuth &&
+        !retriedAfterRefresh &&
+        shouldRetryWithRefresh(response.status, payload)
+      ) {
+        const refreshedSession = await refreshSessionSafely();
+        if (refreshedSession?.access_token) {
+          sessionForRequest = refreshedSession;
+          retriedAfterRefresh = true;
+          continue;
+        }
+      }
+
       let message = 'Erro desconhecido';
       if (payload && typeof payload === 'object') {
         message = (payload as any).error || (payload as any).message || message;
@@ -171,13 +212,13 @@ export async function invokeEdgeFunction<T>(
       if (response.status === 401) {
         message = /sessao|session/i.test(message)
           ? message
-          : 'Sessão inválida ou expirada. Saia e entre novamente.';
+          : 'Sessao invalida ou expirada. Saia e entre novamente.';
       } else if (response.status === 403) {
         message = /permissao|permission/i.test(message)
           ? message
-          : 'Você não tem permissão para realizar esta ação.';
+          : 'Voce nao tem permissao para realizar esta acao.';
       } else if (response.status === 404) {
-        message = 'Função não encontrada ou caminho inválido.';
+        message = 'Funcao nao encontrada ou caminho invalido.';
       }
 
       console.error(`[edge] ${functionName} failed`, {
@@ -185,7 +226,7 @@ export async function invokeEdgeFunction<T>(
         payload,
       });
 
-      if (requireAuth && shouldResetAuthForEdgeError(response.status, message)) {
+      if (requireAuth && resetAuthOn401 && shouldResetAuthForEdgeError(response.status, message)) {
         await resetAuthSession({ reason: `edge_function_401:${functionName}` });
       }
 
@@ -194,12 +235,10 @@ export async function invokeEdgeFunction<T>(
       wrapped.payload = payload;
       throw wrapped;
     }
-
-    return payload as T;
   } catch (err: any) {
     if (err.status) throw err;
 
     console.error(`Network error calling ${functionName}:`, err);
-    throw new Error(err.message || 'Erro de conexão com o servidor.');
+    throw new Error(err.message || 'Erro de conexao com o servidor.');
   }
 }

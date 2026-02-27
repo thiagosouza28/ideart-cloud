@@ -553,19 +553,178 @@ export default function PublicProductDetails() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900" style={{ color: textColor }}>
+    <div className="catalog-detail-root min-h-screen bg-slate-50 text-slate-900" style={{ color: textColor }}>
       <style>{`
-        .catalog-primary { color: ${baseButtonColor}; }
-        .catalog-btn { background-color: ${buttonBgColor}; color: ${buttonTextColor}; }
-        .catalog-btn:hover { filter: brightness(0.92); }
-        .catalog-btn-outline { border-color: ${buttonOutlineColor}; color: ${buttonOutlineColor}; }
-        .catalog-btn-outline:hover { background-color: ${buttonOutlineColor}; color: ${buttonTextColor}; }
-        .catalog-card { background-color: ${cardBgColor}; border-color: ${cardBorderColor}; }
-        .catalog-badge { background-color: ${badgeBgColor}; color: ${badgeTextColor}; }
-        .catalog-price { color: ${priceColor}; }
+        .catalog-detail-root {
+          --cd-light: #f4f6fb;
+          --cd-white: #ffffff;
+          --cd-border: #e2e7f5;
+          --cd-muted: #7a8299;
+          --cd-text: ${textColor};
+          --cd-primary: ${buttonBgColor};
+          --cd-primary-text: ${buttonTextColor};
+          --cd-outline: ${buttonOutlineColor};
+          --cd-badge-bg: ${badgeBgColor};
+          --cd-badge-text: ${badgeTextColor};
+          --cd-price: ${priceColor};
+          --cd-card-bg: ${cardBgColor};
+          --cd-card-border: ${cardBorderColor};
+          --cd-header-bg: ${headerBgColor};
+          --cd-header-text: ${headerTextColor};
+          --cd-footer-bg: ${footerBgColor};
+          --cd-footer-text: ${footerTextColor};
+          background: var(--cd-light);
+          color: var(--cd-text);
+        }
+
+        .catalog-detail-header {
+          backdrop-filter: blur(10px);
+          background: color-mix(in srgb, var(--cd-header-bg) 94%, #ffffff);
+          border-bottom: 1px solid var(--cd-border);
+        }
+
+        .catalog-detail-main {
+          width: min(1160px, calc(100% - 28px));
+          margin: 0 auto;
+        }
+
+        .catalog-detail-hero {
+          align-items: start;
+          gap: 1.25rem;
+        }
+
+        .catalog-detail-hero > div:first-child {
+          border: 1px solid var(--cd-border);
+          border-radius: 1rem;
+          padding: 0.85rem;
+          background: var(--cd-white);
+        }
+
+        .catalog-detail-hero > div:last-child {
+          border: 1px solid var(--cd-border);
+          border-radius: 1rem;
+          background: var(--cd-white);
+          padding: 1.1rem;
+        }
+
+        .catalog-detail-tabs {
+          border-color: var(--cd-border) !important;
+          border-radius: 1rem;
+          background: var(--cd-card-bg);
+          box-shadow: 0 10px 32px rgba(15, 27, 61, 0.05);
+        }
+
+        .catalog-detail-tabs > div:first-child {
+          background: #fbfcff;
+          border-color: var(--cd-border) !important;
+          padding: 0.65rem;
+          gap: 0.45rem;
+        }
+
+        .catalog-detail-tabs > div:first-child > button {
+          border: 1px solid var(--cd-border);
+          border-radius: 999px;
+          font-size: 12px;
+          font-weight: 700;
+          color: var(--cd-muted);
+          padding: 0.4rem 0.9rem;
+        }
+
+        .catalog-detail-tabs > div:first-child > button.text-primary {
+          background: var(--cd-primary);
+          border-color: var(--cd-primary);
+          color: var(--cd-primary-text);
+        }
+
+        .catalog-detail-order .catalog-card {
+          border-color: var(--cd-card-border);
+          border-radius: 1rem;
+          background: var(--cd-card-bg);
+          box-shadow: 0 10px 32px rgba(15, 27, 61, 0.05);
+        }
+
+        .catalog-detail-related a .bg-white {
+          border-color: var(--cd-border) !important;
+          border-radius: 0.9rem;
+        }
+
+        .catalog-detail-company {
+          border-color: var(--cd-card-border);
+          border-radius: 1rem;
+          background: var(--cd-card-bg);
+          box-shadow: 0 8px 24px rgba(15, 27, 61, 0.04);
+        }
+
+        .catalog-detail-footer {
+          border-color: var(--cd-border) !important;
+          background: var(--cd-footer-bg);
+          color: var(--cd-footer-text);
+        }
+
+        .catalog-detail-root input,
+        .catalog-detail-root .catalog-input,
+        .catalog-detail-root [data-radix-select-trigger] {
+          border-color: var(--cd-border) !important;
+          border-radius: 0.65rem !important;
+          background: var(--cd-white);
+        }
+
+        .catalog-btn {
+          background-color: var(--cd-primary);
+          color: var(--cd-primary-text);
+          border-radius: 0.7rem;
+          border: 0;
+          font-weight: 700;
+          transition: opacity 0.2s ease, transform 0.2s ease;
+        }
+
+        .catalog-btn:hover {
+          opacity: 0.92;
+          transform: translateY(-1px);
+        }
+
+        .catalog-btn-outline {
+          border-color: var(--cd-outline);
+          color: var(--cd-outline);
+          border-radius: 0.7rem;
+          font-weight: 700;
+          background: var(--cd-white);
+          transition: all 0.2s ease;
+        }
+
+        .catalog-btn-outline:hover {
+          background-color: var(--cd-outline);
+          color: var(--cd-primary-text);
+        }
+
+        .catalog-card {
+          background-color: var(--cd-card-bg);
+          border-color: var(--cd-card-border);
+        }
+
+        .catalog-badge {
+          background-color: var(--cd-badge-bg);
+          color: var(--cd-badge-text);
+        }
+
+        .catalog-price {
+          color: var(--cd-price);
+        }
+
+        @media (max-width: 1023px) {
+          .catalog-detail-main {
+            width: calc(100% - 18px);
+          }
+        }
+
+        @media (max-width: 720px) {
+          .catalog-detail-hero > div:last-child {
+            padding: 0.9rem;
+          }
+        }
       `}</style>
 
-      <header className="sticky top-0 z-40 border-b" style={{ backgroundColor: headerBgColor, color: headerTextColor }}>
+      <header className="catalog-detail-header sticky top-0 z-40 border-b" style={{ color: headerTextColor }}>
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
           <div className="flex items-center gap-6">
             <Button
@@ -619,7 +778,7 @@ export default function PublicProductDetails() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-4 py-6">
+      <main className="catalog-detail-main mx-auto max-w-6xl px-4 py-6">
         <div className="flex items-center gap-2 text-xs text-slate-400 mb-6">
           <Link to={`/catalogo/${slug}`} className="hover:text-slate-600">Início</Link>
           <ChevronRight className="h-3 w-3" />
@@ -628,7 +787,7 @@ export default function PublicProductDetails() {
           <span className="text-slate-600 font-medium">{product.name}</span>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+        <div className="catalog-detail-hero grid grid-cols-1 lg:grid-cols-2 gap-10">
           <div className="space-y-4">
             <div className="relative overflow-hidden rounded-2xl bg-slate-900 aspect-[4/5]">
               {isPromotionActive(product as Product) && (
@@ -761,7 +920,7 @@ export default function PublicProductDetails() {
                 </div>
                 <Button className="flex-1 catalog-btn" onClick={handleStartOrder}>
                   <ShoppingCart className="h-4 w-4 mr-2" />
-                  Adicionar ao Carrinho
+                  Fazer pedido agora
                 </Button>
                 <button className="h-10 w-10 rounded-lg border border-slate-200 text-slate-400 hover:text-rose-500">
                   <Heart className="h-4 w-4 mx-auto" />
@@ -788,7 +947,7 @@ export default function PublicProductDetails() {
           </div>
         </div>
 
-        <div className="mt-12 rounded-xl border border-slate-200 bg-white overflow-hidden">
+        <div className="catalog-detail-tabs mt-12 rounded-xl border border-slate-200 bg-white overflow-hidden">
           <div className="flex flex-wrap border-b border-slate-200 text-sm">
             {[
               { id: 'descricao', label: 'Descrição detalhada' },
@@ -842,7 +1001,7 @@ export default function PublicProductDetails() {
           </div>
         </div>
 
-        <div ref={orderFormRef} className="mt-12">
+        <div ref={orderFormRef} className="catalog-detail-order mt-12">
           <Card className="catalog-card border">
             <CardContent className="p-6 space-y-4">
               <div className="flex items-center justify-between">
@@ -1010,7 +1169,7 @@ export default function PublicProductDetails() {
         {relatedProducts.length > 0 && (
           <>
             <Separator className="my-12" />
-            <div>
+            <div className="catalog-detail-related">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-xl font-bold">Compre junto</h2>
                 <Link to={`/catalogo/${slug}`} className="text-xs text-primary">Ver catálogo completo</Link>
@@ -1073,7 +1232,7 @@ export default function PublicProductDetails() {
         )}
 
         <Separator className="my-12" />
-        <Card className="catalog-card border">
+        <Card className="catalog-detail-company catalog-card border">
           <CardContent className="p-6">
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
               <div className="flex items-center gap-4 flex-1">
@@ -1122,7 +1281,7 @@ export default function PublicProductDetails() {
         </Card>
       </main>
 
-      <footer className="border-t mt-12" style={{ backgroundColor: footerBgColor, color: footerTextColor }}>
+      <footer className="catalog-detail-footer border-t mt-12">
         <div className="mx-auto max-w-6xl px-4 py-8 grid gap-6 sm:grid-cols-2 md:grid-cols-4 text-sm">
           <div className="space-y-2">
             <h4 className="font-semibold">{company?.name}</h4>
