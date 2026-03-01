@@ -27,6 +27,11 @@ CREATE TABLE IF NOT EXISTS public.subscriptions (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
+-- When subscriptions already exists from previous schema versions,
+-- keep this migration idempotent by ensuring required CAKTO column exists.
+ALTER TABLE public.subscriptions
+  ADD COLUMN IF NOT EXISTS cakto_subscription_id text;
+
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_subscriptions_company_id ON public.subscriptions (company_id);
 CREATE INDEX IF NOT EXISTS idx_subscriptions_cakto_id ON public.subscriptions (cakto_subscription_id);

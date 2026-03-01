@@ -10,6 +10,11 @@ import { Package, Loader2, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { CpfCnpjInput, normalizeDigits, validateCpf } from '@/components/ui/masked-input';
 import { z } from 'zod';
+import {
+  isCustomerAccount,
+  isSuperAdminRole,
+  SUPER_ADMIN_HOME_PATH,
+} from '@/lib/access-control';
 
 const loginSchema = z.object({
   email: z.string().email('E-mail inválido'),
@@ -31,7 +36,7 @@ const signupSchema = z.object({
 export default function Auth() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { user, profile, needsOnboarding, signIn, signUp, loading: authLoading } = useAuth();
+  const { user, profile, role, needsOnboarding, signIn, signUp, loading: authLoading } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -52,23 +57,26 @@ export default function Auth() {
 
   const mustChangePassword = Boolean(profile?.must_change_password || profile?.force_password_change);
   const mustCompleteCompany = Boolean(profile?.must_complete_company || profile?.must_complete_onboarding);
-  const isCustomerAccount = String(user?.user_metadata?.account_type || '').toLowerCase() === 'customer';
+  const customerAccount = isCustomerAccount(user);
+  const isSuperAdmin = isSuperAdminRole(role);
 
   useEffect(() => {
     if (user && !authLoading) {
-      if (isCustomerAccount) {
+      if (customerAccount) {
         navigate('/minha-conta/pedidos', { replace: true });
         return;
       }
-      if (needsOnboarding || mustCompleteCompany) {
+      if (!isSuperAdmin && (needsOnboarding || mustCompleteCompany)) {
         navigate('/onboarding');
       } else if (mustChangePassword) {
         navigate('/alterar-senha');
+      } else if (isSuperAdmin) {
+        navigate(SUPER_ADMIN_HOME_PATH);
       } else {
         navigate('/dashboard');
       }
     }
-  }, [user, authLoading, isCustomerAccount, needsOnboarding, mustCompleteCompany, mustChangePassword, navigate]);
+  }, [user, authLoading, customerAccount, isSuperAdmin, needsOnboarding, mustCompleteCompany, mustChangePassword, navigate]);
 
   useEffect(() => {
     const tab = searchParams.get('tab');

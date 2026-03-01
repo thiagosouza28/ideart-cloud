@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { User } from '@supabase/supabase-js';
 import { Button } from '@/components/ui/button';
@@ -120,28 +120,6 @@ export default function PublicCustomerLogin() {
     };
   }, [companyContext]);
 
-  const linkCustomerToCompany = useCallback(
-    async (sessionUser?: User | null) => {
-      const resolvedUser = sessionUser || user;
-      const resolvedCompanyId =
-        catalogCompany?.id || (companyContext && isUuid(companyContext) ? companyContext : null);
-      if (!resolvedUser?.id || !resolvedCompanyId) return;
-
-      const metadata = (resolvedUser.user_metadata || {}) as Record<string, unknown>;
-      const { error } = await customerSupabase.rpc('upsert_catalog_customer_profile', {
-        p_company_id: resolvedCompanyId,
-        p_name: (typeof metadata.full_name === 'string' ? metadata.full_name : '').trim(),
-        p_phone: (resolvedUser.phone || (typeof metadata.phone === 'string' ? metadata.phone : '') || '').trim(),
-        p_document: (typeof metadata.cpf === 'string' ? metadata.cpf : '').trim(),
-        p_email: (resolvedUser.email || '').trim(),
-      });
-      if (error) {
-        console.warn('[catalog-customer] failed to link customer to company', error.message);
-      }
-    },
-    [catalogCompany?.id, companyContext, user],
-  );
-
   useEffect(() => {
     if (loading) return;
     if (!user) return;
@@ -153,10 +131,8 @@ export default function PublicCustomerLogin() {
       return;
     }
 
-    void linkCustomerToCompany(user).finally(() => {
-      navigate(targetPath, { replace: true });
-    });
-  }, [linkCustomerToCompany, loading, navigate, signOut, targetPath, user]);
+    navigate(targetPath, { replace: true });
+  }, [loading, navigate, signOut, targetPath, user]);
 
   const handleLoginSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -171,9 +147,6 @@ export default function PublicCustomerLogin() {
       return;
     }
 
-    const { data: userData } = await customerSupabase.auth.getUser();
-    const loggedUser = userData.user;
-    await linkCustomerToCompany(loggedUser);
     setSubmitting(false);
     navigate(targetPath, { replace: true });
   };
@@ -239,13 +212,12 @@ export default function PublicCustomerLogin() {
     if (!data.session) {
       setSuccessMessage(
         catalogCompany
-          ? `Conta criada. Confirme seu e-mail e depois entre novamente para vincular a ${catalogCompany.name}.`
+          ? `Conta criada. Confirme seu e-mail e depois entre novamente para acessar a ${catalogCompany.name}.`
           : 'Conta criada. Verifique seu e-mail para confirmar o acesso.',
       );
       return;
     }
 
-    await linkCustomerToCompany(data.user || null);
     navigate(targetPath, { replace: true });
   };
 
@@ -302,7 +274,7 @@ export default function PublicCustomerLogin() {
             </CardDescription>
             {catalogCompany && (
               <p className="text-xs text-slate-500">
-                Cadastro vinculado a loja <strong>{catalogCompany.name}</strong>.
+                Voce esta acessando a loja <strong>{catalogCompany.name}</strong>.
               </p>
             )}
           </CardHeader>

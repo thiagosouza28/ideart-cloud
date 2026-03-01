@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { AppRole } from '@/types/database';
 import { ensurePublicStorageUrl } from '@/lib/storage';
 import { useTheme } from 'next-themes';
+import { SUPER_ADMIN_HOME_PATH } from '@/lib/access-control';
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -68,13 +69,23 @@ export function AppLayout({ children }: AppLayoutProps) {
     };
   }, []);
 
-  const navItems = useMemo(() => ([
-    { label: 'Início', url: '/dashboard', roles: ['super_admin', 'admin', 'financeiro', 'atendente', 'caixa', 'producao'] as AppRole[] },
-    { label: 'Pedidos', url: '/pedidos', roles: ['admin', 'atendente', 'caixa'] as AppRole[] },
-    { label: 'Catálogo', url: '/catalogo-admin', roles: ['admin'] as AppRole[] },
-    { label: 'Financeiro', url: '/financeiro/fluxo-caixa', roles: ['super_admin', 'admin', 'financeiro', 'atendente', 'producao'] as AppRole[] },
-    { label: 'Perfil', url: '/perfil', roles: ['super_admin', 'admin', 'financeiro', 'atendente', 'caixa', 'producao'] as AppRole[] },
-  ]), []);
+  const navItems = useMemo(() => {
+    if (role === 'super_admin') {
+      return [
+        { label: 'Empresas', url: SUPER_ADMIN_HOME_PATH, roles: ['super_admin'] as AppRole[] },
+        { label: 'Usuários', url: '/usuarios', roles: ['super_admin'] as AppRole[] },
+        { label: 'Testar Loja', url: '/admin/entrar-como-cliente', roles: ['super_admin'] as AppRole[] },
+      ];
+    }
+
+    return [
+      { label: 'Início', url: '/dashboard', roles: ['admin', 'financeiro', 'atendente', 'caixa', 'producao'] as AppRole[] },
+      { label: 'Pedidos', url: '/pedidos', roles: ['admin', 'atendente', 'caixa'] as AppRole[] },
+      { label: 'Catálogo', url: '/catalogo-admin', roles: ['admin'] as AppRole[] },
+      { label: 'Financeiro', url: '/financeiro/fluxo-caixa', roles: ['admin', 'financeiro', 'atendente', 'producao'] as AppRole[] },
+      { label: 'Perfil', url: '/perfil', roles: ['admin', 'financeiro', 'atendente', 'caixa', 'producao'] as AppRole[] },
+    ];
+  }, [role]);
 
   const visibleNavItems = navItems.filter((item) => hasPermission(item.roles));
 

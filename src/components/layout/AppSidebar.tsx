@@ -76,11 +76,7 @@ const secondaryMenu: MenuItem[] = [
 ];
 
 const superAdminMenu: MenuItem[] = [
-  { title: 'Painel', url: '/super-admin', icon: LayoutDashboard, roles: ['super_admin'] },
-  { title: 'Fluxo de Caixa', url: '/financeiro/fluxo-caixa', icon: CreditCard, roles: ['super_admin'] },
-  { title: 'Relatórios', url: '/financeiro/relatorios', icon: BarChart3, roles: ['super_admin'] },
-  { title: 'Empresas SaaS', url: '/super-admin/empresas', icon: Building2, roles: ['super_admin'] },
-  { title: 'Planos', url: '/super-admin/planos', icon: CreditCard, roles: ['super_admin'] },
+  { title: 'Empresas / Lojas', url: '/super-admin/empresas', icon: Building2, roles: ['super_admin'] },
   { title: 'Entrar como cliente', url: '/admin/entrar-como-cliente', icon: Shield, roles: ['super_admin'] },
   { title: 'Usuários', url: '/usuarios', icon: Users, roles: ['super_admin'] },
 ];

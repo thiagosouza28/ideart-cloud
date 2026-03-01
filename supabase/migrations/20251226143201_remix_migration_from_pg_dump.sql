@@ -1490,7 +1490,7 @@ BEGIN
       AND tablename = 'attribute_values'
       AND policyname = 'Admin/Atendente can manage attribute_values'
   ) THEN
-    CREATE POLICY "Admin/Atendente can manage attribute_values" ON public.attribute_valuesTO authenticated USING ((public.has_role(auth.uid(), 'admin'::public.app_role) OR public.has_role(auth.uid(), 'atendente'::public.app_role)));
+    CREATE POLICY "Admin/Atendente can manage attribute_values" ON public.attribute_values TO authenticated USING ((public.has_role(auth.uid(), 'admin'::public.app_role) OR public.has_role(auth.uid(), 'atendente'::public.app_role)));
   END IF;
 EXCEPTION
   WHEN duplicate_object THEN NULL;
@@ -1510,7 +1510,7 @@ BEGIN
       AND tablename = 'attributes'
       AND policyname = 'Admin/Atendente can manage attributes'
   ) THEN
-    CREATE POLICY "Admin/Atendente can manage attributes" ON public.attributesTO authenticated USING ((public.has_role(auth.uid(), 'admin'::public.app_role) OR public.has_role(auth.uid(), 'atendente'::public.app_role)));
+    CREATE POLICY "Admin/Atendente can manage attributes" ON public.attributes TO authenticated USING ((public.has_role(auth.uid(), 'admin'::public.app_role) OR public.has_role(auth.uid(), 'atendente'::public.app_role)));
   END IF;
 EXCEPTION
   WHEN duplicate_object THEN NULL;
@@ -1530,7 +1530,7 @@ BEGIN
       AND tablename = 'categories'
       AND policyname = 'Admin/Atendente can manage categories'
   ) THEN
-    CREATE POLICY "Admin/Atendente can manage categories" ON public.categoriesTO authenticated USING ((public.has_role(auth.uid(), 'admin'::public.app_role) OR public.has_role(auth.uid(), 'atendente'::public.app_role)));
+    CREATE POLICY "Admin/Atendente can manage categories" ON public.categories TO authenticated USING ((public.has_role(auth.uid(), 'admin'::public.app_role) OR public.has_role(auth.uid(), 'atendente'::public.app_role)));
   END IF;
 EXCEPTION
   WHEN duplicate_object THEN NULL;
@@ -1550,7 +1550,7 @@ BEGIN
       AND tablename = 'customers'
       AND policyname = 'Admin/Atendente can manage customers'
   ) THEN
-    CREATE POLICY "Admin/Atendente can manage customers" ON public.customersTO authenticated USING ((public.has_role(auth.uid(), 'admin'::public.app_role) OR public.has_role(auth.uid(), 'atendente'::public.app_role)));
+    CREATE POLICY "Admin/Atendente can manage customers" ON public.customers TO authenticated USING ((public.has_role(auth.uid(), 'admin'::public.app_role) OR public.has_role(auth.uid(), 'atendente'::public.app_role)));
   END IF;
 EXCEPTION
   WHEN duplicate_object THEN NULL;
@@ -1570,7 +1570,7 @@ BEGIN
       AND tablename = 'price_tiers'
       AND policyname = 'Admin/Atendente can manage price_tiers'
   ) THEN
-    CREATE POLICY "Admin/Atendente can manage price_tiers" ON public.price_tiersTO authenticated USING ((public.has_role(auth.uid(), 'admin'::public.app_role) OR public.has_role(auth.uid(), 'atendente'::public.app_role)));
+    CREATE POLICY "Admin/Atendente can manage price_tiers" ON public.price_tiers TO authenticated USING ((public.has_role(auth.uid(), 'admin'::public.app_role) OR public.has_role(auth.uid(), 'atendente'::public.app_role)));
   END IF;
 EXCEPTION
   WHEN duplicate_object THEN NULL;
@@ -1590,7 +1590,7 @@ BEGIN
       AND tablename = 'product_attributes'
       AND policyname = 'Admin/Atendente can manage product_attributes'
   ) THEN
-    CREATE POLICY "Admin/Atendente can manage product_attributes" ON public.product_attributesTO authenticated USING ((public.has_role(auth.uid(), 'admin'::public.app_role) OR public.has_role(auth.uid(), 'atendente'::public.app_role)));
+    CREATE POLICY "Admin/Atendente can manage product_attributes" ON public.product_attributes TO authenticated USING ((public.has_role(auth.uid(), 'admin'::public.app_role) OR public.has_role(auth.uid(), 'atendente'::public.app_role)));
   END IF;
 EXCEPTION
   WHEN duplicate_object THEN NULL;
@@ -1610,7 +1610,7 @@ BEGIN
       AND tablename = 'product_supplies'
       AND policyname = 'Admin/Atendente can manage product_supplies'
   ) THEN
-    CREATE POLICY "Admin/Atendente can manage product_supplies" ON public.product_suppliesTO authenticated USING ((public.has_role(auth.uid(), 'admin'::public.app_role) OR public.has_role(auth.uid(), 'atendente'::public.app_role)));
+    CREATE POLICY "Admin/Atendente can manage product_supplies" ON public.product_supplies TO authenticated USING ((public.has_role(auth.uid(), 'admin'::public.app_role) OR public.has_role(auth.uid(), 'atendente'::public.app_role)));
   END IF;
 EXCEPTION
   WHEN duplicate_object THEN NULL;
@@ -1630,7 +1630,7 @@ BEGIN
       AND tablename = 'products'
       AND policyname = 'Admin/Atendente can manage products'
   ) THEN
-    CREATE POLICY "Admin/Atendente can manage products" ON public.productsTO authenticated USING ((public.has_role(auth.uid(), 'admin'::public.app_role) OR public.has_role(auth.uid(), 'atendente'::public.app_role)));
+    CREATE POLICY "Admin/Atendente can manage products" ON public.products TO authenticated USING ((public.has_role(auth.uid(), 'admin'::public.app_role) OR public.has_role(auth.uid(), 'atendente'::public.app_role)));
   END IF;
 EXCEPTION
   WHEN duplicate_object THEN NULL;
@@ -1650,7 +1650,7 @@ BEGIN
       AND tablename = 'supplies'
       AND policyname = 'Admin/Atendente can manage supplies'
   ) THEN
-    CREATE POLICY "Admin/Atendente can manage supplies" ON public.suppliesTO authenticated USING ((public.has_role(auth.uid(), 'admin'::public.app_role) OR public.has_role(auth.uid(), 'atendente'::public.app_role)));
+    CREATE POLICY "Admin/Atendente can manage supplies" ON public.supplies TO authenticated USING ((public.has_role(auth.uid(), 'admin'::public.app_role) OR public.has_role(auth.uid(), 'atendente'::public.app_role)));
   END IF;
 EXCEPTION
   WHEN duplicate_object THEN NULL;
@@ -1670,7 +1670,7 @@ BEGIN
       AND tablename = 'sales'
       AND policyname = 'Admin/Caixa can manage sales'
   ) THEN
-    CREATE POLICY "Admin/Caixa can manage sales" ON public.salesFOR INSERT TO authenticated WITH CHECK ((public.has_role(auth.uid(), 'admin'::public.app_role) OR public.has_role(auth.uid(), 'caixa'::public.app_role)));
+    CREATE POLICY "Admin/Caixa can manage sales" ON public.sales FOR INSERT TO authenticated WITH CHECK ((public.has_role(auth.uid(), 'admin'::public.app_role) OR public.has_role(auth.uid(), 'caixa'::public.app_role)));
   END IF;
 EXCEPTION
   WHEN duplicate_object THEN NULL;
@@ -1690,7 +1690,7 @@ BEGIN
       AND tablename = 'user_roles'
       AND policyname = 'Admins can delete roles'
   ) THEN
-    CREATE POLICY "Admins can delete roles" ON public.user_rolesFOR DELETE TO authenticated USING (public.has_role(auth.uid(), 'admin'::public.app_role));
+    CREATE POLICY "Admins can delete roles" ON public.user_roles FOR DELETE TO authenticated USING (public.has_role(auth.uid(), 'admin'::public.app_role));
   END IF;
 EXCEPTION
   WHEN duplicate_object THEN NULL;
@@ -1710,7 +1710,7 @@ BEGIN
       AND tablename = 'user_roles'
       AND policyname = 'Admins can insert roles'
   ) THEN
-    CREATE POLICY "Admins can insert roles" ON public.user_rolesFOR INSERT TO authenticated WITH CHECK (public.has_role(auth.uid(), 'admin'::public.app_role));
+    CREATE POLICY "Admins can insert roles" ON public.user_roles FOR INSERT TO authenticated WITH CHECK (public.has_role(auth.uid(), 'admin'::public.app_role));
   END IF;
 EXCEPTION
   WHEN duplicate_object THEN NULL;
@@ -1730,7 +1730,7 @@ BEGIN
       AND tablename = 'companies'
       AND policyname = 'Admins can manage companies'
   ) THEN
-    CREATE POLICY "Admins can manage companies" ON public.companiesUSING (public.has_role(auth.uid(), 'admin'::public.app_role));
+    CREATE POLICY "Admins can manage companies" ON public.companies USING (public.has_role(auth.uid(), 'admin'::public.app_role));
   END IF;
 EXCEPTION
   WHEN duplicate_object THEN NULL;
@@ -1750,7 +1750,7 @@ BEGIN
       AND tablename = 'user_roles'
       AND policyname = 'Admins can update roles'
   ) THEN
-    CREATE POLICY "Admins can update roles" ON public.user_rolesFOR UPDATE TO authenticated USING (public.has_role(auth.uid(), 'admin'::public.app_role));
+    CREATE POLICY "Admins can update roles" ON public.user_roles FOR UPDATE TO authenticated USING (public.has_role(auth.uid(), 'admin'::public.app_role));
   END IF;
 EXCEPTION
   WHEN duplicate_object THEN NULL;
@@ -1790,7 +1790,7 @@ BEGIN
       AND tablename = 'plans'
       AND policyname = 'Anyone can view active plans'
   ) THEN
-    CREATE POLICY "Anyone can view active plans" ON public.plansFOR SELECT USING ((is_active = true));
+    CREATE POLICY "Anyone can view active plans" ON public.plans FOR SELECT USING ((is_active = true));
   END IF;
 EXCEPTION
   WHEN duplicate_object THEN NULL;
@@ -1810,7 +1810,7 @@ BEGIN
       AND tablename = 'order_status_history'
       AND policyname = 'Authenticated can insert order_status_history'
   ) THEN
-    CREATE POLICY "Authenticated can insert order_status_history" ON public.order_status_historyFOR INSERT TO authenticated WITH CHECK (true);
+    CREATE POLICY "Authenticated can insert order_status_history" ON public.order_status_history FOR INSERT TO authenticated WITH CHECK (true);
   END IF;
 EXCEPTION
   WHEN duplicate_object THEN NULL;
@@ -1830,7 +1830,7 @@ BEGIN
       AND tablename = 'sale_items'
       AND policyname = 'Authenticated can insert sale_items'
   ) THEN
-    CREATE POLICY "Authenticated can insert sale_items" ON public.sale_itemsFOR INSERT TO authenticated WITH CHECK (true);
+    CREATE POLICY "Authenticated can insert sale_items" ON public.sale_items FOR INSERT TO authenticated WITH CHECK (true);
   END IF;
 EXCEPTION
   WHEN duplicate_object THEN NULL;
@@ -1850,7 +1850,7 @@ BEGIN
       AND tablename = 'stock_movements'
       AND policyname = 'Authenticated can insert stock_movements'
   ) THEN
-    CREATE POLICY "Authenticated can insert stock_movements" ON public.stock_movementsFOR INSERT TO authenticated WITH CHECK (true);
+    CREATE POLICY "Authenticated can insert stock_movements" ON public.stock_movements FOR INSERT TO authenticated WITH CHECK (true);
   END IF;
 EXCEPTION
   WHEN duplicate_object THEN NULL;
@@ -1870,7 +1870,7 @@ BEGIN
       AND tablename = 'order_items'
       AND policyname = 'Authenticated can manage order_items'
   ) THEN
-    CREATE POLICY "Authenticated can manage order_items" ON public.order_itemsTO authenticated USING (true);
+    CREATE POLICY "Authenticated can manage order_items" ON public.order_items TO authenticated USING (true);
   END IF;
 EXCEPTION
   WHEN duplicate_object THEN NULL;
@@ -1890,7 +1890,7 @@ BEGIN
       AND tablename = 'orders'
       AND policyname = 'Authenticated can manage orders'
   ) THEN
-    CREATE POLICY "Authenticated can manage orders" ON public.ordersTO authenticated USING (true);
+    CREATE POLICY "Authenticated can manage orders" ON public.orders TO authenticated USING (true);
   END IF;
 EXCEPTION
   WHEN duplicate_object THEN NULL;
@@ -1910,7 +1910,7 @@ BEGIN
       AND tablename = 'attribute_values'
       AND policyname = 'Authenticated can view attribute_values'
   ) THEN
-    CREATE POLICY "Authenticated can view attribute_values" ON public.attribute_valuesFOR SELECT TO authenticated USING (true);
+    CREATE POLICY "Authenticated can view attribute_values" ON public.attribute_values FOR SELECT TO authenticated USING (true);
   END IF;
 EXCEPTION
   WHEN duplicate_object THEN NULL;
@@ -1930,7 +1930,7 @@ BEGIN
       AND tablename = 'attributes'
       AND policyname = 'Authenticated can view attributes'
   ) THEN
-    CREATE POLICY "Authenticated can view attributes" ON public.attributesFOR SELECT TO authenticated USING (true);
+    CREATE POLICY "Authenticated can view attributes" ON public.attributes FOR SELECT TO authenticated USING (true);
   END IF;
 EXCEPTION
   WHEN duplicate_object THEN NULL;
@@ -1950,7 +1950,7 @@ BEGIN
       AND tablename = 'categories'
       AND policyname = 'Authenticated can view categories'
   ) THEN
-    CREATE POLICY "Authenticated can view categories" ON public.categoriesFOR SELECT TO authenticated USING (true);
+    CREATE POLICY "Authenticated can view categories" ON public.categories FOR SELECT TO authenticated USING (true);
   END IF;
 EXCEPTION
   WHEN duplicate_object THEN NULL;
@@ -1970,7 +1970,7 @@ BEGIN
       AND tablename = 'companies'
       AND policyname = 'Authenticated can view companies'
   ) THEN
-    CREATE POLICY "Authenticated can view companies" ON public.companiesFOR SELECT USING (true);
+    CREATE POLICY "Authenticated can view companies" ON public.companies FOR SELECT USING (true);
   END IF;
 EXCEPTION
   WHEN duplicate_object THEN NULL;
@@ -1990,7 +1990,7 @@ BEGIN
       AND tablename = 'customers'
       AND policyname = 'Authenticated can view customers'
   ) THEN
-    CREATE POLICY "Authenticated can view customers" ON public.customersFOR SELECT TO authenticated USING (true);
+    CREATE POLICY "Authenticated can view customers" ON public.customers FOR SELECT TO authenticated USING (true);
   END IF;
 EXCEPTION
   WHEN duplicate_object THEN NULL;
@@ -2010,7 +2010,7 @@ BEGIN
       AND tablename = 'order_items'
       AND policyname = 'Authenticated can view order_items'
   ) THEN
-    CREATE POLICY "Authenticated can view order_items" ON public.order_itemsFOR SELECT TO authenticated USING (true);
+    CREATE POLICY "Authenticated can view order_items" ON public.order_items FOR SELECT TO authenticated USING (true);
   END IF;
 EXCEPTION
   WHEN duplicate_object THEN NULL;
@@ -2030,7 +2030,7 @@ BEGIN
       AND tablename = 'order_status_history'
       AND policyname = 'Authenticated can view order_status_history'
   ) THEN
-    CREATE POLICY "Authenticated can view order_status_history" ON public.order_status_historyFOR SELECT TO authenticated USING (true);
+    CREATE POLICY "Authenticated can view order_status_history" ON public.order_status_history FOR SELECT TO authenticated USING (true);
   END IF;
 EXCEPTION
   WHEN duplicate_object THEN NULL;
@@ -2050,7 +2050,7 @@ BEGIN
       AND tablename = 'orders'
       AND policyname = 'Authenticated can view orders'
   ) THEN
-    CREATE POLICY "Authenticated can view orders" ON public.ordersFOR SELECT TO authenticated USING (true);
+    CREATE POLICY "Authenticated can view orders" ON public.orders FOR SELECT TO authenticated USING (true);
   END IF;
 EXCEPTION
   WHEN duplicate_object THEN NULL;
@@ -2070,7 +2070,7 @@ BEGIN
       AND tablename = 'price_tiers'
       AND policyname = 'Authenticated can view price_tiers'
   ) THEN
-    CREATE POLICY "Authenticated can view price_tiers" ON public.price_tiersFOR SELECT TO authenticated USING (true);
+    CREATE POLICY "Authenticated can view price_tiers" ON public.price_tiers FOR SELECT TO authenticated USING (true);
   END IF;
 EXCEPTION
   WHEN duplicate_object THEN NULL;
@@ -2090,7 +2090,7 @@ BEGIN
       AND tablename = 'product_attributes'
       AND policyname = 'Authenticated can view product_attributes'
   ) THEN
-    CREATE POLICY "Authenticated can view product_attributes" ON public.product_attributesFOR SELECT TO authenticated USING (true);
+    CREATE POLICY "Authenticated can view product_attributes" ON public.product_attributes FOR SELECT TO authenticated USING (true);
   END IF;
 EXCEPTION
   WHEN duplicate_object THEN NULL;
@@ -2110,7 +2110,7 @@ BEGIN
       AND tablename = 'product_supplies'
       AND policyname = 'Authenticated can view product_supplies'
   ) THEN
-    CREATE POLICY "Authenticated can view product_supplies" ON public.product_suppliesFOR SELECT TO authenticated USING (true);
+    CREATE POLICY "Authenticated can view product_supplies" ON public.product_supplies FOR SELECT TO authenticated USING (true);
   END IF;
 EXCEPTION
   WHEN duplicate_object THEN NULL;
@@ -2130,7 +2130,7 @@ BEGIN
       AND tablename = 'products'
       AND policyname = 'Authenticated can view products'
   ) THEN
-    CREATE POLICY "Authenticated can view products" ON public.productsFOR SELECT TO authenticated USING (true);
+    CREATE POLICY "Authenticated can view products" ON public.products FOR SELECT TO authenticated USING (true);
   END IF;
 EXCEPTION
   WHEN duplicate_object THEN NULL;
@@ -2150,7 +2150,7 @@ BEGIN
       AND tablename = 'sale_items'
       AND policyname = 'Authenticated can view sale_items'
   ) THEN
-    CREATE POLICY "Authenticated can view sale_items" ON public.sale_itemsFOR SELECT TO authenticated USING (true);
+    CREATE POLICY "Authenticated can view sale_items" ON public.sale_items FOR SELECT TO authenticated USING (true);
   END IF;
 EXCEPTION
   WHEN duplicate_object THEN NULL;
@@ -2170,7 +2170,7 @@ BEGIN
       AND tablename = 'sales'
       AND policyname = 'Authenticated can view sales'
   ) THEN
-    CREATE POLICY "Authenticated can view sales" ON public.salesFOR SELECT TO authenticated USING (true);
+    CREATE POLICY "Authenticated can view sales" ON public.sales FOR SELECT TO authenticated USING (true);
   END IF;
 EXCEPTION
   WHEN duplicate_object THEN NULL;
@@ -2190,7 +2190,7 @@ BEGIN
       AND tablename = 'stock_movements'
       AND policyname = 'Authenticated can view stock_movements'
   ) THEN
-    CREATE POLICY "Authenticated can view stock_movements" ON public.stock_movementsFOR SELECT TO authenticated USING (true);
+    CREATE POLICY "Authenticated can view stock_movements" ON public.stock_movements FOR SELECT TO authenticated USING (true);
   END IF;
 EXCEPTION
   WHEN duplicate_object THEN NULL;
@@ -2210,7 +2210,7 @@ BEGIN
       AND tablename = 'supplies'
       AND policyname = 'Authenticated can view supplies'
   ) THEN
-    CREATE POLICY "Authenticated can view supplies" ON public.suppliesFOR SELECT TO authenticated USING (true);
+    CREATE POLICY "Authenticated can view supplies" ON public.supplies FOR SELECT TO authenticated USING (true);
   END IF;
 EXCEPTION
   WHEN duplicate_object THEN NULL;
@@ -2230,7 +2230,7 @@ BEGIN
       AND tablename = 'companies'
       AND policyname = 'Public can view active companies by slug'
   ) THEN
-    CREATE POLICY "Public can view active companies by slug" ON public.companiesFOR SELECT TO anon USING ((is_active = true));
+    CREATE POLICY "Public can view active companies by slug" ON public.companies FOR SELECT TO anon USING ((is_active = true));
   END IF;
 EXCEPTION
   WHEN duplicate_object THEN NULL;
@@ -2250,7 +2250,7 @@ BEGIN
       AND tablename = 'products'
       AND policyname = 'Public can view catalog products'
   ) THEN
-    CREATE POLICY "Public can view catalog products" ON public.productsFOR SELECT TO anon USING (((show_in_catalog = true) AND (is_active = true)));
+    CREATE POLICY "Public can view catalog products" ON public.products FOR SELECT TO anon USING (((show_in_catalog = true) AND (is_active = true)));
   END IF;
 EXCEPTION
   WHEN duplicate_object THEN NULL;
@@ -2270,7 +2270,7 @@ BEGIN
       AND tablename = 'companies'
       AND policyname = 'Super admin can manage all companies'
   ) THEN
-    CREATE POLICY "Super admin can manage all companies" ON public.companiesUSING (public.has_role(auth.uid(), 'super_admin'::public.app_role));
+    CREATE POLICY "Super admin can manage all companies" ON public.companies USING (public.has_role(auth.uid(), 'super_admin'::public.app_role));
   END IF;
 EXCEPTION
   WHEN duplicate_object THEN NULL;
@@ -2290,7 +2290,7 @@ BEGIN
       AND tablename = 'user_roles'
       AND policyname = 'Super admin can manage all user_roles'
   ) THEN
-    CREATE POLICY "Super admin can manage all user_roles" ON public.user_rolesUSING (public.has_role(auth.uid(), 'super_admin'::public.app_role));
+    CREATE POLICY "Super admin can manage all user_roles" ON public.user_roles USING (public.has_role(auth.uid(), 'super_admin'::public.app_role));
   END IF;
 EXCEPTION
   WHEN duplicate_object THEN NULL;
@@ -2310,7 +2310,7 @@ BEGIN
       AND tablename = 'plans'
       AND policyname = 'Super admin can manage plans'
   ) THEN
-    CREATE POLICY "Super admin can manage plans" ON public.plansUSING (public.has_role(auth.uid(), 'super_admin'::public.app_role));
+    CREATE POLICY "Super admin can manage plans" ON public.plans USING (public.has_role(auth.uid(), 'super_admin'::public.app_role));
   END IF;
 EXCEPTION
   WHEN duplicate_object THEN NULL;
@@ -2330,7 +2330,7 @@ BEGIN
       AND tablename = 'profiles'
       AND policyname = 'Super admin can view all profiles'
   ) THEN
-    CREATE POLICY "Super admin can view all profiles" ON public.profilesFOR SELECT USING (public.has_role(auth.uid(), 'super_admin'::public.app_role));
+    CREATE POLICY "Super admin can view all profiles" ON public.profiles FOR SELECT USING (public.has_role(auth.uid(), 'super_admin'::public.app_role));
   END IF;
 EXCEPTION
   WHEN duplicate_object THEN NULL;
@@ -2350,7 +2350,7 @@ BEGIN
       AND tablename = 'profiles'
       AND policyname = 'Users can update own profile'
   ) THEN
-    CREATE POLICY "Users can update own profile" ON public.profilesFOR UPDATE TO authenticated USING ((auth.uid() = id));
+    CREATE POLICY "Users can update own profile" ON public.profiles FOR UPDATE TO authenticated USING ((auth.uid() = id));
   END IF;
 EXCEPTION
   WHEN duplicate_object THEN NULL;
@@ -2370,7 +2370,7 @@ BEGIN
       AND tablename = 'profiles'
       AND policyname = 'Users can view all profiles'
   ) THEN
-    CREATE POLICY "Users can view all profiles" ON public.profilesFOR SELECT TO authenticated USING (true);
+    CREATE POLICY "Users can view all profiles" ON public.profiles FOR SELECT TO authenticated USING (true);
   END IF;
 EXCEPTION
   WHEN duplicate_object THEN NULL;
@@ -2539,3 +2539,5 @@ ALTER TABLE public.user_roles ENABLE ROW LEVEL SECURITY;
 
 
 COMMIT;
+
+

@@ -6,6 +6,7 @@ import { AppRole, Company, Profile } from '@/types/database';
 import { computeSubscriptionState, type SubscriptionState } from '@/services/subscription';
 import { invokePublicFunction } from '@/services/publicFunctions';
 import { isInvalidRefreshTokenError, resetAuthSession, wasAuthResetRecently } from '@/lib/auth';
+import { isCustomerAccount } from '@/lib/access-control';
 
 interface AuthContextType {
   user: User | null;
@@ -72,9 +73,6 @@ const loadImpersonationAdmin = () => {
     return null;
   }
 };
-
-const isCustomerAccount = (candidate?: User | null) =>
-  String(candidate?.user_metadata?.account_type || '').toLowerCase() === 'customer';
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
@@ -327,7 +325,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const [profileResult, roleResult] = await Promise.all([
         supabase.from('profiles').select('*').eq('id', userId).maybeSingle(),
-        supabase.from('user_roles').select('role').eq('user_id', userId).maybeSingle()
+        supabase.rpc('get_user_role', { _user_id: userId } as any)
       ]);
 
       if (profileResult.error) {
@@ -339,11 +337,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       let profileData = profileResult.data as Profile | null;
-      const userRole = roleResult.data?.role as AppRole | undefined;
+      const userRole = (roleResult.data as AppRole | null | undefined) ?? null;
 
-      // Fallback: If profile has no company_id, check company_users table
-      // This happens if the profile trigger didn't fire or if the user was just created via Edge Function
-      if (profileData && !profileData.company_id) {
+      // Fallback: recover company link from company_users when profile is missing
+      // or has no company_id (old/broken onboarding rows).
+      if (!profileData?.company_id) {
         const { data: companyUserLink } = await supabase
           .from('company_users')
           .select('company_id')
@@ -352,20 +350,51 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (companyUserLink?.company_id) {
           console.log('Found company link via company_users table:', companyUserLink.company_id);
-          // Update local profile state temporarily (or persist it if we wanted to be aggressive)
-          profileData = { ...profileData, company_id: companyUserLink.company_id };
+          if (profileData) {
+            profileData = { ...profileData, company_id: companyUserLink.company_id };
+          } else {
+            const nowIso = new Date().toISOString();
+            const fallbackEmail = session?.user?.email ?? user?.email ?? null;
+            const fallbackName = String(
+              session?.user?.user_metadata?.full_name ??
+              user?.user_metadata?.full_name ??
+              fallbackEmail ??
+              'Usuario'
+            );
 
-          // Optionally attempt to fix the profile in background
-          supabase.from('profiles').update({ company_id: companyUserLink.company_id }).eq('id', userId).then();
+            profileData = {
+              id: userId,
+              full_name: fallbackName,
+              email: fallbackEmail,
+              cpf: null,
+              avatar_url: null,
+              company_id: companyUserLink.company_id,
+              force_password_change: false,
+              must_change_password: false,
+              must_complete_onboarding: false,
+              must_complete_company: false,
+              password_defined: true,
+              created_at: nowIso,
+              updated_at: nowIso,
+            } as Profile;
+          }
+
+          // Attempt to heal the persisted profile row if it already exists.
+          void supabase
+            .from('profiles')
+            .update({ company_id: companyUserLink.company_id })
+            .eq('id', userId);
         }
       }
 
       setProfile(profileData);
-      setRole(userRole ?? null);
+      setRole(userRole);
 
-      const requiresOnboarding =
-        Boolean(profileData?.must_complete_onboarding) || Boolean(profileData?.must_complete_company);
-      const missingCompany = !profileData?.company_id && userRole !== 'super_admin';
+      const isSuperAdmin = userRole === 'super_admin';
+      const requiresOnboarding = !isSuperAdmin && (
+        Boolean(profileData?.must_complete_onboarding) || Boolean(profileData?.must_complete_company)
+      );
+      const missingCompany = !profileData?.company_id && !isSuperAdmin;
       if (requiresOnboarding || missingCompany) {
         console.log('User needs onboarding', { requiresOnboarding, missingCompany });
         setNeedsOnboarding(true);

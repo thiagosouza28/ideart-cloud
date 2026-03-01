@@ -85,14 +85,24 @@ serve(async (req) => {
       return jsonResponse(corsHeaders, 401, { error: "Sessão inválida" });
     }
 
-    const { data: roleData } = await supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", authData.user.id)
-      .in("role", ["admin", "super_admin"])
-      .maybeSingle();
+    const [{ data: superAdminRole }, { data: adminRole }] = await Promise.all([
+      supabase
+        .from("super_admin_users")
+        .select("id")
+        .eq("user_id", authData.user.id)
+        .maybeSingle(),
+      supabase
+        .from("user_roles")
+        .select("id")
+        .eq("user_id", authData.user.id)
+        .eq("role", "admin")
+        .maybeSingle(),
+    ]);
 
-    if (!roleData) {
+    const isSuperAdmin = Boolean(superAdminRole);
+    const isAdmin = Boolean(adminRole);
+
+    if (!isSuperAdmin && !isAdmin) {
       return jsonResponse(corsHeaders, 403, { error: "Not authorized" });
     }
 
@@ -102,15 +112,25 @@ serve(async (req) => {
       .eq("id", authData.user.id)
       .maybeSingle();
 
-    if (!profile?.company_id) {
-      return jsonResponse(corsHeaders, 400, { error: "company_id ausente" });
-    }
-
     const body = (await req.json().catch(() => ({}))) as ResetRequest;
-    const targetCompanyId = body.company_id ?? body.companyId ?? profile.company_id;
+    const requestedCompanyId = body.company_id ?? body.companyId ?? null;
+    const requesterCompanyId = profile?.company_id ?? null;
 
-    if (targetCompanyId !== profile.company_id) {
-      return jsonResponse(corsHeaders, 403, { error: "Company mismatch" });
+    let targetCompanyId: string | null = null;
+
+    if (isSuperAdmin) {
+      targetCompanyId = requestedCompanyId ?? requesterCompanyId;
+      if (!targetCompanyId) {
+        return jsonResponse(corsHeaders, 400, { error: "company_id e obrigatorio para super admin" });
+      }
+    } else {
+      if (!requesterCompanyId) {
+        return jsonResponse(corsHeaders, 400, { error: "company_id ausente" });
+      }
+      if (requestedCompanyId && requestedCompanyId !== requesterCompanyId) {
+        return jsonResponse(corsHeaders, 403, { error: "Company mismatch" });
+      }
+      targetCompanyId = requesterCompanyId;
     }
 
     const serviceClient = getServiceClient();

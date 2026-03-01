@@ -53,6 +53,7 @@ export default function ChangePassword() {
           must_change_password: false,
           must_complete_onboarding: false,
           must_complete_company: false,
+          password_defined: true,
         })
         .eq('id', user.id);
 
@@ -64,7 +65,7 @@ export default function ChangePassword() {
       await refreshUserData();
       clearPasswordRecovery();
       setNotice('Senha atualizada com sucesso.');
-      navigate(passwordRecovery ? '/auth' : '/dashboard', { replace: true });
+      navigate('/dashboard', { replace: true });
     } catch {
       setError('Não foi possível atualizar a senha. Tente novamente.');
     } finally {

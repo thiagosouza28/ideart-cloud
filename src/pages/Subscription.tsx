@@ -372,15 +372,18 @@ export default function Subscription() {
   ====================================================== */
   if (loading) {
     return (
-      <div className="page-container flex min-h-[400px] items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="min-h-screen bg-background px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+        <div className="mx-auto flex min-h-[65vh] w-full max-w-6xl items-center justify-center rounded-2xl border bg-card shadow-sm">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="page-container w-full max-w-none">
-      <div className="page-header">
+    <div className="min-h-screen bg-background px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+      <div className="mx-auto w-full max-w-6xl space-y-6">
+      <div className="rounded-2xl border bg-card p-5 shadow-sm sm:p-6">
         <div>
           <h1 className="page-title">Assinatura e Catálogo</h1>
           <p className="text-muted-foreground mt-1">
@@ -653,6 +656,7 @@ export default function Subscription() {
           );
         })}
       </div>
+    </div>
     </div>
   );
 }

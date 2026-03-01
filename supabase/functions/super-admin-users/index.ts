@@ -58,10 +58,9 @@ Deno.serve(async (req) => {
     }
 
     const { data: roleData } = await supabase
-      .from("user_roles")
-      .select("role")
+      .from("super_admin_users")
+      .select("id")
       .eq("user_id", authData.user.id)
-      .eq("role", "super_admin")
       .maybeSingle();
 
     if (!roleData) {

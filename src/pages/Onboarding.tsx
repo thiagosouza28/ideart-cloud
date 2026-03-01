@@ -70,16 +70,25 @@ export default function Onboarding() {
 
   useUnsavedChanges(isDirty && !loading);
 
+  const shouldGoToPasswordChange = (profileData?: {
+    password_defined?: boolean | null;
+    must_change_password?: boolean | null;
+    force_password_change?: boolean | null;
+  } | null) =>
+    Boolean(
+      profileData?.must_change_password ||
+      profileData?.force_password_change ||
+      !profileData?.password_defined
+    );
+
   useEffect(() => {
     if (!company?.completed) return;
 
-    if (profile?.password_defined || profile?.must_change_password === false) {
-      navigate("/dashboard", { replace: true });
-      return;
-    }
-
-    navigate("/alterar-senha", { replace: true });
-  }, [company?.completed, navigate, profile?.must_change_password, profile?.password_defined]);
+    navigate(
+      shouldGoToPasswordChange(profile) ? "/alterar-senha" : "/dashboard",
+      { replace: true }
+    );
+  }, [company?.completed, navigate, profile]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -168,57 +177,27 @@ export default function Onboarding() {
       } else {
         const baseSlug = slugify(formData.name.trim() || "empresa") || "empresa";
         const slug = `${baseSlug}-${randomSuffix()}`;
-        const { data: createdCompany, error: createError } = await supabase
-          .from("companies")
-          .insert({
-            name: formData.name.trim(),
-            slug,
-            phone: phoneDigits,
-            whatsapp: whatsappDigits,
-            address: formData.address.trim(),
-            city: formData.city.trim(),
-            state: formData.state.trim(),
-            email: formData.email.trim() || null,
-            document: documentDigits,
-            completed: true,
-            is_active: true,
-            subscription_status: "trial",
-            subscription_start_date: now.toISOString(),
-            subscription_end_date: trialEndIso,
-            trial_active: true,
-            trial_ends_at: trialEndIso,
-            owner_user_id: user.id,
-          })
-          .select("id")
-          .single();
+        const { data: createdCompanyId, error: createError } = await (supabase as any).rpc(
+          "complete_onboarding_company",
+          {
+            p_name: formData.name.trim(),
+            p_slug: slug,
+            p_phone: phoneDigits,
+            p_whatsapp: whatsappDigits,
+            p_address: formData.address.trim(),
+            p_city: formData.city.trim(),
+            p_state: formData.state.trim(),
+            p_email: formData.email.trim() || null,
+            p_document: documentDigits,
+            p_trial_ends_at: trialEndIso,
+          }
+        );
 
-        if (createError || !createdCompany?.id) {
+        if (createError || !createdCompanyId) {
           throw createError ?? new Error("Falha ao criar empresa");
         }
-        companyId = createdCompany.id;
 
-        await supabase
-          .from("profiles")
-          .update({ company_id: companyId })
-          .eq("id", user.id);
-
-        const { data: existingSubscription } = await supabase
-          .from("subscriptions")
-          .select("id")
-          .eq("company_id", companyId)
-          .maybeSingle();
-
-        if (!existingSubscription?.id) {
-          await supabase.from("subscriptions").insert({
-            user_id: user.id,
-            company_id: companyId,
-            plan_id: null,
-            status: "trial",
-            trial_ends_at: trialEndIso,
-            current_period_ends_at: trialEndIso,
-            gateway: "trial",
-          });
-        }
+        companyId = createdCompanyId as string;
       }
 
       const { error: profileError } = await supabase
@@ -238,11 +217,16 @@ export default function Onboarding() {
         description: "Cadastro da empresa concluído.",
       });
 
-      if (profile?.password_defined || profile?.must_change_password === false) {
-        navigate("/dashboard", { replace: true });
-      } else {
-        navigate("/alterar-senha", { replace: true });
-      }
+      const { data: latestProfile } = await supabase
+        .from("profiles")
+        .select("password_defined, must_change_password, force_password_change")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      navigate(
+        shouldGoToPasswordChange(latestProfile) ? "/alterar-senha" : "/dashboard",
+        { replace: true }
+      );
     } catch (error) {
       console.error("Onboarding error:", error);
       toast({

@@ -117,6 +117,7 @@ export interface Company {
 export interface Profile {
   id: string;
   full_name: string;
+  email?: string | null;
   cpf?: string | null;
   avatar_url: string | null;
   company_id: string | null;

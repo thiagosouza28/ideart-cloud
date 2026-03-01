@@ -3,13 +3,14 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Navigate, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { CookieConsent } from "@/components/CookieConsent";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { ProtectedRoute } from "@/components/layout/ProtectedRoute";
 import { ThemeProvider } from "next-themes";
 import { ConfirmProvider } from "@/components/ui/confirm-dialog";
+import { SUPER_ADMIN_HOME_PATH } from "@/lib/access-control";
 
 const Auth = lazy(() => import("./pages/Auth"));
 const ChangePassword = lazy(() => import("./pages/ChangePassword"));
@@ -52,9 +53,7 @@ const SubscriptionSuccess = lazy(() => import("./pages/SubscriptionSuccess"));
 const SubscriptionCancel = lazy(() => import("./pages/SubscriptionCancel"));
 const Onboarding = lazy(() => import("./pages/Onboarding"));
 const NotFound = lazy(() => import("./pages/NotFound"));
-const SuperAdminDashboard = lazy(() => import("./pages/SuperAdminDashboard"));
 const SuperAdminCompanies = lazy(() => import("./pages/SuperAdminCompanies"));
-const SuperAdminPlans = lazy(() => import("./pages/SuperAdminPlans"));
 const SuperAdminImpersonate = lazy(() => import("./pages/SuperAdminImpersonate"));
 const Profile = lazy(() => import("./pages/Profile"));
 const Reports = lazy(() => import("./pages/Reports"));
@@ -317,7 +316,7 @@ const App = () => (
               <Route
                 path="/relatorios"
                 element={(
-                  <ProtectedRoute allowedRoles={["super_admin", "admin", "financeiro", "atendente", "producao"]}>
+                  <ProtectedRoute allowedRoles={["admin", "financeiro", "atendente", "producao"]}>
                     <AppLayout>{withSuspense(<Reports />)}</AppLayout>
                   </ProtectedRoute>
                 )}
@@ -326,7 +325,7 @@ const App = () => (
               <Route
                 path="/financeiro/fluxo-caixa"
                 element={(
-                  <ProtectedRoute allowedRoles={["super_admin", "admin", "financeiro", "atendente", "producao"]}>
+                  <ProtectedRoute allowedRoles={["admin", "financeiro", "atendente", "producao"]}>
                     <AppLayout>{withSuspense(<CashFlow />)}</AppLayout>
                   </ProtectedRoute>
                 )}
@@ -335,7 +334,7 @@ const App = () => (
               <Route
                 path="/financeiro/relatorios"
                 element={(
-                  <ProtectedRoute allowedRoles={["super_admin", "admin", "financeiro", "atendente", "producao"]}>
+                  <ProtectedRoute allowedRoles={["admin", "financeiro", "atendente", "producao"]}>
                     <AppLayout>{withSuspense(<Reports />)}</AppLayout>
                   </ProtectedRoute>
                 )}
@@ -407,8 +406,8 @@ const App = () => (
               <Route
                 path="/assinatura"
                 element={(
-                  <ProtectedRoute allowedRoles={["admin", "financeiro", "atendente", "caixa", "producao", "super_admin"]}>
-                    <AppLayout>{withSuspense(<Subscription />)}</AppLayout>
+                  <ProtectedRoute>
+                    {withSuspense(<Subscription />)}
                   </ProtectedRoute>
                 )}
               />
@@ -436,7 +435,7 @@ const App = () => (
                 path="/super-admin"
                 element={(
                   <ProtectedRoute allowedRoles={["super_admin"]}>
-                    <AppLayout>{withSuspense(<SuperAdminDashboard />)}</AppLayout>
+                    <Navigate to={SUPER_ADMIN_HOME_PATH} replace />
                   </ProtectedRoute>
                 )}
               />
@@ -446,15 +445,6 @@ const App = () => (
                 element={(
                   <ProtectedRoute allowedRoles={["super_admin"]}>
                     <AppLayout>{withSuspense(<SuperAdminCompanies />)}</AppLayout>
-                  </ProtectedRoute>
-                )}
-              />
-
-              <Route
-                path="/super-admin/planos"
-                element={(
-                  <ProtectedRoute allowedRoles={["super_admin"]}>
-                    <AppLayout>{withSuspense(<SuperAdminPlans />)}</AppLayout>
                   </ProtectedRoute>
                 )}
               />

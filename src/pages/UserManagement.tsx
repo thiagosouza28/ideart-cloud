@@ -28,12 +28,19 @@ import { AppRole } from '@/types/database';
 interface UserWithRole {
   id: string;
   full_name: string;
+  email: string | null;
   avatar_url: string | null;
   created_at: string;
   role: AppRole | null;
   role_id: string | null;
   company_id: string | null;
+  company_name: string | null;
 }
+
+type CompanyOption = {
+  id: string;
+  name: string;
+};
 
 const roleLabels: Record<AppRole, string> = {
   super_admin: 'Super Admin',
@@ -59,10 +66,13 @@ export default function UserManagement() {
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState<string | null>(null);
-  const [companies, setCompanies] = useState<any[]>([]);
+  const [companies, setCompanies] = useState<CompanyOption[]>([]);
 
   const isSuperAdmin = role === 'super_admin';
   const canCreateUsers = hasPermission(['admin', 'super_admin']);
+  const assignableRoles: AppRole[] = isSuperAdmin
+    ? ['super_admin', 'admin', 'financeiro', 'atendente', 'caixa', 'producao']
+    : ['admin', 'financeiro', 'atendente', 'caixa', 'producao'];
 
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [addingUser, setAddingUser] = useState(false);
@@ -89,7 +99,9 @@ export default function UserManagement() {
       return;
     }
 
-    let query = supabase.from('profiles').select('*');
+    let query = supabase
+      .from('profiles')
+      .select('id, full_name, email, avatar_url, created_at, company_id, company:companies(name)');
     if (!isSuperAdmin) {
       query = query.eq('company_id', profile?.company_id as string);
     }
@@ -102,7 +114,17 @@ export default function UserManagement() {
       return;
     }
 
-    const userIds = profiles?.map(p => p.id) || [];
+    const profileRows = (profiles || []) as Array<{
+      id: string;
+      full_name: string;
+      email: string | null;
+      avatar_url: string | null;
+      created_at: string;
+      company_id: string | null;
+      company?: { name: string } | null;
+    }>;
+
+    const userIds = profileRows.map((p) => p.id);
     if (userIds.length === 0) {
       setUsers([]);
       setLoading(false);
@@ -110,9 +132,7 @@ export default function UserManagement() {
     }
 
     const { data: roles, error: rolesError } = await supabase
-      .from('user_roles')
-      .select('*')
-      .in('user_id', userIds);
+      .rpc('list_user_roles' as any, { p_user_ids: userIds });
 
     if (rolesError) {
       toast.error('Erro ao carregar perfis');
@@ -120,16 +140,20 @@ export default function UserManagement() {
       return;
     }
 
-    const usersWithRoles: UserWithRole[] = (profiles || []).map(p => {
-      const userRole = roles?.find(r => r.user_id === p.id);
+    const usersWithRoles: UserWithRole[] = profileRows.map((p) => {
+      const userRole = (roles as Array<{ user_id: string; role: AppRole | null; role_id: string | null }> | null)?.find(
+        (r) => r.user_id === p.id,
+      );
       return {
         id: p.id,
         full_name: p.full_name,
+        email: p.email ?? null,
         avatar_url: p.avatar_url,
         created_at: p.created_at,
         company_id: p.company_id,
+        company_name: p.company?.name ?? null,
         role: (userRole?.role as AppRole) || null,
-        role_id: userRole?.id || null,
+        role_id: userRole?.role_id || null,
       };
     });
 
@@ -148,7 +172,7 @@ export default function UserManagement() {
       console.error('Erro ao carregar empresas:', error);
       return;
     }
-    setCompanies(data || []);
+    setCompanies((data as CompanyOption[]) || []);
   };
 
   useEffect(() => {
@@ -163,7 +187,7 @@ export default function UserManagement() {
 
     const { data: profiles, error: profilesError } = await supabase
       .from('profiles')
-      .select('*')
+      .select('id, full_name, email, avatar_url, created_at, company_id')
       .is('company_id', null)
       .order('full_name');
 
@@ -173,7 +197,16 @@ export default function UserManagement() {
       return;
     }
 
-    const userIds = profiles?.map(p => p.id) || [];
+    const profileRows = (profiles || []) as Array<{
+      id: string;
+      full_name: string;
+      email: string | null;
+      avatar_url: string | null;
+      created_at: string;
+      company_id: string | null;
+    }>;
+
+    const userIds = profileRows.map((p) => p.id);
     if (userIds.length === 0) {
       setInactiveUsers([]);
       setLoadingInactive(false);
@@ -181,20 +214,22 @@ export default function UserManagement() {
     }
 
     const { data: roles } = await supabase
-      .from('user_roles')
-      .select('*')
-      .in('user_id', userIds);
+      .rpc('list_user_roles' as any, { p_user_ids: userIds });
 
-    const usersWithRoles: UserWithRole[] = (profiles || []).map(p => {
-      const userRole = roles?.find(r => r.user_id === p.id);
+    const usersWithRoles: UserWithRole[] = profileRows.map((p) => {
+      const userRole = (roles as Array<{ user_id: string; role: AppRole | null; role_id: string | null }> | null)?.find(
+        (r) => r.user_id === p.id,
+      );
       return {
         id: p.id,
         full_name: p.full_name,
+        email: p.email ?? null,
         avatar_url: p.avatar_url,
         created_at: p.created_at,
         company_id: p.company_id,
+        company_name: null,
         role: (userRole?.role as AppRole) || null,
-        role_id: userRole?.id || null,
+        role_id: userRole?.role_id || null,
       };
     });
 
@@ -241,39 +276,40 @@ export default function UserManagement() {
     }
   };
 
-  const filtered = users.filter(u =>
-    u.full_name.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = users.filter((u) => {
+    const term = search.trim().toLowerCase();
+    if (!term) return true;
 
-  const handleRoleChange = async (userId: string, roleId: string | null, newRole: AppRole) => {
+    return (
+      u.full_name.toLowerCase().includes(term) ||
+      (u.email || '').toLowerCase().includes(term) ||
+      (u.company_name || '').toLowerCase().includes(term) ||
+      (u.role ? roleLabels[u.role].toLowerCase() : '').includes(term)
+    );
+  });
+
+  const handleRoleChange = async (userId: string, _roleId: string | null, newRole: AppRole) => {
     if (userId === user?.id) {
       toast.error('Você não pode alterar seu próprio perfil');
       return;
     }
 
+    if (!isSuperAdmin && newRole === 'super_admin') {
+      toast.error('Apenas super admin pode definir este cargo');
+      return;
+    }
+
     setUpdating(userId);
 
-    if (roleId) {
-      const { error } = await supabase
-        .from('user_roles')
-        .update({ role: newRole })
-        .eq('id', roleId);
+    const { error } = await supabase.rpc('set_user_role' as any, {
+      p_target_user_id: userId,
+      p_role: newRole,
+    });
 
-      if (error) {
-        toast.error('Erro ao atualizar perfil');
-        setUpdating(null);
-        return;
-      }
-    } else {
-      const { error } = await supabase
-        .from('user_roles')
-        .insert({ user_id: userId, role: newRole });
-
-      if (error) {
-        toast.error('Erro ao definir perfil');
-        setUpdating(null);
-        return;
-      }
+    if (error) {
+      toast.error(error.message || 'Erro ao atualizar perfil');
+      setUpdating(null);
+      return;
     }
 
     toast.success('Perfil atualizado com sucesso');
@@ -292,12 +328,16 @@ export default function UserManagement() {
       return;
     }
 
-    if (!newUserData.email || !newUserData.fullName || !newUserData.password) {
+    const normalizedEmail = newUserData.email.trim().toLowerCase();
+    const normalizedFullName = newUserData.fullName.trim();
+    const normalizedPassword = newUserData.password;
+
+    if (!normalizedEmail || !normalizedFullName || !normalizedPassword) {
       toast.error('Preencha todos os campos obrigatórios');
       return;
     }
 
-    if (newUserData.password.length < 6) {
+    if (normalizedPassword.length < 6) {
       toast.error('A senha deve ter pelo menos 6 caracteres');
       return;
     }
@@ -307,26 +347,34 @@ export default function UserManagement() {
       return;
     }
 
+    if (!isSuperAdmin && newUserData.role === 'super_admin') {
+      toast.error('Apenas super admin pode criar outro super admin');
+      return;
+    }
+
     setAddingUser(true);
 
     try {
       const targetCompanyId = isSuperAdmin ? newUserData.companyId : (profile?.company_id || null);
 
-      if (isSuperAdmin && !targetCompanyId) {
+      const requiresCompany = newUserData.role !== 'super_admin';
+
+      if (isSuperAdmin && requiresCompany && !targetCompanyId) {
         toast.error('Selecione uma empresa para o usuário');
         setAddingUser(false);
         return;
       }
 
-      await invokeEdgeFunction('company-users', {
-        email: newUserData.email,
-        password: newUserData.password,
-        full_name: newUserData.fullName,
+      const response = await invokeEdgeFunction<{ created_now?: boolean }>('company-users', {
+        email: normalizedEmail,
+        password: normalizedPassword,
+        full_name: normalizedFullName,
         role: newUserData.role,
-        company_id: targetCompanyId,
+        company_id: requiresCompany ? targetCompanyId : null,
       });
-
-      toast.success('Usuário adicionado com sucesso');
+      toast.success(response?.created_now === false
+        ? 'Usuário existente atualizado e vinculado com sucesso'
+        : 'Usuário adicionado com sucesso');
       setAddDialogOpen(false);
       setNewUserData({ email: '', fullName: '', password: '', role: '', companyId: '' });
       await loadUsers();
@@ -431,7 +479,7 @@ export default function UserManagement() {
             <div className="relative max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
               <Input
-                placeholder="Buscar usuários..."
+                placeholder="Buscar por nome, e-mail ou loja..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="pl-9"
@@ -444,6 +492,7 @@ export default function UserManagement() {
             <TableHeader>
               <TableRow>
                 <TableHead>Usuário</TableHead>
+                <TableHead>Loja</TableHead>
                 <TableHead>Cargo Atual</TableHead>
                 <TableHead>Cadastrado em</TableHead>
                 <TableHead className="w-[200px]">Alterar Cargo</TableHead>
@@ -453,13 +502,13 @@ export default function UserManagement() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center py-8">
+                  <TableCell colSpan={6} className="text-center py-8">
                     Carregando...
                   </TableCell>
                 </TableRow>
               ) : filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center py-8 text-slate-500">
+                  <TableCell colSpan={6} className="text-center py-8 text-slate-500">
                     Nenhum usuário encontrado
                   </TableCell>
                 </TableRow>
@@ -474,11 +523,15 @@ export default function UserManagement() {
                       </Avatar>
                       <div>
                         <p className="font-medium">{u.full_name}</p>
+                        <p className="text-xs text-slate-500">{u.email || 'Sem e-mail cadastrado'}</p>
                         {u.id === user?.id && (
                           <p className="text-xs text-slate-500">(você)</p>
                         )}
                       </div>
                     </div>
+                  </TableCell>
+                  <TableCell className="text-sm text-slate-500">
+                    {u.company_name || 'Sem loja'}
                   </TableCell>
                   <TableCell>
                     {u.role ? (
@@ -507,12 +560,11 @@ export default function UserManagement() {
                           <SelectValue placeholder="Selecionar cargo" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="super_admin">Super Admin</SelectItem>
-                          <SelectItem value="admin">Administrador</SelectItem>
-                          <SelectItem value="financeiro">Financeiro</SelectItem>
-                          <SelectItem value="atendente">Atendente</SelectItem>
-                          <SelectItem value="caixa">Caixa</SelectItem>
-                          <SelectItem value="producao">Produção</SelectItem>
+                          {assignableRoles.map((roleOption) => (
+                            <SelectItem key={roleOption} value={roleOption}>
+                              {roleLabels[roleOption]}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     )}
@@ -651,12 +703,11 @@ export default function UserManagement() {
                   <SelectValue placeholder="Selecionar cargo" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="super_admin">Super Admin</SelectItem>
-                  <SelectItem value="admin">Administrador</SelectItem>
-                          <SelectItem value="financeiro">Financeiro</SelectItem>
-                  <SelectItem value="atendente">Atendente</SelectItem>
-                  <SelectItem value="caixa">Caixa</SelectItem>
-                  <SelectItem value="producao">Produção</SelectItem>
+                  {assignableRoles.map((roleOption) => (
+                    <SelectItem key={roleOption} value={roleOption}>
+                      {roleLabels[roleOption]}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -729,6 +780,7 @@ export default function UserManagement() {
                     </Avatar>
                     <div>
                       <p className="font-medium">{u.full_name}</p>
+                        <p className="text-xs text-slate-500">{u.email || 'Sem e-mail cadastrado'}</p>
                       <p className="text-xs text-slate-500">
                         {u.role ? roleLabels[u.role] : 'Sem cargo'} - Criado em {formatDate(u.created_at)}
                       </p>
@@ -761,6 +813,4 @@ export default function UserManagement() {
     </div>
   );
 }
-
-
 

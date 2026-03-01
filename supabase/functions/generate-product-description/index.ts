@@ -100,7 +100,7 @@ const truncateText = (value: string, maxLength: number) =>
 const rateBucket: Record<string, { count: number; resetAt: number }> = {};
 const RATE_LIMIT = 20;
 const WINDOW_MS = 60 * 60 * 1000;
-const ALLOWED_ROLES = ["super_admin", "admin", "atendente"];
+const ALLOWED_ROLES = ["admin", "atendente"];
 
 type DescriptionRequest = {
   name?: string;
@@ -198,18 +198,25 @@ serve(async (req) => {
       });
     }
 
-    const { data: roleRows, error: roleError } = await supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", authData.user.id)
-      .in("role", ALLOWED_ROLES);
+    const [{ data: superAdminRow, error: superAdminError }, { data: roleRows, error: roleError }] = await Promise.all([
+      supabase
+        .from("super_admin_users")
+        .select("id")
+        .eq("user_id", authData.user.id)
+        .maybeSingle(),
+      supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", authData.user.id)
+        .in("role", ALLOWED_ROLES),
+    ]);
 
-    if (roleError) {
-      console.error("[AI] Role read error", roleError.message);
+    if (superAdminError || roleError) {
+      console.error("[AI] Role read error", superAdminError?.message ?? roleError?.message ?? "unknown");
       return jsonResponse(corsHeaders, 403, { error: "Sem permissao para gerar descricao" });
     }
 
-    if (!roleRows || roleRows.length === 0) {
+    if (!superAdminRow && (!roleRows || roleRows.length === 0)) {
       return jsonResponse(corsHeaders, 403, { error: "Sem permissao para gerar descricao" });
     }
 

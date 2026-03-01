@@ -43,6 +43,46 @@ type CreateUserPayload = {
 
 const allowedRoles = new Set(["super_admin", "admin", "financeiro", "atendente", "caixa", "producao"]);
 
+const isAlreadyRegisteredError = (message?: string | null) => {
+  const normalized = String(message || "").toLowerCase();
+  return normalized.includes("already") && (normalized.includes("registered") || normalized.includes("exists"));
+};
+
+const isSuperAdminUser = async (
+  supabase: ReturnType<typeof getSupabaseClient>,
+  userId: string,
+) => {
+  const { data } = await supabase
+    .from("super_admin_users")
+    .select("id")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  return Boolean(data?.id);
+};
+
+const findUserByEmail = async (
+  supabase: ReturnType<typeof getSupabaseClient>,
+  email: string,
+) => {
+  let page = 1;
+  const perPage = 200;
+
+  for (;;) {
+    const { data, error } = await supabase.auth.admin.listUsers({ page, perPage });
+    if (error) throw error;
+
+    const users = data?.users ?? [];
+    const found = users.find((candidate) => (candidate.email || "").toLowerCase() === email);
+    if (found) return found;
+
+    if (users.length < perPage) {
+      return null;
+    }
+    page += 1;
+  }
+};
+
 Deno.serve(async (req) => {
   const origin = req.headers.get("origin");
   const corsHeaders = getCorsHeaders(origin);
@@ -52,7 +92,7 @@ Deno.serve(async (req) => {
   }
 
   if (req.method !== "POST") {
-    return jsonResponse(corsHeaders, 405, { error: "Método inválido" });
+    return jsonResponse(corsHeaders, 405, { error: "Metodo invalido" });
   }
 
   try {
@@ -67,20 +107,20 @@ Deno.serve(async (req) => {
     const { data: authData, error: authError } = await supabase.auth.getUser(token);
 
     if (authError || !authData.user) {
-      return jsonResponse(corsHeaders, 401, { error: "Sessão inválida" });
+      return jsonResponse(corsHeaders, 401, { error: "Sessao invalida" });
     }
 
     const requesterId = authData.user.id;
 
     // Check requester role
+    const isSuperAdmin = await isSuperAdminUser(supabase, requesterId);
     const { data: requesterRoleData } = await supabase
       .from("user_roles")
       .select("role")
       .eq("user_id", requesterId)
       .maybeSingle();
 
-    const requesterRole = requesterRoleData?.role;
-    const isSuperAdmin = requesterRole === "super_admin";
+    const requesterRole = requesterRoleData?.role ?? null;
     const isAdmin = requesterRole === "admin";
 
     if (!isSuperAdmin && !isAdmin) {
@@ -96,11 +136,15 @@ Deno.serve(async (req) => {
     const requestedCompanyId = body.company_id?.trim();
 
     if (!email || !password || !fullName || !role) {
-      return jsonResponse(corsHeaders, 400, { error: "Dados obrigatórios ausentes" });
+      return jsonResponse(corsHeaders, 400, { error: "Dados obrigatorios ausentes" });
     }
 
     if (!allowedRoles.has(role)) {
-      return jsonResponse(corsHeaders, 400, { error: "Cargo inválido" });
+      return jsonResponse(corsHeaders, 400, { error: "Cargo invalido" });
+    }
+
+    if (!isSuperAdmin && role === "super_admin") {
+      return jsonResponse(corsHeaders, 403, { error: "Apenas super admin pode criar outro super admin" });
     }
 
     // Determine target company_id
@@ -120,64 +164,163 @@ Deno.serve(async (req) => {
       companyIdToUse = requesterProfile?.company_id || null;
 
       if (!companyIdToUse) {
-        return jsonResponse(corsHeaders, 400, { error: "Empresa do administrador não encontrada" });
+        return jsonResponse(corsHeaders, 400, { error: "Empresa do administrador nao encontrada" });
       }
 
       if (requestedCompanyId && requestedCompanyId !== companyIdToUse) {
-        return jsonResponse(corsHeaders, 403, { error: "Você só pode criar usuários para sua própria empresa" });
+        return jsonResponse(corsHeaders, 403, { error: "Voce so pode criar usuarios para sua propria empresa" });
       }
     }
 
-    // Create the user
-    const { data: createdUser, error: createError } = await supabase.auth.admin
-      .createUser({
-        email,
+    // Create user (or relink/update if already exists)
+    let newUserId: string | null = null;
+    let createdNow = false;
+
+    const { data: createdUser, error: createError } = await supabase.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: {
+        full_name: fullName,
+        role,
+        account_type: "store_user",
+      },
+    });
+
+    if (!createError && createdUser.user?.id) {
+      newUserId = createdUser.user.id;
+      createdNow = true;
+    } else if (isAlreadyRegisteredError(createError?.message)) {
+      const existingUser = await findUserByEmail(supabase, email);
+      if (!existingUser?.id) {
+        return jsonResponse(corsHeaders, 400, {
+          error: "Usuario ja cadastrado, mas nao foi possivel localiza-lo.",
+        });
+      }
+
+      const existingMetadata = (existingUser.user_metadata || {}) as Record<string, unknown>;
+      const { error: updateUserError } = await supabase.auth.admin.updateUserById(existingUser.id, {
         password,
         email_confirm: true,
-        user_metadata: { full_name: fullName, role },
+        user_metadata: {
+          ...existingMetadata,
+          full_name: fullName,
+          role,
+          account_type: "store_user",
+        },
       });
 
-    if (createError || !createdUser.user?.id) {
+      if (updateUserError) {
+        return jsonResponse(corsHeaders, 400, {
+          error: `Falha ao atualizar usuario existente: ${updateUserError.message}`,
+        });
+      }
+
+      newUserId = existingUser.id;
+    } else {
       return jsonResponse(corsHeaders, 400, {
-        error: createError?.message ?? "Falha ao criar usuário",
+        error: createError?.message ?? "Falha ao criar usuario",
       });
     }
 
-    const newUserId = createdUser.user.id;
+    if (!newUserId) {
+      return jsonResponse(corsHeaders, 400, { error: "Falha ao resolver usuario criado" });
+    }
 
-    // 1. Link in profiles table
+    // 1) Link profile to company
     const { error: profileError } = await supabase
       .from("profiles")
       .upsert({
         id: newUserId,
         full_name: fullName,
+        email,
         company_id: companyIdToUse,
-      });
+        must_complete_company: false,
+        must_complete_onboarding: false,
+        must_change_password: false,
+        force_password_change: false,
+        password_defined: true,
+      }, { onConflict: "id" });
 
     if (profileError) {
-      await supabase.auth.admin.deleteUser(newUserId);
-      return jsonResponse(corsHeaders, 400, { error: "Falha ao criar perfil do usuário: " + profileError.message });
+      if (createdNow) await supabase.auth.admin.deleteUser(newUserId);
+      return jsonResponse(corsHeaders, 400, { error: "Falha ao criar perfil do usuario: " + profileError.message });
     }
 
-    // 2. Set role
-    const { error: roleError } = await supabase
-      .from("user_roles")
-      .upsert({ user_id: newUserId, role }, { onConflict: "user_id,role" });
+    // 2) Keep role stores in sync
+    if (role === "super_admin") {
+      const { error: clearStoreRolesError } = await supabase
+        .from("user_roles")
+        .delete()
+        .eq("user_id", newUserId);
 
-    if (roleError) {
-      await supabase.auth.admin.deleteUser(newUserId);
-      return jsonResponse(corsHeaders, 400, { error: "Falha ao definir cargo do usuário: " + roleError.message });
+      if (clearStoreRolesError) {
+        if (createdNow) await supabase.auth.admin.deleteUser(newUserId);
+        return jsonResponse(corsHeaders, 400, { error: "Falha ao limpar cargos da loja: " + clearStoreRolesError.message });
+      }
+
+      const { error: upsertSuperAdminError } = await supabase
+        .from("super_admin_users")
+        .upsert({ user_id: newUserId }, { onConflict: "user_id" });
+
+      if (upsertSuperAdminError) {
+        if (createdNow) await supabase.auth.admin.deleteUser(newUserId);
+        return jsonResponse(corsHeaders, 400, { error: "Falha ao definir super admin: " + upsertSuperAdminError.message });
+      }
+    } else {
+      const { error: clearSuperAdminError } = await supabase
+        .from("super_admin_users")
+        .delete()
+        .eq("user_id", newUserId);
+
+      if (clearSuperAdminError) {
+        if (createdNow) await supabase.auth.admin.deleteUser(newUserId);
+        return jsonResponse(corsHeaders, 400, { error: "Falha ao limpar perfil super admin: " + clearSuperAdminError.message });
+      }
+
+      const { error: clearRoleError } = await supabase
+        .from("user_roles")
+        .delete()
+        .eq("user_id", newUserId);
+
+      if (clearRoleError) {
+        if (createdNow) await supabase.auth.admin.deleteUser(newUserId);
+        return jsonResponse(corsHeaders, 400, { error: "Falha ao limpar cargos existentes: " + clearRoleError.message });
+      }
+
+      const { error: roleError } = await supabase
+        .from("user_roles")
+        .insert({ user_id: newUserId, role });
+
+      if (roleError) {
+        if (createdNow) await supabase.auth.admin.deleteUser(newUserId);
+        return jsonResponse(corsHeaders, 400, { error: "Falha ao definir cargo do usuario: " + roleError.message });
+      }
     }
 
-    // 3. Optional join table
+    // 3) Keep company_users in sync
     if (companyIdToUse) {
-      await supabase
+      const { error: companyLinkError } = await supabase
         .from("company_users")
-        .insert({ company_id: companyIdToUse, user_id: newUserId });
-      // We ignore errors here as it's an optional linking
+        .upsert({ company_id: companyIdToUse, user_id: newUserId }, { onConflict: "company_id,user_id" });
+
+      if (companyLinkError) {
+        if (createdNow) await supabase.auth.admin.deleteUser(newUserId);
+        return jsonResponse(corsHeaders, 400, { error: "Falha ao vincular usuario a empresa: " + companyLinkError.message });
+      }
+    } else {
+      const { error: unlinkCompanyError } = await supabase
+        .from("company_users")
+        .delete()
+        .eq("user_id", newUserId);
+
+      if (unlinkCompanyError) {
+        if (createdNow) await supabase.auth.admin.deleteUser(newUserId);
+        return jsonResponse(corsHeaders, 400, { error: "Falha ao remover vinculo de empresa: " + unlinkCompanyError.message });
+      }
     }
 
-    return jsonResponse(corsHeaders, 200, { user_id: newUserId });
+    return jsonResponse(corsHeaders, 200, { user_id: newUserId, created_now: createdNow });
   } catch (error) {
     console.error("Erro em company-users:", error);
     return jsonResponse(corsHeaders, 500, { error: error instanceof Error ? error.message : String(error) });

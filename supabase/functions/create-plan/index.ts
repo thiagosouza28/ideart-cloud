@@ -112,14 +112,21 @@ serve(async (req) => {
     const { data: authData, error: authError } = await supabase.auth.getUser(token);
     if (authError || !authData.user) return jsonResponse(corsHeaders, 401, { error: "Sessão inválida" });
 
-    const { data: roleData } = await supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", authData.user.id)
-      .in("role", ["super_admin", "admin"])
-      .maybeSingle();
+    const [{ data: superAdminRole }, { data: adminRole }] = await Promise.all([
+      supabase
+        .from("super_admin_users")
+        .select("id")
+        .eq("user_id", authData.user.id)
+        .maybeSingle(),
+      supabase
+        .from("user_roles")
+        .select("id")
+        .eq("user_id", authData.user.id)
+        .eq("role", "admin")
+        .maybeSingle(),
+    ]);
 
-    if (!roleData) {
+    if (!superAdminRole && !adminRole) {
       return jsonResponse(corsHeaders, 403, { error: "Not authorized" });
     }
 
