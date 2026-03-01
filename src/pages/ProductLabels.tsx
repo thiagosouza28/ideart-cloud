@@ -39,9 +39,9 @@ const escapeHtml = (value: string) =>
     .replace(/'/g, '&#39;');
 
 const getBarcodeSizing = (size: LabelSize) => {
-  if (size.width >= 50) return { height: 48, moduleWidth: 2 };
-  if (size.width >= 40) return { height: 42, moduleWidth: 1.6 };
-  return { height: 36, moduleWidth: 1.4 };
+  if (size.width >= 50) return { height: 40, moduleWidth: 1.5 };
+  if (size.width >= 40) return { height: 34, moduleWidth: 1.3 };
+  return { height: 28, moduleWidth: 1.1 };
 };
 
 export default function ProductLabels() {
@@ -57,13 +57,11 @@ export default function ProductLabels() {
   useEffect(() => {
     const loadProducts = async () => {
       setLoading(true);
-      let query = supabase
-        .from('products')
-        .select('*')
-        .order('name');
+      let query = supabase.from('products').select('*').order('name');
       if (profile?.company_id) {
         query = query.eq('company_id', profile.company_id);
       }
+
       const { data, error } = await query;
       if (error) {
         toast({ title: 'Erro ao carregar produtos', variant: 'destructive' });
@@ -71,11 +69,12 @@ export default function ProductLabels() {
         setLoading(false);
         return;
       }
+
       setProducts((data as Product[]) || []);
       setLoading(false);
     };
 
-    loadProducts();
+    void loadProducts();
   }, [profile?.company_id, toast]);
 
   const filteredProducts = useMemo(() => {
@@ -147,6 +146,7 @@ export default function ProductLabels() {
 
   const buildPrintHtml = () => {
     const { height: barcodeHeight, moduleWidth } = getBarcodeSizing(labelSize);
+
     const labelsHtml = labelItems
       .map((product) => {
         const barcodeValue = normalizeBarcode(product.barcode || '');
@@ -158,20 +158,24 @@ export default function ProductLabels() {
               moduleWidth,
             }) || ''
           : '';
-        const skuLine = showSku && product.sku
-          ? `<div class="sku">SKU: ${escapeHtml(product.sku)}</div>`
-          : '';
+        const hasSku = Boolean(showSku && product.sku);
+        const skuLine = hasSku ? `SKU: ${escapeHtml(product.sku || '')}` : '&nbsp;';
         const barcodeText = barcodeValue
           ? `<div class="barcode-text">${escapeHtml(barcodeValue)}</div>`
-          : '<div class="barcode-text missing">Sem código</div>';
+          : '<div class="barcode-text missing">Sem codigo</div>';
         const price = formatCurrency(resolvePrice(product));
+
         return `
           <div class="label">
-            <div class="name">${escapeHtml(product.name)}</div>
-            ${skuLine}
-            <div class="barcode">${barcodeMarkup || '<div class="barcode-empty">Sem código</div>'}</div>
-            ${barcodeText}
-            <div class="price">${price}</div>
+            <div class="label-grid">
+              <div class="name">${escapeHtml(product.name)}</div>
+              <div class="sku ${hasSku ? '' : 'sku-empty'}">${skuLine}</div>
+              <div class="barcode">${barcodeMarkup || '<div class="barcode-empty">Sem codigo</div>'}</div>
+              ${barcodeText}
+              <div class="price-row">
+                <span class="price">${price}</span>
+              </div>
+            </div>
           </div>
         `;
       })
@@ -185,27 +189,115 @@ export default function ProductLabels() {
           <title>Etiquetas de Produtos</title>
           <style>
             @page { margin: 6mm; }
-            body { margin: 0; padding: 6mm; font-family: Arial, sans-serif; color: #0f172a; background: white; }
-            .sheet { display: grid; gap: 2.5mm; grid-template-columns: repeat(auto-fill, ${labelSize.width}mm); }
+            body {
+              margin: 0;
+              padding: 6mm;
+              font-family: "Segoe UI", Arial, sans-serif;
+              color: #0f172a;
+              background: #ffffff;
+            }
+            .sheet {
+              display: grid;
+              gap: 2.5mm;
+              align-content: start;
+              grid-template-columns: repeat(auto-fill, ${labelSize.width}mm);
+            }
             .label {
               width: ${labelSize.width}mm;
               height: ${labelSize.height}mm;
-              border: 1px dashed #e2e8f0;
-              padding: 2mm;
+              border: 0.2mm solid #cbd5e1;
+              border-radius: 1.4mm;
+              background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+              padding: 1.5mm;
               box-sizing: border-box;
-              display: flex;
-              flex-direction: column;
-              justify-content: space-between;
+              overflow: hidden;
             }
-            .name { font-size: 8pt; font-weight: 600; line-height: 1.1; }
-            .sku { font-size: 7pt; color: #475569; }
-            .barcode { display: flex; align-items: center; justify-content: center; min-height: 18mm; }
-            .barcode svg { width: 100%; height: auto; }
-            .barcode-empty { font-size: 7pt; color: #94a3b8; text-align: center; }
-            .barcode-text { font-size: 7pt; text-align: center; letter-spacing: 0.15em; color: #475569; }
-            .barcode-text.missing { letter-spacing: normal; }
-            .price { font-size: 9pt; font-weight: 700; text-align: right; }
-            @media print { .label { border: none; } }
+            .label-grid {
+              display: grid;
+              grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+              gap: 0.8mm;
+              height: 100%;
+              min-height: 0;
+            }
+            .name {
+              font-size: 7.1pt;
+              font-weight: 700;
+              line-height: 1.12;
+              overflow: hidden;
+              display: -webkit-box;
+              -webkit-line-clamp: 2;
+              -webkit-box-orient: vertical;
+            }
+            .sku {
+              font-size: 6.4pt;
+              color: #475569;
+              white-space: nowrap;
+              overflow: hidden;
+              text-overflow: ellipsis;
+            }
+            .sku-empty {
+              visibility: hidden;
+            }
+            .barcode {
+              min-height: 0;
+              border: 0.2mm solid #e2e8f0;
+              border-radius: 0.8mm;
+              background: #f8fafc;
+              padding: 0.5mm 0.7mm;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              overflow: hidden;
+            }
+            .barcode svg {
+              width: 100%;
+              max-height: 100%;
+              height: auto;
+              display: block;
+            }
+            .barcode-empty {
+              font-size: 6.6pt;
+              color: #94a3b8;
+              text-align: center;
+            }
+            .barcode-text {
+              font-size: 6pt;
+              text-align: center;
+              letter-spacing: 0.13em;
+              color: #475569;
+              white-space: nowrap;
+              overflow: hidden;
+              text-overflow: ellipsis;
+              text-transform: uppercase;
+            }
+            .barcode-text.missing {
+              letter-spacing: normal;
+            }
+            .price-row {
+              display: flex;
+              justify-content: flex-end;
+              min-height: 0;
+            }
+            .price {
+              display: inline-flex;
+              align-items: center;
+              justify-content: center;
+              white-space: nowrap;
+              font-size: 7.8pt;
+              font-weight: 700;
+              color: #ffffff;
+              background: #0f172a;
+              border: 0.2mm solid #0f172a;
+              border-radius: 0.9mm;
+              padding: 0.65mm 1.25mm;
+              line-height: 1;
+            }
+            @media print {
+              .label {
+                border-style: solid;
+                border-color: #e2e8f0;
+              }
+            }
           </style>
         </head>
         <body>
@@ -225,15 +317,15 @@ export default function ProductLabels() {
 
     if (missingBarcodeCount > 0) {
       toast({
-        title: 'Existem produtos sem código de barras',
-        description: 'As etiquetas sem código exibirão aviso no lugar do código.',
+        title: 'Existem produtos sem codigo de barras',
+        description: 'As etiquetas sem codigo exibirao aviso no lugar do codigo.',
         variant: 'destructive',
       });
     }
 
     const win = window.open('', '_blank');
     if (!win) {
-      toast({ title: 'Não foi possível abrir a janela de impressão', variant: 'destructive' });
+      toast({ title: 'Nao foi possivel abrir a janela de impressao', variant: 'destructive' });
       return;
     }
 
@@ -254,7 +346,7 @@ export default function ProductLabels() {
         <div>
           <h1 className="page-title">Etiquetas de produtos</h1>
           <p className="text-muted-foreground">
-            Selecione produtos, defina quantidades e gere etiquetas prontas para impressão.
+            Selecione produtos, defina quantidades e gere etiquetas prontas para impressao.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -274,14 +366,14 @@ export default function ProductLabels() {
           <Card>
             <CardHeader>
               <CardTitle>Selecionar produtos</CardTitle>
-              <CardDescription>Escolha os produtos que receberão etiquetas.</CardDescription>
+              <CardDescription>Escolha os produtos que receberao etiquetas.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="relative flex-1">
                   <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
-                    placeholder="Buscar por nome, SKU ou código de barras..."
+                    placeholder="Buscar por nome, SKU ou codigo de barras..."
                     value={search}
                     onChange={(event) => setSearch(event.target.value)}
                     className="pl-9"
@@ -307,7 +399,7 @@ export default function ProductLabels() {
                       <TableHead>Produto</TableHead>
                       <TableHead>SKU</TableHead>
                       <TableHead>Barcode</TableHead>
-                      <TableHead className="text-right">Preço</TableHead>
+                      <TableHead className="text-right">Preco</TableHead>
                       <TableHead className="w-[110px] text-right">Qtd.</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -339,7 +431,7 @@ export default function ProductLabels() {
                                 <span>{product.name}</span>
                                 {!product.barcode && (
                                   <Badge variant="secondary" className="w-fit">
-                                    Sem código
+                                    Sem codigo
                                   </Badge>
                                 )}
                               </div>
@@ -369,7 +461,7 @@ export default function ProductLabels() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Pré-visualização</CardTitle>
+              <CardTitle>Pre-visualizacao</CardTitle>
               <CardDescription>Confira o layout antes de imprimir.</CardDescription>
             </CardHeader>
             <CardContent>
@@ -378,38 +470,51 @@ export default function ProductLabels() {
                   Selecione produtos para visualizar as etiquetas.
                 </div>
               ) : (
-                <div
-                  className="flex flex-wrap gap-4 rounded-lg border bg-muted/30 p-4"
-                  style={{ rowGap: '12px', columnGap: '12px' }}
-                >
+                <div className="flex flex-wrap gap-4 rounded-lg border bg-muted/30 p-4" style={{ rowGap: '12px', columnGap: '12px' }}>
                   {labelItems.map((product, index) => {
                     const barcodeValue = normalizeBarcode(product.barcode || '');
                     const { height, moduleWidth } = getBarcodeSizing(labelSize);
+                    const hasSku = Boolean(showSku && product.sku);
+
                     return (
                       <div
                         key={`${product.id}-${index}`}
-                        className="rounded-md border bg-white p-2 shadow-sm"
+                        className="overflow-hidden rounded-md border border-slate-300 bg-white shadow-sm"
                         style={{ width: `${labelSize.width}mm`, height: `${labelSize.height}mm` }}
                       >
-                        <div className="flex h-full flex-col justify-between">
-                          <div>
-                            <div className="text-[10px] font-semibold leading-tight">{product.name}</div>
-                            {showSku && product.sku && (
-                              <div className="text-[9px] text-muted-foreground">SKU: {product.sku}</div>
-                            )}
+                        <div className="grid h-full min-h-0 grid-rows-[auto_auto_minmax(0,1fr)_auto_auto] gap-1.5 p-2">
+                          <div className="overflow-hidden text-[10px] font-semibold leading-tight [display:-webkit-box] [-webkit-line-clamp:2] [-webkit-box-orient:vertical]">
+                            {product.name}
                           </div>
-                          <div className="flex flex-col items-center gap-1">
-                            {barcodeValue ? (
-                              <BarcodeSvg value={barcodeValue} format={detectBarcodeFormat(barcodeValue) ?? 'code128'} height={height} moduleWidth={moduleWidth} />
-                            ) : (
-                              <div className="text-[9px] text-muted-foreground">Sem código</div>
-                            )}
-                            <div className="text-[8px] tracking-[0.2em] text-muted-foreground">
-                              {barcodeValue || 'SEM CÓDIGO'}
+
+                          <div className={`truncate text-[8px] text-slate-500 ${hasSku ? '' : 'invisible'}`}>
+                            {hasSku ? `SKU: ${product.sku}` : 'SKU'}
+                          </div>
+
+                          <div className="min-h-0 overflow-hidden rounded border border-slate-200 bg-slate-50 px-1.5 py-1">
+                            <div className="flex h-full items-center justify-center overflow-hidden">
+                              {barcodeValue ? (
+                                <BarcodeSvg
+                                  value={barcodeValue}
+                                  format={detectBarcodeFormat(barcodeValue) ?? 'code128'}
+                                  height={height}
+                                  moduleWidth={moduleWidth}
+                                  className="block w-full max-w-full [&_svg]:block [&_svg]:h-auto [&_svg]:w-full [&_svg]:max-h-full"
+                                />
+                              ) : (
+                                <div className="text-[8px] text-slate-400">Sem codigo</div>
+                              )}
                             </div>
                           </div>
-                          <div className="text-right text-[10px] font-semibold">
-                            {formatCurrency(resolvePrice(product))}
+
+                          <div className="truncate text-center text-[7px] uppercase tracking-[0.16em] text-slate-500">
+                            {barcodeValue || 'SEM CODIGO'}
+                          </div>
+
+                          <div className="flex justify-end">
+                            <div className="inline-flex items-center rounded border border-slate-900 bg-slate-900 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
+                              {formatCurrency(resolvePrice(product))}
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -424,8 +529,8 @@ export default function ProductLabels() {
         <div className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Configurações</CardTitle>
-              <CardDescription>Defina tamanho e conteúdo das etiquetas.</CardDescription>
+              <CardTitle>Configuracoes</CardTitle>
+              <CardDescription>Defina tamanho e conteudo das etiquetas.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
@@ -447,7 +552,7 @@ export default function ProductLabels() {
               <div className="flex items-center justify-between rounded-lg border p-3">
                 <div className="space-y-1">
                   <span className="text-sm font-medium">Exibir SKU</span>
-                  <p className="text-xs text-muted-foreground">Mostra o código interno nas etiquetas.</p>
+                  <p className="text-xs text-muted-foreground">Mostra o codigo interno nas etiquetas.</p>
                 </div>
                 <Switch checked={showSku} onCheckedChange={setShowSku} />
               </div>
@@ -463,7 +568,7 @@ export default function ProductLabels() {
                 </div>
                 {missingBarcodeCount > 0 && (
                   <div className="mt-2 text-xs text-destructive">
-                    {missingBarcodeCount} produto(s) sem código de barras.
+                    {missingBarcodeCount} produto(s) sem codigo de barras.
                   </div>
                 )}
               </div>
