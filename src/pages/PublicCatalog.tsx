@@ -1,24 +1,27 @@
 ﻿import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+
 import {
-  ArrowLeft,
   ArrowUpDown,
   LayoutGrid,
   List,
   Mail,
   MapPin,
-  MessageCircle,
+  MessageCircle as Whatsapp,
   Package,
   Phone,
   ShoppingCart,
   Tag,
-} from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
+} from "lucide-react";
+import { publicSupabase as supabase } from '@/integrations/supabase/public-client';
+import { useCustomerAuth } from '@/hooks/use-customer-auth';
+import { PUBLIC_CART_UPDATED_EVENT, getPublicCartItemsCount } from '@/lib/public-cart';
 import { ensurePublicStorageUrl } from '@/lib/storage';
 import { isPromotionActive, resolveProductBasePrice, resolveProductPrice } from '@/lib/pricing';
-import { Category, Company, Product } from '@/types/database';
+import { Category, Company as DatabaseCompany, Product } from '@/types/database';
 
-interface CompanyWithCatalog extends Company {
+
+interface Company extends Omit<DatabaseCompany, 'catalog_contact_url' | 'whatsapp'> {
   catalog_layout?: 'grid' | 'list' | null;
   catalog_title?: string | null;
   catalog_description?: string | null;
@@ -26,7 +29,8 @@ interface CompanyWithCatalog extends Company {
   catalog_button_text?: string | null;
   catalog_show_prices?: boolean | null;
   catalog_show_contact?: boolean | null;
-  catalog_contact_url?: string | null;
+  catalog_contact_url?: string;
+  whatsapp?: string;
 }
 
 interface ProductWithCategory extends Omit<Product, 'category'> {
@@ -160,6 +164,7 @@ const pageStyles = `
   font-size: 14px;
   font-weight: 500;
   white-space: nowrap;
+  cursor: pointer;
 }
 
 .pc-whatsapp-btn {
@@ -174,6 +179,24 @@ const pageStyles = `
   padding: 0 15px;
   cursor: pointer;
   transition: opacity 0.2s ease;
+}
+
+.pc-account-btn {
+  height: 36px;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--pc-white);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 0 14px;
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+}
+
+.pc-account-btn:hover {
+  opacity: 0.9;
 }
 
 .pc-whatsapp-btn:hover {
@@ -743,6 +766,11 @@ const pageStyles = `
     font-size: 13px;
   }
 
+  .pc-account-btn {
+    padding: 0 10px;
+    font-size: 12px;
+  }
+
   .pc-title {
     font-size: clamp(1.6rem, 8vw, 2.1rem);
   }
@@ -774,11 +802,18 @@ const initials = (value?: string | null) => {
   return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
 };
 
-export default function PublicCatalog() {
-  const { slug } = useParams<{ slug: string }>();
-  const navigate = useNavigate();
+const getProductPrice = (product: ProductWithCategory) =>
+  resolveProductPrice(product as unknown as Product, 1, [], 0);
 
-  const [company, setCompany] = useState<CompanyWithCatalog | null>(null);
+const getPromotionBasePrice = (product: ProductWithCategory) =>
+  resolveProductBasePrice(product as unknown as Product, 1, [], 0);
+
+export default function PublicCatalog() {
+  const { slug, companyId } = useParams<{ slug?: string; companyId?: string }>();
+  const navigate = useNavigate();
+  const { user } = useCustomerAuth();
+
+  const [company, setCompany] = useState<Company | null>(null);
   const [products, setProducts] = useState<ProductWithCategory[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -786,23 +821,88 @@ export default function PublicCatalog() {
   const [notFound, setNotFound] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [sortBy, setSortBy] = useState<SortMode>('name_asc');
+  const [cartItemsCount, setCartItemsCount] = useState(0);
 
   useEffect(() => {
     const loadCatalog = async () => {
-      if (!slug) {
+      const resolvedSlug = slug?.trim();
+      const resolvedCompanyId = companyId?.trim();
+
+      if (!resolvedSlug && !resolvedCompanyId) {
         setNotFound(true);
         setLoading(false);
         return;
       }
 
       setLoading(true);
+      setNotFound(false);
 
-      const { data: companyData, error: companyError } = await supabase
-        .from('companies')
-        .select('*')
-        .eq('slug', slug)
-        .eq('is_active', true)
-        .single();
+      let companyQuery = supabase.from('companies').select('*').eq('is_active', true);
+      if (resolvedCompanyId) {
+        companyQuery = companyQuery.eq('id', resolvedCompanyId);
+      } else if (resolvedSlug) {
+        companyQuery = companyQuery.eq('slug', resolvedSlug);
+      }
+
+      const { data: companyData, error: companyError } = await companyQuery.maybeSingle();
+
+      if (
+        (!companyData || companyError) &&
+        !resolvedCompanyId &&
+        resolvedSlug &&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(resolvedSlug)
+      ) {
+        const fallbackResult = await supabase
+          .from('companies')
+          .select('*')
+          .eq('id', resolvedSlug)
+          .eq('is_active', true)
+          .maybeSingle();
+
+        if (!fallbackResult.error && fallbackResult.data) {
+          const normalizedCompany: Company = {
+            ...(fallbackResult.data as Company),
+            logo_url: ensurePublicStorageUrl('product-images', fallbackResult.data.logo_url),
+          };
+
+          setCompany(normalizedCompany);
+          setViewMode(normalizedCompany.catalog_layout === 'list' ? 'list' : 'grid');
+
+          const { data: productsData } = await supabase
+            .from('products')
+            .select('*, category:categories(name)')
+            .eq('company_id', fallbackResult.data.id)
+            .or('catalog_enabled.is.true,show_in_catalog.is.true')
+            .eq('is_active', true)
+            .order('catalog_sort_order', { ascending: true })
+            .order('name', { ascending: true });
+
+          const mappedProducts = ((productsData || []) as unknown as ProductWithCategory[]).map((product) => ({
+            ...product,
+            image_url: ensurePublicStorageUrl('product-images', product.image_url),
+          }));
+
+          setProducts(mappedProducts);
+
+          const uniqueCategoryIds = [
+            ...new Set(mappedProducts.map((item) => item.category_id).filter(Boolean)),
+          ] as string[];
+          if (uniqueCategoryIds.length > 0) {
+            const { data: categoriesData } = await supabase
+              .from('categories')
+              .select('*')
+              .in('id', uniqueCategoryIds)
+              .order('name', { ascending: true });
+
+            setCategories((categoriesData || []) as Category[]);
+          } else {
+            setCategories([]);
+          }
+
+          setLoading(false);
+          return;
+        }
+      }
 
       if (companyError || !companyData) {
         setNotFound(true);
@@ -810,8 +910,8 @@ export default function PublicCatalog() {
         return;
       }
 
-      const normalizedCompany = {
-        ...(companyData as CompanyWithCatalog),
+      const normalizedCompany: Company = {
+        ...(companyData as Company),
         logo_url: ensurePublicStorageUrl('product-images', companyData.logo_url),
       };
 
@@ -827,7 +927,7 @@ export default function PublicCatalog() {
         .order('catalog_sort_order', { ascending: true })
         .order('name', { ascending: true });
 
-      const mappedProducts = ((productsData || []) as ProductWithCategory[]).map((product) => ({
+      const mappedProducts = ((productsData || []) as unknown as ProductWithCategory[]).map((product) => ({
         ...product,
         image_url: ensurePublicStorageUrl('product-images', product.image_url),
       }));
@@ -851,7 +951,7 @@ export default function PublicCatalog() {
     };
 
     void loadCatalog();
-  }, [slug]);
+  }, [companyId, slug]);
 
   useEffect(() => {
     if (!company) return;
@@ -876,11 +976,35 @@ export default function PublicCatalog() {
     }
   }, [company]);
 
-  const getProductPrice = (product: ProductWithCategory) =>
-    resolveProductPrice(product as unknown as Product, 1, [], 0);
+  useEffect(() => {
+    if (!company?.id) {
+      setCartItemsCount(0);
+      return;
+    }
 
-  const getPromotionBasePrice = (product: ProductWithCategory) =>
-    resolveProductBasePrice(product as unknown as Product, 1, [], 0);
+    const refreshCartCount = () => {
+      setCartItemsCount(getPublicCartItemsCount(company.id));
+    };
+
+    const handleStorage = () => {
+      refreshCartCount();
+    };
+
+    const handleCartUpdated = (event: Event) => {
+      const detail = (event as CustomEvent<{ companyId?: string }>).detail;
+      if (!detail?.companyId || detail.companyId === company.id) {
+        refreshCartCount();
+      }
+    };
+
+    refreshCartCount();
+    window.addEventListener('storage', handleStorage);
+    window.addEventListener(PUBLIC_CART_UPDATED_EVENT, handleCartUpdated as EventListener);
+    return () => {
+      window.removeEventListener('storage', handleStorage);
+      window.removeEventListener(PUBLIC_CART_UPDATED_EVENT, handleCartUpdated as EventListener);
+    };
+  }, [company?.id]);
 
   const categoryCount = useMemo(() => {
     const map = new Map<string, number>();
@@ -905,31 +1029,50 @@ export default function PublicCatalog() {
     });
   }, [products, selectedCategory, sortBy]);
 
-  const openContact = (product?: ProductWithCategory) => {
-    if (!company) return;
-
-    if (company.catalog_contact_url) {
-      const url = company.catalog_contact_url.replace('{produto}', product?.name || '');
-      window.open(url, '_blank');
+  const openContact = () => {
+    if (company?.catalog_contact_url) {
+      window.open(company.catalog_contact_url, '_blank');
       return;
     }
 
-    if (!company.whatsapp) return;
-
-    const phone = company.whatsapp.replace(/\D/g, '');
-    const message = product
-      ? `Ola! Gostaria de saber mais sobre o produto: ${product.name}`
-      : 'Ola! Vim pelo catalogo online e gostaria de mais informacoes.';
-
-    window.open(
-      `https://api.whatsapp.com/send/?phone=${phone}&text=${encodeURIComponent(message)}`,
-      '_blank'
-    );
+    if (company?.whatsapp) {
+      const phone = company.whatsapp.replace(/\D/g, '');
+      window.open(`https://wa.me/${phone}`, '_blank');
+    }
   };
 
   const showPrices = company?.catalog_show_prices ?? true;
   const showContact = company?.catalog_show_contact ?? true;
   const buttonText = company?.catalog_button_text || 'Fazer Pedido';
+  const resetCategory = () => setSelectedCategory(null);
+  const openHome = () => navigate('/catalogo');
+  const catalogPath = company
+    ? (company.slug ? `/catalogo/${company.slug}` : `/loja/${company.id}`)
+    : '/catalogo';
+  const customerOrdersPath = (() => {
+    if (!company?.id) return '/minha-conta/pedidos';
+    const params = new URLSearchParams();
+    params.set('catalog', catalogPath);
+    params.set('company', company.id);
+    return `/minha-conta/pedidos?${params.toString()}`;
+  })();
+
+  const openCart = () => {
+    if (!company?.id) return;
+    if (company.slug) {
+      navigate(`/catalogo/${company.slug}/carrinho`);
+      return;
+    }
+    navigate(`/catalogo/carrinho/${company.id}`);
+  };
+  const openCustomerArea = () => navigate(customerOrdersPath);
+  const openCustomerLogin = () => {
+    const params = new URLSearchParams();
+    params.set('next', customerOrdersPath);
+    if (company?.slug) params.set('catalog', catalogPath);
+    if (company?.id) params.set('company', company.id);
+    navigate(`/minha-conta/login?${params.toString()}`);
+  };
 
   if (loading) {
     return (
@@ -953,7 +1096,7 @@ export default function PublicCatalog() {
             <button
               type="button"
               className="pc-not-found-btn"
-              onClick={() => navigate('/')}
+              onClick={openHome}
             >
               Voltar ao inicio
             </button>
@@ -970,16 +1113,6 @@ export default function PublicCatalog() {
       <nav className="pc-nav">
         <div className="pc-container pc-nav-inner">
           <div className="pc-nav-left">
-            <button
-              type="button"
-              className="pc-back-btn"
-              onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/'))}
-              aria-label="Voltar"
-            >
-              <ArrowLeft size={16} />
-              Voltar
-            </button>
-
             <div className="pc-brand">
               <span className="pc-brand-avatar">{initials(company?.name)}</span>
               <div>
@@ -992,14 +1125,28 @@ export default function PublicCatalog() {
           </div>
 
           <div className="pc-nav-right">
-            <span className="pc-cart-chip">
+            <button type="button" className="pc-cart-chip" onClick={openCart}>
               <ShoppingCart size={14} />
-              {filteredProducts.length} {filteredProducts.length === 1 ? 'produto' : 'produtos'}
-            </span>
+              {cartItemsCount}{" "}
+              {cartItemsCount === 1 ? "item" : "itens"}
+            </button>
+
+            <button
+              type="button"
+              className="pc-account-btn"
+              onClick={user ? openCustomerArea : openCustomerLogin}
+            >
+              {user ? 'Minha conta' : 'Entrar / Criar'}
+            </button>
 
             {showContact && (company?.catalog_contact_url || company?.whatsapp) && (
-              <button type="button" className="pc-whatsapp-btn" onClick={() => openContact()}>
-                <MessageCircle size={15} /> WhatsApp
+              <button
+                type="button"
+                className="pc-whatsapp-btn"
+                onClick={openContact}
+              >
+                <Whatsapp size={16} />
+                <span>WhatsApp</span>
               </button>
             )}
           </div>
@@ -1040,7 +1187,7 @@ export default function PublicCatalog() {
             <button
               type="button"
               className={`pc-tab ${selectedCategory === null ? 'active' : ''}`}
-              onClick={() => setSelectedCategory(null)}
+              onClick={resetCategory}
               aria-selected={selectedCategory === null}
             >
               Todos ({products.length})
@@ -1109,7 +1256,7 @@ export default function PublicCatalog() {
                 <button
                   type="button"
                   className="pc-empty-btn"
-                  onClick={() => setSelectedCategory(null)}
+                  onClick={resetCategory}
                 >
                   Ver todos os produtos
                 </button>
@@ -1118,7 +1265,10 @@ export default function PublicCatalog() {
           ) : (
             <section className={`pc-products ${viewMode === 'list' ? 'pc-list' : ''}`}>
               {filteredProducts.map((product) => {
-                const productHref = `/catalogo/${slug}/produto/${product.slug?.trim() ? product.slug : product.id}`;
+                const productIdentifier = product.slug?.trim() ? product.slug : product.id;
+                const productHref = company?.slug
+                  ? `/catalogo/${company.slug}/produto/${productIdentifier}`
+                  : `/catalogo/produto/${product.id}`;
                 const inPromotion = isPromotionActive(product as unknown as Product);
                 const categoryName = product.category?.name || 'Produto';
 
@@ -1202,11 +1352,11 @@ export default function PublicCatalog() {
               )}
 
               {showContact && (company?.catalog_contact_url || company?.whatsapp) ? (
-                <button type="button" className="pc-footer-btn pc-footer-btn-primary" onClick={() => openContact()}>
-                  <MessageCircle size={15} /> WhatsApp
+                <button type="button" className="pc-footer-btn pc-footer-btn-primary" onClick={openContact}>
+                  <Whatsapp size={15} /> WhatsApp
                 </button>
               ) : (
-                <Link to={`/catalogo/${slug}`} className="pc-footer-btn pc-footer-btn-primary">
+                <Link to={catalogPath} className="pc-footer-btn pc-footer-btn-primary">
                   Ver Catalogo Completo
                 </Link>
               )}

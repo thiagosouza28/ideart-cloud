@@ -61,10 +61,13 @@ export interface Company {
   address: string | null;
   city: string | null;
   state: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
   instagram: string | null;
   facebook: string | null;
   is_active: boolean;
   minimum_order_value?: number | null;
+  minimum_delivery_value?: number | null;
   catalog_primary_color?: string | null;
   catalog_secondary_color?: string | null;
   catalog_accent_color?: string | null;
@@ -237,6 +240,23 @@ export interface Product {
   company?: Company;
 }
 
+export interface ProductReview {
+  id: string;
+  company_id: string;
+  product_id: string;
+  user_id: string | null;
+  reviewer_name: string;
+  reviewer_phone: string | null;
+  rating: number;
+  comment: string | null;
+  review_image_urls: string[];
+  is_approved: boolean;
+  created_at: string;
+  updated_at: string;
+  product?: Product;
+  company?: Company;
+}
+
 export interface ProductAttribute {
   id: string;
   product_id: string;
@@ -266,6 +286,8 @@ export interface PriceTier {
 
 export interface Customer {
   id: string;
+  company_id: string | null;
+  user_id: string | null;
   name: string;
   document: string | null;
   email: string | null;
@@ -326,6 +348,7 @@ export interface Order {
   id: string;
   order_number: number;
   customer_id: string | null;
+  customer_user_id?: string | null;
   customer_name: string | null;
   company_id: string | null;
   gateway?: string | null;

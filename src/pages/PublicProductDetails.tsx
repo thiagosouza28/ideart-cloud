@@ -1,38 +1,39 @@
-import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
   Check,
   ChevronRight,
-  Heart,
   Mail,
   MapPin,
-  Menu,
-  MessageCircle,
+  MessageCircle as Whatsapp,
   Minus,
   Package,
   Phone,
   Plus,
-  Search,
   Share2,
   ShoppingCart,
   Star,
-  Tag,
-  User
+  Tag
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
-import { supabase } from '@/integrations/supabase/client';
+import { useCustomerAuth } from '@/hooks/use-customer-auth';
+import { customerSupabase } from '@/integrations/supabase/customer-client';
+import { publicSupabase } from '@/integrations/supabase/public-client';
+import {
+  PUBLIC_CART_UPDATED_EVENT,
+  getPublicCartItemsCount,
+  upsertPublicCartItem,
+} from '@/lib/public-cart';
 import { ensurePublicStorageUrl } from '@/lib/storage';
 import { isPromotionActive, resolveProductBasePrice, resolveProductPrice } from '@/lib/pricing';
-import { CpfCnpjInput, PhoneInput, normalizeDigits, validateCpf, validatePhone } from '@/components/ui/masked-input';
 import { useToast } from '@/hooks/use-toast';
-import { Company, PaymentMethod, Product, ProductColor } from '@/types/database';
+import { Company, Product, ProductColor, ProductReview } from '@/types/database';
 
 interface CompanyWithColors extends Company {
   catalog_primary_color?: string;
@@ -89,9 +90,18 @@ const normalizeProductImages = (value: unknown, fallback?: string | null): strin
   return unique.slice(0, 5);
 };
 
+const initials = (value?: string | null) => {
+  const safe = (value || 'Catalogo').trim();
+  if (!safe) return 'C';
+  const parts = safe.split(/\s+/).filter(Boolean);
+  if (parts.length === 1) return parts[0].slice(0, 1).toUpperCase();
+  return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+};
+
 export default function PublicProductDetails() {
   const { slug, productSlug } = useParams<{ slug?: string; productSlug?: string }>();
   const navigate = useNavigate();
+  const { user } = useCustomerAuth();
   const [company, setCompany] = useState<CompanyWithColors | null>(null);
   const [product, setProduct] = useState<ProductWithCategory | null>(null);
   const [relatedProducts, setRelatedProducts] = useState<Product[]>([]);
@@ -102,35 +112,25 @@ export default function PublicProductDetails() {
   const [selectedColorIndex, setSelectedColorIndex] = useState(0);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const { toast } = useToast();
-  const orderFormRef = useRef<HTMLDivElement>(null);
+  const [cartItemsCount, setCartItemsCount] = useState(0);
   const [orderForm, setOrderForm] = useState({
-    name: '',
-    phone: '',
-    document: '',
-    paymentMethod: '' as PaymentMethod | '',
     customization: '',
     quantity: 1,
   });
-  const [orderErrors, setOrderErrors] = useState<{
-    name?: string;
-    phone?: string;
-    document?: string;
-    paymentMethod?: string;
-    quantity?: string;
-    minimum?: string;
-  }>({});
-  const [orderSubmitting, setOrderSubmitting] = useState(false);
-  const [orderResult, setOrderResult] = useState<{
-    orderNumber: number | null;
-    customerName: string;
-    document: string;
-    phone: string;
-    paymentMethod: PaymentMethod;
-    quantity: number;
-    total: number;
-    productName: string;
-  } | null>(null);
-  const [cpfStatus, setCpfStatus] = useState<'valid' | 'invalid' | null>(null);
+  const [reviews, setReviews] = useState<ProductReview[]>([]);
+  const [reviewsLoading, setReviewsLoading] = useState(false);
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [reviewError, setReviewError] = useState<string | null>(null);
+  const [selectedReviewImage, setSelectedReviewImage] = useState<string | null>(null);
+  const [reviewForm, setReviewForm] = useState({
+    name: '',
+    phone: '',
+    rating: 0,
+    comment: '',
+  });
+  const [reviewFiles, setReviewFiles] = useState<File[]>([]);
+  const [reviewImagePreviews, setReviewImagePreviews] = useState<string[]>([]);
+  const reviewImagePreviewsRef = useRef<string[]>([]);
   const isUuid = (value: string) =>
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 
@@ -141,7 +141,7 @@ export default function PublicProductDetails() {
 
       let companyData: Company | null = null;
       if (slug) {
-        const { data, error } = await supabase
+        const { data, error } = await publicSupabase
           .from('companies')
           .select('*')
           .eq('slug', slug)
@@ -151,7 +151,7 @@ export default function PublicProductDetails() {
       }
 
       if (!companyData && !slug) {
-        let productLookupQuery = supabase.from('products').select('company_id');
+        let productLookupQuery = publicSupabase.from('products').select('company_id');
         if (isUuid(resolvedProductSlug)) {
           productLookupQuery = productLookupQuery.or(
             `id.eq.${resolvedProductSlug},slug.eq.${resolvedProductSlug}`
@@ -161,7 +161,7 @@ export default function PublicProductDetails() {
         }
         const { data: productLookup } = await productLookupQuery.maybeSingle();
         if (productLookup?.company_id) {
-          const companyResult = await supabase
+          const companyResult = await publicSupabase
             .from('companies')
             .select('*')
             .eq('id', productLookup.company_id)
@@ -183,7 +183,7 @@ export default function PublicProductDetails() {
       };
       setCompany(normalizedCompany);
 
-      let productQuery = supabase
+      let productQuery = publicSupabase
         .from('products')
         .select('*, category:categories(name)')
         .eq('company_id', companyData.id)
@@ -215,7 +215,7 @@ export default function PublicProductDetails() {
       });
 
       if (productData.category_id) {
-        const { data: relatedData } = await supabase
+        const { data: relatedData } = await publicSupabase
           .from('products')
           .select('*')
           .eq('company_id', companyData.id)
@@ -259,6 +259,36 @@ export default function PublicProductDetails() {
     if (ogDesc) ogDesc.setAttribute('content', description);
   }, [product, company]);
 
+  useEffect(() => {
+    if (!company?.id) {
+      setCartItemsCount(0);
+      return;
+    }
+
+    const refreshCartCount = () => {
+      setCartItemsCount(getPublicCartItemsCount(company.id));
+    };
+
+    const handleStorage = () => {
+      refreshCartCount();
+    };
+
+    const handleCartUpdated = (event: Event) => {
+      const detail = (event as CustomEvent<{ companyId?: string }>).detail;
+      if (!detail?.companyId || detail.companyId === company.id) {
+        refreshCartCount();
+      }
+    };
+
+    refreshCartCount();
+    window.addEventListener('storage', handleStorage);
+    window.addEventListener(PUBLIC_CART_UPDATED_EVENT, handleCartUpdated as EventListener);
+    return () => {
+      window.removeEventListener('storage', handleStorage);
+      window.removeEventListener(PUBLIC_CART_UPDATED_EVENT, handleCartUpdated as EventListener);
+    };
+  }, [company?.id]);
+
   const availableColors = useMemo(
     () => normalizeProductColors(product?.product_colors).filter((color) => color.active),
     [product?.product_colors]
@@ -278,10 +308,59 @@ export default function PublicProductDetails() {
     }
   }, [product?.id, availableColors.length]);
 
-  const productPrice = product ? resolveProductPrice(product as Product, orderForm.quantity, [], 0) : 0;
+  useEffect(() => {
+    const loadReviews = async () => {
+      if (!product?.id) {
+        setReviews([]);
+        setReviewsLoading(false);
+        return;
+      }
+
+      setReviewsLoading(true);
+      const { data, error } = await publicSupabase
+        .from('product_reviews')
+        .select('*')
+        .eq('product_id', product.id)
+        .eq('is_approved', true)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        setReviews([]);
+      } else {
+        setReviews((data || []) as ProductReview[]);
+      }
+      setReviewsLoading(false);
+    };
+
+    void loadReviews();
+  }, [product?.id]);
+
+  useEffect(() => {
+    reviewImagePreviewsRef.current = reviewImagePreviews;
+  }, [reviewImagePreviews]);
+
+  useEffect(() => {
+    return () => {
+      reviewImagePreviewsRef.current.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!selectedReviewImage) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setSelectedReviewImage(null);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [selectedReviewImage]);
+
   const unitPrice = product ? resolveProductPrice(product as Product, 1, [], 0) : 0;
-  const orderTotal = productPrice * orderForm.quantity;
-  const minimumOrderValue = Number(company?.minimum_order_value || 0);
   const minimumOrderQuantity = Math.max(1, Number(product?.catalog_min_order ?? product?.min_order_quantity ?? 1));
   const promoBasePrice = product && isPromotionActive(product as Product)
     ? resolveProductBasePrice(product as Product, 1, [], 0)
@@ -291,23 +370,34 @@ export default function PublicProductDetails() {
     ? productImages
     : Array.from({ length: 4 }, () => null);
   const isPersonalizationAllowed = product?.personalization_enabled === true;
+  const reviewCount = reviews.length;
+  const averageRating = useMemo(() => {
+    if (reviews.length === 0) return 0;
+    const total = reviews.reduce((sum, item) => sum + Number(item.rating || 0), 0);
+    return Math.round((total / reviews.length) * 10) / 10;
+  }, [reviews]);
+  const roundedAverageRating = Math.round(averageRating);
+  const loggedReviewerName = useMemo(() => {
+    if (!user) return '';
+    const metadata = (user.user_metadata || {}) as Record<string, unknown>;
+    const metadataName = typeof metadata.full_name === 'string' ? metadata.full_name.trim() : '';
+    if (metadataName.length >= 2) return metadataName;
+    if (user.email) return user.email.split('@')[0] || 'Cliente';
+    return 'Cliente';
+  }, [user]);
+  const loggedReviewerPhone = useMemo(() => {
+    if (!user) return '';
+    const metadata = (user.user_metadata || {}) as Record<string, unknown>;
+    const metadataPhone = typeof metadata.phone === 'string' ? metadata.phone.trim() : '';
+    const directPhone = typeof user.phone === 'string' ? user.phone.trim() : '';
+    return directPhone || metadataPhone || '';
+  }, [user]);
 
   const formatCurrency = (value: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 
-  const formatPaymentMethod = (value: PaymentMethod) => {
-    const labels: Record<PaymentMethod, string> = {
-      dinheiro: 'Dinheiro',
-      cartao: 'Cartao',
-      credito: 'Cartao credito',
-      debito: 'Cartao debito',
-      transferencia: 'Transferencia',
-      pix: 'Pix',
-      boleto: 'Boleto',
-      outro: 'Outro',
-    };
-    return labels[value] || value;
-  };
+  const formatReviewDate = (value: string) =>
+    new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short' }).format(new Date(value));
 
   const openContact = () => {
     if (!product) return;
@@ -318,7 +408,7 @@ export default function PublicProductDetails() {
     }
     if (!company?.whatsapp) return;
     const phone = company.whatsapp.replace(/\D/g, '');
-    const message = `Olá! Gostaria de saber mais sobre o produto: ${product.name}`;
+    const message = `Ola! Gostaria de saber mais sobre o produto: ${product.name}`;
     window.open(`https://wa.me/55${phone}?text=${encodeURIComponent(message)}`, '_blank');
   };
 
@@ -341,197 +431,205 @@ export default function PublicProductDetails() {
     }
   };
 
-  const handleStartOrder = () => {
-    orderFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const openCart = () => {
+    if (!company) return;
+    const href = company.slug ? `/catalogo/${company.slug}/carrinho` : `/catalogo/carrinho/${company.id}`;
+    navigate(href);
   };
 
-  const clearOrderError = (field: keyof typeof orderErrors) => {
-    setOrderErrors((prev) => {
-      if (!prev[field]) return prev;
-      const next = { ...prev };
-      delete next[field];
-      return next;
+  const handleAddToCart = (mode: 'sum' | 'replace' = 'sum') => {
+    if (!company || !product) return;
+
+    const minimumQuantity = Math.max(1, Number(product.catalog_min_order ?? product.min_order_quantity ?? 1));
+    const quantity = Math.max(minimumQuantity, Number(orderForm.quantity || minimumQuantity));
+    const notes = isPersonalizationAllowed ? orderForm.customization.trim() : '';
+
+    upsertPublicCartItem(
+      company.id,
+      {
+        productId: product.id,
+        productSlug: product.slug || null,
+        name: product.name,
+        imageUrl: product.image_url,
+        unitPrice,
+        quantity,
+        minOrderQuantity: minimumQuantity,
+        notes: notes || null,
+      },
+      mode,
+    );
+
+    setCartItemsCount(getPublicCartItemsCount(company.id));
+    toast({
+      title: 'Produto adicionado',
+      description: `${product.name} foi adicionado ao carrinho.`,
     });
   };
 
-  const handleOrderFieldChange = (
-    field: 'name' | 'phone' | 'document' | 'paymentMethod' | 'customization' | 'quantity',
-    value: string | number
-  ) => {
-    setOrderForm((prev) => ({ ...prev, [field]: value }));
-    clearOrderError(field);
-    if (orderResult) setOrderResult(null);
+  const handleGoToCheckout = () => {
+    handleAddToCart('replace');
+    openCart();
   };
 
-  const handleDocumentChange = (value: string) => {
-    handleOrderFieldChange('document', value);
-    const digits = normalizeDigits(value);
-    if (!digits) {
-      setCpfStatus(null);
-      clearOrderError('document');
+  const handleReviewFieldChange = (field: 'name' | 'phone' | 'comment', value: string) => {
+    setReviewForm((prev) => ({ ...prev, [field]: value }));
+    if (reviewError) setReviewError(null);
+  };
+
+  const handleReviewRatingChange = (value: number) => {
+    setReviewForm((prev) => ({ ...prev, rating: value }));
+    if (reviewError) setReviewError(null);
+  };
+
+  const handleReviewImagesChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const incoming = Array.from(event.target.files || []).filter((file) =>
+      file.type.startsWith('image/')
+    );
+    if (incoming.length === 0) return;
+
+    if (reviewFiles.length + incoming.length > 3) {
+      setReviewError('Voce pode enviar no maximo 3 imagens por avaliacao.');
+      event.target.value = '';
       return;
     }
-    if (digits.length < 11) {
-      setCpfStatus(null);
-      return;
-    }
-    const valid = validateCpf(value);
-    setCpfStatus(valid ? 'valid' : 'invalid');
-    setOrderErrors((prev) => {
-      const next = { ...prev };
-      if (valid) {
-        delete next.document;
-      } else {
-        next.document = 'CPF inválido.';
-      }
-      return next;
+
+    const previews = incoming.map((file) => URL.createObjectURL(file));
+    setReviewFiles((prev) => [...prev, ...incoming]);
+    setReviewImagePreviews((prev) => [...prev, ...previews]);
+    if (reviewError) setReviewError(null);
+    event.target.value = '';
+  };
+
+  const removeReviewImage = (index: number) => {
+    setReviewFiles((prev) => prev.filter((_, itemIndex) => itemIndex !== index));
+    setReviewImagePreviews((prev) => {
+      const target = prev[index];
+      if (target) URL.revokeObjectURL(target);
+      return prev.filter((_, itemIndex) => itemIndex !== index);
     });
   };
 
-  const validateOrderForm = () => {
-    const nextErrors: {
-      name?: string;
-      phone?: string;
-      document?: string;
-      paymentMethod?: string;
-      quantity?: string;
-      minimum?: string;
-    } = {};
-
-    if (!orderForm.name.trim()) {
-      nextErrors.name = 'Informe o nome completo.';
-    }
-
-    if (!validatePhone(orderForm.phone)) {
-      nextErrors.phone = 'Telefone inválido.';
-    }
-
-    const docDigits = normalizeDigits(orderForm.document);
-    if (docDigits.length !== 11 || !validateCpf(orderForm.document)) {
-      nextErrors.document = 'CPF inválido.';
-    }
-
-    if (!orderForm.paymentMethod) {
-      nextErrors.paymentMethod = 'Selecione a forma de pagamento.';
-    }
-
-    if (orderForm.quantity < 1) {
-      nextErrors.quantity = 'Quantidade inválida.';
-    } else if (product) {
-      const minimumQuantity = Math.max(1, Number(product.catalog_min_order ?? product.min_order_quantity ?? 1));
-      if (orderForm.quantity < minimumQuantity) {
-        nextErrors.quantity = `A quantidade mínima para este produto é ${minimumQuantity} unidade(s).`;
-      }
-    }
-
-    const minValue = Number(company?.minimum_order_value || 0);
-    if (minValue > 0 && orderTotal < minValue) {
-      nextErrors.minimum = `O valor mínimo para pedidos é ${formatCurrency(minValue)}.`;
-    }
-
-    setOrderErrors(nextErrors);
-    return Object.keys(nextErrors).length === 0;
+  const resetReviewImages = () => {
+    reviewImagePreviews.forEach((url) => URL.revokeObjectURL(url));
+    setReviewFiles([]);
+    setReviewImagePreviews([]);
   };
-  const handleOrderSubmit = async (event: FormEvent) => {
+
+  const openReviewImage = (url: string) => {
+    setSelectedReviewImage(url);
+  };
+
+  const closeReviewImage = () => {
+    setSelectedReviewImage(null);
+  };
+
+  const handleReviewSubmit = async (event: FormEvent) => {
     event.preventDefault();
     if (!company || !product) return;
 
-    if (!validateOrderForm()) return;
+    const reviewerName = user ? loggedReviewerName.trim() : reviewForm.name.trim();
+    const reviewerPhone = user ? loggedReviewerPhone.trim() : reviewForm.phone.trim();
+    const comment = reviewForm.comment.trim();
 
-    setOrderSubmitting(true);
-    setOrderResult(null);
-
-    const phoneDigits = normalizeDigits(orderForm.phone);
-    const documentDigits = normalizeDigits(orderForm.document);
-    const { data, error } = await supabase.rpc('create_public_order', {
-      p_company_id: company.id,
-      p_customer_name: orderForm.name.trim(),
-      p_customer_phone: phoneDigits,
-      p_customer_document: documentDigits,
-      p_payment_method: orderForm.paymentMethod as PaymentMethod,
-      p_items: [
-        {
-          product_id: product.id,
-          quantity: orderForm.quantity,
-          notes: orderForm.customization.trim() ? orderForm.customization.trim() : null,
-        },
-      ],
-    });
-
-    if (error) {
-      const isMinOrderError =
-        error.message.includes('Minimum order value') ||
-        error.message.includes('Valor mínimo do pedido');
-      const isMinQuantityError =
-        error.message.includes('Minimum quantity not reached') ||
-        error.message.includes('Quantidade mínima não atingida');
-      const minimumQuantity = Math.max(1, Number(product?.catalog_min_order ?? product?.min_order_quantity ?? 1));
-
-      if (isMinOrderError) {
-        const minValue = Number(company?.minimum_order_value || 0);
-        setOrderErrors((prev) => ({
-          ...prev,
-          minimum: `O valor mínimo para pedidos é ${formatCurrency(minValue)}.`,
-        }));
-      }
-
-      if (isMinQuantityError) {
-        setOrderErrors((prev) => ({
-          ...prev,
-          quantity: `A quantidade mínima para este produto é ${minimumQuantity} unidade(s).`,
-        }));
-      }
-
-      const errorMessage = isMinQuantityError
-        ? `A quantidade mínima para este produto é ${minimumQuantity} unidade(s).`
-        : isMinOrderError
-          ? `O valor mínimo para pedidos é ${formatCurrency(Number(company?.minimum_order_value || 0))}.`
-          : error.message;
-
-      toast({
-        title: 'Erro ao enviar pedido',
-        description: errorMessage,
-        variant: 'destructive',
-      });
-      setOrderSubmitting(false);
+    if (reviewerName.length < 2) {
+      setReviewError('Informe seu nome para publicar a avaliacao.');
       return;
     }
 
-    const orderNumber = Number((data as { order_number?: number } | null)?.order_number ?? NaN);
-    const resolvedOrderNumber = Number.isFinite(orderNumber) ? orderNumber : null;
-    setOrderResult({
-      orderNumber: resolvedOrderNumber,
-      customerName: orderForm.name.trim(),
-      document: orderForm.document.trim(),
-      phone: orderForm.phone.trim(),
-      paymentMethod: orderForm.paymentMethod as PaymentMethod,
-      quantity: orderForm.quantity,
-      total: productPrice * orderForm.quantity,
-      productName: product.name,
-    });
+    if (reviewForm.rating < 1 || reviewForm.rating > 5) {
+      setReviewError('Selecione uma nota de 1 a 5 estrelas.');
+      return;
+    }
+
+    setReviewSubmitting(true);
+    setReviewError(null);
+    const reviewClient = user ? customerSupabase : publicSupabase;
+
+    const uploadedImageUrls: string[] = [];
+    for (const [index, file] of reviewFiles.entries()) {
+      const extension = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+      const objectPath = `${company.id}/${product.id}/${Date.now()}-${index}-${Math.random()
+        .toString(36)
+        .slice(2, 10)}.${extension}`;
+
+      const { error: uploadError } = await reviewClient.storage
+        .from('product-review-images')
+        .upload(objectPath, file, {
+          upsert: false,
+          contentType: file.type || undefined,
+          cacheControl: '3600',
+        });
+
+      if (uploadError) {
+        setReviewSubmitting(false);
+        setReviewError('Nao foi possivel enviar as imagens da avaliacao.');
+        toast({
+          title: 'Erro ao enviar imagens',
+          description: 'Nao foi possivel enviar as imagens da avaliacao.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      const { data: publicUrlData } = reviewClient.storage
+        .from('product-review-images')
+        .getPublicUrl(objectPath);
+      if (publicUrlData.publicUrl) uploadedImageUrls.push(publicUrlData.publicUrl);
+    }
+
+    const { data, error } = await reviewClient
+      .from('product_reviews')
+      .insert({
+        company_id: company.id,
+        product_id: product.id,
+        reviewer_name: reviewerName,
+        reviewer_phone: reviewerPhone || null,
+        rating: reviewForm.rating,
+        comment: comment || null,
+        review_image_urls: uploadedImageUrls,
+        user_id: user?.id || null,
+      })
+      .select('*')
+      .single();
+
+    if (error) {
+      setReviewSubmitting(false);
+      setReviewError('Nao foi possivel enviar sua avaliacao agora. Tente novamente.');
+      toast({
+        title: 'Erro ao enviar avaliacao',
+        description: 'Nao foi possivel enviar sua avaliacao agora.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setReviews((prev) => [data as ProductReview, ...prev]);
+    setReviewForm({ name: '', phone: '', rating: 0, comment: '' });
+    resetReviewImages();
+    setReviewSubmitting(false);
     toast({
-      title: 'Pedido enviado com sucesso',
-      description: resolvedOrderNumber ? `Pedido #${resolvedOrderNumber} registrado.` : 'Pedido registrado.',
+      title: 'Avaliacao enviada',
+      description: 'Obrigado por avaliar este produto.',
     });
-    setOrderSubmitting(false);
   };
 
-  const baseButtonColor = company?.catalog_primary_color || '#2563eb';
-  const textColor = company?.catalog_text_color || '#0f172a';
-  const headerBgColor = company?.catalog_header_bg_color || '#f8fafc';
-  const headerTextColor = company?.catalog_header_text_color || '#0f172a';
-  const footerBgColor = company?.catalog_footer_bg_color || '#f8fafc';
-  const footerTextColor = company?.catalog_footer_text_color || '#0f172a';
-  const priceColor = company?.catalog_price_color || baseButtonColor;
   const showPrices = company?.catalog_show_prices ?? true;
   const showContact = company?.catalog_show_contact ?? true;
-  const badgeBgColor = company?.catalog_badge_bg_color || baseButtonColor;
-  const badgeTextColor = company?.catalog_badge_text_color || '#ffffff';
-  const buttonBgColor = company?.catalog_button_bg_color || '#2563eb';
-  const buttonTextColor = company?.catalog_button_text_color || '#ffffff';
-  const buttonOutlineColor = company?.catalog_button_outline_color || '#2563eb';
-  const cardBgColor = company?.catalog_card_bg_color || '#ffffff';
-  const cardBorderColor = company?.catalog_card_border_color || '#e2e8f0';
+  const catalogHref = company?.slug
+    ? `/catalogo/${company.slug}`
+    : company?.id
+      ? `/loja/${company.id}`
+      : slug
+        ? `/catalogo/${slug}`
+        : '/catalogo';
+
+  const goBack = () => {
+    if (window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
+    navigate(catalogHref);
+  };
 
   if (loading) {
     return (
@@ -545,10 +643,10 @@ export default function PublicProductDetails() {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-slate-900 mb-2">Produto não encontrado</h1>
-          <p className="text-slate-500 mb-4">Este produto não existe ou não está disponível.</p>
-          <Link to={`/catalogo/${slug}`}>
-            <Button>Voltar ao catálogo</Button>
+          <h1 className="text-2xl font-bold text-slate-900 mb-2">Produto nao encontrado</h1>
+          <p className="text-slate-500 mb-4">Este produto nao existe ou nao esta disponivel.</p>
+          <Link to={catalogHref}>
+            <Button>Voltar ao catalogo</Button>
           </Link>
         </div>
       </div>
@@ -556,34 +654,223 @@ export default function PublicProductDetails() {
   }
 
   return (
-    <div className="catalog-detail-root min-h-screen bg-slate-50 text-slate-900" style={{ color: textColor }}>
+    <div className="catalog-detail-root min-h-screen bg-slate-50 text-slate-900">
       <style>{`
         .catalog-detail-root {
           --cd-light: #f4f6fb;
           --cd-white: #ffffff;
           --cd-border: #e2e7f5;
           --cd-muted: #7a8299;
-          --cd-text: ${textColor};
-          --cd-primary: ${buttonBgColor};
-          --cd-primary-text: ${buttonTextColor};
-          --cd-outline: ${buttonOutlineColor};
-          --cd-badge-bg: ${badgeBgColor};
-          --cd-badge-text: ${badgeTextColor};
-          --cd-price: ${priceColor};
-          --cd-card-bg: ${cardBgColor};
-          --cd-card-border: ${cardBorderColor};
-          --cd-header-bg: ${headerBgColor};
-          --cd-header-text: ${headerTextColor};
-          --cd-footer-bg: ${footerBgColor};
-          --cd-footer-text: ${footerTextColor};
+          --cd-text: #0f1b3d;
+          --cd-primary: #1a3a8f;
+          --cd-primary-text: #ffffff;
+          --cd-outline: #1a3a8f;
+          --cd-badge-bg: #c9a84c;
+          --cd-badge-text: #2f2406;
+          --cd-price: #1a3a8f;
+          --cd-card-bg: #ffffff;
+          --cd-card-border: #e2e7f5;
+          --cd-header-bg: #0f1b3d;
+          --cd-header-text: #ffffff;
+          --cd-footer-bg: #0f1b3d;
+          --cd-footer-text: #ffffff;
           background: var(--cd-light);
           color: var(--cd-text);
         }
 
         .catalog-detail-header {
           backdrop-filter: blur(10px);
-          background: color-mix(in srgb, var(--cd-header-bg) 94%, #ffffff);
-          border-bottom: 1px solid var(--cd-border);
+          background: var(--cd-header-bg);
+          border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+          color: var(--cd-header-text);
+          height: 68px;
+        }
+
+        .pc-container {
+          width: min(1220px, calc(100% - 40px));
+          margin: 0 auto;
+        }
+
+        .pc-nav-inner {
+          height: 100%;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 14px;
+        }
+
+        .pc-nav-left {
+          display: flex;
+          align-items: center;
+          gap: 14px;
+          min-width: 0;
+        }
+
+        .pc-back-btn {
+          border: 0;
+          background: transparent;
+          color: var(--cd-header-text);
+          font-family: inherit;
+          font-size: 15px;
+          font-weight: 500;
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          cursor: pointer;
+          opacity: 0.92;
+          transition: opacity 0.2s ease;
+        }
+
+        .pc-back-btn:hover {
+          opacity: 1;
+        }
+
+        .pc-brand {
+          display: flex;
+          align-items: center;
+          gap: 11px;
+          min-width: 0;
+        }
+
+        .pc-brand-avatar {
+          width: 34px;
+          height: 34px;
+          border-radius: 999px;
+          background: #3d8bef;
+          color: var(--cd-primary-text);
+          display: grid;
+          place-items: center;
+          font-size: 14px;
+          font-weight: 700;
+          flex-shrink: 0;
+        }
+
+        .pc-brand-name {
+          font-family: inherit;
+          font-weight: 700;
+          font-size: 1.03rem;
+          line-height: 1.1;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .pc-brand-sub {
+          font-size: 12px;
+          color: rgba(255, 255, 255, 0.75);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .pc-nav-right {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          flex-shrink: 0;
+        }
+
+        .pc-cart-chip {
+          height: 36px;
+          border-radius: 50px;
+          border: 1px solid rgba(255, 255, 255, 0.4);
+          background: rgba(255, 255, 255, 0.08);
+          color: var(--cd-primary-text);
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          padding: 0 14px;
+          font-size: 14px;
+          font-weight: 500;
+          white-space: nowrap;
+          cursor: pointer;
+        }
+
+        .pc-whatsapp-btn {
+          height: 36px;
+          border: 0;
+          border-radius: 12px;
+          background: var(--cd-primary);
+          color: var(--cd-primary-text);
+          font-family: inherit;
+          font-size: 14px;
+          font-weight: 500;
+          padding: 0 15px;
+          cursor: pointer;
+          transition: opacity 0.2s ease;
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+        }
+
+        .pc-whatsapp-btn:hover {
+          opacity: 0.9;
+        }
+
+        .pc-hero {
+          position: relative;
+          overflow: hidden;
+          background: var(--cd-primary);
+          color: var(--cd-primary-text);
+        }
+
+        .pc-hero::before {
+          content: '';
+          position: absolute;
+          inset: 0;
+          background-image: radial-gradient(circle, rgba(255, 255, 255, 0.22) 1px, transparent 1px);
+          background-size: 16px 16px;
+          opacity: 0.38;
+          pointer-events: none;
+        }
+
+        .pc-hero-inner {
+          position: relative;
+          z-index: 1;
+          padding: 28px 0 30px;
+        }
+
+        .pc-hero-tag {
+          display: inline-flex;
+          align-items: center;
+          height: 28px;
+          border-radius: 50px;
+          background: #c9a84c;
+          color: #2f2406;
+          font-size: 12px;
+          font-weight: 500;
+          padding: 0 12px;
+          margin-bottom: 10px;
+        }
+
+        .pc-title {
+          font-family: inherit;
+          font-size: clamp(1.8rem, 4vw, 2.75rem);
+          line-height: 1.12;
+          font-weight: 800;
+          margin-bottom: 8px;
+        }
+
+        .pc-subtitle {
+          max-width: 820px;
+          font-size: 15px;
+          font-weight: 300;
+          color: rgba(255, 255, 255, 0.88);
+          margin-bottom: 14px;
+        }
+
+        .pc-contact-row {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 14px 20px;
+          font-size: 14px;
+        }
+
+        .pc-contact-item {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          color: rgba(255, 255, 255, 0.95);
         }
 
         .catalog-detail-main {
@@ -594,6 +881,29 @@ export default function PublicProductDetails() {
         .catalog-detail-hero {
           align-items: start;
           gap: 1.25rem;
+        }
+
+        .catalog-detail-media {
+          display: flex;
+          flex-direction: column;
+        }
+
+        .catalog-detail-media-frame {
+          min-height: clamp(280px, 64vw, 520px);
+          height: clamp(280px, 64vw, 520px);
+          max-height: clamp(280px, 64vw, 520px);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: #f8fafc;
+        }
+
+        .catalog-detail-media-image {
+          width: 100%;
+          height: 100%;
+          object-fit: contain;
+          object-position: center;
+          background: #f8fafc;
         }
 
         .catalog-detail-hero > div:first-child {
@@ -608,6 +918,19 @@ export default function PublicProductDetails() {
           border-radius: 1rem;
           background: var(--cd-white);
           padding: 1.1rem;
+        }
+
+        .catalog-detail-info {
+          display: flex;
+          flex-direction: column;
+        }
+
+        .catalog-detail-buybox {
+          margin-top: auto;
+          border: 1px solid var(--cd-border);
+          border-radius: 0.9rem;
+          background: #fbfcff;
+          padding: 1rem;
         }
 
         .catalog-detail-tabs {
@@ -658,10 +981,67 @@ export default function PublicProductDetails() {
           box-shadow: 0 8px 24px rgba(15, 27, 61, 0.04);
         }
 
-        .catalog-detail-footer {
-          border-color: var(--cd-border) !important;
+        .pc-footer {
           background: var(--cd-footer-bg);
           color: var(--cd-footer-text);
+          padding-top: 24px;
+          margin-top: 26px;
+        }
+
+        .pc-footer-top {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 16px;
+          padding-bottom: 20px;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.18);
+        }
+
+        .pc-footer-actions {
+          display: flex;
+          align-items: center;
+          justify-content: flex-end;
+          gap: 10px;
+          flex-wrap: wrap;
+        }
+
+        .pc-footer-btn {
+          height: 40px;
+          border-radius: 12px;
+          font-family: inherit;
+          font-size: 14px;
+          font-weight: 500;
+          padding: 0 16px;
+          text-decoration: none;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          transition: opacity 0.2s ease;
+          cursor: pointer;
+        }
+
+        .pc-footer-btn:hover {
+          opacity: 0.9;
+        }
+
+        .pc-footer-btn-outline {
+          border: 1px solid rgba(255, 255, 255, 0.58);
+          color: var(--cd-footer-text);
+          background: transparent;
+        }
+
+        .pc-footer-btn-primary {
+          border: 0;
+          color: var(--cd-primary-text);
+          background: #3d8bef;
+        }
+
+        .pc-footer-copy {
+          text-align: center;
+          color: rgba(255, 255, 255, 0.68);
+          font-size: 13px;
+          padding: 15px 0 18px;
         }
 
         .catalog-detail-root input,
@@ -715,84 +1095,141 @@ export default function PublicProductDetails() {
         }
 
         @media (max-width: 1023px) {
+          .pc-container {
+            width: min(1220px, calc(100% - 24px));
+          }
+
           .catalog-detail-main {
             width: calc(100% - 18px);
+          }
+
+          .pc-footer-top {
+            flex-direction: column;
+            align-items: flex-start;
+          }
+
+          .pc-footer-actions {
+            justify-content: flex-start;
+          }
+        }
+
+        @media (min-width: 1024px) {
+          .catalog-detail-hero {
+            align-items: start;
+          }
+
+          .catalog-detail-media-frame {
+            min-height: 460px;
+            height: 460px;
+            max-height: 460px;
+          }
+
+          .catalog-detail-info {
+            min-height: 460px;
+          }
+
+          .catalog-detail-buybox {
+            position: sticky;
+            top: 86px;
           }
         }
 
         @media (max-width: 720px) {
+          .pc-container {
+            width: calc(100% - 16px);
+          }
+
+          .pc-brand-sub {
+            display: none;
+          }
+
+          .pc-cart-chip {
+            padding: 0 10px;
+            font-size: 12px;
+          }
+
+          .pc-whatsapp-btn {
+            padding: 0 12px;
+            font-size: 13px;
+          }
+
           .catalog-detail-hero > div:last-child {
             padding: 0.9rem;
           }
         }
       `}</style>
 
-      <header className="catalog-detail-header sticky top-0 z-40 border-b" style={{ color: headerTextColor }}>
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
-          <div className="flex items-center gap-6">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => (window.history.length > 1 ? navigate(-1) : navigate(`/catalogo/${slug}`))}
-              className="gap-2 text-xs text-slate-600"
-            >
+      <header className="catalog-detail-header sticky top-0 z-40 border-b">
+        <div className="pc-container pc-nav-inner">
+          <div className="pc-nav-left">
+            <button type="button" className="pc-back-btn" onClick={goBack}>
               <ArrowLeft className="h-4 w-4" />
               Voltar
-            </Button>
-            <div className="flex items-center gap-2">
-              {company?.logo_url ? (
-                <img
-                  src={company.logo_url}
-                  alt={company?.name || 'Logo'}
-                  className="w-7 h-7 rounded bg-white/80 object-cover"
-                />
-              ) : (
-                <div className="w-7 h-7 rounded bg-slate-200 flex items-center justify-center">
-                  <Package className="h-4 w-4" />
-                </div>
-              )}
-              <span className="text-sm font-semibold">{company?.name || 'IDEART'}</span>
+            </button>
+            <div className="pc-brand">
+              <span className="pc-brand-avatar">{initials(company?.name)}</span>
+              <div>
+                <p className="pc-brand-name">{company?.name || 'Catalogo'}</p>
+                {company?.city && company?.state && (
+                  <p className="pc-brand-sub">{company.city}, {company.state}</p>
+                )}
+              </div>
             </div>
-            <nav className="hidden md:flex items-center gap-6 text-xs text-slate-500">
-              <Link to="/">Início</Link>
-              <Link to={`/catalogo/${slug}`}>Catálogo</Link>
-              <span>Servicos</span>
-              <span>Contato</span>
-            </nav>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="hidden md:flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-500">
-              <Search className="h-4 w-4" />
-              <input
-                placeholder="Buscar produtos..."
-                className="bg-transparent focus:outline-none"
-              />
-            </div>
-            <button className="h-9 w-9 rounded-lg border border-slate-200 bg-white text-slate-600 hover:text-slate-900">
-              <ShoppingCart className="h-4 w-4 mx-auto" />
+          <div className="pc-nav-right">
+            <button type="button" className="pc-cart-chip" onClick={openCart}>
+              <ShoppingCart className="h-4 w-4" />
+              {cartItemsCount} {cartItemsCount === 1 ? 'item' : 'itens'}
             </button>
-            <button className="h-9 w-9 rounded-lg border border-slate-200 bg-white text-slate-600 hover:text-slate-900">
-              <User className="h-4 w-4 mx-auto" />
-            </button>
-            <button className="h-9 w-9 rounded-lg border border-slate-200 bg-white text-slate-600 hover:text-slate-900 md:hidden">
-              <Menu className="h-4 w-4 mx-auto" />
-            </button>
+            {showContact && (company?.catalog_contact_url || company?.whatsapp) && (
+              <button type="button" className="pc-whatsapp-btn" onClick={openContact}>
+                <Whatsapp className="h-4 w-4" />
+                <span>WhatsApp</span>
+              </button>
+            )}
           </div>
         </div>
       </header>
 
+      <section className="pc-hero">
+        <div className="pc-container pc-hero-inner">
+          <span className="pc-hero-tag">Detalhes do produto</span>
+          <h1 className="pc-title">{product.name}</h1>
+          <p className="pc-subtitle">
+            {product.catalog_short_description || product.description || 'Descricao detalhada do produto.'}
+          </p>
+          <div className="pc-contact-row">
+            {company?.phone && (
+              <span className="pc-contact-item">
+                <Phone className="h-4 w-4" /> {company.phone}
+              </span>
+            )}
+            {company?.email && (
+              <span className="pc-contact-item">
+                <Mail className="h-4 w-4" /> {company.email}
+              </span>
+            )}
+            {company?.address && (
+              <span className="pc-contact-item">
+                <MapPin className="h-4 w-4" /> {company.address}
+              </span>
+            )}
+          </div>
+        </div>
+      </section>
+
       <main className="catalog-detail-main mx-auto max-w-6xl px-4 py-6">
         <div className="flex items-center gap-2 text-xs text-slate-400 mb-6">
-          <Link to={`/catalogo/${slug}`} className="hover:text-slate-600">Início</Link>
+          <Link to={catalogHref} className="hover:text-slate-600">Catalogo</Link>
           <ChevronRight className="h-3 w-3" />
-          <span>{product.category?.name || 'Catálogo'}</span>
+          <span>{product.category?.name || 'Catalogo'}</span>
           <ChevronRight className="h-3 w-3" />
           <span className="text-slate-600 font-medium">{product.name}</span>
         </div>
 
         <div className="catalog-detail-hero grid grid-cols-1 lg:grid-cols-2 gap-10">
-          <div className="space-y-4">
-            <div className="relative overflow-hidden rounded-2xl bg-slate-900 aspect-[4/5]">
+          <div className="catalog-detail-media space-y-4">
+            <div className="catalog-detail-media-frame relative overflow-hidden rounded-2xl">
               {isPromotionActive(product as Product) && (
                 <Badge className="absolute top-4 left-4 catalog-badge">Novidade</Badge>
               )}
@@ -800,7 +1237,7 @@ export default function PublicProductDetails() {
                 <img
                   src={activeImage}
                   alt={product.name}
-                  className="w-full h-full object-cover"
+                  className="catalog-detail-media-image"
                 />
               ) : (
                 <div className="h-full w-full flex items-center justify-center bg-slate-800">
@@ -829,46 +1266,46 @@ export default function PublicProductDetails() {
             </div>
           </div>
 
-          <div className="space-y-6">
+          <div className="catalog-detail-info space-y-6">
             <div>
               <h1 className="text-3xl font-bold">{product.name}</h1>
               <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-slate-500">
                 <div className="flex items-center gap-1 text-yellow-500">
                   {Array.from({ length: 5 }).map((_, index) => (
-                    <Star key={index} className={`h-4 w-4 ${index < 4 ? 'fill-yellow-400' : ''}`} />
+                    <Star key={index} className={`h-4 w-4 ${index < roundedAverageRating ? 'fill-yellow-400' : ''}`} />
                   ))}
                 </div>
-                <span>(128 avaliações)</span>
+                {reviewCount > 0 ? (
+                  <span>{averageRating.toFixed(1)} ({reviewCount} {reviewCount === 1 ? 'avaliacao' : 'avaliacoes'})</span>
+                ) : (
+                  <span>Sem avaliacoes</span>
+                )}
                 <Badge variant="secondary">Em estoque</Badge>
               </div>
             </div>
 
-            {showPrices ? (
-              promoBasePrice !== null ? (
-                <div className="flex flex-col gap-1">
-                  <div className="text-sm text-slate-500">
-                    <span className="mr-1">De</span>
-                    <span className="line-through">{formatCurrency(promoBasePrice)}</span>
+            <div className="catalog-detail-buybox space-y-4">
+              {showPrices ? (
+                promoBasePrice !== null ? (
+                  <div className="flex flex-col gap-1">
+                    <div className="text-sm text-slate-500">
+                      <span className="mr-1">De</span>
+                      <span className="line-through">{formatCurrency(promoBasePrice)}</span>
+                    </div>
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-sm text-slate-500">Por</span>
+                      <span className="text-3xl font-bold catalog-price">{formatCurrency(unitPrice)}</span>
+                    </div>
                   </div>
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-sm text-slate-500">Por</span>
+                ) : (
+                  <div className="flex items-baseline gap-3">
                     <span className="text-3xl font-bold catalog-price">{formatCurrency(unitPrice)}</span>
                   </div>
-                </div>
+                )
               ) : (
-                <div className="flex items-baseline gap-3">
-                  <span className="text-3xl font-bold catalog-price">{formatCurrency(unitPrice)}</span>
-                </div>
-              )
-            ) : (
-              <div className="text-sm text-slate-500">Preço sob consulta</div>
-            )}
+                <div className="text-sm text-slate-500">Preco sob consulta</div>
+              )}
 
-            <p className="text-sm text-slate-600 leading-relaxed">
-              {product.catalog_short_description || product.description || 'Descrição detalhada do produto.'}
-            </p>
-
-            <div className="border-t border-slate-200 pt-4 space-y-4">
               {availableColors.length > 0 && (
                 <div>
                   <Label className="text-xs uppercase text-slate-500">Cor da Capa</Label>
@@ -876,11 +1313,16 @@ export default function PublicProductDetails() {
                     {availableColors.map((color, index) => (
                       <button
                         key={`${color.name}-${color.hex}`}
-                        className={`h-8 w-8 rounded-full border-2 ${index === selectedColorIndex ? 'border-primary' : 'border-transparent'} bg-white`}
-                        style={{ backgroundColor: color.hex }}
+                        className={`h-8 rounded-full border px-3 text-xs font-medium ${
+                          index === selectedColorIndex
+                            ? 'border-primary bg-primary text-white'
+                            : 'border-slate-200 bg-white text-slate-600'
+                        }`}
                         aria-label={color.name}
                         onClick={() => setSelectedColorIndex(index)}
-                      />
+                      >
+                        {color.name}
+                      </button>
                     ))}
                   </div>
                 </div>
@@ -888,7 +1330,7 @@ export default function PublicProductDetails() {
               {isPersonalizationAllowed && (
                 <div>
                   <div className="flex items-center justify-between text-xs text-slate-500">
-                    <Label>Personalização (Nome na capa)</Label>
+                    <Label>Personalizacao (Nome na capa)</Label>
                     <span>Gratis</span>
                   </div>
                   <Input
@@ -897,37 +1339,49 @@ export default function PublicProductDetails() {
                     maxLength={20}
                     value={orderForm.customization}
                     onChange={(event) =>
-                      handleOrderFieldChange('customization', event.target.value.slice(0, 20))
+                      setOrderForm((prev) => ({ ...prev, customization: event.target.value.slice(0, 20) }))
                     }
                   />
-                  <p className="mt-1 text-xs text-slate-400">Máximo de 20 caracteres.</p>
+                  <p className="mt-1 text-xs text-slate-400">Maximo de 20 caracteres.</p>
                 </div>
               )}
               <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
                 <div className="flex items-center border border-slate-200 rounded-lg bg-white h-10 w-28">
                   <button
+                    type="button"
                     className="w-8 h-full flex items-center justify-center text-slate-400 hover:text-slate-700"
-                    onClick={() => handleOrderFieldChange('quantity', Math.max(1, orderForm.quantity - 1))}
+                    onClick={() =>
+                      setOrderForm((prev) => ({
+                        ...prev,
+                        quantity: Math.max(1, prev.quantity - 1),
+                      }))
+                    }
                     aria-label="Diminuir"
                   >
                     <Minus className="h-4 w-4" />
                   </button>
                   <span className="flex-1 text-center text-sm font-medium">{orderForm.quantity}</span>
                   <button
+                    type="button"
                     className="w-8 h-full flex items-center justify-center text-slate-400 hover:text-slate-700"
-                    onClick={() => handleOrderFieldChange('quantity', orderForm.quantity + 1)}
+                    onClick={() =>
+                      setOrderForm((prev) => ({
+                        ...prev,
+                        quantity: prev.quantity + 1,
+                      }))
+                    }
                     aria-label="Aumentar"
                   >
                     <Plus className="h-4 w-4" />
                   </button>
                 </div>
-                <Button className="flex-1 catalog-btn" onClick={handleStartOrder}>
+                <Button className="flex-1 catalog-btn" onClick={() => handleAddToCart('sum')}>
                   <ShoppingCart className="h-4 w-4 mr-2" />
-                  Fazer pedido agora
+                  Adicionar ao carrinho
                 </Button>
-                <button className="h-10 w-10 rounded-lg border border-slate-200 text-slate-400 hover:text-rose-500">
-                  <Heart className="h-4 w-4 mx-auto" />
-                </button>
+                <Button className="flex-1 catalog-btn" onClick={handleGoToCheckout}>
+                  Fazer Pedido
+                </Button>
               </div>
               <div className="flex flex-wrap gap-4 text-xs text-slate-500">
                 <span className="flex items-center gap-1"><Check className="h-3 w-3 text-primary" />Compra segura</span>
@@ -937,7 +1391,7 @@ export default function PublicProductDetails() {
               <div className="flex flex-wrap gap-2">
                 {showContact && (company?.catalog_contact_url || company?.whatsapp) && (
                   <Button variant="outline" className="catalog-btn-outline" onClick={openContact}>
-                    <MessageCircle className="h-4 w-4 mr-2" />
+                    <Whatsapp className="h-4 w-4 mr-2" />
                     WhatsApp
                   </Button>
                 )}
@@ -953,10 +1407,10 @@ export default function PublicProductDetails() {
         <div className="catalog-detail-tabs mt-12 rounded-xl border border-slate-200 bg-white overflow-hidden">
           <div className="flex flex-wrap border-b border-slate-200 text-sm">
             {[
-              { id: 'descricao', label: 'Descrição detalhada' },
-              { id: 'especificacoes', label: 'Especificações técnicas' },
+              { id: 'descricao', label: 'Descricao detalhada' },
+              { id: 'especificacoes', label: 'Especificacoes tecnicas' },
               { id: 'envio', label: 'Envio e prazos' },
-              { id: 'avaliacoes', label: 'Avaliações (128)' },
+              { id: 'avaliacoes', label: `Avaliacoes (${reviewCount})` },
             ].map((tab) => (
               <button
                 key={tab.id}
@@ -971,7 +1425,7 @@ export default function PublicProductDetails() {
             {activeTab === 'descricao' && (
               <div className="space-y-4 text-sm text-slate-600">
                 <p>
-                  {product.catalog_long_description || product.description || 'Descrição detalhada do produto para apresentar benefícios e diferenciais.'}
+                  {product.catalog_long_description || product.description || 'Descricao detalhada do produto para apresentar beneficios e diferenciais.'}
                 </p>
                 <div className="grid md:grid-cols-2 gap-4">
                   <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
@@ -979,209 +1433,211 @@ export default function PublicProductDetails() {
                     <p className="text-xs text-slate-500">Papel de fontes responsaveis e materiais duraveis para uso diario.</p>
                   </div>
                   <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-                    <h4 className="font-semibold text-slate-800 mb-2">Personalização</h4>
-                    <p className="text-xs text-slate-500">Gravação com qualidade premium para destacar sua marca.</p>
+                    <h4 className="font-semibold text-slate-800 mb-2">Personalizacao</h4>
+                    <p className="text-xs text-slate-500">Gravacao com qualidade premium para destacar sua marca.</p>
                   </div>
                 </div>
               </div>
             )}
             {activeTab === 'especificacoes' && (
               <div className="space-y-2 text-sm text-slate-600">
-                <p><strong>SKU:</strong> {product.sku || 'Não informado'}</p>
-                <p><strong>Código de barras:</strong> {product.barcode || 'Não informado'}</p>
-                <p><strong>Unidade:</strong> {product.unit || 'Não informada'}</p>
-                <p><strong>Quantidade mínima:</strong> {minimumOrderQuantity}</p>
+                <p><strong>SKU:</strong> {product.sku || 'Nao informado'}</p>
+                <p><strong>Codigo de barras:</strong> {product.barcode || 'Nao informado'}</p>
+                <p><strong>Unidade:</strong> {product.unit || 'Nao informada'}</p>
+                <p><strong>Quantidade minima:</strong> {minimumOrderQuantity}</p>
               </div>
             )}
             {activeTab === 'envio' && (
               <div className="text-sm text-slate-600">
-                Consulte prazos e modalidades de entrega com a equipe. Pedidos acima de R$199 possuem frete grátis.
+                Consulte prazos e modalidades de entrega com a equipe. Pedidos acima de R$199 possuem frete gratis.
               </div>
             )}
             {activeTab === 'avaliacoes' && (
-              <div className="text-sm text-slate-600">Avaliações em breve.</div>
+              <div className="space-y-5">
+                <form onSubmit={handleReviewSubmit} className="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-3">
+                  <div>
+                    <h4 className="font-semibold text-slate-800">Deixe sua avaliacao</h4>
+                    <p className="text-xs text-slate-500 mt-1">Compartilhe sua experiencia com este produto.</p>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {!user && (
+                      <>
+                        <div>
+                          <Label htmlFor="review-name">Nome *</Label>
+                          <Input
+                            id="review-name"
+                            value={reviewForm.name}
+                            onChange={(event) => handleReviewFieldChange('name', event.target.value)}
+                            placeholder="Seu nome"
+                          />
+                        </div>
+
+                        <div>
+                          <Label htmlFor="review-phone">WhatsApp (opcional)</Label>
+                          <Input
+                            id="review-phone"
+                            value={reviewForm.phone}
+                            onChange={(event) => handleReviewFieldChange('phone', event.target.value)}
+                            placeholder="(00) 00000-0000"
+                          />
+                        </div>
+                      </>
+                    )}
+
+                    {user && (
+                      <div className="sm:col-span-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
+                        Avaliacao vinculada a sua conta como <strong>{loggedReviewerName}</strong>.
+                      </div>
+                    )}
+
+                    <div className="sm:col-span-2">
+                      <Label>Avaliacao *</Label>
+                      <div className="mt-2 flex items-center gap-1">
+                        {[1, 2, 3, 4, 5].map((rating) => (
+                          <button
+                            key={rating}
+                            type="button"
+                            className="rounded-md p-1 text-amber-500 hover:bg-amber-50"
+                            onClick={() => handleReviewRatingChange(rating)}
+                            aria-label={`Avaliar com ${rating} estrela${rating > 1 ? 's' : ''}`}
+                          >
+                            <Star className={`h-5 w-5 ${rating <= reviewForm.rating ? 'fill-amber-400' : ''}`} />
+                          </button>
+                        ))}
+                        <span className="ml-2 text-xs text-slate-500">
+                          {reviewForm.rating > 0 ? `${reviewForm.rating} de 5` : 'Selecione de 1 a 5'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="sm:col-span-2">
+                      <Label htmlFor="review-comment">Comentario (opcional)</Label>
+                      <textarea
+                        id="review-comment"
+                        className="mt-2 min-h-[86px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                        value={reviewForm.comment}
+                        maxLength={600}
+                        onChange={(event) => handleReviewFieldChange('comment', event.target.value)}
+                        placeholder="Conte o que voce achou do produto..."
+                      />
+                    </div>
+
+                    <div className="sm:col-span-2">
+                      <Label htmlFor="review-images">Imagens (ate 3)</Label>
+                      <Input
+                        id="review-images"
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        onChange={handleReviewImagesChange}
+                      />
+                      <p className="mt-1 text-xs text-slate-500">
+                        Envie fotos reais do produto para ajudar outros clientes.
+                      </p>
+                      {reviewImagePreviews.length > 0 && (
+                        <div className="mt-3 grid grid-cols-3 gap-2">
+                          {reviewImagePreviews.map((previewUrl, index) => (
+                            <div key={`${previewUrl}-${index}`} className="relative overflow-hidden rounded-md border border-slate-200 bg-white">
+                              <img
+                                src={previewUrl}
+                                alt={`Preview ${index + 1}`}
+                                className="h-24 w-full object-contain bg-slate-50 p-1"
+                              />
+                              <button
+                                type="button"
+                                className="absolute right-1 top-1 rounded bg-black/70 px-2 py-1 text-[10px] text-white"
+                                onClick={() => removeReviewImage(index)}
+                              >
+                                Remover
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {reviewError && <p className="text-xs text-destructive">{reviewError}</p>}
+
+                  <div className="flex justify-end">
+                    <Button type="submit" className="catalog-btn" disabled={reviewSubmitting}>
+                      {reviewSubmitting ? 'Enviando...' : 'Enviar avaliacao'}
+                    </Button>
+                  </div>
+                </form>
+
+                {reviewsLoading ? (
+                  <p className="text-sm text-slate-500">Carregando avaliacoes...</p>
+                ) : reviewCount === 0 ? (
+                  <div className="text-sm text-slate-600">Ainda nao ha avaliacoes para este produto.</div>
+                ) : (
+                  <div className="space-y-3">
+                    {reviews.map((review) => (
+                      <article key={review.id} className="rounded-lg border border-slate-200 bg-white p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="font-semibold text-slate-800">{review.reviewer_name}</p>
+                            <div className="mt-1 flex items-center gap-1 text-amber-500">
+                              {Array.from({ length: 5 }).map((_, index) => (
+                                <Star
+                                  key={`${review.id}-${index}`}
+                                  className={`h-4 w-4 ${index < review.rating ? 'fill-amber-400' : ''}`}
+                                />
+                              ))}
+                            </div>
+                          </div>
+                          <span className="text-xs text-slate-500">{formatReviewDate(review.created_at)}</span>
+                        </div>
+                        {review.comment && (
+                          <p className="mt-3 text-sm text-slate-600 leading-relaxed">{review.comment}</p>
+                        )}
+                        {review.review_image_urls && review.review_image_urls.length > 0 && (
+                          <div className="mt-3 grid grid-cols-3 gap-2">
+                            {review.review_image_urls.slice(0, 3).map((imageUrl, imageIndex) => (
+                              <button
+                                key={`${review.id}-image-${imageIndex}`}
+                                type="button"
+                                onClick={() => openReviewImage(imageUrl)}
+                                className="block overflow-hidden rounded-md border border-slate-200 bg-slate-50 transition hover:border-primary/40"
+                                aria-label={`Abrir imagem ${imageIndex + 1} da avaliacao`}
+                              >
+                                <img
+                                  src={imageUrl}
+                                  alt={`Imagem da avaliacao ${imageIndex + 1}`}
+                                  className="h-24 w-full object-contain bg-white p-1"
+                                  loading="lazy"
+                                />
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </div>
 
-        <div ref={orderFormRef} className="catalog-detail-order mt-12">
-          <Card className="catalog-card border">
-            <CardContent className="p-6 space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-lg font-semibold">Finalizar pedido</h2>
-                  <p className="text-sm text-slate-500">Preencha os dados para enviar o pedido.</p>
-                </div>
-                {orderResult && <Badge variant="secondary">Pendente</Badge>}
-              </div>
-
-              {orderResult && (
-                <div className="rounded-md border border-slate-200 bg-slate-50 p-4 text-sm">
-                  <div className="flex items-center justify-between">
-                    <span className="font-semibold">Comprovante do pedido</span>
-                    <span className="text-slate-500">#{orderResult.orderNumber || '-'}</span>
-                  </div>
-                  <div className="mt-3 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-500">Cliente</span>
-                      <span className="font-medium">{orderResult.customerName}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-500">CPF</span>
-                      <span className="font-medium">{orderResult.document}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-500">Telefone</span>
-                      <span className="font-medium">{orderResult.phone}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-500">Forma de pagamento</span>
-                      <span className="font-medium">{formatPaymentMethod(orderResult.paymentMethod)}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-500">Total</span>
-                      <span className="font-semibold">{formatCurrency(orderResult.total)}</span>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              <form onSubmit={handleOrderSubmit} className="space-y-4">
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="sm:col-span-2">
-                    <Label htmlFor="order-name">Nome completo *</Label>
-                    <Input
-                      id="order-name"
-                      value={orderForm.name}
-                      onChange={(event) => handleOrderFieldChange('name', event.target.value)}
-                      placeholder="Nome e sobrenome"
-                    />
-                    {orderErrors.name && (
-                      <p className="mt-1 text-xs text-destructive">{orderErrors.name}</p>
-                    )}
-                  </div>
-
-                  <div>
-                    <Label htmlFor="order-phone">Telefone (WhatsApp) *</Label>
-                    <PhoneInput
-                      id="order-phone"
-                      value={orderForm.phone}
-                      onChange={(value) => handleOrderFieldChange('phone', value)}
-                      className={orderErrors.phone ? 'border-destructive' : ''}
-                    />
-                    {orderErrors.phone && (
-                      <p className="mt-1 text-xs text-destructive">{orderErrors.phone}</p>
-                    )}
-                  </div>
-
-                  <div>
-                    <Label htmlFor="order-document">CPF *</Label>
-                    <CpfCnpjInput
-                      id="order-document"
-                      value={orderForm.document}
-                      onChange={(value) => handleDocumentChange(value)}
-                      className={
-                        cpfStatus === 'valid'
-                          ? 'border-emerald-500 focus-visible:ring-emerald-500'
-                          : cpfStatus === 'invalid' || orderErrors.document
-                            ? 'border-destructive focus-visible:ring-destructive'
-                            : ''
-                      }
-                    />
-                    {orderErrors.document && (
-                      <p className="mt-1 text-xs text-destructive">{orderErrors.document}</p>
-                    )}
-                    {!orderErrors.document && cpfStatus === 'valid' && (
-                      <p className="mt-1 text-xs text-emerald-600">CPF valido.</p>
-                    )}
-                  </div>
-
-                  <div>
-                    <Label htmlFor="order-payment">Forma de pagamento *</Label>
-                    <Select
-                      value={orderForm.paymentMethod}
-                      onValueChange={(value) =>
-                        handleOrderFieldChange('paymentMethod', value as PaymentMethod)
-                      }
-                    >
-                      <SelectTrigger
-                        id="order-payment"
-                        className={orderErrors.paymentMethod ? 'border-destructive' : ''}
-                      >
-                        <SelectValue placeholder="Selecione" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="dinheiro">Dinheiro</SelectItem>
-                        <SelectItem value="pix">Pix</SelectItem>
-                        <SelectItem value="cartao">Cartao</SelectItem>
-                        <SelectItem value="boleto">Boleto</SelectItem>
-                        <SelectItem value="outro">Outro</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    {orderErrors.paymentMethod && (
-                      <p className="mt-1 text-xs text-destructive">{orderErrors.paymentMethod}</p>
-                    )}
-                  </div>
-
-                  <div>
-                    <Label htmlFor="order-quantity">Quantidade *</Label>
-                    <Input
-                      id="order-quantity"
-                      type="number"
-                      min="1"
-                      value={orderForm.quantity}
-                      onChange={(event) =>
-                        handleOrderFieldChange(
-                          'quantity',
-                          Math.max(1, Number(event.target.value) || 1)
-                        )
-                      }
-                    />
-                    {orderErrors.quantity && (
-                      <p className="mt-1 text-xs text-destructive">{orderErrors.quantity}</p>
-                    )}
-                    {!orderErrors.quantity && minimumOrderQuantity > 1 && (
-                      <p className="mt-1 text-xs text-slate-500">
-                        Quantidade mínima: {minimumOrderQuantity} unidade(s).
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-slate-500">Total estimado</span>
-                  <span className="font-semibold">{formatCurrency(orderTotal)}</span>
-                </div>
-
-                {minimumOrderValue > 0 && (
-                  <p className={`text-xs ${orderTotal < minimumOrderValue ? 'text-destructive' : 'text-slate-500'}`}>
-                    O valor mínimo para pedidos é {formatCurrency(minimumOrderValue)}.
-                  </p>
-                )}
-
-                <Button type="submit" className="w-full catalog-btn" disabled={orderSubmitting}>
-                  {orderSubmitting ? 'Enviando...' : 'Enviar pedido'}
-                </Button>
-                <p className="text-xs text-slate-400">
-                  O pagamento será confirmado somente no PDV ou no painel administrativo.
-                </p>
-              </form>
-            </CardContent>
-          </Card>
-        </div>
         {relatedProducts.length > 0 && (
           <>
             <Separator className="my-12" />
             <div className="catalog-detail-related">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-xl font-bold">Compre junto</h2>
-                <Link to={`/catalogo/${slug}`} className="text-xs text-primary">Ver catálogo completo</Link>
+                <Link to={catalogHref} className="text-xs text-primary">Ver catalogo completo</Link>
               </div>
               <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
                 {relatedProducts.map((related) => (
                   <Link
                     key={related.id}
-                    to={`/catalogo/${slug}/produto/${related.slug?.trim() ? related.slug : related.id}`}
+                    to={
+                      company?.slug
+                        ? `/catalogo/${company.slug}/produto/${related.slug?.trim() ? related.slug : related.id}`
+                        : `/catalogo/produto/${related.id}`
+                    }
                   >
                     <Card className="overflow-hidden border border-slate-200 bg-white hover:shadow-md transition-shadow">
                       <div className="aspect-square bg-slate-100 relative overflow-hidden">
@@ -1223,7 +1679,7 @@ export default function PublicProductDetails() {
                             </span>
                           )
                         ) : (
-                          <span className="text-xs text-slate-500">Preço sob consulta</span>
+                          <span className="text-xs text-slate-500">Preco sob consulta</span>
                         )}
                       </CardContent>
                     </Card>
@@ -1273,9 +1729,9 @@ export default function PublicProductDetails() {
                     </a>
                   </Button>
                 )}
-                <Link to={`/catalogo/${slug}`}>
+                <Link to={catalogHref}>
                   <Button size="sm" className="catalog-btn w-full sm:w-auto">
-                    Ver catálogo completo
+                    Ver catalogo completo
                   </Button>
                 </Link>
               </div>
@@ -1284,37 +1740,74 @@ export default function PublicProductDetails() {
         </Card>
       </main>
 
-      <footer className="catalog-detail-footer border-t mt-12">
-        <div className="mx-auto max-w-6xl px-4 py-8 grid gap-6 sm:grid-cols-2 md:grid-cols-4 text-sm">
-          <div className="space-y-2">
-            <h4 className="font-semibold">{company?.name}</h4>
-            <p className="text-xs text-slate-500">Transformando ideias em arte impressa.</p>
-          </div>
-          <div className="space-y-2 text-xs text-slate-500">
-            <p>Empresa</p>
-            <p>Sobre nos</p>
-            <p>Blog</p>
-          </div>
-          <div className="space-y-2 text-xs text-slate-500">
-            <p>Ajuda</p>
-            <p>Termos de uso</p>
-            <p>Politica de privacidade</p>
-          </div>
-          <div className="space-y-2 text-xs text-slate-500">
-            <p>Newsletter</p>
-            <div className="flex gap-2">
-              <input className="flex-1 rounded-lg border border-slate-200 px-2 py-1" placeholder="Seu e-mail" />
-              <Button size="sm" className="catalog-btn">Enviar</Button>
+      <footer className="pc-footer">
+        <div className="pc-container">
+          <div className="pc-footer-top">
+            <div className="pc-brand">
+              <span className="pc-brand-avatar">{initials(company?.name)}</span>
+              <div>
+                <p className="pc-brand-name">{company?.name || 'Catalogo'}</p>
+                {company?.city && company?.state && (
+                  <p className="pc-brand-sub">{company.city}, {company.state}</p>
+                )}
+              </div>
+            </div>
+
+            <div className="pc-footer-actions">
+              {company?.phone && (
+                <a href={`tel:${company.phone}`} className="pc-footer-btn pc-footer-btn-outline">
+                  <Phone className="h-4 w-4" /> Ligar
+                </a>
+              )}
+
+              {company?.email && (
+                <a href={`mailto:${company.email}`} className="pc-footer-btn pc-footer-btn-outline">
+                  <Mail className="h-4 w-4" /> E-mail
+                </a>
+              )}
+
+              {showContact && (company?.catalog_contact_url || company?.whatsapp) ? (
+                <button type="button" className="pc-footer-btn pc-footer-btn-primary" onClick={openContact}>
+                  <Whatsapp className="h-4 w-4" /> WhatsApp
+                </button>
+              ) : (
+                <Link to={catalogHref} className="pc-footer-btn pc-footer-btn-primary">
+                  Ver Catalogo Completo
+                </Link>
+              )}
             </div>
           </div>
-        </div>
-        <div className="border-t">
-          <div className="mx-auto max-w-6xl px-4 py-4 text-xs text-slate-400">
-            (c) {new Date().getFullYear()} {company?.name}. Todos os direitos reservados.
-          </div>
+          <p className="pc-footer-copy">(c) {new Date().getFullYear()} {company?.name}. Todos os direitos reservados.</p>
         </div>
       </footer>
+
+      {selectedReviewImage && (
+        <div
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-black/80 p-4"
+          onClick={closeReviewImage}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Visualizacao de imagem da avaliacao"
+        >
+          <div
+            className="relative flex max-h-[92vh] w-full max-w-5xl items-center justify-center rounded-lg bg-slate-900 p-3"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              type="button"
+              className="absolute right-2 top-2 rounded-md bg-black/70 px-3 py-1 text-xs font-medium text-white hover:bg-black/85"
+              onClick={closeReviewImage}
+            >
+              Fechar
+            </button>
+            <img
+              src={selectedReviewImage}
+              alt="Imagem ampliada da avaliacao"
+              className="max-h-[86vh] w-full object-contain"
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
-

@@ -39,7 +39,13 @@ const UserManagement = lazy(() => import("./pages/UserManagement"));
 const Companies = lazy(() => import("./pages/Companies"));
 const CompanyForm = lazy(() => import("./pages/CompanyForm"));
 const PublicCatalog = lazy(() => import("./pages/PublicCatalog"));
+const PublicStoreExplorer = lazy(() => import("./pages/PublicStoreExplorer"));
 const PublicProductDetails = lazy(() => import("./pages/PublicProductDetails"));
+const PublicCart = lazy(() => import("./pages/PublicCart"));
+const PublicCustomerLogin = lazy(() => import("./pages/PublicCustomerLogin"));
+const PublicCustomerOrders = lazy(() => import("./pages/PublicCustomerOrders"));
+const PublicCustomerProfile = lazy(() => import("./pages/PublicCustomerProfile"));
+const PublicCustomerOrderDetails = lazy(() => import("./pages/PublicCustomerOrderDetails"));
 const PublicOrder = lazy(() => import("./pages/PublicOrder"));
 const Subscription = lazy(() => import("./pages/Subscription"));
 const SubscriptionSuccess = lazy(() => import("./pages/SubscriptionSuccess"));
@@ -482,9 +488,17 @@ const App = () => (
               />
 
               {/* Public Catalog - No auth required */}
+              <Route path="/catalogo" element={withSuspense(<PublicStoreExplorer />)} />
               <Route path="/catalogo/:slug" element={withSuspense(<PublicCatalog />)} />
+              <Route path="/loja/:companyId" element={withSuspense(<PublicCatalog />)} />
               <Route path="/catalogo/:slug/produto/:productSlug" element={withSuspense(<PublicProductDetails />)} />
               <Route path="/catalogo/produto/:productSlug" element={withSuspense(<PublicProductDetails />)} />
+              <Route path="/catalogo/:slug/carrinho" element={withSuspense(<PublicCart />)} />
+              <Route path="/catalogo/carrinho/:companyId" element={withSuspense(<PublicCart />)} />
+              <Route path="/minha-conta/login" element={withSuspense(<PublicCustomerLogin />)} />
+              <Route path="/minha-conta/perfil" element={withSuspense(<PublicCustomerProfile />)} />
+              <Route path="/minha-conta/pedidos" element={withSuspense(<PublicCustomerOrders />)} />
+              <Route path="/minha-conta/pedidos/:orderId" element={withSuspense(<PublicCustomerOrderDetails />)} />
               <Route path="/pedido/:token" element={withSuspense(<PublicOrder />)} />
 
               <Route path="*" element={withSuspense(<NotFound />)} />

@@ -116,6 +116,8 @@ export type Database = {
           catalog_filter_bg_color: string | null
           catalog_filter_text_color: string | null
           city: string | null
+          latitude: number | null
+          longitude: number | null
           created_at: string
           description: string | null
           document: string | null
@@ -129,6 +131,7 @@ export type Database = {
           signature_image_url: string | null
           signature_responsible: string | null
           signature_role: string | null
+          minimum_delivery_value: number | null
           minimum_order_value: number | null
           name: string
           owner_user_id: string | null
@@ -170,6 +173,8 @@ export type Database = {
           catalog_filter_bg_color?: string | null
           catalog_filter_text_color?: string | null
           city?: string | null
+          latitude?: number | null
+          longitude?: number | null
           created_at?: string
           description?: string | null
           document?: string | null
@@ -183,6 +188,7 @@ export type Database = {
           signature_image_url?: string | null
           signature_responsible?: string | null
           signature_role?: string | null
+          minimum_delivery_value?: number | null
           minimum_order_value?: number | null
           name: string
           owner_user_id?: string | null
@@ -224,6 +230,8 @@ export type Database = {
           catalog_filter_bg_color?: string | null
           catalog_filter_text_color?: string | null
           city?: string | null
+          latitude?: number | null
+          longitude?: number | null
           created_at?: string
           description?: string | null
           document?: string | null
@@ -237,6 +245,7 @@ export type Database = {
           signature_image_url?: string | null
           signature_responsible?: string | null
           signature_role?: string | null
+          minimum_delivery_value?: number | null
           minimum_order_value?: number | null
           name?: string
           owner_user_id?: string | null
@@ -270,6 +279,7 @@ export type Database = {
         Row: {
           address: string | null
           city: string | null
+          company_id: string | null
           created_at: string
           date_of_birth: string | null
           document: string | null
@@ -281,11 +291,13 @@ export type Database = {
           phone: string | null
           state: string | null
           updated_at: string
+          user_id: string | null
           zip_code: string | null
         }
         Insert: {
           address?: string | null
           city?: string | null
+          company_id?: string | null
           created_at?: string
           date_of_birth?: string | null
           document?: string | null
@@ -297,11 +309,13 @@ export type Database = {
           phone?: string | null
           state?: string | null
           updated_at?: string
+          user_id?: string | null
           zip_code?: string | null
         }
         Update: {
           address?: string | null
           city?: string | null
+          company_id?: string | null
           created_at?: string
           date_of_birth?: string | null
           document?: string | null
@@ -313,6 +327,7 @@ export type Database = {
           phone?: string | null
           state?: string | null
           updated_at?: string
+          user_id?: string | null
           zip_code?: string | null
         }
         Relationships: []
@@ -532,6 +547,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           customer_id: string | null
+          customer_user_id: string | null
           customer_name: string | null
           discount: number
           gateway: string | null
@@ -558,6 +574,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           customer_id?: string | null
+          customer_user_id?: string | null
           customer_name?: string | null
           discount?: number
           gateway?: string | null
@@ -584,6 +601,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           customer_id?: string | null
+          customer_user_id?: string | null
           customer_name?: string | null
           discount?: number
           gateway?: string | null
@@ -933,6 +951,66 @@ export type Database = {
             columns: ["supply_id"]
             isOneToOne: false
             referencedRelation: "supplies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      product_reviews: {
+        Row: {
+          comment: string | null
+          company_id: string
+          created_at: string
+          id: string
+          is_approved: boolean
+          product_id: string
+          rating: number
+          review_image_urls: string[]
+          reviewer_name: string
+          reviewer_phone: string | null
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          comment?: string | null
+          company_id: string
+          created_at?: string
+          id?: string
+          is_approved?: boolean
+          product_id: string
+          rating: number
+          review_image_urls?: string[]
+          reviewer_name: string
+          reviewer_phone?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          comment?: string | null
+          company_id?: string
+          created_at?: string
+          id?: string
+          is_approved?: boolean
+          product_id?: string
+          rating?: number
+          review_image_urls?: string[]
+          reviewer_name?: string
+          reviewer_phone?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_reviews_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_reviews_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
             referencedColumns: ["id"]
           },
         ]
@@ -1452,13 +1530,42 @@ export type Database = {
       create_public_order: {
         Args: {
           p_company_id: string
+          p_customer_address?: string
+          p_customer_city?: string
           p_customer_document: string
+          p_customer_email?: string
           p_customer_name: string
           p_customer_phone: string
+          p_customer_state?: string
+          p_customer_zip_code?: string
           p_items: Json
           p_payment_method: Database["public"]["Enums"]["payment_method"]
         }
         Returns: Json
+      }
+      upsert_catalog_customer_profile: {
+        Args: {
+          p_company_id: string
+          p_document?: string
+          p_email?: string
+          p_name?: string
+          p_phone?: string
+        }
+        Returns: string
+      }
+      upsert_catalog_customer_checkout_profile: {
+        Args: {
+          p_address?: string
+          p_city?: string
+          p_company_id: string
+          p_document?: string
+          p_email?: string
+          p_name?: string
+          p_phone?: string
+          p_state?: string
+          p_zip_code?: string
+        }
+        Returns: string
       }
       get_user_role: {
         Args: { _user_id: string }

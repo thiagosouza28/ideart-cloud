@@ -155,7 +155,7 @@ set search_path = public
 as $$
 begin
   if old.is_automatic then
-    raise exception 'Lancamentos automáticos nao podem ser excluidos';
+    raise exception 'Lancamentos automaticos nao podem ser excluidos';
   end if;
   return old;
 end;

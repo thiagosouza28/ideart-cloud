@@ -1,9 +1,10 @@
-﻿import { useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
+﻿import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
 import { formatOrderNumber } from '@/lib/utils';
 import { useParams } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { CatalogFooter, CatalogHero, CatalogTopNav } from '@/components/catalog/PublicCatalogChrome';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -27,7 +28,7 @@ const statusLabels: Record<OrderStatus, string> = {
   cancelado: 'Cancelado',
 };
 
-const statusIcons: Record<OrderStatus, ComponentType<any>> = {
+const statusIcons: Record<OrderStatus, ComponentType<{ className?: string }>> = {
   orcamento: FileText,
   pendente: Clock,
   produzindo_arte: ImageIcon,
@@ -87,7 +88,7 @@ export default function PublicOrder() {
     return Math.max(0, Number(payload.order.total) - Number(payload.order.amount_paid));
   }, [payload]);
 
-  const loadOrder = async (silent = false) => {
+  const loadOrder = useCallback(async (silent = false) => {
     if (!token) return;
     try {
       const data = await fetchPublicOrder(token);
@@ -108,23 +109,26 @@ export default function PublicOrder() {
       setPayload(data);
       setError(null);
       if (!silent) setLoading(false);
-    } catch (err: any) {
+    } catch (err: unknown) {
       if (!silent) {
-        setError(err?.message || 'Erro ao carregar pedido.');
+        const message = err instanceof Error ? err.message : 'Erro ao carregar pedido.';
+        setError(message);
         setLoading(false);
       }
     }
-  };
+  }, [token, toast]);
 
   useEffect(() => {
-    loadOrder();
-  }, [token]);
+    void loadOrder();
+  }, [loadOrder]);
 
   useEffect(() => {
     if (!token) return;
-    const interval = setInterval(() => loadOrder(true), 30000);
+    const interval = setInterval(() => {
+      void loadOrder(true);
+    }, 30000);
     return () => clearInterval(interval);
-  }, [token]);
+  }, [loadOrder, token]);
 
   const handleApprove = async () => {
     if (!token) return;
@@ -135,8 +139,9 @@ export default function PublicOrder() {
         setPayload(data);
         toast({ title: 'Orçamento aprovado com sucesso!' });
       }
-    } catch (err: any) {
-      toast({ title: 'Erro ao aprovar orçamento', description: err?.message, variant: 'destructive' });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Falha ao aprovar orçamento.';
+      toast({ title: 'Erro ao aprovar orçamento', description: message, variant: 'destructive' });
     } finally {
       setApproving(false);
     }
@@ -151,8 +156,9 @@ export default function PublicOrder() {
         setPayload(data);
         toast({ title: 'Arte aprovada com sucesso!' });
       }
-    } catch (err: any) {
-      toast({ title: 'Erro ao aprovar arte', description: err?.message, variant: 'destructive' });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Falha ao aprovar arte.';
+      toast({ title: 'Erro ao aprovar arte', description: message, variant: 'destructive' });
     } finally {
       setApprovingArt(false);
     }
@@ -160,23 +166,41 @@ export default function PublicOrder() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-muted-foreground">Carregando...</div>
+      <div className="min-h-screen bg-slate-50 text-slate-900">
+        <CatalogTopNav subtitle="Acompanhe seu pedido" showContact={false} />
+        <CatalogHero
+          badge="Pedido online"
+          title="Acompanhar pedido"
+          description="Visualize status, itens e pagamentos em tempo real."
+        />
+        <div className="mx-auto flex w-[min(980px,calc(100%-24px))] items-center justify-center py-10">
+          <div className="text-sm text-slate-500">Carregando...</div>
+        </div>
+        <CatalogFooter />
       </div>
     );
   }
 
   if (error || !payload) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Card className="max-w-md w-full">
-          <CardHeader>
-            <CardTitle>Pedido</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-muted-foreground">{error || 'Pedido não encontrado.'}</p>
-          </CardContent>
-        </Card>
+      <div className="min-h-screen bg-slate-50 text-slate-900">
+        <CatalogTopNav subtitle="Acompanhe seu pedido" showContact={false} />
+        <CatalogHero
+          badge="Pedido online"
+          title="Acompanhar pedido"
+          description="Visualize status, itens e pagamentos em tempo real."
+        />
+        <div className="mx-auto w-[min(980px,calc(100%-24px))] py-10">
+          <Card className="mx-auto w-full max-w-md">
+            <CardHeader>
+              <CardTitle>Pedido</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-muted-foreground">{error || 'Pedido não encontrado.'}</p>
+            </CardContent>
+          </Card>
+        </div>
+        <CatalogFooter />
       </div>
     );
   }
@@ -216,10 +240,30 @@ export default function PublicOrder() {
   const canApproveArt =
     payload.order.status === 'produzindo_arte' && artFilesReady.length > 0;
   const StatusIcon = statusIcons[payload.order.status];
+  const companyInfo = {
+    name: payload.company.name,
+    city: payload.company.city,
+    state: payload.company.state,
+    phone: payload.company.phone,
+    email: payload.company.email,
+    address: payload.company.address,
+    whatsapp: payload.company.whatsapp,
+  };
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="page-container max-w-5xl mx-auto">
+    <div className="min-h-screen bg-slate-50 text-slate-900">
+      <CatalogTopNav
+        company={companyInfo}
+        subtitle="Acompanhamento de pedido"
+        showContact
+      />
+      <CatalogHero
+        badge="Pedido online"
+        title={`Pedido #${formatOrderNumber(payload.order.order_number)}`}
+        description="Acompanhe status, pagamento e detalhes do seu pedido."
+      />
+
+      <div className="page-container mx-auto max-w-5xl py-6">
         <div className="space-y-2">
           <div className="flex items-center gap-3">
             {companyLogoUrl && (
@@ -586,9 +630,13 @@ export default function PublicOrder() {
           </DialogContent>
         </Dialog>
       </div>
+
+      <CatalogFooter company={companyInfo} />
     </div>
   );
 }
+
+
 
 
 

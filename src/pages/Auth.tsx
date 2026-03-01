@@ -52,9 +52,14 @@ export default function Auth() {
 
   const mustChangePassword = Boolean(profile?.must_change_password || profile?.force_password_change);
   const mustCompleteCompany = Boolean(profile?.must_complete_company || profile?.must_complete_onboarding);
+  const isCustomerAccount = String(user?.user_metadata?.account_type || '').toLowerCase() === 'customer';
 
   useEffect(() => {
     if (user && !authLoading) {
+      if (isCustomerAccount) {
+        navigate('/minha-conta/pedidos', { replace: true });
+        return;
+      }
       if (needsOnboarding || mustCompleteCompany) {
         navigate('/onboarding');
       } else if (mustChangePassword) {
@@ -63,7 +68,7 @@ export default function Auth() {
         navigate('/dashboard');
       }
     }
-  }, [user, authLoading, needsOnboarding, mustCompleteCompany, mustChangePassword, navigate]);
+  }, [user, authLoading, isCustomerAccount, needsOnboarding, mustCompleteCompany, mustChangePassword, navigate]);
 
   useEffect(() => {
     const tab = searchParams.get('tab');

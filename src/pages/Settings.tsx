@@ -64,6 +64,7 @@ export default function Settings() {
     instagram: "",
     facebook: "",
     minimum_order_value: 0,
+    minimum_delivery_value: 0,
     catalog_primary_color: "#3b82f6",
     catalog_secondary_color: "#1e40af",
     catalog_accent_color: "#f59e0b",
@@ -220,6 +221,7 @@ export default function Settings() {
           signature_responsible: data.signature_responsible || "",
           signature_role: data.signature_role || "",
           minimum_order_value: Number(data.minimum_order_value ?? 0),
+          minimum_delivery_value: Number(data.minimum_delivery_value ?? 0),
           catalog_primary_color: catalogButtonBg,
           catalog_secondary_color: catalogHeaderBg,
           catalog_accent_color: catalogPrice,
@@ -238,7 +240,7 @@ export default function Settings() {
           catalog_card_border_color: catalogCardBorder,
           catalog_filter_bg_color: catalogFilterBg,
           catalog_filter_text_color: catalogFilterText,
-          catalog_layout: (data as any).catalog_layout || "grid",
+          catalog_layout: ((data.catalog_layout as "grid" | "list" | null) || "grid"),
           whatsapp_message_template: data.whatsapp_message_template || "",
           birthday_message_template: data.birthday_message_template || "",
         };
@@ -393,6 +395,7 @@ export default function Settings() {
           instagram: companyForm.instagram || null,
           facebook: companyForm.facebook || null,
           minimum_order_value: Number(companyForm.minimum_order_value || 0),
+          minimum_delivery_value: Number(companyForm.minimum_delivery_value || 0),
           logo_url: logoUrl,
           signature_image_url: signatureUrl,
           signature_responsible: companyForm.signature_responsible?.trim() || null,
@@ -418,7 +421,7 @@ export default function Settings() {
           catalog_layout: companyForm.catalog_layout,
           whatsapp_message_template: companyForm.whatsapp_message_template?.trim() || null,
           birthday_message_template: companyForm.birthday_message_template?.trim() || null,
-        } as any)
+        })
         .eq('id', company.id)
         .select()
         .single();
@@ -774,16 +777,30 @@ export default function Settings() {
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="company-min-order">Valor mínimo do pedido</Label>
-                <CurrencyInput
-                  id="company-min-order"
-                  value={Number(companyForm.minimum_order_value || 0)}
-                  onChange={(value) => setCompanyForm({ ...companyForm, minimum_order_value: value })}
-                />
-                <p className="text-sm text-muted-foreground">
-                  Pedidos do catálogo só poderão ser enviados a partir desse valor.
-                </p>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="company-min-order">Valor mínimo do pedido</Label>
+                  <CurrencyInput
+                    id="company-min-order"
+                    value={Number(companyForm.minimum_order_value || 0)}
+                    onChange={(value) => setCompanyForm({ ...companyForm, minimum_order_value: value })}
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    Pedido só pode ser finalizado no catálogo a partir desse valor.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="company-min-delivery">Valor mínimo para entrega</Label>
+                  <CurrencyInput
+                    id="company-min-delivery"
+                    value={Number(companyForm.minimum_delivery_value || 0)}
+                    onChange={(value) => setCompanyForm({ ...companyForm, minimum_delivery_value: value })}
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    Valor mínimo para habilitar entrega. Abaixo disso, apenas retirada.
+                  </p>
+                </div>
               </div>
 
               {/* Contact Info */}

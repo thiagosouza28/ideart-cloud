@@ -73,6 +73,9 @@ const loadImpersonationAdmin = () => {
   }
 };
 
+const isCustomerAccount = (candidate?: User | null) =>
+  String(candidate?.user_metadata?.account_type || '').toLowerCase() === 'customer';
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
   const [user, setUser] = useState<User | null>(null);
@@ -173,6 +176,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         }
 
+        if (session?.user && isCustomerAccount(session.user)) {
+          setSession(null);
+          setUser(null);
+          setProfile(null);
+          setCompany(null);
+          setSubscription(null);
+          setRole(null);
+          setNeedsOnboarding(false);
+          setPasswordRecovery(false);
+          setLoading(false);
+          void supabase.auth.signOut({ scope: 'local' });
+          return;
+        }
+
         const nextUserId = session?.user?.id ?? null;
         const tokenChanged = (session?.access_token ?? null) !== sessionTokenRef.current;
         const userChanged = nextUserId !== userIdRef.current;
@@ -227,6 +244,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       const session = data.session ?? null;
+      if (session?.user && isCustomerAccount(session.user)) {
+        setSession(null);
+        setUser(null);
+        setProfile(null);
+        setCompany(null);
+        setSubscription(null);
+        setRole(null);
+        setNeedsOnboarding(false);
+        setPasswordRecovery(false);
+        clearImpersonationState();
+        setLoading(false);
+        void supabase.auth.signOut({ scope: 'local' });
+        return;
+      }
+
       setSession(session);
       setUser(session?.user ?? null);
 
@@ -359,7 +391,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [user]);
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) return { error };
+
+    if (data.user && isCustomerAccount(data.user)) {
+      await supabase.auth.signOut({ scope: 'local' });
+      return {
+        error: new Error('Este login e exclusivo para equipe da loja. Cliente deve usar /minha-conta/login.'),
+      };
+    }
+
     return { error };
   };
 

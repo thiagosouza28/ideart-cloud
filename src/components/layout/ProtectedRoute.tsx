@@ -12,7 +12,9 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
   const { user, role, loading, hasPermission, needsOnboarding, subscription, profile, company } = useAuth();
   const location = useLocation();
   const isSubscriptionRoute = location.pathname.startsWith('/assinatura');
+  const isOnboardingRoute = location.pathname.startsWith('/onboarding');
   const isPasswordChangeRoute = location.pathname === '/alterar-senha';
+  const isCustomerAccount = String(user?.user_metadata?.account_type || '').toLowerCase() === 'customer';
   const mustChangePassword = Boolean(profile?.must_change_password || profile?.force_password_change);
   const mustCompleteCompany = Boolean(profile?.must_complete_company);
   const companyCompleted = Boolean(company?.completed);
@@ -30,6 +32,11 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
     return <Navigate to="/auth" replace />;
   }
 
+  // Customer accounts should use the dedicated public area only.
+  if (isCustomerAccount) {
+    return <Navigate to="/minha-conta/pedidos" replace />;
+  }
+
   // Redirect to onboarding if needed (except if already on onboarding page)
   if (!companyCompleted && (needsOnboarding || mustCompleteCompany) && location.pathname !== '/onboarding') {
     return <Navigate to="/onboarding" replace />;
@@ -39,7 +46,12 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
     return <Navigate to="/alterar-senha" replace />;
   }
 
-  if (role !== 'super_admin' && (!subscription || !subscription.hasAccess) && !isSubscriptionRoute) {
+  if (
+    !isOnboardingRoute &&
+    role !== 'super_admin' &&
+    (!subscription || !subscription.hasAccess) &&
+    !isSubscriptionRoute
+  ) {
     return <Navigate to="/assinatura" replace />;
   }
 
