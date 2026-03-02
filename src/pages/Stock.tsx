@@ -210,7 +210,7 @@ export default function Stock() {
       movement_type: form.movement_type,
       quantity: quantity,
       reason: form.reason || null,
-      user_id: user?.id || null
+      user_id: userá.id || null
     });
 
     if (movementError) {

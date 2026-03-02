@@ -50,7 +50,7 @@ export default function Production() {
 
   const startProduction = async (orderId: string) => {
     try {
-      await updateOrderStatus({ orderId, status: 'em_producao', userId: user?.id });
+      await updateOrderStatus({ orderId, status: 'em_producao', userId: userá.id });
       toast({ title: 'Pedido iniciado na produção!' });
       fetchOrders();
     } catch (error: any) {
@@ -60,7 +60,7 @@ export default function Production() {
 
   const markArtApproved = async (orderId: string) => {
     try {
-      await updateOrderStatus({ orderId, status: 'arte_aprovada', userId: user?.id });
+      await updateOrderStatus({ orderId, status: 'arte_aprovada', userId: userá.id });
       toast({ title: 'Arte aprovada com sucesso!' });
       fetchOrders();
     } catch (error: any) {
@@ -137,7 +137,7 @@ export default function Production() {
       uploadedPaths.map((path) => ({
         order_id: orderId,
         storage_path: path,
-        created_by: user?.id || null,
+        created_by: userá.id || null,
       })),
     );
 
@@ -157,7 +157,7 @@ export default function Production() {
 
     try {
       uploadedPaths = await uploadFinalPhotos(readyOrder.id, readyFiles);
-      await updateOrderStatus({ orderId: readyOrder.id, status: 'finalizado', userId: user?.id });
+      await updateOrderStatus({ orderId: readyOrder.id, status: 'finalizado', userId: userá.id });
       toast({ title: 'Pedido finalizado!', description: 'Fotos salvas com sucesso.' });
       closeReadyDialog();
       fetchOrders();

@@ -68,7 +68,7 @@ export default function PublicCustomerOrderDetails() {
 
   useEffect(() => {
     const loadOrder = async () => {
-      if (!user?.id || !orderId) return;
+      if (!userá.id || !orderId) return;
 
       setPageLoading(true);
       setErrorMessage(null);
@@ -96,7 +96,7 @@ export default function PublicCustomerOrderDetails() {
         setOrder(null);
         setItems([]);
         setHistory([]);
-        setErrorMessage(orderError?.message || 'Pedido nao encontrado.');
+        setErrorMessage(orderError?.message || 'Pedido não encontrado.');
         setPageLoading(false);
         return;
       }
@@ -112,7 +112,7 @@ export default function PublicCustomerOrderDetails() {
     };
 
     void loadOrder();
-  }, [orderId, user?.id]);
+  }, [orderId, userá.id]);
 
   const totalItems = useMemo(
     () => items.reduce((sum, item) => sum + Number(item.quantity || 0), 0),
@@ -122,7 +122,7 @@ export default function PublicCustomerOrderDetails() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <CatalogTopNav
-        subtitle={user?.email || 'Cliente autenticado'}
+        subtitle={userá.email || 'Cliente autenticado'}
         showBack
         onBack={() => navigate(ordersPath)}
         showAccount
@@ -133,13 +133,13 @@ export default function PublicCustomerOrderDetails() {
       <CatalogHero
         badge="Minha conta"
         title="Detalhes do pedido"
-        description="Consulte itens, historico e valores do seu pedido."
+        description="Consulte itens, histórico e valores do seu pedido."
       />
 
       <main className="mx-auto w-[min(980px,calc(100%-24px))] py-6 space-y-6">
         <div className="flex items-center justify-between gap-3">
           <Link to={catalogPath} className="text-sm font-medium text-[#1a3a8f] hover:underline">
-            Ir para catalogo
+            Ir para catálogo
           </Link>
           <Link to={ordersPath} className="text-sm font-medium text-[#1a3a8f] hover:underline">
             Voltar para pedidos
@@ -219,11 +219,11 @@ export default function PublicCustomerOrderDetails() {
 
             <Card className="border-slate-200">
               <CardHeader>
-                <CardTitle className="text-lg">Historico de status</CardTitle>
+                <CardTitle className="text-lg">Histórico de status</CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
                 {history.length === 0 && (
-                  <p className="text-sm text-slate-500">Sem historico registrado.</p>
+                  <p className="text-sm text-slate-500">Sem histórico registrado.</p>
                 )}
                 {history.map((entry) => (
                   <div key={entry.id} className="rounded-md border border-slate-200 bg-white p-3 text-sm">

@@ -298,7 +298,7 @@ export default function PaymentSettings() {
                   : 'Cole o access token'}
               />
               <p className="text-xs text-slate-500">
-                Token atual: {settings?.mp_access_token_masked || 'nao configurado'}.
+                Token atual: {settings?.mp_access_token_masked || 'não configurado'}.
               </p>
             </div>
           )}
@@ -316,7 +316,7 @@ export default function PaymentSettings() {
                   : 'Cole o token'}
               />
               <p className="text-xs text-slate-500">
-                Token atual: {settings?.pagseguro_token_masked || 'nao configurado'}.
+                Token atual: {settings?.pagseguro_token_masked || 'não configurado'}.
               </p>
             </div>
           )}

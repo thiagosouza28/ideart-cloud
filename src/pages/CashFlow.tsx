@@ -53,9 +53,9 @@ const paymentMethods: Array<{ value: PaymentMethod | 'all' | 'none'; label: stri
   { value: 'all', label: 'Todas as formas' },
   { value: 'dinheiro', label: 'Dinheiro' },
   { value: 'pix', label: 'PIX' },
-  { value: 'cartao', label: 'Cartao' },
-  { value: 'credito', label: 'Cartao credito' },
-  { value: 'debito', label: 'Cartao debito' },
+  { value: 'cartao', label: 'Cartão' },
+  { value: 'credito', label: 'Cartão crédito' },
+  { value: 'debito', label: 'Cartão débito' },
   { value: 'transferencia', label: 'Transferencia' },
   { value: 'boleto', label: 'Boleto' },
   { value: 'outro', label: 'Outros' },
@@ -188,7 +188,7 @@ export default function CashFlow() {
     } catch (error: any) {
       toast({
         title: 'Erro ao carregar filtros',
-        description: error?.message || 'Nao foi possivel carregar os filtros',
+        description: error?.message || 'Não foi possível carregar os filtros',
         variant: 'destructive',
       });
     }
@@ -266,7 +266,7 @@ export default function CashFlow() {
   const handleSaveEntry = async () => {
     const amount = Number(entryForm.amount.replace(',', '.'));
     if (!amount || amount <= 0) {
-      toast({ title: 'Valor invalido', description: 'Informe um valor maior que zero.', variant: 'destructive' });
+      toast({ title: 'Valor inválido', description: 'Informe um valor maior que zero.', variant: 'destructive' });
       return;
     }
 
@@ -692,7 +692,7 @@ export default function CashFlow() {
                             size="icon"
                             disabled={tx.isAutomatic}
                             onClick={() => openEditDialog(tx)}
-                            title={tx.isAutomatic ? 'Lançamento automatico nao pode ser editado' : 'Editar'}
+                            title={tx.isAutomatic ? 'Lançamento automático não pode ser editado' : 'Editar'}
                           >
                             <Pencil className="h-4 w-4" />
                           </Button>
@@ -701,7 +701,7 @@ export default function CashFlow() {
                             size="icon"
                             disabled={tx.isAutomatic}
                             onClick={() => handleDeleteEntry(tx)}
-                            title={tx.isAutomatic ? 'Lançamento automatico nao pode ser excluido' : 'Excluir'}
+                            title={tx.isAutomatic ? 'Lançamento automático não pode ser excluído' : 'Excluir'}
                           >
                             <Trash2 className="h-4 w-4 text-red-500" />
                           </Button>
@@ -803,11 +803,11 @@ export default function CashFlow() {
               />
             </div>
             <div className="space-y-2 md:col-span-2">
-              <Label>Observacoes</Label>
+              <Label>Observa??es</Label>
               <Textarea
                 value={entryForm.notes}
                 onChange={(e) => setEntryForm((prev) => ({ ...prev, notes: e.target.value }))}
-                placeholder="Informacoes adicionais (opcional)"
+                placeholder="Informa??es adicionais (opcional)"
               />
             </div>
           </div>

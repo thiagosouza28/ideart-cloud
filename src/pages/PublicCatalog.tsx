@@ -795,7 +795,7 @@ const asCurrency = (value: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 
 const initials = (value?: string | null) => {
-  const safe = (value || 'Catalogo').trim();
+  const safe = (value || 'Catálogo').trim();
   if (!safe) return 'C';
   const parts = safe.split(/\s+/).filter(Boolean);
   if (parts.length === 1) return parts[0].slice(0, 1).toUpperCase();
@@ -956,8 +956,8 @@ export default function PublicCatalog() {
   useEffect(() => {
     if (!company) return;
 
-    const title = company.catalog_title || company.name || 'Catalogo';
-    const description = company.catalog_description || `Catalogo de ${company.name}`;
+    const title = company.catalog_title || company.name || 'Catálogo';
+    const description = company.catalog_description || `Catálogo de ${company.name}`;
 
     document.title = title;
 
@@ -1079,7 +1079,7 @@ export default function PublicCatalog() {
       <div className="pc-page">
         <style>{pageStyles}</style>
         <div className="pc-loading">
-          <p className="pc-loading-text">Carregando catalogo...</p>
+          <p className="pc-loading-text">Carregando catálogo...</p>
         </div>
       </div>
     );
@@ -1091,8 +1091,8 @@ export default function PublicCatalog() {
         <style>{pageStyles}</style>
         <div className="pc-not-found">
           <div className="pc-not-found-card">
-            <h1 className="pc-not-found-title">Catalogo nao encontrado</h1>
-            <p className="pc-not-found-subtitle">Este catalogo nao existe ou nao esta disponivel.</p>
+            <h1 className="pc-not-found-title">Catálogo não encontrado</h1>
+            <p className="pc-not-found-subtitle">Este catálogo não existe ou não está disponível.</p>
             <button
               type="button"
               className="pc-not-found-btn"
@@ -1116,7 +1116,7 @@ export default function PublicCatalog() {
             <div className="pc-brand">
               <span className="pc-brand-avatar">{initials(company?.name)}</span>
               <div>
-                <p className="pc-brand-name">{company?.name || 'Catalogo'}</p>
+                <p className="pc-brand-name">{company?.name || 'Catálogo'}</p>
                 {company?.city && company?.state && (
                   <p className="pc-brand-sub">{company.city}, {company.state}</p>
                 )}
@@ -1155,8 +1155,8 @@ export default function PublicCatalog() {
 
       <header className="pc-hero">
         <div className="pc-container pc-hero-inner">
-          <span className="pc-hero-tag">Catalogo de produtos</span>
-          <h1 className="pc-title">{company?.catalog_title || 'Catalogo de Produtos'}</h1>
+          <span className="pc-hero-tag">Catálogo de produtos</span>
+          <h1 className="pc-title">{company?.catalog_title || 'Catálogo de Produtos'}</h1>
           <p className="pc-subtitle">
             {company?.catalog_description || 'Explore os itens disponiveis, filtre por categoria e encontre o produto ideal para seu pedido.'}
           </p>
@@ -1331,7 +1331,7 @@ export default function PublicCatalog() {
             <div className="pc-brand">
               <span className="pc-brand-avatar">{initials(company?.name)}</span>
               <div>
-                <p className="pc-brand-name">{company?.name || 'Catalogo'}</p>
+                <p className="pc-brand-name">{company?.name || 'Catálogo'}</p>
                 {company?.city && company?.state && (
                   <p className="pc-brand-sub">{company.city}, {company.state}</p>
                 )}
@@ -1357,7 +1357,7 @@ export default function PublicCatalog() {
                 </button>
               ) : (
                 <Link to={catalogPath} className="pc-footer-btn pc-footer-btn-primary">
-                  Ver Catalogo Completo
+                  Ver Catálogo Completo
                 </Link>
               )}
             </div>

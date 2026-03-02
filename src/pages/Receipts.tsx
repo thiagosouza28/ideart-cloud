@@ -89,9 +89,9 @@ const buildDefaultDates = () => {
 
 const paymentMethodLabels: Record<PaymentMethod, string> = {
   dinheiro: 'Dinheiro',
-  cartao: 'Cartao',
-  credito: 'Cartao credito',
-  debito: 'Cartao debito',
+  cartao: 'Cartão',
+  credito: 'Cartão crédito',
+  debito: 'Cartão débito',
   transferencia: 'Transferencia',
   pix: 'Pix',
   boleto: 'Boleto',

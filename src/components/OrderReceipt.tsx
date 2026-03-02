@@ -324,7 +324,7 @@ const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
         </div>
 
         <div className="receipt-block mt-5 text-center text-[11px] text-slate-500">
-          <p>Documento nao fiscal</p>
+          <p>Documento não fiscal</p>
           <p className="mt-1">Obrigado pela preferencia!</p>
         </div>
       </div>

@@ -91,7 +91,7 @@ const normalizeProductImages = (value: unknown, fallback?: string | null): strin
 };
 
 const initials = (value?: string | null) => {
-  const safe = (value || 'Catalogo').trim();
+  const safe = (value || 'Catálogo').trim();
   if (!safe) return 'C';
   const parts = safe.split(/\s+/).filter(Boolean);
   if (parts.length === 1) return parts[0].slice(0, 1).toUpperCase();
@@ -488,7 +488,7 @@ export default function PublicProductDetails() {
     if (incoming.length === 0) return;
 
     if (reviewFiles.length + incoming.length > 3) {
-      setReviewError('Voce pode enviar no maximo 3 imagens por avaliacao.');
+      setReviewError('Você pode enviar no máximo 3 imagens por avaliação.');
       event.target.value = '';
       return;
     }
@@ -562,10 +562,10 @@ export default function PublicProductDetails() {
 
       if (uploadError) {
         setReviewSubmitting(false);
-        setReviewError('Nao foi possivel enviar as imagens da avaliacao.');
+        setReviewError('Não foi possível enviar as imagens da avaliação.');
         toast({
           title: 'Erro ao enviar imagens',
-          description: 'Nao foi possivel enviar as imagens da avaliacao.',
+          description: 'Não foi possível enviar as imagens da avaliação.',
           variant: 'destructive',
         });
         return;
@@ -587,17 +587,17 @@ export default function PublicProductDetails() {
         rating: reviewForm.rating,
         comment: comment || null,
         review_image_urls: uploadedImageUrls,
-        user_id: user?.id || null,
+        user_id: userá.id || null,
       })
       .select('*')
       .single();
 
     if (error) {
       setReviewSubmitting(false);
-      setReviewError('Nao foi possivel enviar sua avaliacao agora. Tente novamente.');
+      setReviewError('Não foi possível enviar sua avaliação agora. Tente novamente.');
       toast({
         title: 'Erro ao enviar avaliacao',
-        description: 'Nao foi possivel enviar sua avaliacao agora.',
+        description: 'Não foi possível enviar sua avaliação agora.',
         variant: 'destructive',
       });
       return;
@@ -643,10 +643,10 @@ export default function PublicProductDetails() {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-slate-900 mb-2">Produto nao encontrado</h1>
-          <p className="text-slate-500 mb-4">Este produto nao existe ou nao esta disponivel.</p>
+          <h1 className="text-2xl font-bold text-slate-900 mb-2">Produto não encontrado</h1>
+          <p className="text-slate-500 mb-4">Este produto não existe ou não está disponível.</p>
           <Link to={catalogHref}>
-            <Button>Voltar ao catalogo</Button>
+            <Button>Voltar ao catálogo</Button>
           </Link>
         </div>
       </div>
@@ -1169,7 +1169,7 @@ export default function PublicProductDetails() {
             <div className="pc-brand">
               <span className="pc-brand-avatar">{initials(company?.name)}</span>
               <div>
-                <p className="pc-brand-name">{company?.name || 'Catalogo'}</p>
+                <p className="pc-brand-name">{company?.name || 'Catálogo'}</p>
                 {company?.city && company?.state && (
                   <p className="pc-brand-sub">{company.city}, {company.state}</p>
                 )}
@@ -1220,9 +1220,9 @@ export default function PublicProductDetails() {
 
       <main className="catalog-detail-main mx-auto max-w-6xl px-4 py-6">
         <div className="flex items-center gap-2 text-xs text-slate-400 mb-6">
-          <Link to={catalogHref} className="hover:text-slate-600">Catalogo</Link>
+          <Link to={catalogHref} className="hover:text-slate-600">Catálogo</Link>
           <ChevronRight className="h-3 w-3" />
-          <span>{product.category?.name || 'Catalogo'}</span>
+          <span>{product.category?.name || 'Catálogo'}</span>
           <ChevronRight className="h-3 w-3" />
           <span className="text-slate-600 font-medium">{product.name}</span>
         </div>
@@ -1441,9 +1441,9 @@ export default function PublicProductDetails() {
             )}
             {activeTab === 'especificacoes' && (
               <div className="space-y-2 text-sm text-slate-600">
-                <p><strong>SKU:</strong> {product.sku || 'Nao informado'}</p>
-                <p><strong>Codigo de barras:</strong> {product.barcode || 'Nao informado'}</p>
-                <p><strong>Unidade:</strong> {product.unit || 'Nao informada'}</p>
+                <p><strong>SKU:</strong> {product.sku || 'Não informado'}</p>
+                <p><strong>Código de barras:</strong> {product.barcode || 'Não informado'}</p>
+                <p><strong>Unidade:</strong> {product.unit || 'Não informada'}</p>
                 <p><strong>Quantidade minima:</strong> {minimumOrderQuantity}</p>
               </div>
             )}
@@ -1570,7 +1570,7 @@ export default function PublicProductDetails() {
                 {reviewsLoading ? (
                   <p className="text-sm text-slate-500">Carregando avaliacoes...</p>
                 ) : reviewCount === 0 ? (
-                  <div className="text-sm text-slate-600">Ainda nao ha avaliacoes para este produto.</div>
+                  <div className="text-sm text-slate-600">Ainda não há avaliações para este produto.</div>
                 ) : (
                   <div className="space-y-3">
                     {reviews.map((review) => (
@@ -1627,7 +1627,7 @@ export default function PublicProductDetails() {
             <div className="catalog-detail-related">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-xl font-bold">Compre junto</h2>
-                <Link to={catalogHref} className="text-xs text-primary">Ver catalogo completo</Link>
+                <Link to={catalogHref} className="text-xs text-primary">Ver catálogo completo</Link>
               </div>
               <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
                 {relatedProducts.map((related) => (
@@ -1731,7 +1731,7 @@ export default function PublicProductDetails() {
                 )}
                 <Link to={catalogHref}>
                   <Button size="sm" className="catalog-btn w-full sm:w-auto">
-                    Ver catalogo completo
+                    Ver catálogo completo
                   </Button>
                 </Link>
               </div>
@@ -1746,7 +1746,7 @@ export default function PublicProductDetails() {
             <div className="pc-brand">
               <span className="pc-brand-avatar">{initials(company?.name)}</span>
               <div>
-                <p className="pc-brand-name">{company?.name || 'Catalogo'}</p>
+                <p className="pc-brand-name">{company?.name || 'Catálogo'}</p>
                 {company?.city && company?.state && (
                   <p className="pc-brand-sub">{company.city}, {company.state}</p>
                 )}
@@ -1772,7 +1772,7 @@ export default function PublicProductDetails() {
                 </button>
               ) : (
                 <Link to={catalogHref} className="pc-footer-btn pc-footer-btn-primary">
-                  Ver Catalogo Completo
+                  Ver Catálogo Completo
                 </Link>
               )}
             </div>

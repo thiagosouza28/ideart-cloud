@@ -21,7 +21,7 @@ type CatalogStoreWithDistance = CatalogStore & {
 
 const resolveGeoErrorMessage = (error: GeolocationPositionError) => {
   if (error.code === 1) return 'Permissao de localizacao negada.';
-  if (error.code === 2) return 'Nao foi possivel identificar sua localizacao.';
+  if (error.code === 2) return 'Não foi possível identificar sua localização.';
   if (error.code === 3) return 'Tempo limite para obter localizacao.';
   return 'Falha ao obter localizacao.';
 };
@@ -41,7 +41,7 @@ export default function PublicStoreExplorer() {
 
   const requestUserLocation = useCallback(() => {
     if (typeof navigator === 'undefined' || !navigator.geolocation) {
-      setLocationError('Seu navegador nao suporta geolocalizacao.');
+      setLocationError('Seu navegador não suporta geolocalização.');
       return;
     }
 
@@ -88,14 +88,14 @@ export default function PublicStoreExplorer() {
       if (companiesResult.error) {
         setStores([]);
         setLoading(false);
-        setErrorMessage('Nao foi possivel carregar as lojas no momento.');
+        setErrorMessage('Não foi possível carregar as lojas no momento.');
         return;
       }
 
       if (productsResult.error) {
         setStores([]);
         setLoading(false);
-        setErrorMessage('Nao foi possivel carregar as lojas com catalogo ativo.');
+        setErrorMessage('Não foi possível carregar as lojas com catálogo ativo.');
         return;
       }
 
@@ -172,9 +172,9 @@ export default function PublicStoreExplorer() {
       />
 
       <CatalogHero
-        badge="Catalogo publico"
+        badge="Catálogo público"
         title="Lojas proximas"
-        description="Encontre lojas ativas, filtre por nome/cidade e abra o catalogo de cada uma."
+        description="Encontre lojas ativas, filtre por nome/cidade e abra o catálogo de cada uma."
       />
 
       <main className="mx-auto w-[min(1220px,calc(100%-24px))] py-6">
@@ -220,7 +220,7 @@ export default function PublicStoreExplorer() {
 
         {locationError && (
           <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-            {locationError} Voce ainda pode buscar por nome e cidade.
+            {locationError} Você ainda pode buscar por nome e cidade.
           </p>
         )}
 

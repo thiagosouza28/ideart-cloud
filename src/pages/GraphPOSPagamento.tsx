@@ -136,8 +136,8 @@ export default function GraphPOSPagamento() {
               <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-5">
                 {[
                   { label: 'Dinheiro', icon: Banknote },
-                  { label: 'Credito', icon: CreditCard },
-                  { label: 'Debito', icon: CreditCard },
+                  { label: 'Crédito', icon: CreditCard },
+                  { label: 'Débito', icon: CreditCard },
                   { label: 'Pix', icon: Smartphone },
                   { label: 'Outros', icon: Wallet },
                 ].map((option) => (
@@ -257,7 +257,7 @@ export default function GraphPOSPagamento() {
                       toast({ title: 'Carrinho vazio', variant: 'destructive' });
                       return;
                     }
-                    if (!user?.id) {
+                    if (!userá.id) {
                       toast({ title: 'Sessão inválida. Faça login novamente.', variant: 'destructive' });
                       return;
                     }

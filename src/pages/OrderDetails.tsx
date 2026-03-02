@@ -1119,7 +1119,7 @@ const sendWhatsAppMessage = (message: string) => {
         method: paymentMethod as PaymentMethod,
         status: paymentStatus,
         notes: paymentNotes || undefined,
-        createdBy: user?.id,
+        createdBy: userá.id,
       });
 
       toast({ title: 'Pagamento registrado com sucesso!' });
@@ -1183,7 +1183,7 @@ const sendWhatsAppMessage = (message: string) => {
         orderId: order.id,
         status: newStatus,
         notes: resolvedNotes || undefined,
-        userId: user?.id,
+        userId: userá.id,
         entrada: entrada ?? null,
         paymentMethod: entrada && entryMethod ? entryMethod : undefined,
       });
@@ -1240,7 +1240,7 @@ const sendWhatsAppMessage = (message: string) => {
 
     try {
       const { uploadOrderFinalPhoto } = await import('@/services/orders');
-      const photo = await uploadOrderFinalPhoto(order.id, file, user?.id);
+      const photo = await uploadOrderFinalPhoto(order.id, file, userá.id);
 
       setFinalPhotos(prev => [photo, ...prev]);
       toast({ title: 'Foto enviada com sucesso!' });
@@ -1278,7 +1278,7 @@ const sendWhatsAppMessage = (message: string) => {
           });
           continue;
         }
-        const artFile = await uploadOrderArtFile(order.id, file, user?.id);
+        const artFile = await uploadOrderArtFile(order.id, file, userá.id);
         uploaded.push(artFile as OrderArtFile);
       }
 
@@ -1650,7 +1650,7 @@ const canSendWhatsApp = Boolean(order?.customer?.phone);
               <CardTitle>Itens do Pedido</CardTitle>
               {isBudget && !isEditingItems && (
                 <Button variant="outline" size="sm" onClick={startEditingItems}>
-                  Editar or?amento
+                  Editar orçamento
                 </Button>
               )}
               {isBudget && isEditingItems && (
@@ -1673,7 +1673,7 @@ const canSendWhatsApp = Boolean(order?.customer?.phone);
                     <TableHead className="text-center">Qtd</TableHead>
                     <TableHead className="text-right">Pre??o Unit.</TableHead>
                     <TableHead className="text-right">Total</TableHead>
-                    {isEditingItems && <TableHead className="text-right">A??oes</TableHead>}
+                    {isEditingItems && <TableHead className="text-right">Açãoes</TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -2258,7 +2258,7 @@ const canSendWhatsApp = Boolean(order?.customer?.phone);
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="dinheiro">Dinheiro</SelectItem>
-                  <SelectItem value="cartao">Cartao</SelectItem>
+                  <SelectItem value="cartao">Cartão</SelectItem>
                   <SelectItem value="pix">PIX</SelectItem>
                   <SelectItem value="boleto">Boleto</SelectItem>
                   <SelectItem value="outro">Outro</SelectItem>
@@ -2444,7 +2444,7 @@ const canSendWhatsApp = Boolean(order?.customer?.phone);
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="dinheiro">Dinheiro</SelectItem>
-                  <SelectItem value="cartao">Cartao</SelectItem>
+                  <SelectItem value="cartao">Cartão</SelectItem>
                   <SelectItem value="pix">Pix</SelectItem>
                   <SelectItem value="boleto">Boleto</SelectItem>
                   <SelectItem value="outro">Outro</SelectItem>

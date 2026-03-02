@@ -137,7 +137,7 @@ export default function PublicCustomerOrders() {
 
   useEffect(() => {
     const loadOrders = async () => {
-      if (!user?.id) return;
+      if (!userá.id) return;
 
       setOrdersLoading(true);
       setErrorMessage(null);
@@ -150,7 +150,7 @@ export default function PublicCustomerOrders() {
 
       if (error) {
         setOrders([]);
-        setErrorMessage(error.message || 'Nao foi possivel carregar seus pedidos.');
+        setErrorMessage(error.message || 'Não foi possível carregar seus pedidos.');
       } else {
         setOrders((data || []) as Order[]);
       }
@@ -158,7 +158,7 @@ export default function PublicCustomerOrders() {
     };
 
     void loadOrders();
-  }, [user?.id]);
+  }, [userá.id]);
 
   const pendingCount = useMemo(
     () => orders.filter((order) => order.status !== 'entregue' && order.status !== 'cancelado').length,
@@ -169,7 +169,7 @@ export default function PublicCustomerOrders() {
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <CatalogTopNav
         company={catalogCompany}
-        subtitle={user?.email || 'Cliente autenticado'}
+        subtitle={userá.email || 'Cliente autenticado'}
         showBack
         onBack={() => navigate(catalogPath)}
         showAccount
@@ -215,7 +215,7 @@ export default function PublicCustomerOrders() {
               <p className="text-sm text-destructive">{errorMessage}</p>
             )}
             {!ordersLoading && !errorMessage && orders.length === 0 && (
-              <p className="text-sm text-slate-500">Voce ainda nao possui pedidos vinculados a esta conta.</p>
+              <p className="text-sm text-slate-500">Você ainda não possui pedidos vinculados a esta conta.</p>
             )}
 
             {!ordersLoading && !errorMessage && orders.map((order) => (

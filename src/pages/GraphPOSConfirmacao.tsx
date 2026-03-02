@@ -44,8 +44,8 @@ export default function GraphPOSConfirmacao() {
 
   const paymentLabelMap: Record<string, string> = {
     dinheiro: 'Dinheiro',
-    credito: 'Credito',
-    debito: 'Debito',
+    credito: 'Crédito',
+    debito: 'Débito',
     pix: 'Pix',
     outros: 'Outros',
   };

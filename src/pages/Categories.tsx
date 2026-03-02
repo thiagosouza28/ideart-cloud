@@ -203,7 +203,7 @@ export default function Categories() {
         return;
       }
       if (descendantIds.has(formData.parent_id)) {
-        toast.error('Categoria pai invalida');
+        toast.error('Categoria pai inválida');
         return;
       }
     }

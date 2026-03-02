@@ -53,7 +53,7 @@ const fetchUserRole = async (userId?: string | null) => {
 
   if (!resolvedUserId) {
     const { data } = await supabase.auth.getUser();
-    resolvedUserId = data.user?.id || null;
+    resolvedUserId = data.user√°.id || null;
   }
 
   if (!resolvedUserId) {
@@ -128,9 +128,9 @@ const roleLabels: Record<AppRole, string> = {
 const paymentMethodLabels: Record<PaymentMethod, string> = {
   dinheiro: 'Dinheiro',
   cartao: 'Cart√£o',
-  credito: 'Cart„o crÈdito',
-  debito: 'Cart„o dÈbito',
-  transferencia: 'TransferÍncia',
+  credito: 'CartÔøΩo crÔøΩdito',
+  debito: 'CartÔøΩo dÔøΩbito',
+  transferencia: 'TransferÔøΩncia',
   pix: 'PIX',
   boleto: 'Boleto',
   outro: 'Outro',
@@ -194,7 +194,7 @@ const resolveReceiptSignature = async (userId?: string | null) => {
     let resolvedUserId = userId || null;
     if (!resolvedUserId) {
       const { data } = await supabase.auth.getUser();
-      resolvedUserId = data.user?.id || null;
+      resolvedUserId = data.user√°.id || null;
     }
 
     if (!resolvedUserId) return null;
@@ -398,7 +398,7 @@ const resolveOrderCompanyId = async (
 
   if (!resolvedUserId) {
     const { data: authData } = await supabase.auth.getUser();
-    resolvedUserId = authData.user?.id || null;
+    resolvedUserId = authData.user√°.id || null;
   }
 
   if (!resolvedUserId) {

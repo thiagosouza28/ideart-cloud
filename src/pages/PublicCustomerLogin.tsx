@@ -143,7 +143,7 @@ export default function PublicCustomerLogin() {
     const { error } = await signIn(email.trim(), password);
     if (error) {
       setSubmitting(false);
-      setErrorMessage(error.message || 'Nao foi possivel entrar. Verifique os dados.');
+      setErrorMessage(error.message || 'Não foi possível entrar. Verifique os dados.');
       return;
     }
 
@@ -184,7 +184,7 @@ export default function PublicCustomerLogin() {
 
     if (signupPassword !== signupConfirmPassword) {
       setSubmitting(false);
-      setErrorMessage('As senhas nao conferem.');
+      setErrorMessage('As senhas não conferem.');
       return;
     }
 
@@ -203,7 +203,7 @@ export default function PublicCustomerLogin() {
 
     if (error) {
       setSubmitting(false);
-      setErrorMessage(error.message || 'Nao foi possivel criar a conta.');
+      setErrorMessage(error.message || 'Não foi possível criar a conta.');
       return;
     }
 
@@ -274,7 +274,7 @@ export default function PublicCustomerLogin() {
             </CardDescription>
             {catalogCompany && (
               <p className="text-xs text-slate-500">
-                Voce esta acessando a loja <strong>{catalogCompany.name}</strong>.
+                Você está acessando a loja <strong>{catalogCompany.name}</strong>.
               </p>
             )}
           </CardHeader>

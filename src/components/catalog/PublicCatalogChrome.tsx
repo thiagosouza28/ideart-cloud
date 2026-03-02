@@ -15,7 +15,7 @@ export interface CatalogChromeCompany {
 }
 
 const getInitials = (value?: string | null) => {
-  const safe = (value || 'Catalogo').trim();
+  const safe = (value || 'Catálogo').trim();
   if (!safe) return 'C';
   const parts = safe.split(/\s+/).filter(Boolean);
   if (parts.length === 1) return parts[0].slice(0, 1).toUpperCase();
@@ -68,8 +68,8 @@ export function CatalogTopNav({
   accountLabel = 'Minha conta',
   showContact = false,
 }: CatalogTopNavProps) {
-  const brandName = company?.name || 'Catalogo';
-  const brandSub = subtitle || [company?.city, company?.state].filter(Boolean).join(', ') || 'Catalogo publico';
+  const brandName = company?.name || 'Catálogo';
+  const brandSub = subtitle || [company?.city, company?.state].filter(Boolean).join(', ') || 'Catálogo público';
   const hasContact = Boolean(company?.catalog_contact_url || company?.whatsapp);
 
   return (
@@ -190,8 +190,8 @@ export function CatalogFooter({
   accountHref = '/minha-conta/pedidos',
   accountLabel = 'Minha conta',
 }: CatalogFooterProps) {
-  const brandName = company?.name || 'Catalogo';
-  const brandSub = [company?.city, company?.state].filter(Boolean).join(', ') || 'Catalogo publico';
+  const brandName = company?.name || 'Catálogo';
+  const brandSub = [company?.city, company?.state].filter(Boolean).join(', ') || 'Catálogo público';
   const hasContact = Boolean(company?.catalog_contact_url || company?.whatsapp);
   const catalogPath = resolveCatalogPath(company);
 
@@ -250,7 +250,7 @@ export function CatalogFooter({
               to={catalogPath}
               className="inline-flex h-10 items-center rounded-xl border border-white/45 px-4 text-sm font-semibold text-white hover:bg-white/10"
             >
-              Ver catalogo
+              Ver catálogo
             </Link>
           )}
         </div>

@@ -29,6 +29,44 @@ import { Company, PaymentMethod } from '@/types/database';
 const asCurrency = (value: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 
+const paymentMethodLabels: Record<PaymentMethod, string> = {
+  dinheiro: 'Dinheiro',
+  cartao: 'Cartão',
+  credito: 'Cartão de crédito',
+  debito: 'Cartão de débito',
+  transferencia: 'Transferencia',
+  pix: 'Pix',
+  boleto: 'Boleto',
+  outro: 'Outro',
+};
+
+type OrderResultItem = {
+  name: string;
+  quantity: number;
+  unitPrice: number;
+  total: number;
+  notes: string | null;
+};
+
+type OrderResultSummary = {
+  orderId: string | null;
+  orderNumber: number | null;
+  customerName: string;
+  customerPhone: string;
+  customerDocument: string;
+  customerEmail: string;
+  customerAddress: string | null;
+  customerCity: string | null;
+  customerState: string | null;
+  customerZipCode: string | null;
+  deliveryMethod: 'entrega' | 'retirada';
+  total: number;
+  paymentMethod: PaymentMethod;
+  publicToken: string | null;
+  createdAt: string;
+  items: OrderResultItem[];
+};
+
 export default function PublicCart() {
   const { slug, companyId } = useParams<{ slug?: string; companyId?: string }>();
   const navigate = useNavigate();
@@ -55,14 +93,7 @@ export default function PublicCart() {
     deliveryMinimum?: string;
     cart?: string;
   }>({});
-  const [orderResult, setOrderResult] = useState<{
-    orderId: string | null;
-    orderNumber: number | null;
-    customerName: string;
-    total: number;
-    paymentMethod: PaymentMethod;
-    publicToken: string | null;
-  } | null>(null);
+  const [orderResult, setOrderResult] = useState<OrderResultSummary | null>(null);
   const [pixResult, setPixResult] = useState<PublicPixPaymentResult | null>(null);
   const [pixGenerating, setPixGenerating] = useState(false);
   const [pixErrorMessage, setPixErrorMessage] = useState<string | null>(null);
@@ -105,7 +136,7 @@ export default function PublicCart() {
   }, [user]);
 
   useEffect(() => {
-    if (!user?.id || !company?.id) {
+    if (!userá.id || !company?.id) {
       setHasSavedAddress(false);
       setEditingSavedAddress(true);
       setSavedAddressLoaded(true);
@@ -160,7 +191,7 @@ export default function PublicCart() {
     return () => {
       isMounted = false;
     };
-  }, [company?.id, user?.id]);
+  }, [company?.id, userá.id]);
 
   useEffect(() => {
     const loadCompany = async () => {
@@ -323,6 +354,97 @@ export default function PublicCart() {
     window.open(`https://wa.me/${phone}`, '_blank');
   };
 
+  const buildStoreOrderMessage = (summary: OrderResultSummary) => {
+    const paymentLabel = paymentMethodLabels[summary.paymentMethod] || summary.paymentMethod;
+    const deliveryLabel = summary.deliveryMethod === 'entrega' ? 'Entrega' : 'Retirada';
+    const orderLabel = summary.orderNumber ? `#${summary.orderNumber}` : summary.orderId || '-';
+    const orderUrl = summary.publicToken
+      ? `${window.location.origin}/pedido/${summary.publicToken}`
+      : null;
+
+    const lines: string[] = [
+      `Novo pedido no catálogo - ${orderLabel}`,
+      '',
+      `Cliente: ${summary.customerName}`,
+      `Telefone: ${summary.customerPhone}`,
+      `CPF: ${summary.customerDocument}`,
+      `E-mail: ${summary.customerEmail}`,
+      `Recebimento: ${deliveryLabel}`,
+      `Pagamento: ${paymentLabel}`,
+      '',
+      'Produtos:',
+      ...summary.items.flatMap((item, index) => {
+        const itemLines = [
+          `${index + 1}. ${item.name}`,
+          `   Qtd: ${item.quantity} | Unit: ${asCurrency(item.unitPrice)} | Total: ${asCurrency(item.total)}`,
+        ];
+        if (item.notes) {
+          itemLines.push(`   Obs: ${item.notes}`);
+        }
+        return itemLines;
+      }),
+      '',
+      `Total do pedido: ${asCurrency(summary.total)}`,
+      `Data/Hora: ${new Date(summary.createdAt).toLocaleString('pt-BR')}`,
+    ];
+
+    if (summary.deliveryMethod === 'entrega') {
+      lines.push(
+        `Endereço: ${summary.customerAddress || '-'}, ${summary.customerCity || '-'} - ${summary.customerState || '-'}, CEP ${summary.customerZipCode || '-'}`,
+      );
+    }
+
+    if (orderUrl) {
+      lines.push(`Acompanhar pedido: ${orderUrl}`);
+    }
+
+    return lines.join('\n');
+  };
+
+  const buildStoreContactUrl = (message: string) => {
+    const encodedMessage = encodeURIComponent(message);
+    const catalogContactUrl = company?.catalog_contact_url?.trim();
+
+    if (catalogContactUrl) {
+      try {
+        const parsed = new URL(catalogContactUrl);
+        const host = parsed.hostname.toLowerCase();
+        const isWhatsappLink = host.includes('wa.me') || host.includes('whatsapp.com');
+        if (isWhatsappLink) {
+          const phoneFromPath = parsed.pathname.replace(/\D/g, '');
+          if (host.includes('wa.me') && phoneFromPath) {
+            return `https://wa.me/${phoneFromPath}?text=${encodedMessage}`;
+          }
+          parsed.searchParams.set('text', message);
+          return parsed.toString();
+        }
+      } catch {
+        // ignore invalid URL and fallback to whatsapp field
+      }
+    }
+
+    const whatsappPhone = company?.whatsapp?.replace(/\D/g, '');
+    if (!whatsappPhone) return null;
+    return `https://wa.me/${whatsappPhone}?text=${encodedMessage}`;
+  };
+
+  const handleSendOrderToStoreContact = () => {
+    if (!orderResult) return;
+    const message = buildStoreOrderMessage(orderResult);
+    const shareUrl = buildStoreContactUrl(message);
+
+    if (!shareUrl) {
+      toast({
+        title: 'Contato da loja não configurado',
+        description: 'Configure o WhatsApp da loja para enviar os detalhes do pedido.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    window.open(shareUrl, '_blank');
+  };
+
   const handleCopyPixCode = async () => {
     if (!pixResult?.payment_copy_paste) return;
     try {
@@ -331,7 +453,7 @@ export default function PublicCart() {
       window.setTimeout(() => setCopiedPixCode(false), 1800);
     } catch {
       toast({
-        title: 'Nao foi possivel copiar o codigo PIX',
+        title: 'Não foi possível copiar o código PIX',
         variant: 'destructive',
       });
     }
@@ -359,12 +481,12 @@ export default function PublicCart() {
       setPixResult(pixCharge);
       return pixCharge;
     } catch (pixError: unknown) {
-      const pixMessage = pixError instanceof Error ? pixError.message : 'Falha ao gerar cobranca PIX.';
+      const pixMessage = pixError instanceof Error ? pixError.message : 'Falha ao gerar cobrança PIX.';
       setPixResult(null);
       setPixErrorMessage(pixMessage);
       if (!silent) {
         toast({
-          title: 'Pedido criado, mas PIX nao foi gerado',
+          title: 'Pedido criado, mas PIX não foi gerado',
           description: pixMessage,
           variant: 'destructive',
         });
@@ -411,13 +533,13 @@ export default function PublicCart() {
     const nextErrors: typeof formErrors = {};
 
     if (checkoutBlocked) {
-      nextErrors.cart = 'Loja com acesso bloqueado no plano atual. Finalizacao indisponivel.';
+      nextErrors.cart = 'Loja com acesso bloqueado no plano atual. Finalização indisponível.';
       setFormErrors(nextErrors);
       return false;
     }
 
     if (cartItems.length === 0) {
-      nextErrors.cart = 'Seu carrinho esta vazio.';
+      nextErrors.cart = 'Seu carrinho está vazio.';
     }
 
     if (!form.name.trim()) {
@@ -425,12 +547,12 @@ export default function PublicCart() {
     }
 
     if (!validatePhone(form.phone)) {
-      nextErrors.phone = 'Telefone invalido.';
+      nextErrors.phone = 'Telefone inválido.';
     }
 
     const documentDigits = normalizeDigits(form.document);
     if (documentDigits.length !== 11 || !validateCpf(form.document)) {
-      nextErrors.document = 'CPF invalido.';
+      nextErrors.document = 'CPF inválido.';
     }
 
     if (!form.email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
@@ -439,7 +561,7 @@ export default function PublicCart() {
 
     if (requiresAddressInput) {
       if (!form.address.trim()) {
-        nextErrors.address = 'Informe o endereco para entrega/contato.';
+        nextErrors.address = 'Informe o endereço para entrega/contato.';
       }
 
       if (!form.city.trim()) {
@@ -458,11 +580,11 @@ export default function PublicCart() {
     if (!form.paymentMethod) {
       nextErrors.paymentMethod = 'Selecione a forma de pagamento.';
     } else if (form.paymentMethod === 'pix' && !paymentOptions.pixAvailable) {
-      nextErrors.paymentMethod = 'PIX indisponivel para esta loja.';
+      nextErrors.paymentMethod = 'PIX indisponível para esta loja.';
     }
 
     if (minimumOrderValue > 0 && orderTotal < minimumOrderValue) {
-      nextErrors.minimum = `O valor minimo para pedidos e ${asCurrency(minimumOrderValue)}.`;
+      nextErrors.minimum = `O valor mínimo para pedidos ? ${asCurrency(minimumOrderValue)}.`;
     }
 
     if (form.deliveryMethod === 'entrega' && minimumDeliveryValue > 0 && orderTotal < minimumDeliveryValue) {
@@ -471,7 +593,7 @@ export default function PublicCart() {
 
     const invalidMinQuantity = cartItems.find((item) => item.quantity < Math.max(1, item.minOrderQuantity));
     if (invalidMinQuantity) {
-      nextErrors.cart = `O produto "${invalidMinQuantity.name}" exige no minimo ${invalidMinQuantity.minOrderQuantity} unidade(s).`;
+      nextErrors.cart = `O produto "${invalidMinQuantity.name}" exige no mínimo ${invalidMinQuantity.minOrderQuantity} unidade(s).`;
     }
 
     setFormErrors(nextErrors);
@@ -484,6 +606,22 @@ export default function PublicCart() {
     if (!validateCheckout()) return;
 
     const selectedPaymentMethod = form.paymentMethod;
+    const customerName = form.name.trim();
+    const customerPhone = normalizeDigits(form.phone);
+    const customerDocument = normalizeDigits(form.document);
+    const customerEmail = form.email.trim();
+    const customerAddress = form.deliveryMethod === 'entrega' ? form.address.trim() : '';
+    const customerCity = form.deliveryMethod === 'entrega' ? form.city.trim() : '';
+    const customerState = form.deliveryMethod === 'entrega' ? form.state.trim() : '';
+    const customerZipCode = form.deliveryMethod === 'entrega' ? normalizeDigits(form.zipCode) : '';
+    const createdAt = new Date().toISOString();
+    const orderItemsSummary: OrderResultItem[] = cartItems.map((item) => ({
+      name: item.name,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      total: item.unitPrice * item.quantity,
+      notes: item.notes || null,
+    }));
 
     setSubmitting(true);
     setOrderResult(null);
@@ -494,14 +632,14 @@ export default function PublicCart() {
 
     const { data, error } = await customerSupabase.rpc('create_public_order', {
       p_company_id: company.id,
-      p_customer_name: form.name.trim(),
-      p_customer_phone: normalizeDigits(form.phone),
-      p_customer_document: normalizeDigits(form.document),
-      p_customer_email: form.email.trim(),
-      p_customer_address: form.deliveryMethod === 'entrega' ? form.address.trim() : '',
-      p_customer_city: form.deliveryMethod === 'entrega' ? form.city.trim() : '',
-      p_customer_state: form.deliveryMethod === 'entrega' ? form.state.trim() : '',
-      p_customer_zip_code: form.deliveryMethod === 'entrega' ? normalizeDigits(form.zipCode) : '',
+      p_customer_name: customerName,
+      p_customer_phone: customerPhone,
+      p_customer_document: customerDocument,
+      p_customer_email: customerEmail,
+      p_customer_address: customerAddress,
+      p_customer_city: customerCity,
+      p_customer_state: customerState,
+      p_customer_zip_code: customerZipCode,
       p_payment_method: form.paymentMethod as PaymentMethod,
       p_items: cartItems.map((item) => ({
         product_id: item.productId,
@@ -513,20 +651,20 @@ export default function PublicCart() {
     if (error) {
       const isMinOrderError =
         error.message.includes('Minimum order value') ||
-        error.message.includes('Valor minimo do pedido');
+        error.message.includes('Valor mínimo do pedido');
       const isMinQuantityError =
         error.message.includes('Minimum quantity not reached') ||
-        error.message.includes('Quantidade minima nao atingida');
+        error.message.includes('Quantidade mínima não atingida');
       const isPixUnavailable =
         error.message.includes('PIX unavailable') ||
-        error.message.includes('PIX indisponivel');
+        error.message.includes('PIX indisponível');
 
       const errorMessage = isMinOrderError
-        ? `O valor minimo para pedidos e ${asCurrency(minimumOrderValue)}.`
+        ? `O valor mínimo para pedidos ? ${asCurrency(minimumOrderValue)}.`
         : isMinQuantityError
           ? 'Existe item abaixo da quantidade minima permitida.'
           : isPixUnavailable
-            ? 'PIX indisponivel para esta loja no momento.'
+            ? 'PIX indisponível para esta loja no momento.'
           : error.message;
 
       if (isMinOrderError) {
@@ -559,17 +697,27 @@ export default function PublicCart() {
       if (orderId && publicToken) {
         await generatePixCharge({ orderId, publicToken });
       } else {
-        setPixErrorMessage('Pedido criado, mas nao foi possivel iniciar o pagamento PIX.');
+        setPixErrorMessage('Pedido criado, mas não foi possível iniciar o pagamento PIX.');
       }
     }
 
     setOrderResult({
       orderId: orderId || null,
       orderNumber: resolvedOrderNumber,
-      customerName: form.name.trim(),
+      customerName,
+      customerPhone,
+      customerDocument,
+      customerEmail,
+      customerAddress: customerAddress || null,
+      customerCity: customerCity || null,
+      customerState: customerState || null,
+      customerZipCode: customerZipCode || null,
+      deliveryMethod: form.deliveryMethod,
       total: orderTotal,
       paymentMethod: selectedPaymentMethod as PaymentMethod,
       publicToken,
+      createdAt,
+      items: orderItemsSummary,
     });
     setForm((prev) => {
       if (user) {
@@ -615,8 +763,8 @@ export default function PublicCart() {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-slate-900 mb-2">Catalogo nao encontrado</h1>
-          <p className="text-slate-500 mb-4">Nao foi possivel carregar os dados da empresa.</p>
+          <h1 className="text-2xl font-bold text-slate-900 mb-2">Catálogo não encontrado</h1>
+          <p className="text-slate-500 mb-4">Não foi possível carregar os dados da empresa.</p>
           <Link to="/">
             <Button>Voltar ao inicio</Button>
           </Link>
@@ -641,7 +789,7 @@ export default function PublicCart() {
 
       <main className="mx-auto w-[min(1160px,calc(100%-28px))] py-6">
         <div className="mb-6 flex items-center gap-2 text-xs text-slate-500">
-          <Link to={catalogHref} className="hover:text-slate-700">Catalogo</Link>
+          <Link to={catalogHref} className="hover:text-slate-700">Catálogo</Link>
           <span>/</span>
           <span className="font-semibold text-slate-700">Carrinho</span>
         </div>
@@ -660,7 +808,7 @@ export default function PublicCart() {
 
               {cartItems.length === 0 ? (
                 <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-600">
-                  Seu carrinho esta vazio.
+                  Seu carrinho está vazio.
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -773,7 +921,7 @@ export default function PublicCart() {
                 </div>
                 {minimumOrderValue > 0 && (
                   <p className={`mt-2 text-xs ${orderTotal < minimumOrderValue ? 'text-destructive' : 'text-slate-500'}`}>
-                    Pedido minimo: {asCurrency(minimumOrderValue)}
+                    Pedido mínimo: {asCurrency(minimumOrderValue)}
                   </p>
                 )}
                 {minimumDeliveryValue > 0 && (
@@ -783,7 +931,7 @@ export default function PublicCart() {
                 )}
                 {checkoutBlocked && (
                   <p className="mt-2 text-xs text-destructive">
-                    Loja com assinatura/bloqueio ativo: novos pedidos estao temporariamente indisponiveis.
+                    Loja com assinatura/bloqueio ativo: novos pedidos estão temporariamente indisponíveis.
                   </p>
                 )}
                 {formErrors.minimum && <p className="mt-2 text-xs text-destructive">{formErrors.minimum}</p>}
@@ -805,6 +953,17 @@ export default function PublicCart() {
                       </Link>
                     </p>
                   )}
+                  {(company.catalog_contact_url || company.whatsapp) && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="mt-3 w-full gap-2 border-emerald-400 bg-white text-emerald-800 hover:bg-emerald-100"
+                      onClick={handleSendOrderToStoreContact}
+                    >
+                      <Whatsapp className="h-4 w-4" />
+                      Enviar detalhes para a loja
+                    </Button>
+                  )}
                 </div>
               )}
 
@@ -814,7 +973,7 @@ export default function PublicCart() {
                   <p className="text-xs">
                     {pixGenerating
                       ? 'Gerando QR Code PIX...'
-                      : pixErrorMessage || 'Gerando cobranca PIX para este pedido.'}
+                      : pixErrorMessage || 'Gerando cobrança PIX para este pedido.'}
                   </p>
                   {orderResult.orderId && orderResult.publicToken && !pixGenerating && (
                     <Button
@@ -848,7 +1007,7 @@ export default function PublicCart() {
                     </div>
                   )}
                   <div className="space-y-2">
-                    <Label className="text-xs">Codigo copia e cola</Label>
+                    <Label className="text-xs">Código copia e cola</Label>
                     <Input value={pixResult.payment_copy_paste} readOnly />
                     <Button
                       type="button"
@@ -857,7 +1016,7 @@ export default function PublicCart() {
                       onClick={handleCopyPixCode}
                     >
                       <Copy className="h-4 w-4" />
-                      {copiedPixCode ? 'Codigo copiado' : 'Copiar codigo PIX'}
+                      {copiedPixCode ? 'Código copiado' : 'Copiar código PIX'}
                     </Button>
                   </div>
                 </div>
@@ -928,13 +1087,13 @@ export default function PublicCart() {
 
                 {form.deliveryMethod === 'entrega' && user && !savedAddressLoaded && (
                   <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">
-                    Carregando endereco salvo...
+                    Carregando endereço salvo...
                   </div>
                 )}
 
                 {form.deliveryMethod === 'entrega' && user && hasSavedAddress && !editingSavedAddress ? (
                   <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
-                    <p className="text-xs font-medium text-slate-700">Endereco salvo para entrega</p>
+                    <p className="text-xs font-medium text-slate-700">Endereço salvo para entrega</p>
                     <p className="mt-1 text-xs text-slate-600">
                       {form.address}, {form.city} - {form.state}, CEP {form.zipCode}
                     </p>
@@ -943,13 +1102,13 @@ export default function PublicCart() {
                       className="mt-2 text-xs font-semibold text-[#1a3a8f] hover:underline"
                       onClick={() => setEditingSavedAddress(true)}
                     >
-                      Alterar endereco
+                      Alterar endereço
                     </button>
                   </div>
                 ) : form.deliveryMethod === 'entrega' ? (
                   <>
                     <div>
-                      <Label htmlFor="checkout-address">Endereco *</Label>
+                      <Label htmlFor="checkout-address">Endereço *</Label>
                       <Input
                         id="checkout-address"
                         value={form.address}
@@ -996,7 +1155,7 @@ export default function PublicCart() {
                   </>
                 ) : (
                   <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-                    Retirada selecionada. Endereco de entrega nao sera exigido.
+                    Retirada selecionada. Endereço de entrega não será exigido.
                   </p>
                 )}
 
@@ -1012,14 +1171,14 @@ export default function PublicCart() {
                     <SelectContent>
                       <SelectItem value="dinheiro">Dinheiro</SelectItem>
                       {paymentOptions.pixAvailable && <SelectItem value="pix">Pix</SelectItem>}
-                      <SelectItem value="cartao">Cartao</SelectItem>
+                      <SelectItem value="cartao">Cartão</SelectItem>
                       <SelectItem value="boleto">Boleto</SelectItem>
                       <SelectItem value="outro">Outro</SelectItem>
                     </SelectContent>
                   </Select>
                   {!paymentOptions.pixAvailable && (
                     <p className="mt-1 text-xs text-slate-500">
-                      PIX indisponivel: configure o gateway completo na loja.
+                      PIX indisponível: configure o gateway completo na loja.
                     </p>
                   )}
                   {formErrors.paymentMethod && (

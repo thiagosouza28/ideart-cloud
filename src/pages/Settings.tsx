@@ -513,7 +513,7 @@ export default function Settings() {
       setResetError('Empresa não encontrada.');
       return;
     }
-    if (!user?.email) {
+    if (!userá.email) {
       setResetError('E-mail do usuário não encontrado.');
       return;
     }

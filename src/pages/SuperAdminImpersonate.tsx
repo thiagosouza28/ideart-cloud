@@ -118,7 +118,7 @@ export default function SuperAdminImpersonate() {
     }
 
     if (isImpersonating) {
-      toast.error('Finalize a sessao atual antes de entrar em outra conta.');
+      toast.error('Finalize a sessão atual antes de entrar em outra conta.');
       return;
     }
 
@@ -134,7 +134,7 @@ export default function SuperAdminImpersonate() {
       if (!switched) return;
 
       setEmail('');
-      toast.success('Acesso concedido. Voce esta na conta do cliente.');
+      toast.success('Acesso concedido. Você está na conta do cliente.');
       navigate('/dashboard', { replace: true });
     } catch (error: any) {
       clearImpersonation();
@@ -182,7 +182,7 @@ export default function SuperAdminImpersonate() {
               Entrar na conta
             </Button>
             <p className="text-xs text-slate-500">
-              A sessao do admin fica salva e pode ser restaurada no banner superior.
+              A sessão do admin fica salva e pode ser restaurada no banner superior.
             </p>
           </div>
         </CardContent>

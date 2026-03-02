@@ -32,7 +32,7 @@ const SUPABASE_CLIENT_KEY = resolveClientKey();
 
 if (!SUPABASE_URL || !SUPABASE_CLIENT_KEY) {
   throw new Error(
-    'Variaveis do Supabase ausentes/invalidas. Configure VITE_SUPABASE_URL e VITE_SUPABASE_PUBLISHABLE_KEY (ou ANON sem service_role).',
+    'Variáveis do Supabase ausentes/inválidas. Configure VITE_SUPABASE_URL e VITE_SUPABASE_PUBLISHABLE_KEY (ou ANON sem service_role).',
   );
 }
 

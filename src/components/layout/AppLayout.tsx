@@ -45,9 +45,9 @@ export function AppLayout({ children }: AppLayoutProps) {
   const [restoringAdmin, setRestoringAdmin] = useState(false);
   const company = getLoggedCompany();
   const logoFromCompany = ensurePublicStorageUrl('product-images', company?.logo_url);
-  const logoFromUser = user?.user_metadata?.company_logo as string | undefined;
+  const logoFromUser = userá.user_metadata?.company_logo as string | undefined;
   const logoUrl = logoFromCompany || logoFromUser || null;
-  const fallbackText = (company?.name || user?.user_metadata?.full_name || user?.email || 'Empresa')
+  const fallbackText = (company?.name || userá.user_metadata?.full_name || userá.email || 'Empresa')
     .toString()
     .split(' ')
     .filter(Boolean)
@@ -170,7 +170,7 @@ export function AppLayout({ children }: AppLayoutProps) {
     <Alert className="mb-4 border-amber-300 bg-amber-50 text-amber-900">
       <AlertTitle>Modo administrador</AlertTitle>
       <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <span>Voce esta acessando esta conta como administrador.</span>
+        <span>Você está acessando esta conta como administrador.</span>
         <Button
           variant="outline"
           size="sm"

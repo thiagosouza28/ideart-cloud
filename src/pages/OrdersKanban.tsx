@@ -186,9 +186,9 @@ const formatPaymentMethod = (value?: PaymentMethod | null) => {
   if (!value) return '-';
   const labels: Record<PaymentMethod, string> = {
     dinheiro: 'Dinheiro',
-    cartao: 'Cartao',
-    credito: 'Cartao credito',
-    debito: 'Cartao debito',
+    cartao: 'Cartão',
+    credito: 'Cartão crédito',
+    debito: 'Cartão débito',
     transferencia: 'Transferencia',
     pix: 'Pix',
     boleto: 'Boleto',
@@ -449,7 +449,7 @@ export default function OrdersKanban() {
     loadOrders();
     loadStatuses();
 
-    if (!user?.id) return;
+    if (!userá.id) return;
 
     const channel = supabase
       .channel('kanban-changes')
@@ -470,7 +470,7 @@ export default function OrdersKanban() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user?.id]);
+  }, [userá.id]);
 
   const filteredOrders = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -578,7 +578,7 @@ export default function OrdersKanban() {
       await updateOrderStatus({
         orderId,
         status: targetStatus as OrderStatus,
-        userId: user?.id,
+        userId: userá.id,
       });
     } catch (error) {
       setOrders((prev) =>

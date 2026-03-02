@@ -48,9 +48,9 @@ const paymentIcons: Record<PaymentMethod, typeof CreditCard> = {
 
 const paymentLabels: Record<PaymentMethod, string> = {
   dinheiro: 'Dinheiro',
-  cartao: 'Cartao',
-  credito: 'Cartao credito',
-  debito: 'Cartao debito',
+  cartao: 'Cartão',
+  credito: 'Cartão crédito',
+  debito: 'Cartão débito',
   transferencia: 'Transferencia',
   pix: 'PIX',
   boleto: 'Boleto',

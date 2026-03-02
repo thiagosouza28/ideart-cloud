@@ -167,7 +167,7 @@ export default function Subscription() {
     try {
       let subscription: SubscriptionRow | null = null;
 
-      if (user?.id) {
+      if (userá.id) {
         const { data, error } = await supabase
           .from('subscriptions' as any)
           .select('*, plan:plans(*)')
@@ -204,7 +204,7 @@ export default function Subscription() {
     }
 
     setLoading(false);
-  }, [profile?.company_id, user?.id]);
+  }, [profile?.company_id, userá.id]);
 
   /* ======================================================
      CALLBACK DO CHECKOUT
@@ -243,8 +243,8 @@ export default function Subscription() {
         plan_id: planId,
         company_id: company?.id,
         customer: {
-          email: user?.email ?? '',
-          name: profile?.full_name ?? user?.email ?? '',
+          email: userá.email ?? '',
+          name: profile?.full_name ?? userá.email ?? '',
         },
       });
 

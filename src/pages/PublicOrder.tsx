@@ -183,7 +183,7 @@ export default function PublicOrder() {
       window.setTimeout(() => setCopiedPixCode(false), 1800);
     } catch {
       toast({
-        title: 'Nao foi possivel copiar o codigo PIX',
+        title: 'Não foi possível copiar o código PIX',
         variant: 'destructive',
       });
     }
@@ -208,7 +208,7 @@ export default function PublicOrder() {
       if (!silent) {
         const message = err instanceof Error ? err.message : 'Falha ao gerar PIX.';
         toast({
-          title: 'Nao foi possivel gerar o PIX',
+          title: 'Não foi possível gerar o PIX',
           description: message,
           variant: 'destructive',
         });
@@ -604,7 +604,7 @@ export default function PublicOrder() {
                       onClick={handleCopyPixCode}
                     >
                       <Copy className="h-4 w-4" />
-                      {copiedPixCode ? 'Codigo copiado' : 'Copiar codigo PIX'}
+                      {copiedPixCode ? 'Código copiado' : 'Copiar código PIX'}
                     </Button>
                   </div>
                 )}
@@ -613,7 +613,7 @@ export default function PublicOrder() {
                   payload.order.payment_status !== 'pago' && (
                     <div className="space-y-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
                       <p className="text-xs font-semibold text-amber-900">
-                        QR Code PIX ainda nao disponivel
+                        QR Code PIX ainda não disponível
                       </p>
                       <Button
                         type="button"

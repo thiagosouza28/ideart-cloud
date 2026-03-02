@@ -29,7 +29,7 @@ const SUPABASE_PUBLIC_KEY = resolvePublicKey();
 const shouldSendAuthorization = SUPABASE_PUBLIC_KEY.includes('.');
 
 if (!SUPABASE_URL || !SUPABASE_PUBLIC_KEY) {
-  throw new Error('Supabase URL ou chave publica invalida nao configuradas.');
+  throw new Error('Supabase URL ou chave pública inválida não configuradas.');
 }
 
 export async function invokePublicFunction<T>(
@@ -69,7 +69,7 @@ export async function invokePublicFunction<T>(
       status: res.status,
       body: json ?? text,
     });
-    throw new Error(json?.error || json?.message || 'Erro ao chamar funcao publica');
+    throw new Error(json?.error || json?.message || 'Erro ao chamar função pública');
   }
 
   return json as T;

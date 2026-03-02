@@ -149,7 +149,7 @@ export default function PublicCustomerProfile() {
 
   useEffect(() => {
     const loadFallbackCompany = async () => {
-      if (!user?.id || catalogCompany?.id || (companyContext && isUuid(companyContext))) return;
+      if (!userá.id || catalogCompany?.id || (companyContext && isUuid(companyContext))) return;
 
       const { data } = await customerSupabase
         .from('orders')
@@ -164,7 +164,7 @@ export default function PublicCustomerProfile() {
     };
 
     void loadFallbackCompany();
-  }, [catalogCompany?.id, companyContext, user?.id]);
+  }, [catalogCompany?.id, companyContext, userá.id]);
 
   useEffect(() => {
     if (!user) return;
@@ -185,7 +185,7 @@ export default function PublicCustomerProfile() {
   }, [catalogCompany?.id, companyContext, fallbackCompanyId]);
 
   useEffect(() => {
-    if (!user?.id || !profileCompanyId) {
+    if (!userá.id || !profileCompanyId) {
       setProfileLoaded(true);
       return;
     }
@@ -225,7 +225,7 @@ export default function PublicCustomerProfile() {
     return () => {
       isMounted = false;
     };
-  }, [profileCompanyId, user?.id]);
+  }, [profileCompanyId, userá.id]);
 
   const validateProfile = () => {
     const nextErrors: Partial<Record<keyof ProfileForm, string>> = {};
@@ -234,16 +234,16 @@ export default function PublicCustomerProfile() {
       nextErrors.name = 'Informe o nome completo.';
     }
     if (!validatePhone(profileForm.phone)) {
-      nextErrors.phone = 'Telefone invalido.';
+      nextErrors.phone = 'Telefone inválido.';
     }
     if (!validateCpf(profileForm.document)) {
-      nextErrors.document = 'CPF invalido.';
+      nextErrors.document = 'CPF inválido.';
     }
     if (!isValidEmail(profileForm.email)) {
       nextErrors.email = 'Informe um e-mail valido.';
     }
     if (!profileForm.address.trim()) {
-      nextErrors.address = 'Informe o endereco.';
+      nextErrors.address = 'Informe o endereço.';
     }
     if (!profileForm.city.trim()) {
       nextErrors.city = 'Informe a cidade.';
@@ -268,7 +268,7 @@ export default function PublicCustomerProfile() {
 
   const handleProfileSubmit = async (event: FormEvent) => {
     event.preventDefault();
-    if (!user?.id || !profileCompanyId) return;
+    if (!userá.id || !profileCompanyId) return;
     if (!validateProfile()) return;
 
     setProfileSaving(true);
@@ -288,7 +288,7 @@ export default function PublicCustomerProfile() {
     });
 
     if (error) {
-      setProfileErrorMessage(error.message || 'Nao foi possivel salvar o perfil.');
+      setProfileErrorMessage(error.message || 'Não foi possível salvar o perfil.');
       setProfileSaving(false);
       return;
     }
@@ -301,7 +301,7 @@ export default function PublicCustomerProfile() {
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <CatalogTopNav
         company={catalogCompany}
-        subtitle={user?.email || 'Cliente autenticado'}
+        subtitle={userá.email || 'Cliente autenticado'}
         showBack
         onBack={() => navigate(catalogPath)}
         showAccount
@@ -347,7 +347,7 @@ export default function PublicCustomerProfile() {
           <CardContent>
             {!profileCompanyId && (
               <p className="rounded-md border border-dashed border-slate-300 bg-slate-50 p-3 text-xs text-slate-600">
-                Abra o catalogo de uma loja para vincular e salvar seu perfil.
+                Abra o catálogo de uma loja para vincular e salvar seu perfil.
               </p>
             )}
             {profileCompanyId && !profileLoaded && (
@@ -406,7 +406,7 @@ export default function PublicCustomerProfile() {
               </div>
 
               <div>
-                <Label htmlFor="profile-address">Endereco *</Label>
+                <Label htmlFor="profile-address">Endereço *</Label>
                 <Input
                   id="profile-address"
                   value={profileForm.address}
