@@ -133,9 +133,16 @@ export type Database = {
           signature_role: string | null
           minimum_delivery_value: number | null
           minimum_order_value: number | null
+          mp_access_token: string | null
           name: string
           owner_user_id: string | null
+          pagseguro_token: string | null
           phone: string | null
+          pix_beneficiary_name: string | null
+          pix_enabled: boolean
+          pix_gateway: string | null
+          pix_key: string | null
+          pix_key_type: string | null
           plan_id: string | null
           slug: string
           state: string | null
@@ -190,9 +197,16 @@ export type Database = {
           signature_role?: string | null
           minimum_delivery_value?: number | null
           minimum_order_value?: number | null
+          mp_access_token?: string | null
           name: string
           owner_user_id?: string | null
+          pagseguro_token?: string | null
           phone?: string | null
+          pix_beneficiary_name?: string | null
+          pix_enabled?: boolean
+          pix_gateway?: string | null
+          pix_key?: string | null
+          pix_key_type?: string | null
           plan_id?: string | null
           slug: string
           state?: string | null
@@ -247,9 +261,16 @@ export type Database = {
           signature_role?: string | null
           minimum_delivery_value?: number | null
           minimum_order_value?: number | null
+          mp_access_token?: string | null
           name?: string
           owner_user_id?: string | null
+          pagseguro_token?: string | null
           phone?: string | null
+          pix_beneficiary_name?: string | null
+          pix_enabled?: boolean
+          pix_gateway?: string | null
+          pix_key?: string | null
+          pix_key_type?: string | null
           plan_id?: string | null
           slug?: string
           state?: string | null
@@ -271,6 +292,41 @@ export type Database = {
             columns: ["plan_id"]
             isOneToOne: false
             referencedRelation: "plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      company_payment_tokens: {
+        Row: {
+          company_id: string
+          created_at: string
+          mp_access_token: string | null
+          pagseguro_token: string | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          mp_access_token?: string | null
+          pagseguro_token?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          mp_access_token?: string | null
+          pagseguro_token?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "company_payment_tokens_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: true
+            referencedRelation: "companies"
             referencedColumns: ["id"]
           },
         ]
@@ -555,7 +611,11 @@ export type Database = {
           id: string
           notes: string | null
           order_number: number
+          paid_at: string | null
+          payment_copy_paste: string | null
+          payment_id: string | null
           payment_method: Database["public"]["Enums"]["payment_method"] | null
+          payment_qr_code: string | null
           payment_link_id: string | null
           payment_link_url: string | null
           payment_status: Database["public"]["Enums"]["payment_status"]
@@ -582,7 +642,11 @@ export type Database = {
           id?: string
           notes?: string | null
           order_number?: number
+          paid_at?: string | null
+          payment_copy_paste?: string | null
+          payment_id?: string | null
           payment_method?: Database["public"]["Enums"]["payment_method"] | null
+          payment_qr_code?: string | null
           payment_link_id?: string | null
           payment_link_url?: string | null
           payment_status?: Database["public"]["Enums"]["payment_status"]
@@ -609,7 +673,11 @@ export type Database = {
           id?: string
           notes?: string | null
           order_number?: number
+          paid_at?: string | null
+          payment_copy_paste?: string | null
+          payment_id?: string | null
           payment_method?: Database["public"]["Enums"]["payment_method"] | null
+          payment_qr_code?: string | null
           payment_link_id?: string | null
           payment_link_url?: string | null
           payment_status?: Database["public"]["Enums"]["payment_status"]
@@ -791,6 +859,8 @@ export type Database = {
           features: Json
           id: string
           is_active: boolean
+          max_orders_per_month: number | null
+          max_products: number | null
           max_users: number | null
           name: string
           period_days: number
@@ -810,6 +880,8 @@ export type Database = {
           features?: Json
           id?: string
           is_active?: boolean
+          max_orders_per_month?: number | null
+          max_products?: number | null
           max_users?: number | null
           name: string
           period_days?: number
@@ -829,6 +901,8 @@ export type Database = {
           features?: Json
           id?: string
           is_active?: boolean
+          max_orders_per_month?: number | null
+          max_products?: number | null
           max_users?: number | null
           name?: string
           period_days?: number
@@ -1484,6 +1558,69 @@ export type Database = {
         }
         Relationships: []
       }
+      payment_webhook_logs: {
+        Row: {
+          company_id: string
+          error_message: string | null
+          event_type: string | null
+          external_event_id: string | null
+          gateway: string
+          id: string
+          order_id: string | null
+          payload: Json | null
+          payment_id: string | null
+          processed_at: string | null
+          received_at: string
+          signature_valid: boolean | null
+          status: string | null
+        }
+        Insert: {
+          company_id: string
+          error_message?: string | null
+          event_type?: string | null
+          external_event_id?: string | null
+          gateway: string
+          id?: string
+          order_id?: string | null
+          payload?: Json | null
+          payment_id?: string | null
+          processed_at?: string | null
+          received_at?: string
+          signature_valid?: boolean | null
+          status?: string | null
+        }
+        Update: {
+          company_id?: string
+          error_message?: string | null
+          event_type?: string | null
+          external_event_id?: string | null
+          gateway?: string
+          id?: string
+          order_id?: string | null
+          payload?: Json | null
+          payment_id?: string | null
+          processed_at?: string | null
+          received_at?: string
+          signature_valid?: boolean | null
+          status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_webhook_logs_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_webhook_logs_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       webhook_events: {
         Row: {
           event_id: string
@@ -1541,6 +1678,22 @@ export type Database = {
           p_items: Json
           p_payment_method: Database["public"]["Enums"]["payment_method"]
         }
+        Returns: Json
+      }
+      assert_company_order_limit: {
+        Args: { p_company_id: string }
+        Returns: undefined
+      }
+      company_has_active_access: {
+        Args: { p_company_id: string }
+        Returns: boolean
+      }
+      company_pix_is_ready: {
+        Args: { p_company_id: string }
+        Returns: boolean
+      }
+      get_company_checkout_payment_options: {
+        Args: { p_company_id: string }
         Returns: Json
       }
       upsert_catalog_customer_profile: {

@@ -9,12 +9,13 @@ export const SUPER_ADMIN_HOME_PATH = '/super-admin/empresas';
 const SUPER_ADMIN_ALLOWED_EXACT_PATHS = new Set([
   '/super-admin',
   '/super-admin/empresas',
+  '/super-admin/planos',
   '/admin/entrar-como-cliente',
   '/super-admin/entrar-como-cliente',
   '/usuarios',
 ]);
 
-const SUPER_ADMIN_ALLOWED_PREFIX_PATHS = ['/usuarios/'];
+const SUPER_ADMIN_ALLOWED_PREFIX_PATHS = ['/usuarios/', '/super-admin/planos/'];
 
 const normalizePathname = (pathname: string) => {
   const normalized = pathname.replace(/\/+$/, '');
@@ -44,4 +45,3 @@ export const canSuperAdminAccessPath = (pathname: string) => {
   if (SUPER_ADMIN_ALLOWED_EXACT_PATHS.has(normalized)) return true;
   return SUPER_ADMIN_ALLOWED_PREFIX_PATHS.some((prefix) => normalized.startsWith(prefix));
 };
-

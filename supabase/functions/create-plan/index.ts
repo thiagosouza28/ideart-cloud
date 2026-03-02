@@ -68,6 +68,8 @@ type CreatePlanRequest = {
   period_days?: number;
   features?: string[] | null;
   max_users?: number | null;
+  max_products?: number | null;
+  max_orders_per_month?: number | null;
   is_active?: boolean;
 };
 
@@ -149,6 +151,10 @@ serve(async (req) => {
       : periodDaysBase * intervalCount;
     const features = Array.isArray(body.features) ? body.features : [];
     const maxUsers = Number.isFinite(Number(body.max_users)) ? Number(body.max_users) : null;
+    const maxProducts = Number.isFinite(Number(body.max_products)) ? Number(body.max_products) : null;
+    const maxOrdersPerMonth = Number.isFinite(Number(body.max_orders_per_month))
+      ? Number(body.max_orders_per_month)
+      : null;
     const isActive = body.is_active ?? true;
 
     log('Plan payload', { name, price, billingPeriod, intervalCount, periodDays });
@@ -164,6 +170,8 @@ serve(async (req) => {
         period_days: periodDays,
         features,
         max_users: maxUsers,
+        max_products: maxProducts,
+        max_orders_per_month: maxOrdersPerMonth,
         is_active: isActive,
       })
       .select('*')

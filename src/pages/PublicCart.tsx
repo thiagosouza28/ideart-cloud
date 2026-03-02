@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { MessageCircle as Whatsapp, Minus, Plus, Trash2 } from 'lucide-react';
+import { Copy, MessageCircle as Whatsapp, Minus, Plus, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -23,6 +23,7 @@ import {
   setPublicCartItemQuantity,
 } from '@/lib/public-cart';
 import { ensurePublicStorageUrl } from '@/lib/storage';
+import { createPublicPixPayment, type PublicPixPaymentResult } from '@/services/payments';
 import { Company, PaymentMethod } from '@/types/database';
 
 const asCurrency = (value: number) =>
@@ -55,10 +56,26 @@ export default function PublicCart() {
     cart?: string;
   }>({});
   const [orderResult, setOrderResult] = useState<{
+    orderId: string | null;
     orderNumber: number | null;
     customerName: string;
     total: number;
+    paymentMethod: PaymentMethod;
+    publicToken: string | null;
   } | null>(null);
+  const [pixResult, setPixResult] = useState<PublicPixPaymentResult | null>(null);
+  const [pixGenerating, setPixGenerating] = useState(false);
+  const [pixErrorMessage, setPixErrorMessage] = useState<string | null>(null);
+  const [copiedPixCode, setCopiedPixCode] = useState(false);
+  const [paymentOptions, setPaymentOptions] = useState<{
+    pixAvailable: boolean;
+    pixGateway: string | null;
+    hasAccess: boolean;
+  }>({
+    pixAvailable: false,
+    pixGateway: null,
+    hasAccess: true,
+  });
   const [savedAddressLoaded, setSavedAddressLoaded] = useState(false);
   const [hasSavedAddress, setHasSavedAddress] = useState(false);
   const [editingSavedAddress, setEditingSavedAddress] = useState(true);
@@ -179,6 +196,54 @@ export default function PublicCart() {
 
   useEffect(() => {
     if (!company?.id) {
+      setPaymentOptions({
+        pixAvailable: false,
+        pixGateway: null,
+        hasAccess: true,
+      });
+      return;
+    }
+
+    let active = true;
+
+    const loadPaymentOptions = async () => {
+      const { data, error } = await customerSupabase.rpc('get_company_checkout_payment_options', {
+        p_company_id: company.id,
+      });
+
+      if (!active) return;
+
+      if (error) {
+        setPaymentOptions({
+          pixAvailable: false,
+          pixGateway: null,
+          hasAccess: true,
+        });
+        return;
+      }
+
+      const options = (data || {}) as {
+        pix_available?: boolean;
+        pix_gateway?: string | null;
+        has_access?: boolean;
+      };
+
+      setPaymentOptions({
+        pixAvailable: Boolean(options.pix_available),
+        pixGateway: options.pix_gateway || null,
+        hasAccess: options.has_access !== false,
+      });
+    };
+
+    void loadPaymentOptions();
+
+    return () => {
+      active = false;
+    };
+  }, [company?.id]);
+
+  useEffect(() => {
+    if (!company?.id) {
       setCartItems([]);
       return;
     }
@@ -237,10 +302,16 @@ export default function PublicCart() {
   const minimumOrderValue = Number(company?.minimum_order_value || 0);
   const minimumDeliveryValue = Number(company?.minimum_delivery_value || 0);
   const requiresAddressInput = form.deliveryMethod === 'entrega' && (!user || !hasSavedAddress || editingSavedAddress);
+  const checkoutBlocked = !paymentOptions.hasAccess;
   const orderTotal = useMemo(
     () => cartItems.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0),
     [cartItems],
   );
+
+  useEffect(() => {
+    if (form.paymentMethod !== 'pix' || paymentOptions.pixAvailable) return;
+    setForm((prev) => ({ ...prev, paymentMethod: '' }));
+  }, [form.paymentMethod, paymentOptions.pixAvailable]);
 
   const openContact = () => {
     if (company?.catalog_contact_url) {
@@ -250,6 +321,58 @@ export default function PublicCart() {
     if (!company?.whatsapp) return;
     const phone = company.whatsapp.replace(/\D/g, '');
     window.open(`https://wa.me/${phone}`, '_blank');
+  };
+
+  const handleCopyPixCode = async () => {
+    if (!pixResult?.payment_copy_paste) return;
+    try {
+      await navigator.clipboard.writeText(pixResult.payment_copy_paste);
+      setCopiedPixCode(true);
+      window.setTimeout(() => setCopiedPixCode(false), 1800);
+    } catch {
+      toast({
+        title: 'Nao foi possivel copiar o codigo PIX',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const generatePixCharge = async ({
+    orderId,
+    publicToken,
+    silent = false,
+  }: {
+    orderId: string;
+    publicToken: string;
+    silent?: boolean;
+  }) => {
+    if (!company?.id) return null;
+
+    setPixGenerating(true);
+    setPixErrorMessage(null);
+    try {
+      const pixCharge = await createPublicPixPayment({
+        company_id: company.id,
+        order_id: orderId,
+        public_token: publicToken,
+      });
+      setPixResult(pixCharge);
+      return pixCharge;
+    } catch (pixError: unknown) {
+      const pixMessage = pixError instanceof Error ? pixError.message : 'Falha ao gerar cobranca PIX.';
+      setPixResult(null);
+      setPixErrorMessage(pixMessage);
+      if (!silent) {
+        toast({
+          title: 'Pedido criado, mas PIX nao foi gerado',
+          description: pixMessage,
+          variant: 'destructive',
+        });
+      }
+      return null;
+    } finally {
+      setPixGenerating(false);
+    }
   };
 
   const handleBack = () => {
@@ -286,6 +409,12 @@ export default function PublicCart() {
 
   const validateCheckout = () => {
     const nextErrors: typeof formErrors = {};
+
+    if (checkoutBlocked) {
+      nextErrors.cart = 'Loja com acesso bloqueado no plano atual. Finalizacao indisponivel.';
+      setFormErrors(nextErrors);
+      return false;
+    }
 
     if (cartItems.length === 0) {
       nextErrors.cart = 'Seu carrinho esta vazio.';
@@ -328,6 +457,8 @@ export default function PublicCart() {
 
     if (!form.paymentMethod) {
       nextErrors.paymentMethod = 'Selecione a forma de pagamento.';
+    } else if (form.paymentMethod === 'pix' && !paymentOptions.pixAvailable) {
+      nextErrors.paymentMethod = 'PIX indisponivel para esta loja.';
     }
 
     if (minimumOrderValue > 0 && orderTotal < minimumOrderValue) {
@@ -352,8 +483,14 @@ export default function PublicCart() {
     if (!company) return;
     if (!validateCheckout()) return;
 
+    const selectedPaymentMethod = form.paymentMethod;
+
     setSubmitting(true);
     setOrderResult(null);
+    setPixResult(null);
+    setPixErrorMessage(null);
+    setPixGenerating(false);
+    setCopiedPixCode(false);
 
     const { data, error } = await customerSupabase.rpc('create_public_order', {
       p_company_id: company.id,
@@ -380,11 +517,16 @@ export default function PublicCart() {
       const isMinQuantityError =
         error.message.includes('Minimum quantity not reached') ||
         error.message.includes('Quantidade minima nao atingida');
+      const isPixUnavailable =
+        error.message.includes('PIX unavailable') ||
+        error.message.includes('PIX indisponivel');
 
       const errorMessage = isMinOrderError
         ? `O valor minimo para pedidos e ${asCurrency(minimumOrderValue)}.`
         : isMinQuantityError
           ? 'Existe item abaixo da quantidade minima permitida.'
+          : isPixUnavailable
+            ? 'PIX indisponivel para esta loja no momento.'
           : error.message;
 
       if (isMinOrderError) {
@@ -392,6 +534,9 @@ export default function PublicCart() {
       }
       if (isMinQuantityError) {
         setFormErrors((prev) => ({ ...prev, cart: errorMessage }));
+      }
+      if (isPixUnavailable) {
+        setFormErrors((prev) => ({ ...prev, paymentMethod: errorMessage }));
       }
 
       toast({
@@ -405,11 +550,26 @@ export default function PublicCart() {
 
     const orderNumber = Number((data as { order_number?: number } | null)?.order_number ?? NaN);
     const resolvedOrderNumber = Number.isFinite(orderNumber) ? orderNumber : null;
+    const publicToken =
+      (data as { public_token?: string } | null)?.public_token || null;
+    const orderId =
+      (data as { order_id?: string } | null)?.order_id || '';
+
+    if (selectedPaymentMethod === 'pix') {
+      if (orderId && publicToken) {
+        await generatePixCharge({ orderId, publicToken });
+      } else {
+        setPixErrorMessage('Pedido criado, mas nao foi possivel iniciar o pagamento PIX.');
+      }
+    }
 
     setOrderResult({
+      orderId: orderId || null,
       orderNumber: resolvedOrderNumber,
       customerName: form.name.trim(),
       total: orderTotal,
+      paymentMethod: selectedPaymentMethod as PaymentMethod,
+      publicToken,
     });
     setForm((prev) => {
       if (user) {
@@ -621,6 +781,11 @@ export default function PublicCart() {
                     Entrega a partir de: {asCurrency(minimumDeliveryValue)}
                   </p>
                 )}
+                {checkoutBlocked && (
+                  <p className="mt-2 text-xs text-destructive">
+                    Loja com assinatura/bloqueio ativo: novos pedidos estao temporariamente indisponiveis.
+                  </p>
+                )}
                 {formErrors.minimum && <p className="mt-2 text-xs text-destructive">{formErrors.minimum}</p>}
                 {formErrors.deliveryMinimum && <p className="mt-1 text-xs text-destructive">{formErrors.deliveryMinimum}</p>}
               </div>
@@ -632,6 +797,69 @@ export default function PublicCart() {
                   </p>
                   <p className="mt-1">Cliente: {orderResult.customerName}</p>
                   <p>Total: {asCurrency(orderResult.total)}</p>
+                  {orderResult.publicToken && (
+                    <p className="mt-2 text-xs">
+                      Acompanhe em{' '}
+                      <Link to={`/pedido/${orderResult.publicToken}`} className="font-semibold underline">
+                        /pedido/{orderResult.publicToken}
+                      </Link>
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {orderResult?.paymentMethod === 'pix' && !pixResult && (
+                <div className="space-y-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                  <p className="font-semibold">Pagamento PIX</p>
+                  <p className="text-xs">
+                    {pixGenerating
+                      ? 'Gerando QR Code PIX...'
+                      : pixErrorMessage || 'Gerando cobranca PIX para este pedido.'}
+                  </p>
+                  {orderResult.orderId && orderResult.publicToken && !pixGenerating && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full border-amber-300 text-amber-900"
+                      onClick={() =>
+                        void generatePixCharge({
+                          orderId: orderResult.orderId as string,
+                          publicToken: orderResult.publicToken as string,
+                        })
+                      }
+                    >
+                      Gerar QR Code PIX
+                    </Button>
+                  )}
+                </div>
+              )}
+
+              {pixResult && (
+                <div className="space-y-3 rounded-md border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900">
+                  <p className="font-semibold">Pagamento PIX gerado</p>
+                  <p className="text-xs">Valor do PIX: {asCurrency(Number(pixResult.amount || 0))}</p>
+                  {pixResult.payment_qr_code && (
+                    <div className="flex justify-center">
+                      <img
+                        src={pixResult.payment_qr_code}
+                        alt="QR Code PIX"
+                        className="h-44 w-44 rounded-md border border-sky-200 bg-white p-2"
+                      />
+                    </div>
+                  )}
+                  <div className="space-y-2">
+                    <Label className="text-xs">Codigo copia e cola</Label>
+                    <Input value={pixResult.payment_copy_paste} readOnly />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full gap-2 border-sky-300 text-sky-800"
+                      onClick={handleCopyPixCode}
+                    >
+                      <Copy className="h-4 w-4" />
+                      {copiedPixCode ? 'Codigo copiado' : 'Copiar codigo PIX'}
+                    </Button>
+                  </div>
                 </div>
               )}
 
@@ -783,18 +1011,23 @@ export default function PublicCart() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="dinheiro">Dinheiro</SelectItem>
-                      <SelectItem value="pix">Pix</SelectItem>
+                      {paymentOptions.pixAvailable && <SelectItem value="pix">Pix</SelectItem>}
                       <SelectItem value="cartao">Cartao</SelectItem>
                       <SelectItem value="boleto">Boleto</SelectItem>
                       <SelectItem value="outro">Outro</SelectItem>
                     </SelectContent>
                   </Select>
+                  {!paymentOptions.pixAvailable && (
+                    <p className="mt-1 text-xs text-slate-500">
+                      PIX indisponivel: configure o gateway completo na loja.
+                    </p>
+                  )}
                   {formErrors.paymentMethod && (
                     <p className="mt-1 text-xs text-destructive">{formErrors.paymentMethod}</p>
                   )}
                 </div>
 
-                <Button type="submit" className="w-full bg-[#1a3a8f] hover:bg-[#16337e]" disabled={submitting || cartItems.length === 0}>
+                <Button type="submit" className="w-full bg-[#1a3a8f] hover:bg-[#16337e]" disabled={submitting || cartItems.length === 0 || checkoutBlocked}>
                   {submitting ? 'Enviando...' : 'Finalizar pedido'}
                 </Button>
               </form>

@@ -7,6 +7,7 @@ type InvokeOptions = {
   path?: string;
   requireAuth?: boolean;
   resetAuthOn401?: boolean;
+  retryOn401WithRefresh?: boolean;
 };
 
 const SESSION_EXPIRY_BUFFER_MS = 60_000;
@@ -37,7 +38,9 @@ const isSessionExpiring = (session: Session) => {
   return Date.now() > session.expires_at * 1000 - SESSION_EXPIRY_BUFFER_MS;
 };
 
-const refreshSessionSafely = async () => {
+const refreshSessionSafely = async (options: { resetOnInvalidRefreshToken?: boolean } = {}) => {
+  const resetOnInvalidRefreshToken = options.resetOnInvalidRefreshToken ?? true;
+
   if (Date.now() - lastRefreshFailureAt < REFRESH_FAILURE_COOLDOWN_MS) {
     return null;
   }
@@ -51,7 +54,9 @@ const refreshSessionSafely = async () => {
       lastRefreshFailureAt = Date.now();
       console.error('[auth] refreshSession failed', error);
       if (isInvalidRefreshTokenError(error)) {
-        await resetAuthSession({ reason: 'invalid_refresh_token' });
+        if (resetOnInvalidRefreshToken) {
+          await resetAuthSession({ reason: 'invalid_refresh_token' });
+        }
         return null;
       }
       throw new Error('Nao foi possivel atualizar a sessao. Tente novamente.');
@@ -66,7 +71,10 @@ const refreshSessionSafely = async () => {
   }
 };
 
-const getActiveSession = async (supabaseUrl: string) => {
+const getActiveSession = async (
+  supabaseUrl: string,
+  options: { resetOnInvalidRefreshToken?: boolean } = {}
+) => {
   if (wasAuthResetRecently()) {
     return null;
   }
@@ -86,7 +94,9 @@ const getActiveSession = async (supabaseUrl: string) => {
   }
 
   if (isSessionExpiring(session)) {
-    const refreshed = await refreshSessionSafely();
+    const refreshed = await refreshSessionSafely({
+      resetOnInvalidRefreshToken: options.resetOnInvalidRefreshToken,
+    });
     if (!refreshed) {
       throw new Error('Sessao expirada. Faca login novamente.');
     }
@@ -137,6 +147,7 @@ export async function invokeEdgeFunction<T>(
     : name;
   const requireAuth = options.requireAuth ?? true;
   const resetAuthOn401 = options.resetAuthOn401 ?? true;
+  const retryOn401WithRefresh = options.retryOn401WithRefresh ?? true;
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
   const publishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
   const anonCandidate = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -149,7 +160,9 @@ export async function invokeEdgeFunction<T>(
   let activeSession: Session | null = null;
 
   if (requireAuth) {
-    activeSession = await getActiveSession(supabaseUrl);
+    activeSession = await getActiveSession(supabaseUrl, {
+      resetOnInvalidRefreshToken: resetAuthOn401,
+    });
     if (!activeSession?.access_token) {
       throw new Error('Sessao nao encontrada. Faca login novamente.');
     }
@@ -191,10 +204,13 @@ export async function invokeEdgeFunction<T>(
 
       if (
         requireAuth &&
+        retryOn401WithRefresh &&
         !retriedAfterRefresh &&
         shouldRetryWithRefresh(response.status, payload)
       ) {
-        const refreshedSession = await refreshSessionSafely();
+        const refreshedSession = await refreshSessionSafely({
+          resetOnInvalidRefreshToken: resetAuthOn401,
+        });
         if (refreshedSession?.access_token) {
           sessionForRequest = refreshedSession;
           retriedAfterRefresh = true;

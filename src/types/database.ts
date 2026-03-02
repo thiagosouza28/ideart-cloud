@@ -22,6 +22,8 @@ export type PaymentMethod =
   | 'transferencia'
   | 'outro';
 export type PaymentStatus = 'pendente' | 'parcial' | 'pago';
+export type PixGateway = 'MercadoPago' | 'PagSeguro' | 'PixManual';
+export type PixKeyType = 'CPF' | 'CNPJ' | 'Email' | 'Telefone' | 'ChaveAleatoria';
 export type FinancialEntryType = 'receita' | 'despesa';
 export type FinancialEntryStatus = 'pendente' | 'pago' | 'atrasado';
 export type FinancialEntryOrigin =
@@ -95,6 +97,13 @@ export interface Company {
   catalog_contact_url?: string | null;
   whatsapp_message_template?: string | null;
   birthday_message_template?: string | null;
+  pix_enabled?: boolean | null;
+  pix_gateway?: PixGateway | string | null;
+  pix_key_type?: PixKeyType | string | null;
+  pix_key?: string | null;
+  pix_beneficiary_name?: string | null;
+  mp_access_token?: string | null;
+  pagseguro_token?: string | null;
   catalog_font?: string | null;
   catalog_columns_mobile?: number | null;
   catalog_columns_desktop?: number | null;
@@ -183,6 +192,8 @@ export interface Plan {
   period_days?: number | null;
   features: string[];
   max_users: number | null;
+  max_orders_per_month?: number | null;
+  max_products?: number | null;
   is_active: boolean;
   cakto_plan_id?: string | null;
   stripe_price_id?: string | null;
@@ -362,6 +373,10 @@ export interface Order {
   total: number;
   payment_method: PaymentMethod | null;
   payment_status: PaymentStatus;
+  payment_id?: string | null;
+  payment_qr_code?: string | null;
+  payment_copy_paste?: string | null;
+  paid_at?: string | null;
   amount_paid: number;
   notes: string | null;
   cancel_reason: string | null;
@@ -497,6 +512,10 @@ export interface PublicOrderPayload {
     | 'gateway_order_id'
     | 'payment_link_id'
     | 'payment_link_url'
+    | 'payment_id'
+    | 'payment_qr_code'
+    | 'payment_copy_paste'
+    | 'paid_at'
     | 'notes'
     | 'created_at'
     | 'approved_at'

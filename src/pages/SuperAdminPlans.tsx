@@ -23,6 +23,8 @@ const defaultPlan: Partial<Plan> = {
   billing_period: 'monthly',
   features: [],
   max_users: null,
+  max_products: null,
+  max_orders_per_month: null,
   is_active: true,
   cakto_plan_id: null,
 };
@@ -159,6 +161,8 @@ export default function SuperAdminPlans() {
       billing_period: plan.billing_period as BillingPeriod,
       features: plan.features || [],
       max_users: plan.max_users,
+      max_products: plan.max_products ?? null,
+      max_orders_per_month: plan.max_orders_per_month ?? null,
       is_active: plan.is_active,
       cakto_plan_id: plan.cakto_plan_id,
       ['interval_count' as any]: intervalCount,
@@ -179,6 +183,8 @@ export default function SuperAdminPlans() {
       billing_period: billingPeriod,
       features: [],
       max_users: null,
+      max_products: null,
+      max_orders_per_month: null,
       is_active: true,
       cakto_plan_id: offer.id,
       ['interval_count' as any]: intervalCount,
@@ -227,6 +233,8 @@ export default function SuperAdminPlans() {
       period_days: periodDays * intervalCount,
       features: formData.features || [],
       max_users: formData.max_users || null,
+      max_products: formData.max_products || null,
+      max_orders_per_month: formData.max_orders_per_month || null,
       is_active: formData.is_active ?? true,
       trial_days: (formData as any).trial_days || 0,
       cakto_plan_id: formData.cakto_plan_id || null,
@@ -241,6 +249,8 @@ export default function SuperAdminPlans() {
         period_days: planData.period_days,
         features: planData.features,
         max_users: planData.max_users,
+        max_products: planData.max_products,
+        max_orders_per_month: planData.max_orders_per_month,
         is_active: planData.is_active,
         cakto_plan_id: planData.cakto_plan_id,
       };
@@ -267,6 +277,8 @@ export default function SuperAdminPlans() {
           period_days: planData.period_days,
           features: planData.features,
           max_users: planData.max_users,
+          max_products: planData.max_products,
+          max_orders_per_month: planData.max_orders_per_month,
           is_active: planData.is_active,
           cakto_plan_id: planData.cakto_plan_id,
         });
@@ -359,6 +371,8 @@ export default function SuperAdminPlans() {
           period_days: periodDays,
           features: [],
           max_users: null,
+          max_products: null,
+          max_orders_per_month: null,
           is_active: true,
           cakto_plan_id: offer.id,
         };
@@ -519,6 +533,16 @@ export default function SuperAdminPlans() {
                       Até {plan.max_users} usuário{plan.max_users > 1 ? 's' : ''}
                     </p>
                   )}
+                  {plan?.max_products && (
+                    <p className="text-sm text-slate-500 mb-3">
+                      Até {plan.max_products} produto{plan.max_products > 1 ? 's' : ''}
+                    </p>
+                  )}
+                  {plan?.max_orders_per_month && (
+                    <p className="text-sm text-slate-500 mb-3">
+                      Até {plan.max_orders_per_month} pedido{plan.max_orders_per_month > 1 ? 's' : ''} por mes
+                    </p>
+                  )}
 
                   {plan?.features && plan.features.length > 0 && (
                     <ul className="space-y-2">
@@ -598,7 +622,7 @@ export default function SuperAdminPlans() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               <div className="space-y-2">
                 <Label>Dias de Teste (Trial)</Label>
                 <Input
@@ -616,6 +640,26 @@ export default function SuperAdminPlans() {
                   min="1"
                   value={formData.max_users || ''}
                   onChange={(e) => setFormData({ ...formData, max_users: e.target.value ? parseInt(e.target.value) : null })}
+                  placeholder="Ilimitado"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Maximo de Produtos</Label>
+                <Input
+                  type="number"
+                  min="1"
+                  value={formData.max_products || ''}
+                  onChange={(e) => setFormData({ ...formData, max_products: e.target.value ? parseInt(e.target.value) : null })}
+                  placeholder="Ilimitado"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Pedidos por Mes</Label>
+                <Input
+                  type="number"
+                  min="1"
+                  value={formData.max_orders_per_month || ''}
+                  onChange={(e) => setFormData({ ...formData, max_orders_per_month: e.target.value ? parseInt(e.target.value) : null })}
                   placeholder="Ilimitado"
                 />
               </div>
@@ -696,3 +740,4 @@ export default function SuperAdminPlans() {
     </div>
   );
 }
+

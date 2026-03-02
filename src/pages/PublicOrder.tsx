@@ -10,10 +10,11 @@ import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
 import { approveArtByToken, approveOrderByToken, fetchPublicOrder } from '@/services/orders';
+import { createPublicPixPayment } from '@/services/payments';
 import type { OrderStatus, PublicOrderPayload } from '@/types/database';
 import { ensurePublicStorageUrl } from '@/lib/storage';
 import { formatAreaM2, parseM2Attributes } from '@/lib/measurements';
-import { CheckCircle, Clock, Package, Truck, XCircle, FileText, Image as ImageIcon } from 'lucide-react';
+import { CheckCircle, Clock, Copy, Package, Truck, XCircle, FileText, Image as ImageIcon } from 'lucide-react';
 
 const statusLabels: Record<OrderStatus, string> = {
   orcamento: 'Orçamento',
@@ -60,6 +61,12 @@ const getPaymentStatusLabel = (status: 'pago' | 'parcial' | 'pendente') => {
   return 'Pendente';
 };
 
+const isLikelyValidPixCode = (value: string | null | undefined) => {
+  if (!value) return false;
+  const normalized = value.trim();
+  return normalized.startsWith('000201') && normalized.includes('6304');
+};
+
 export default function PublicOrder() {
   const { token } = useParams<{ token: string }>();
   const { toast } = useToast();
@@ -68,9 +75,12 @@ export default function PublicOrder() {
   const [error, setError] = useState<string | null>(null);
   const [approving, setApproving] = useState(false);
   const [approvingArt, setApprovingArt] = useState(false);
+  const [copiedPixCode, setCopiedPixCode] = useState(false);
+  const [pixGenerating, setPixGenerating] = useState(false);
   const [photoViewerOpen, setPhotoViewerOpen] = useState(false);
   const [selectedPhoto, setSelectedPhoto] = useState<{ url: string; created_at: string } | null>(null);
   const lastStatusRef = useRef<OrderStatus | null>(null);
+  const pixAutoRequestRef = useRef<string | null>(null);
 
   const formatCurrency = (v: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
@@ -163,6 +173,75 @@ export default function PublicOrder() {
       setApprovingArt(false);
     }
   };
+
+  const handleCopyPixCode = async () => {
+    const copyCode = payload?.order.payment_copy_paste;
+    if (!copyCode) return;
+    try {
+      await navigator.clipboard.writeText(copyCode);
+      setCopiedPixCode(true);
+      window.setTimeout(() => setCopiedPixCode(false), 1800);
+    } catch {
+      toast({
+        title: 'Nao foi possivel copiar o codigo PIX',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleGeneratePix = useCallback(async (silent = false) => {
+    if (!token || !payload?.order?.id || pixGenerating) return;
+
+    setPixGenerating(true);
+    try {
+      await createPublicPixPayment({
+        order_id: payload.order.id,
+        public_token: token,
+      });
+      await loadOrder(true);
+      if (!silent) {
+        toast({
+          title: 'QR Code PIX gerado',
+        });
+      }
+    } catch (err: unknown) {
+      if (!silent) {
+        const message = err instanceof Error ? err.message : 'Falha ao gerar PIX.';
+        toast({
+          title: 'Nao foi possivel gerar o PIX',
+          description: message,
+          variant: 'destructive',
+        });
+      }
+    } finally {
+      setPixGenerating(false);
+    }
+  }, [loadOrder, payload?.order?.id, pixGenerating, toast, token]);
+
+  useEffect(() => {
+    if (!token || !payload?.order?.id) return;
+
+    const hasValidPixCode = isLikelyValidPixCode(payload.order.payment_copy_paste);
+    const needsPixGeneration =
+      payload.order.payment_method === 'pix' &&
+      payload.order.payment_status !== 'pago' &&
+      !hasValidPixCode;
+
+    if (!needsPixGeneration) return;
+
+    const requestKey = `${payload.order.id}:${payload.order.payment_status}`;
+    if (pixAutoRequestRef.current === requestKey) return;
+
+    pixAutoRequestRef.current = requestKey;
+    void handleGeneratePix(true);
+  }, [
+    handleGeneratePix,
+    payload?.order?.id,
+    payload?.order?.payment_copy_paste,
+    payload?.order?.payment_method,
+    payload?.order?.payment_status,
+    token,
+  ]);
 
   if (loading) {
     return (
@@ -503,6 +582,50 @@ export default function PublicOrder() {
                   <span className="text-muted-foreground">Saldo</span>
                   <span>{formatCurrency(remainingAmount)}</span>
                 </div>
+                {payload.order.payment_method === 'pix' && isLikelyValidPixCode(payload.order.payment_copy_paste) && (
+                  <div className="space-y-3 rounded-lg border border-sky-200 bg-sky-50 p-3">
+                    <p className="text-xs font-semibold text-sky-900">PIX copia e cola</p>
+                    {payload.order.payment_qr_code && (
+                      <div className="flex justify-center">
+                        <img
+                          src={payload.order.payment_qr_code}
+                          alt="QR Code PIX"
+                          className="h-40 w-40 rounded-md border border-sky-200 bg-white p-2"
+                        />
+                      </div>
+                    )}
+                    <p className="break-all rounded-md border border-sky-200 bg-white p-2 text-xs text-sky-900">
+                      {payload.order.payment_copy_paste}
+                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full gap-2 border-sky-300 text-sky-900"
+                      onClick={handleCopyPixCode}
+                    >
+                      <Copy className="h-4 w-4" />
+                      {copiedPixCode ? 'Codigo copiado' : 'Copiar codigo PIX'}
+                    </Button>
+                  </div>
+                )}
+                {payload.order.payment_method === 'pix' &&
+                  !isLikelyValidPixCode(payload.order.payment_copy_paste) &&
+                  payload.order.payment_status !== 'pago' && (
+                    <div className="space-y-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                      <p className="text-xs font-semibold text-amber-900">
+                        QR Code PIX ainda nao disponivel
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="w-full border-amber-300 text-amber-900"
+                        onClick={() => void handleGeneratePix(false)}
+                        disabled={pixGenerating}
+                      >
+                        {pixGenerating ? 'Gerando...' : 'Gerar QR Code PIX'}
+                      </Button>
+                    </div>
+                  )}
                 <Separator />
                 {payload.payments.length > 0 ? (
                   <div className="space-y-2">

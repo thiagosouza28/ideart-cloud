@@ -17,3 +17,15 @@ verify_jwt = false
 
 [functions.cakto-success]
 verify_jwt = false
+
+[functions.company-payment-settings]
+verify_jwt = false
+
+[functions.create-pix-payment]
+verify_jwt = false
+
+[functions.mercadopago-webhook]
+verify_jwt = false
+
+[functions.pagseguro-webhook]
+verify_jwt = false

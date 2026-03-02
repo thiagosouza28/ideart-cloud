@@ -36,6 +36,7 @@ const GraphPOSPDV = lazy(() => import("./pages/GraphPOSPDV"));
 const GraphPOSPagamento = lazy(() => import("./pages/GraphPOSPagamento"));
 const GraphPOSConfirmacao = lazy(() => import("./pages/GraphPOSConfirmacao"));
 const Settings = lazy(() => import("./pages/Settings"));
+const PaymentSettings = lazy(() => import("./pages/PaymentSettings"));
 const UserManagement = lazy(() => import("./pages/UserManagement"));
 const Companies = lazy(() => import("./pages/Companies"));
 const CompanyForm = lazy(() => import("./pages/CompanyForm"));
@@ -54,6 +55,7 @@ const SubscriptionCancel = lazy(() => import("./pages/SubscriptionCancel"));
 const Onboarding = lazy(() => import("./pages/Onboarding"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const SuperAdminCompanies = lazy(() => import("./pages/SuperAdminCompanies"));
+const SuperAdminPlans = lazy(() => import("./pages/SuperAdminPlans"));
 const SuperAdminImpersonate = lazy(() => import("./pages/SuperAdminImpersonate"));
 const Profile = lazy(() => import("./pages/Profile"));
 const Reports = lazy(() => import("./pages/Reports"));
@@ -404,6 +406,15 @@ const App = () => (
               />
 
               <Route
+                path="/configuracoes/pagamentos/pix"
+                element={(
+                  <ProtectedRoute allowedRoles={["admin"]}>
+                    <AppLayout>{withSuspense(<PaymentSettings />)}</AppLayout>
+                  </ProtectedRoute>
+                )}
+              />
+
+              <Route
                 path="/assinatura"
                 element={(
                   <ProtectedRoute>
@@ -445,6 +456,15 @@ const App = () => (
                 element={(
                   <ProtectedRoute allowedRoles={["super_admin"]}>
                     <AppLayout>{withSuspense(<SuperAdminCompanies />)}</AppLayout>
+                  </ProtectedRoute>
+                )}
+              />
+
+              <Route
+                path="/super-admin/planos"
+                element={(
+                  <ProtectedRoute allowedRoles={["super_admin"]}>
+                    <AppLayout>{withSuspense(<SuperAdminPlans />)}</AppLayout>
                   </ProtectedRoute>
                 )}
               />

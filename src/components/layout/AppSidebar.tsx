@@ -70,6 +70,7 @@ const secondaryMenu: MenuItem[] = [
   { title: 'Clientes', url: '/clientes', icon: Users, roles: ['admin', 'atendente'] },
   { title: 'Aniversariantes do Mês', url: '/clientes/aniversariantes', icon: Gift, roles: ['admin', 'atendente'] },
   { title: 'Empresas', url: '/empresas', icon: Building2, roles: ['admin'] },
+  { title: 'Pagamentos PIX', url: '/configuracoes/pagamentos/pix', icon: CreditCard, roles: ['admin'] },
   { title: 'Banners', url: '/banners', icon: ImageIcon, roles: ['admin'] },
   { title: 'Usuários', url: '/usuarios', icon: User, roles: ['admin'] },
   { title: 'Assinatura', url: '/assinatura', icon: Crown, roles: ['admin', 'financeiro'] },
@@ -77,6 +78,7 @@ const secondaryMenu: MenuItem[] = [
 
 const superAdminMenu: MenuItem[] = [
   { title: 'Empresas / Lojas', url: '/super-admin/empresas', icon: Building2, roles: ['super_admin'] },
+  { title: 'Planos', url: '/super-admin/planos', icon: Crown, roles: ['super_admin'] },
   { title: 'Entrar como cliente', url: '/admin/entrar-como-cliente', icon: Shield, roles: ['super_admin'] },
   { title: 'Usuários', url: '/usuarios', icon: Users, roles: ['super_admin'] },
 ];

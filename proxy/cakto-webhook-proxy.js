@@ -21,8 +21,17 @@ export default {
       return new Response("Missing SUPABASE_URL or SUPABASE_ANON_KEY", { status: 500 });
     }
 
+    const pathname = new URL(request.url).pathname;
+    const resolveFunctionName = () => {
+      if (pathname.endsWith("/api/webhooks/mercadopago")) return "mercadopago-webhook";
+      if (pathname.endsWith("/api/webhooks/pagseguro")) return "pagseguro-webhook";
+      if (pathname.endsWith("/api/webhooks/cakto")) return "cakto-webhook";
+      return "cakto-webhook";
+    };
+    const functionName = resolveFunctionName();
+
     const body = await request.text();
-    const resp = await fetch(`${supabaseUrl}/functions/v1/cakto-webhook`, {
+    const resp = await fetch(`${supabaseUrl}/functions/v1/${functionName}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
