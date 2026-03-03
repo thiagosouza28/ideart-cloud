@@ -149,7 +149,7 @@ export default function PublicCustomerProfile() {
 
   useEffect(() => {
     const loadFallbackCompany = async () => {
-      if (!userá.id || catalogCompany?.id || (companyContext && isUuid(companyContext))) return;
+      if (!user.id || catalogCompany?.id || (companyContext && isUuid(companyContext))) return;
 
       const { data } = await customerSupabase
         .from('orders')
@@ -164,7 +164,7 @@ export default function PublicCustomerProfile() {
     };
 
     void loadFallbackCompany();
-  }, [catalogCompany?.id, companyContext, userá.id]);
+  }, [catalogCompany?.id, companyContext, user.id]);
 
   useEffect(() => {
     if (!user) return;
@@ -185,7 +185,7 @@ export default function PublicCustomerProfile() {
   }, [catalogCompany?.id, companyContext, fallbackCompanyId]);
 
   useEffect(() => {
-    if (!userá.id || !profileCompanyId) {
+    if (!user.id || !profileCompanyId) {
       setProfileLoaded(true);
       return;
     }
@@ -225,7 +225,7 @@ export default function PublicCustomerProfile() {
     return () => {
       isMounted = false;
     };
-  }, [profileCompanyId, userá.id]);
+  }, [profileCompanyId, user.id]);
 
   const validateProfile = () => {
     const nextErrors: Partial<Record<keyof ProfileForm, string>> = {};
@@ -268,7 +268,7 @@ export default function PublicCustomerProfile() {
 
   const handleProfileSubmit = async (event: FormEvent) => {
     event.preventDefault();
-    if (!userá.id || !profileCompanyId) return;
+    if (!user.id || !profileCompanyId) return;
     if (!validateProfile()) return;
 
     setProfileSaving(true);
@@ -301,7 +301,7 @@ export default function PublicCustomerProfile() {
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <CatalogTopNav
         company={catalogCompany}
-        subtitle={userá.email || 'Cliente autenticado'}
+        subtitle={user.email || 'Cliente autenticado'}
         showBack
         onBack={() => navigate(catalogPath)}
         showAccount
@@ -340,7 +340,7 @@ export default function PublicCustomerProfile() {
           <CardHeader className="space-y-1">
             <CardTitle className="text-lg">Dados para pedidos</CardTitle>
             <p className="text-xs text-slate-500">
-              Esses dados sao usados automaticamente no checkout.
+              Esses dados sao usados automaticamente no pagamento.
               {catalogCompany ? ` Loja vinculada: ${catalogCompany.name}.` : ''}
             </p>
           </CardHeader>

@@ -37,7 +37,7 @@ const normalizeOrigin = (origin: FinancialEntryOrigin): FinancialEntryOrigin => 
 
 const resolveAuthUserId = async () => {
   const { data } = await supabase.auth.getUser();
-  return data.userá.id || null;
+  return data.user.id || null;
 };
 
 export const createManualCashEntry = async (payload: ManualCashEntryPayload) => {

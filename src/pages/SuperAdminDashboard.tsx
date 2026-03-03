@@ -14,7 +14,7 @@ interface Stats {
 }
 
 const statusLabels: Record<string, string> = {
-  trial: 'Trial',
+  trial: 'Teste',
   active: 'Ativo',
   cancelled: 'Cancelado',
   canceled: 'Cancelado',
@@ -128,7 +128,7 @@ export default function SuperAdminDashboard() {
 
         <Card className="border-slate-200">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-slate-500">Em Trial</CardTitle>
+            <CardTitle className="text-sm font-medium text-slate-500">Em Teste</CardTitle>
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-100">
               <AlertTriangle className="h-4 w-4 text-blue-600" />
             </div>

@@ -39,7 +39,7 @@ interface CompanyUser {
 }
 
 const statusLabels: Record<string, string> = {
-  trial: 'Trial',
+  trial: 'Teste',
   active: 'Ativo',
   cancelled: 'Cancelado',
   canceled: 'Cancelado',
@@ -291,16 +291,16 @@ export default function SuperAdminCompanies() {
         .eq('id', selectedTrialCompany.id);
 
       if (error) {
-        toast.error(error.message || 'Erro ao adicionar dias de trial');
+        toast.error(error.message || 'Erro ao adicionar dias de teste');
         return;
       }
 
-      toast.success(`Trial atualizado por ${days} dia${days === 1 ? '' : 's'}`);
+      toast.success(`Teste atualizado por ${days} dia${days === 1 ? '' : 's'}`);
       setTrialDialogOpen(false);
       setSelectedTrialCompany(null);
       await loadData();
     } catch (error: any) {
-      toast.error(error?.message || 'Erro ao adicionar dias de trial');
+      toast.error(error?.message || 'Erro ao adicionar dias de teste');
     } finally {
       setAddingTrialDays(false);
     }
@@ -339,14 +339,14 @@ export default function SuperAdminCompanies() {
                 {companies.length} empresa{companies.length !== 1 ? 's' : ''} no sistema
               </CardDescription>
             </div>
-            <div className="flex gap-2">
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
               <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-[140px]">
+                <SelectTrigger className="w-full sm:w-[140px]">
                   <SelectValue placeholder="Status" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todos</SelectItem>
-                  <SelectItem value="trial">Trial</SelectItem>
+                  <SelectItem value="trial">Teste</SelectItem>
                   <SelectItem value="active">Ativo</SelectItem>
                   <SelectItem value="cancelled">Cancelado</SelectItem>
                   <SelectItem value="expired">Expirado</SelectItem>
@@ -358,7 +358,7 @@ export default function SuperAdminCompanies() {
                   placeholder="Buscar empresas..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  className="pl-9 w-[220px]"
+                  className="w-full pl-9 sm:w-[220px]"
                 />
               </div>
             </div>
@@ -447,7 +447,7 @@ export default function SuperAdminCompanies() {
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => openTrialDialog(company)}>
                           <CalendarPlus className="h-4 w-4 mr-2" />
-                          Adicionar dias de trial
+                          Adicionar dias de teste
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => toggleCompanyStatus(company)}>
                           {company.is_active ? 'Desativar' : 'Ativar'}
@@ -502,7 +502,7 @@ export default function SuperAdminCompanies() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="trial">Trial</SelectItem>
+                  <SelectItem value="trial">Teste</SelectItem>
                   <SelectItem value="active">Ativo</SelectItem>
                   <SelectItem value="cancelled">Cancelado</SelectItem>
                   <SelectItem value="expired">Expirado</SelectItem>
@@ -520,7 +520,7 @@ export default function SuperAdminCompanies() {
       <Dialog open={trialDialogOpen} onOpenChange={setTrialDialogOpen}>
         <DialogContent aria-describedby={undefined}>
           <DialogHeader>
-            <DialogTitle>Adicionar dias de trial</DialogTitle>
+            <DialogTitle>Adicionar dias de teste</DialogTitle>
             <DialogDescription>
               Prorroga o periodo de teste da empresa selecionada.
             </DialogDescription>
@@ -529,7 +529,7 @@ export default function SuperAdminCompanies() {
             <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
               <p className="font-medium text-slate-900">{selectedTrialCompany?.name || '-'}</p>
               <p className="text-slate-500">
-                Trial atual ate: {formatDate(selectedTrialCompany?.trial_ends_at || selectedTrialCompany?.subscription_end_date || null)}
+                Teste atual ate: {formatDate(selectedTrialCompany?.trial_ends_at || selectedTrialCompany?.subscription_end_date || null)}
               </p>
             </div>
             <div className="space-y-2">

@@ -130,7 +130,7 @@ export default function CustomerBirthdays() {
           </CardTitle>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-3">
-          <div className="min-w-[200px]">
+          <div className="w-full sm:w-auto sm:min-w-[200px]">
             <Select value={String(selectedMonth)} onValueChange={(value) => setSelectedMonth(Number(value))}>
               <SelectTrigger>
                 <SelectValue placeholder="Selecione o mes" />
@@ -144,7 +144,7 @@ export default function CustomerBirthdays() {
               </SelectContent>
             </Select>
           </div>
-          <div className="relative min-w-[240px] flex-1">
+          <div className="relative w-full sm:min-w-[240px] sm:flex-1">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               placeholder="Buscar por nome..."

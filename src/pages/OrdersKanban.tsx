@@ -449,7 +449,7 @@ export default function OrdersKanban() {
     loadOrders();
     loadStatuses();
 
-    if (!userá.id) return;
+    if (!user.id) return;
 
     const channel = supabase
       .channel('kanban-changes')
@@ -470,7 +470,7 @@ export default function OrdersKanban() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [userá.id]);
+  }, [user.id]);
 
   const filteredOrders = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -578,7 +578,7 @@ export default function OrdersKanban() {
       await updateOrderStatus({
         orderId,
         status: targetStatus as OrderStatus,
-        userId: userá.id,
+        userId: user.id,
       });
     } catch (error) {
       setOrders((prev) =>

@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Edit, Trash2, Building2, Upload, Loader2, MapPin, Phone, Mail, Globe, ExternalLink, Copy, Check, Palette, LayoutGrid, List, Settings as SettingsIcon, MessageCircle, Gift } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -123,6 +123,7 @@ export default function Settings() {
     { value: '{pedido_id}', label: 'ID', description: 'Identificador do pedido' },
     { value: '{pedido_numero}', label: 'Pedido', description: 'Número do pedido' },
     { value: '{pedido_status}', label: 'Status', description: 'Status do pedido' },
+    { value: '{mensagem_status}', label: 'Mensagem status', description: 'Mensagem padrao conforme status do pedido' },
     { value: '{pedido_total}', label: 'Total', description: 'Total do pedido' },
     { value: '{total}', label: 'Total curto', description: 'Alias do total do pedido' },
     { value: '{pedido_link}', label: 'Link', description: 'Link do pedido' },
@@ -513,7 +514,7 @@ export default function Settings() {
       setResetError('Empresa não encontrada.');
       return;
     }
-    if (!userá.email) {
+    if (!user.email) {
       setResetError('E-mail do usuário não encontrado.');
       return;
     }
@@ -851,7 +852,7 @@ export default function Settings() {
                   value={companyForm.address}
                   onChange={(e) => setCompanyForm({ ...companyForm, address: e.target.value })}
                 />
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <Input
                     placeholder="Cidade"
                     value={companyForm.city}
@@ -925,7 +926,7 @@ export default function Settings() {
                   ref={whatsappTemplateRef}
                   value={companyForm.whatsapp_message_template}
                   onChange={(e) => setCompanyForm({ ...companyForm, whatsapp_message_template: e.target.value })}
-                  placeholder="Ola {cliente_nome}, seu pedido #{pedido_numero} esta finalizado! Acompanhe pelo link: {pedido_link}"
+                  placeholder="Ola {cliente_nome}! {mensagem_status} Pedido #{pedido_numero}. Acompanhe: {pedido_link}"
                   className="min-h-[120px]"
                   />
                   <div className="text-xs text-muted-foreground">
@@ -935,6 +936,7 @@ export default function Settings() {
                       <span>{'{cliente_telefone}'}</span>
                       <span>{'{pedido_numero}'}</span>
                       <span>{'{pedido_status}'}</span>
+                      <span>{'{mensagem_status}'}</span>
                       <span>{'{pedido_total}'}</span>
                       <span>{'{pedido_link}'}</span>
                       <span>{'{empresa_nome}'}</span>

@@ -227,7 +227,7 @@ export default function Landing() {
         window.location.href = checkoutUrl;
         return;
       }
-      toast.error("Plano ainda não configurado para checkout.");
+      toast.error("Plano ainda não configurado para pagamento.");
       return;
     }
     const plan = plans.find((item) => item.id === planId) ?? null;
@@ -261,13 +261,13 @@ export default function Landing() {
       const checkoutUrl = (resp as { checkout_url?: string })?.checkout_url;
 
       if (!checkoutUrl) {
-        throw new Error("Checkout indisponível no momento.");
+        throw new Error("Pagamento indisponível no momento.");
       }
 
       window.location.href = checkoutUrl;
     } catch (error: unknown) {
       console.error(error);
-      const message = error instanceof Error ? error.message : "Erro ao iniciar o checkout.";
+      const message = error instanceof Error ? error.message : "Erro ao iniciar o pagamento.";
       toast.error(message);
       setCheckoutLoading(false);
     }
@@ -396,7 +396,7 @@ export default function Landing() {
                     <span className="landing-heading text-sm font-bold tracking-[0.08em]">GRAFICAERP</span>
                   </div>
                   <div className="space-y-2 text-[0.86rem] text-slate-400">
-                    {["Dashboard", "Pedidos", "Clientes", "Estoque", "Financeiro"].map((item, index) => (
+                    {["Painel", "Pedidos", "Clientes", "Estoque", "Financeiro"].map((item, index) => (
                       <div
                         key={item}
                         className={`rounded-lg px-3 py-2 ${
@@ -621,7 +621,7 @@ export default function Landing() {
           <DialogHeader>
             <DialogTitle className="landing-heading">Finalize sua assinatura</DialogTitle>
             <DialogDescription>
-              Informe seus dados para gerar o checkout do plano selecionado.
+              Informe seus dados para gerar o pagamento do plano selecionado.
             </DialogDescription>
           </DialogHeader>
           <form className="space-y-4" onSubmit={handleCheckout}>
@@ -659,7 +659,7 @@ export default function Landing() {
                 {checkoutLoading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Gerando checkout...
+                    Gerando pagamento...
                   </>
                 ) : (
                   "Continuar para pagamento"

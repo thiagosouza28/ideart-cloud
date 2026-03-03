@@ -167,7 +167,7 @@ export default function Subscription() {
     try {
       let subscription: SubscriptionRow | null = null;
 
-      if (userá.id) {
+      if (user.id) {
         const { data, error } = await supabase
           .from('subscriptions' as any)
           .select('*, plan:plans(*)')
@@ -204,7 +204,7 @@ export default function Subscription() {
     }
 
     setLoading(false);
-  }, [profile?.company_id, userá.id]);
+  }, [profile?.company_id, user.id]);
 
   /* ======================================================
      CALLBACK DO CHECKOUT
@@ -243,15 +243,15 @@ export default function Subscription() {
         plan_id: planId,
         company_id: company?.id,
         customer: {
-          email: userá.email ?? '',
-          name: profile?.full_name ?? userá.email ?? '',
+          email: user.email ?? '',
+          name: profile?.full_name ?? user.email ?? '',
         },
       });
 
       const redirectUrl = data?.checkout_url ?? data?.url;
 
       if (!redirectUrl) {
-        toast.error('Erro ao iniciar checkout');
+        toast.error('Erro ao iniciar pagamento');
         return;
       }
 
@@ -268,7 +268,7 @@ export default function Subscription() {
         return;
       }
 
-      toast.error(err?.message || 'Erro ao iniciar checkout');
+      toast.error(err?.message || 'Erro ao iniciar pagamento');
     } finally {
       setSubscribing(null);
     }
@@ -300,7 +300,7 @@ export default function Subscription() {
       case 'active':
         return <Badge className="bg-chart-2">Ativo</Badge>;
       case 'trial':
-        return <Badge variant="secondary">Trial</Badge>;
+        return <Badge variant="secondary">Teste</Badge>;
       case 'expired':
         return <Badge variant="destructive">Plano expirado</Badge>;
       default:

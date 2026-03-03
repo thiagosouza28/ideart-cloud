@@ -264,7 +264,7 @@ export default function BannerManagement() {
             <div className="page-header">
                 <div>
                     <h1 className="page-title">Banners</h1>
-                    <p className="text-muted-foreground">Gerencie propagandas e avisos para catálogo ou dashboard</p>
+                    <p className="text-muted-foreground">Gerencie propagandas e avisos para catálogo ou painel</p>
                 </div>
                 <Button onClick={handleOpenCreate}>
                     <Plus className="h-4 w-4 mr-2" />
@@ -335,7 +335,7 @@ export default function BannerManagement() {
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                             <div className="grid gap-1.5">
                                 <Label htmlFor="title">Título (opcional)</Label>
                                 <Input
@@ -356,13 +356,13 @@ export default function BannerManagement() {
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="catalog">Catálogo Online</SelectItem>
-                                        <SelectItem value="dashboard">Dashboard Interno</SelectItem>
+                                        <SelectItem value="dashboard">Painel Interno</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                             <div className="grid gap-1.5">
                                 <Label htmlFor="link">Link de Redirecionamento</Label>
                                 <Input
@@ -383,7 +383,7 @@ export default function BannerManagement() {
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                             <div className="grid gap-1.5">
                                 <Label htmlFor="start">Data de Início</Label>
                                 <Input
@@ -505,7 +505,7 @@ export default function BannerManagement() {
                                     <div>
                                         <h3 className="font-semibold line-clamp-1">{banner.title || 'Sem título'}</h3>
                                         <p className="text-xs text-muted-foreground flex items-center gap-1">
-                                            {banner.position === 'catalog' ? 'Catálogo' : 'Dashboard'} · Ordem: {banner.sort_order}
+                                            {banner.position === 'catalog' ? 'Catálogo' : 'Painel'} · Ordem: {banner.sort_order}
                                         </p>
                                     </div>
                                     <Switch
@@ -561,7 +561,7 @@ export default function BannerManagement() {
                                         <span className="font-medium">{banner.title || '-'}</span>
                                     </td>
                                     <td className="py-3 px-4">
-                                        {banner.position === 'catalog' ? 'Catálogo' : 'Dashboard'}
+                                        {banner.position === 'catalog' ? 'Catálogo' : 'Painel'}
                                     </td>
                                     <td className="py-3 px-4">
                                         {getStatusBadge(banner)}

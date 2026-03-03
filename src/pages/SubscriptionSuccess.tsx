@@ -40,7 +40,7 @@ const SubscriptionSuccess = () => {
           timeout = window.setTimeout(run, 3000);
         }
       } catch (error: any) {
-        console.error("Erro ao finalizar checkout:", error);
+        console.error("Erro ao finalizar pagamento:", error);
         setStatusMessage(error?.message || "Falha ao validar assinatura.");
       } finally {
         setLoading(false);
@@ -176,7 +176,7 @@ const SubscriptionSuccess = () => {
           <div className="flex flex-col gap-3 pt-4">
             <Button asChild size="lg" className="w-full">
               <Link to="/dashboard">
-                Ir para o Dashboard
+                Ir para o Painel
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
             </Button>

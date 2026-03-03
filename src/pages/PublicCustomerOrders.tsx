@@ -137,7 +137,7 @@ export default function PublicCustomerOrders() {
 
   useEffect(() => {
     const loadOrders = async () => {
-      if (!userá.id) return;
+      if (!user.id) return;
 
       setOrdersLoading(true);
       setErrorMessage(null);
@@ -158,7 +158,7 @@ export default function PublicCustomerOrders() {
     };
 
     void loadOrders();
-  }, [userá.id]);
+  }, [user.id]);
 
   const pendingCount = useMemo(
     () => orders.filter((order) => order.status !== 'entregue' && order.status !== 'cancelado').length,
@@ -169,7 +169,7 @@ export default function PublicCustomerOrders() {
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <CatalogTopNav
         company={catalogCompany}
-        subtitle={userá.email || 'Cliente autenticado'}
+        subtitle={user.email || 'Cliente autenticado'}
         showBack
         onBack={() => navigate(catalogPath)}
         showAccount

@@ -68,7 +68,7 @@ export default function PublicCustomerOrderDetails() {
 
   useEffect(() => {
     const loadOrder = async () => {
-      if (!userá.id || !orderId) return;
+      if (!user.id || !orderId) return;
 
       setPageLoading(true);
       setErrorMessage(null);
@@ -112,7 +112,7 @@ export default function PublicCustomerOrderDetails() {
     };
 
     void loadOrder();
-  }, [orderId, userá.id]);
+  }, [orderId, user.id]);
 
   const totalItems = useMemo(
     () => items.reduce((sum, item) => sum + Number(item.quantity || 0), 0),
@@ -122,7 +122,7 @@ export default function PublicCustomerOrderDetails() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <CatalogTopNav
-        subtitle={userá.email || 'Cliente autenticado'}
+        subtitle={user.email || 'Cliente autenticado'}
         showBack
         onBack={() => navigate(ordersPath)}
         showAccount

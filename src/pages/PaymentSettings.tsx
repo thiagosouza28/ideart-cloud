@@ -24,6 +24,103 @@ const formatDate = (value: string | null) => {
   return date.toLocaleString('pt-BR');
 };
 
+const GATEWAY_LABELS: Record<string, string> = {
+  mercadopago: 'MercadoPago',
+  mercado_pago: 'MercadoPago',
+  pagseguro: 'PagSeguro',
+  pixmanual: 'PixManual',
+  pix_manual: 'PixManual',
+  manual: 'PixManual',
+};
+
+const EVENT_LABELS: Record<string, string> = {
+  'payment.created': 'Pagamento criado',
+  'payment.updated': 'Pagamento atualizado',
+  'payment.approved': 'Pagamento aprovado',
+  'payment.pending': 'Pagamento pendente',
+  'payment.canceled': 'Pagamento cancelado',
+  'payment.cancelled': 'Pagamento cancelado',
+  'payment.failed': 'Pagamento com falha',
+  'payment.refunded': 'Pagamento reembolsado',
+  'payment.authorized': 'Pagamento autorizado',
+  'payment.captured': 'Pagamento capturado',
+  'payment.paid': 'Pagamento pago',
+};
+
+const STATUS_LABELS: Record<string, string> = {
+  approved: 'Aprovado',
+  pending: 'Pendente',
+  paid: 'Pago',
+  in_process: 'Em processamento',
+  in_review: 'Em analise',
+  authorized: 'Autorizado',
+  processing: 'Processando',
+  rejected: 'Rejeitado',
+  cancelled: 'Cancelado',
+  canceled: 'Cancelado',
+  refunded: 'Reembolsado',
+  failed: 'Falha',
+  error: 'Erro',
+  success: 'Sucesso',
+  created: 'Criado',
+  updated: 'Atualizado',
+  unknown: 'Desconhecido',
+};
+
+const LOG_WORD_LABELS: Record<string, string> = {
+  payment: 'pagamento',
+  webhook: 'webhook',
+  order: 'pedido',
+  transaction: 'transacao',
+  charge: 'cobranca',
+  notification: 'notificacao',
+  pix: 'pix',
+  created: 'criado',
+  updated: 'atualizado',
+  approved: 'aprovado',
+  pending: 'pendente',
+  canceled: 'cancelado',
+  cancelled: 'cancelado',
+  failed: 'falha',
+  paid: 'pago',
+  processing: 'processando',
+  authorized: 'autorizado',
+  refunded: 'reembolsado',
+  received: 'recebido',
+};
+
+const normalizeLogValue = (value: string) => value.trim().toLowerCase();
+
+const sentenceCase = (value: string) =>
+  value ? `${value.charAt(0).toUpperCase()}${value.slice(1)}` : value;
+
+const formatLogLabel = (value: string, exactMap: Record<string, string>) => {
+  const normalized = normalizeLogValue(value);
+  if (exactMap[normalized]) return exactMap[normalized];
+
+  const parts = normalized.split(/[.\s:_-]+/g).filter(Boolean);
+  if (!parts.length) return value;
+
+  const translated = parts.map((part) => LOG_WORD_LABELS[part] || STATUS_LABELS[part]?.toLowerCase() || part);
+  return sentenceCase(translated.join(' '));
+};
+
+const getGatewayLabel = (gateway: string | null) => {
+  if (!gateway) return '-';
+  const normalized = normalizeLogValue(gateway);
+  return GATEWAY_LABELS[normalized] || gateway;
+};
+
+const getEventLabel = (eventType: string | null) => {
+  if (!eventType) return '-';
+  return formatLogLabel(eventType, EVENT_LABELS);
+};
+
+const getStatusLabel = (status: string | null) => {
+  if (!status) return '-';
+  return formatLogLabel(status, STATUS_LABELS);
+};
+
 export default function PaymentSettings() {
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
@@ -201,7 +298,7 @@ export default function PaymentSettings() {
         <CardContent className="space-y-6">
           <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
             <div>
-              <p className="text-sm font-medium">Ativar PIX no checkout</p>
+              <p className="text-sm font-medium">Ativar PIX no pagamento</p>
               <p className="text-xs text-slate-500">
                 O cliente so vera o botao PIX quando a configuracao estiver completa.
               </p>
@@ -390,9 +487,9 @@ export default function PaymentSettings() {
                 logs.map((log) => (
                   <TableRow key={log.id}>
                     <TableCell>{formatDate(log.received_at)}</TableCell>
-                    <TableCell>{log.gateway}</TableCell>
-                    <TableCell>{log.event_type || '-'}</TableCell>
-                    <TableCell>{log.status || '-'}</TableCell>
+                    <TableCell>{getGatewayLabel(log.gateway)}</TableCell>
+                    <TableCell>{getEventLabel(log.event_type)}</TableCell>
+                    <TableCell>{getStatusLabel(log.status)}</TableCell>
                     <TableCell>{log.signature_valid === null ? '-' : log.signature_valid ? 'Valida' : 'Invalida'}</TableCell>
                     <TableCell className="max-w-[320px] truncate text-xs">{log.error_message || '-'}</TableCell>
                   </TableRow>

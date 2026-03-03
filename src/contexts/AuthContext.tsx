@@ -97,7 +97,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const sessionTokenRef = useRef<string | null>(null);
 
   useEffect(() => {
-    userIdRef.current = userá.id ?? null;
+    userIdRef.current = user?.id ?? null;
   }, [user]);
 
   useEffect(() => {
@@ -128,7 +128,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (isRecovery) {
       supabase.auth.exchangeCodeForSession(url).catch((error) => {
-        console.error('Failed to exchange recovery code', error);
+        console.error('Falha ao trocar codigo de recuperacao', error);
       }).finally(() => {
         setPasswordRecovery(true);
         if (window.location.pathname !== '/alterar-senha') {
@@ -188,7 +188,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
-        const nextUserId = session?.userá.id ?? null;
+        const nextUserId = session?.user.id ?? null;
         const tokenChanged = (session?.access_token ?? null) !== sessionTokenRef.current;
         const userChanged = nextUserId !== userIdRef.current;
         const shouldUpdateUser = userChanged || event === 'USER_UPDATED';
@@ -354,10 +354,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             profileData = { ...profileData, company_id: companyUserLink.company_id };
           } else {
             const nowIso = new Date().toISOString();
-            const fallbackEmail = session?.userá.email ?? userá.email ?? null;
+            const fallbackEmail = session?.user.email ?? user?.email ?? null;
             const fallbackName = String(
-              session?.userá.user_metadata?.full_name ??
-              userá.user_metadata?.full_name ??
+              session?.user.user_metadata?.full_name ??
+              user?.user_metadata?.full_name ??
               fallbackEmail ??
               'Usuario'
             );
@@ -467,12 +467,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const startImpersonation = useCallback(async () => {
     if (isImpersonating) {
-      throw new Error('Impersonation already active.');
+      throw new Error('A impersonacao ja esta ativa.');
     }
     const { data, error } = await supabase.auth.getSession();
     const activeSession = data.session ?? null;
-    if (error || !activeSession?.access_token || !activeSession?.refresh_token || !activeSession.userá.id) {
-      throw new Error('Admin session not available.');
+    if (error || !activeSession?.access_token || !activeSession?.refresh_token || !activeSession.user.id) {
+      throw new Error('Sessao de administrador indisponivel.');
     }
 
     const storedSession: StoredAdminSession = {

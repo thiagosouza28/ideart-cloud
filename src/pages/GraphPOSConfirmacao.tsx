@@ -291,7 +291,7 @@ export default function GraphPOSConfirmacao() {
 
             <div className="grid gap-4 md:grid-cols-2">
               <BotaoSecundario onClick={() => navigate('/dashboard')} className="h-14 text-base">
-                Voltar ao Dashboard
+                Voltar ao Painel
               </BotaoSecundario>
               <BotaoPrimario
                 onClick={() => {

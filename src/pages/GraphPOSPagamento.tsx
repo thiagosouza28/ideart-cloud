@@ -1,4 +1,4 @@
-﻿import { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CreditCard, Banknote, Smartphone, Wallet, ChevronRight } from 'lucide-react';
 import GraphPOSBreadcrumb from '@/components/graphpos/GraphPOSBreadcrumb';
@@ -257,7 +257,7 @@ export default function GraphPOSPagamento() {
                       toast({ title: 'Carrinho vazio', variant: 'destructive' });
                       return;
                     }
-                    if (!userá.id) {
+                    if (!user.id) {
                       toast({ title: 'Sessão inválida. Faça login novamente.', variant: 'destructive' });
                       return;
                     }

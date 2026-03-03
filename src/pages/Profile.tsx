@@ -107,7 +107,7 @@ export default function Profile() {
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   id="email"
-                  value={userá.email || ''}
+                  value={user.email || ''}
                   disabled
                   className="pl-9 bg-muted"
                 />

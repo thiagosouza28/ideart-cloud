@@ -210,7 +210,7 @@ export default function Stock() {
       movement_type: form.movement_type,
       quantity: quantity,
       reason: form.reason || null,
-      user_id: userá.id || null
+      user_id: user.id || null
     });
 
     if (movementError) {
@@ -253,7 +253,7 @@ export default function Stock() {
     <div className="page-container">
       <div className="page-header">
         <h1 className="page-title">Controle de Estoque</h1>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {view !== 'form' ? (
             <>
               <Button variant={view === 'products' ? 'default' : 'outline'} onClick={() => setView('products')}>
@@ -291,7 +291,7 @@ export default function Stock() {
           <CardContent className="space-y-6">
             <div className="space-y-2">
               <Label>Tipo de Movimentação *</Label>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                 <Button
                   type="button"
                   variant="outline"
@@ -371,7 +371,7 @@ export default function Stock() {
             </div>
 
             {selectedProduct && (
-              <div className="p-4 rounded-lg bg-muted/40 border text-sm grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 rounded-lg border bg-muted/40 p-4 text-sm sm:grid-cols-2">
                 <div>
                   <p className="text-muted-foreground mb-1">Estoque atual:</p>
                   <p className="font-bold text-lg">{selectedProduct.stock_quantity} {selectedProduct.unit}</p>
@@ -389,7 +389,7 @@ export default function Stock() {
                   </div>
                 )}
                 {selectedProduct.min_stock > 0 && (
-                  <div className="col-span-2 pt-2 border-t">
+                  <div className="border-t pt-2 sm:col-span-2">
                     <p className="text-xs text-muted-foreground">Estoque mínimo configurado: {selectedProduct.min_stock} {selectedProduct.unit}</p>
                   </div>
                 )}

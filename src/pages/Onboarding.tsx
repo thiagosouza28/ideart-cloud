@@ -331,7 +331,7 @@ export default function Onboarding() {
                 onChange={(e) => setFormData({ ...formData, address: e.target.value })}
                 required
               />
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Input
                   placeholder="Cidade"
                   value={formData.city}

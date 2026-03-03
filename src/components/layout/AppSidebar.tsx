@@ -49,7 +49,7 @@ interface MenuItem {
 }
 
 const primaryMenu: MenuItem[] = [
-  { title: 'Dashboard', url: '/dashboard', icon: LayoutDashboard, roles: ['super_admin', 'admin', 'financeiro', 'atendente', 'caixa', 'producao'] },
+  { title: 'Painel', url: '/dashboard', icon: LayoutDashboard, roles: ['super_admin', 'admin', 'financeiro', 'atendente', 'caixa', 'producao'] },
   { title: 'Pedidos', url: '/pedidos', icon: ClipboardList, roles: ['admin', 'atendente', 'caixa'] },
   { title: 'Produção', url: '/producao', icon: Factory, roles: ['admin', 'producao'] },
   { title: 'Fluxo de Caixa', url: '/financeiro/fluxo-caixa', icon: CreditCard, roles: ['admin', 'financeiro', 'atendente', 'producao'] },

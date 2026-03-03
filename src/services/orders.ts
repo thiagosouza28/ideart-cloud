@@ -53,7 +53,7 @@ const fetchUserRole = async (userId?: string | null) => {
 
   if (!resolvedUserId) {
     const { data } = await supabase.auth.getUser();
-    resolvedUserId = data.userá.id || null;
+    resolvedUserId = data.user.id || null;
   }
 
   if (!resolvedUserId) {
@@ -194,7 +194,7 @@ const resolveReceiptSignature = async (userId?: string | null) => {
     let resolvedUserId = userId || null;
     if (!resolvedUserId) {
       const { data } = await supabase.auth.getUser();
-      resolvedUserId = data.userá.id || null;
+      resolvedUserId = data.user.id || null;
     }
 
     if (!resolvedUserId) return null;
@@ -398,7 +398,7 @@ const resolveOrderCompanyId = async (
 
   if (!resolvedUserId) {
     const { data: authData } = await supabase.auth.getUser();
-    resolvedUserId = authData.userá.id || null;
+    resolvedUserId = authData.user.id || null;
   }
 
   if (!resolvedUserId) {

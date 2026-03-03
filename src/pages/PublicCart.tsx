@@ -136,7 +136,7 @@ export default function PublicCart() {
   }, [user]);
 
   useEffect(() => {
-    if (!userá.id || !company?.id) {
+    if (!user.id || !company?.id) {
       setHasSavedAddress(false);
       setEditingSavedAddress(true);
       setSavedAddressLoaded(true);
@@ -191,7 +191,7 @@ export default function PublicCart() {
     return () => {
       isMounted = false;
     };
-  }, [company?.id, userá.id]);
+  }, [company?.id, user.id]);
 
   useEffect(() => {
     const loadCompany = async () => {

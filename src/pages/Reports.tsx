@@ -342,10 +342,10 @@ export default function Reports() {
           </div>
 
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
+            <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <CardTitle>Fluxo de caixa</CardTitle>
               <Select value={cashPeriod} onValueChange={(value) => setCashPeriod(value as typeof cashPeriod)}>
-                <SelectTrigger className="w-48">
+                <SelectTrigger className="w-full sm:w-48">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -658,10 +658,10 @@ export default function Reports() {
           </div>
 
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
+            <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <CardTitle>Vendas por período</CardTitle>
               <Select value={salesPeriod} onValueChange={(value) => setSalesPeriod(value as SalesPeriod)}>
-                <SelectTrigger className="w-40">
+                <SelectTrigger className="w-full sm:w-40">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>

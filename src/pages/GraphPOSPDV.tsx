@@ -548,7 +548,7 @@ export default function GraphPOSPDV() {
                   </div>
                 ) : (
                   <div className="h-full overflow-y-auto pr-1">
-                    <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
+                    <div className="grid grid-cols-1 gap-4 min-[420px]:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
                       {products.map((product) => (
                         <button
                           key={product.id}

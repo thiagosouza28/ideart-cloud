@@ -31,7 +31,7 @@ export const isStoreRole = (role?: AppRole | null) =>
   Boolean(role && STORE_ROLES.includes(role));
 
 export const getAccessScope = (
-  userá: User | null,
+  user: User | null,
   role?: AppRole | null,
 ): AccessScope => {
   if (isCustomerAccount(user)) return 'customer';

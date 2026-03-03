@@ -174,7 +174,7 @@ export async function invokeEdgeFunction<T>(
     let retriedAfterRefresh = false;
 
     for (;;) {
-      const authHeader = sessionForRequestá.access_token ? `Bearer ${sessionForRequest.access_token}` : undefined;
+      const authHeader = sessionForRequest?.access_token ? `Bearer ${sessionForRequest.access_token}` : undefined;
       const headers: Record<string, string> = {};
 
       if (anonKey) headers.apikey = anonKey;
@@ -254,7 +254,7 @@ export async function invokeEdgeFunction<T>(
   } catch (err: any) {
     if (err.status) throw err;
 
-    console.error(`Network error calling ${functionName}:`, err);
+    console.error(`Erro de rede ao chamar ${functionName}:`, err);
     throw new Error(err.message || 'Erro de conexão com o servidor.');
   }
 }

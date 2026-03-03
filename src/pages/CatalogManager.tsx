@@ -606,7 +606,7 @@ export default function CatalogManager() {
                         {product.name}
                       </h3>
 
-                      <div className="grid grid-cols-3 gap-2 text-xs">
+                      <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-3">
                         <div>
                           <p className="text-muted-foreground">Preço</p>
                           <p className="font-semibold">{formatCurrency(product.catalog_price)}</p>

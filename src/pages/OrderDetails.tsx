@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { formatOrderNumber } from '@/lib/utils';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -115,6 +115,19 @@ const statusLabels: Record<OrderStatus, string> = {
   cancelado: 'Cancelado',
 };
 
+const statusCustomerMessages: Record<OrderStatus, string> = {
+  orcamento: 'Seu pedido esta em orcamento.',
+  pendente: 'Recebemos seu pedido e ele esta pendente.',
+  produzindo_arte: 'Sua arte esta sendo produzida.',
+  arte_aprovada: 'Sua arte foi aprovada e seguira para producao.',
+  em_producao: 'Seu pedido esta em producao.',
+  finalizado: 'Seu pedido foi finalizado.',
+  pronto: 'Seu pedido foi finalizado.',
+  aguardando_retirada: 'Seu pedido esta pronto e aguardando retirada.',
+  entregue: 'Seu pedido foi entregue.',
+  cancelado: 'Seu pedido foi cancelado.',
+};
+
 const extractVisibleNotes = (value?: string | null) => {
   if (!value) return '';
   return value
@@ -193,6 +206,33 @@ export default function OrderDetails() {
 
   const formatCurrency = (v: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
+
+  const getStatusCustomerMessage = (status: OrderStatus) =>
+    statusCustomerMessages[status] ||
+    `O status do seu pedido agora e ${statusLabels[status] ?? status}.`;
+
+  const getWhatsAppTemplateReplacements = (link: string): Record<string, string> => {
+    if (!order) return {};
+    const catalogLink = order.company?.slug
+      ? `${window.location.origin}/catalogo/${order.company.slug}`
+      : '';
+    return {
+      '{cliente_nome}': order.customer?.name || order.customer_name || 'cliente',
+      '{cliente_telefone}': order.customer?.phone || order.customer_phone || '',
+      '{pedido_numero}': formatOrderNumber(order.order_number),
+      '{pedido_id}': order.id,
+      '{pedido_status}': statusLabels[order.status] ?? order.status,
+      '{mensagem_status}': getStatusCustomerMessage(order.status),
+      '{pedido_total}': formatCurrency(Number(order.total || 0)),
+      '{total}': formatCurrency(Number(order.total || 0)),
+      '{pedido_link}': link,
+      '{link_catalogo}': catalogLink,
+      '{empresa_nome}': order.company?.name || 'Nossa empresa',
+    };
+  };
+
+  const applyTemplateReplacements = (template: string, replacements: Record<string, string>) =>
+    Object.entries(replacements).reduce((acc, [key, value]) => acc.replaceAll(key, value), template);
 
   const getProductById = (productId?: string | null) =>
     products.find((product) => product.id === productId);
@@ -737,23 +777,8 @@ const sendWhatsAppMessage = (message: string) => {
     if (!order) return '';
     const template =
       order.company?.whatsapp_message_template ||
-      'Ola {cliente_nome}, seu pedido #{pedido_numero} esta finalizado! Acompanhe pelo link: {pedido_link}';
-    const catalogLink = order.company?.slug
-      ? `${window.location.origin}/catalogo/${order.company.slug}`
-      : '';
-    const replacements: Record<string, string> = {
-      '{cliente_nome}': order.customer?.name || order.customer_name || 'cliente',
-      '{cliente_telefone}': order.customer?.phone || order.customer_phone || '',
-      '{pedido_numero}': formatOrderNumber(order.order_number),
-      '{pedido_id}': order.id,
-      '{pedido_status}': statusLabels[order.status] ?? order.status,
-      '{pedido_total}': formatCurrency(Number(order.total || 0)),
-      '{total}': formatCurrency(Number(order.total || 0)),
-      '{pedido_link}': link,
-      '{link_catalogo}': catalogLink,
-      '{empresa_nome}': order.company?.name || 'Nossa empresa',
-    };
-    return Object.entries(replacements).reduce((acc, [key, value]) => acc.replaceAll(key, value), template);
+      'Ola {cliente_nome}! {mensagem_status} Pedido #{pedido_numero}. Status: {pedido_status}. Acompanhe pelo link: {pedido_link}';
+    return applyTemplateReplacements(template, getWhatsAppTemplateReplacements(link));
   };
   const handleWhatsApp = () => {
     handleSendWhatsAppUpdate();
@@ -964,13 +989,8 @@ const sendWhatsAppMessage = (message: string) => {
   const messageLink = publicLink || '[link]';
   const resolveMessageForSend = (url: string) => {
     if (!messageDirty) return buildWhatsAppMessage(url);
-    const catalogLink = order?.company?.slug
-      ? `${window.location.origin}/catalogo/${order.company.slug}`
-      : '';
-    return messageText
-      .replaceAll('{pedido_link}', url)
-      .replaceAll('{link_catalogo}', catalogLink)
-      .replaceAll('[link]', url);
+    const resolved = applyTemplateReplacements(messageText, getWhatsAppTemplateReplacements(url));
+    return resolved.replaceAll('[link]', url);
   };
 
   const clientMessage = messageDirty ? messageText : buildWhatsAppMessage(messageLink);
@@ -1119,7 +1139,7 @@ const sendWhatsAppMessage = (message: string) => {
         method: paymentMethod as PaymentMethod,
         status: paymentStatus,
         notes: paymentNotes || undefined,
-        createdBy: userá.id,
+        createdBy: user.id,
       });
 
       toast({ title: 'Pagamento registrado com sucesso!' });
@@ -1183,7 +1203,7 @@ const sendWhatsAppMessage = (message: string) => {
         orderId: order.id,
         status: newStatus,
         notes: resolvedNotes || undefined,
-        userId: userá.id,
+        userId: user.id,
         entrada: entrada ?? null,
         paymentMethod: entrada && entryMethod ? entryMethod : undefined,
       });
@@ -1240,7 +1260,7 @@ const sendWhatsAppMessage = (message: string) => {
 
     try {
       const { uploadOrderFinalPhoto } = await import('@/services/orders');
-      const photo = await uploadOrderFinalPhoto(order.id, file, userá.id);
+      const photo = await uploadOrderFinalPhoto(order.id, file, user.id);
 
       setFinalPhotos(prev => [photo, ...prev]);
       toast({ title: 'Foto enviada com sucesso!' });
@@ -1278,7 +1298,7 @@ const sendWhatsAppMessage = (message: string) => {
           });
           continue;
         }
-        const artFile = await uploadOrderArtFile(order.id, file, userá.id);
+        const artFile = await uploadOrderArtFile(order.id, file, user.id);
         uploaded.push(artFile as OrderArtFile);
       }
 
@@ -1480,12 +1500,12 @@ const canSendWhatsApp = Boolean(order?.customer?.phone);
   return (
     <div className="page-container w-full max-w-none">
       <div className="page-header">
-        <div className="flex items-center gap-4">
+        <div className="flex items-start gap-3 sm:items-center sm:gap-4">
           <Button variant="ghost" size="icon" onClick={() => navigate('/pedidos')}>
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div>
-            <h1 className="page-title flex items-center gap-3">
+            <h1 className="page-title flex flex-wrap items-center gap-2 sm:gap-3">
               Pedido #{formatOrderNumber(order.order_number)}
               <span className={`status-badge ${config.color}`}>
                 <StatusIcon className="h-4 w-4 mr-1" />
@@ -1501,11 +1521,12 @@ const canSendWhatsApp = Boolean(order?.customer?.phone);
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center">
           {order.status !== 'cancelado' && (
             <Button
               variant="outline"
               onClick={() => setCancelDialogOpen(true)}
+              className="w-full sm:w-auto"
             >
               Cancelar
             </Button>
@@ -1514,20 +1535,21 @@ const canSendWhatsApp = Boolean(order?.customer?.phone);
             <Button
               variant="destructive"
               onClick={() => setDeleteDialogOpen(true)}
+              className="w-full sm:w-auto"
             >
               Excluir
             </Button>
           )}
           {config.next.length > 0 && hasPermission(['admin', 'atendente', 'caixa', 'producao']) && (
-            <Button onClick={() => setStatusDialogOpen(true)}>
+            <Button onClick={() => setStatusDialogOpen(true)} className="w-full sm:w-auto">
               Alterar Status
             </Button>
           )}
-          <Button variant="outline" onClick={handlePrint}>
+          <Button variant="outline" onClick={handlePrint} className="w-full sm:w-auto">
             <Printer className="mr-2 h-4 w-4" />
             Imprimir
           </Button>
-          <Button variant="outline" onClick={handleWhatsApp} disabled={!order?.customer?.phone}>
+          <Button variant="outline" onClick={handleWhatsApp} disabled={!order?.customer?.phone} className="w-full sm:w-auto">
             <MessageCircle className="mr-2 h-4 w-4" />
             WhatsApp
           </Button>
@@ -1549,7 +1571,7 @@ const canSendWhatsApp = Boolean(order?.customer?.phone);
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <Label>Link para o cliente</Label>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <Input
                 readOnly
                 value={publicLink}
@@ -1559,7 +1581,7 @@ const canSendWhatsApp = Boolean(order?.customer?.phone);
                 variant="outline"
                 onClick={handleCopyPublicLink}
                 disabled={linkLoading}
-                className="gap-2"
+                className="w-full gap-2 sm:w-auto"
               >
                 <Copy className="h-4 w-4" />
                 {publicLinkLabel}
@@ -1568,21 +1590,21 @@ const canSendWhatsApp = Boolean(order?.customer?.phone);
           </div>
           <div className="space-y-2">
             <Label>Mensagem para o cliente</Label>
-            <div className="flex items-start gap-2">
+            <div className="flex flex-col gap-2 md:flex-row md:items-start">
                 <Textarea
                   value={clientMessage}
                   onChange={(event) => {
                     setMessageDirty(true);
                     setMessageText(event.target.value);
                   }}
-                  className="min-h-[88px]"
+                  className="min-h-[88px] w-full"
                 />
-              <div className="flex flex-col gap-2">
+              <div className="flex gap-2 md:flex-col">
                 <Button
                   variant="outline"
                   onClick={handleCopyMessage}
                   disabled={linkLoading}
-                  className="gap-2"
+                  className="flex-1 gap-2 md:flex-none"
                 >
                   <Copy className="h-4 w-4" />
                   {messageLabel}
@@ -1591,7 +1613,7 @@ const canSendWhatsApp = Boolean(order?.customer?.phone);
                   variant="outline"
                   onClick={handleSendWhatsAppUpdate}
                   disabled={!canSendWhatsApp || linkLoading}
-                  className="gap-2"
+                  className="flex-1 gap-2 md:flex-none"
                 >
                   <MessageCircle className="h-4 w-4" />
                   Enviar WhatsApp
@@ -1607,7 +1629,7 @@ const canSendWhatsApp = Boolean(order?.customer?.phone);
         <div className="md:col-span-2 space-y-6">
           {/* Customer Info */}
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
+            <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <CardTitle className="flex items-center gap-2">
                 <User className="h-5 w-5" />
                 Cliente
@@ -1615,6 +1637,7 @@ const canSendWhatsApp = Boolean(order?.customer?.phone);
               <Button
                 variant="outline"
                 size="sm"
+                className="w-full sm:w-auto"
                 onClick={() => {
                   setCustomerDialogOpen(true);
                   setCustomerDraft(order.customer || null);
@@ -1646,19 +1669,19 @@ const canSendWhatsApp = Boolean(order?.customer?.phone);
 
           {/* Items */}
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
+            <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <CardTitle>Itens do Pedido</CardTitle>
               {isBudget && !isEditingItems && (
-                <Button variant="outline" size="sm" onClick={startEditingItems}>
+                <Button variant="outline" size="sm" onClick={startEditingItems} className="w-full sm:w-auto">
                   Editar orçamento
                 </Button>
               )}
               {isBudget && isEditingItems && (
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" onClick={cancelEditingItems} disabled={savingItems}>
+                <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+                  <Button variant="outline" size="sm" onClick={cancelEditingItems} disabled={savingItems} className="w-full sm:w-auto">
                     Cancelar
                   </Button>
-                  <Button size="sm" onClick={handleSaveItems} disabled={savingItems}>
+                  <Button size="sm" onClick={handleSaveItems} disabled={savingItems} className="w-full sm:w-auto">
                     {savingItems && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     Salvar altera??es
                   </Button>
@@ -1666,7 +1689,8 @@ const canSendWhatsApp = Boolean(order?.customer?.phone);
               )}
             </CardHeader>
             <CardContent>
-              <Table>
+              <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+              <Table className="min-w-[720px]">
                 <TableHeader>
                   <TableRow>
                     <TableHead>Produto</TableHead>
@@ -1741,7 +1765,7 @@ const canSendWhatsApp = Boolean(order?.customer?.phone);
                           <div>
                             <p className="font-medium">{item.product_name}</p>
                             {Object.keys(displayAttributes).length > 0 && (
-                              <div className="flex gap-1 mt-1">
+                              <div className="mt-1 flex flex-wrap gap-1">
                                 {Object.entries(displayAttributes).map(([key, value]) => (
                                   <Badge key={key} variant="outline" className="text-xs">
                                     {value}
@@ -1797,6 +1821,7 @@ const canSendWhatsApp = Boolean(order?.customer?.phone);
                   })}
                 </TableBody>
               </Table>
+              </div>
 
               {isEditingItems && (
                 <div className="mt-4 rounded-lg border p-4">
@@ -1846,7 +1871,7 @@ const canSendWhatsApp = Boolean(order?.customer?.phone);
                         />
                       </div>
                     )}
-                    <Button onClick={handleAddItem} className="mt-6 md:mt-0">
+                    <Button onClick={handleAddItem} className="mt-2 w-full md:mt-6 md:w-auto">
                       Adicionar item
                     </Button>
                   </div>
@@ -2112,14 +2137,14 @@ const canSendWhatsApp = Boolean(order?.customer?.phone);
               {payments.length > 0 ? (
                 <div className="space-y-2">
                   {payments.map((payment) => (
-                    <div key={payment.id} className="flex items-center justify-between text-sm">
+                    <div key={payment.id} className="flex flex-col gap-2 rounded-md border p-2 text-sm sm:flex-row sm:items-center sm:justify-between">
                       <div>
                         <p className="font-medium">{formatCurrency(Number(payment.amount))}</p>
                         <p className="text-xs text-muted-foreground">
                           {(payment.method || '-').toString()} - {formatDate(payment.paid_at || payment.created_at)}
                         </p>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1 sm:gap-2">
                         <Badge variant={payment.status === 'pago' ? 'default' : 'outline'}>
                           {getPaymentStatusLabel(payment.status)}
                         </Badge>

@@ -3,7 +3,7 @@ import { Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const navItems = [
-  { label: 'Dashboard', to: '/dashboard' },
+  { label: 'Painel', to: '/dashboard' },
   { label: 'Vendas', to: '/pdv' },
   { label: 'Clientes', to: '/clientes' },
   { label: 'Inventario', to: '/estoque' },

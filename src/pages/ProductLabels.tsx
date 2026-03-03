@@ -398,7 +398,7 @@ export default function ProductLabels() {
                       <TableHead className="w-[40px]"></TableHead>
                       <TableHead>Produto</TableHead>
                       <TableHead>SKU</TableHead>
-                      <TableHead>Barcode</TableHead>
+                      <TableHead>Código de barras</TableHead>
                       <TableHead className="text-right">Preco</TableHead>
                       <TableHead className="w-[110px] text-right">Qtd.</TableHead>
                     </TableRow>

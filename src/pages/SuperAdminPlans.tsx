@@ -426,7 +426,7 @@ export default function SuperAdminPlans() {
         </div>
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2">
-            <span className="text-xs text-slate-500">Auto sync 5 min</span>
+            <span className="text-xs text-slate-500">Sincronizacao automatica a cada 5 min</span>
             <Switch
               checked={autoSyncEnabled}
               onCheckedChange={(checked) => setAutoSyncEnabled(checked)}
@@ -513,7 +513,7 @@ export default function SuperAdminPlans() {
                         className="w-full"
                         onClick={() => window.open(offer.checkoutUrl as string, '_blank')}
                       >
-                        Abrir checkout Cakto
+                        Abrir pagamento Cakto
                       </Button>
                       <Button
                         variant="outline"
@@ -588,7 +588,7 @@ export default function SuperAdminPlans() {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
               <Label>Preço *</Label>
                 <CurrencyInput
@@ -624,13 +624,13 @@ export default function SuperAdminPlans() {
 
                         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               <div className="space-y-2">
-                <Label>Dias de Teste (Trial)</Label>
+                <Label>Dias de Teste</Label>
                 <Input
                   type="number"
                   min="0"
                   value={(formData as any).trial_days || 0}
                   onChange={(e) => setFormData({ ...formData, ['trial_days' as any]: parseInt(e.target.value) || 0 })}
-                  placeholder="0 (sem trial)"
+                  placeholder="0 (sem teste)"
                 />
               </div>
               <div className="space-y-2">

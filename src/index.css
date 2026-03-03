@@ -126,6 +126,12 @@
     height: 100%;
   }
 
+  img,
+  video,
+  canvas {
+    max-width: 100%;
+  }
+
 }
 
 .app-locked {
@@ -134,12 +140,12 @@
 
 @layer components {
   .app-shell {
-    @apply flex h-svh flex-col bg-background;
+    @apply flex h-svh w-full min-w-0 flex-col bg-background;
     background: #f7f9fc;
   }
 
   .app-header {
-    @apply sticky top-0 z-40 flex h-16 shrink-0 items-center justify-between gap-2 border-b bg-card px-6;
+    @apply sticky top-0 z-40 flex h-16 shrink-0 items-center justify-between gap-2 border-b bg-card px-4 sm:px-6 lg:px-8;
     padding-top: env(safe-area-inset-top);
   }
 
@@ -148,33 +154,19 @@
   }
 
   .app-content {
-    @apply min-h-0 flex-1 overflow-y-auto px-6 py-6 pb-24 sm:px-8 sm:py-8 sm:pb-8;
+    @apply min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 py-4 sm:px-6 sm:py-6 lg:px-8;
     -webkit-overflow-scrolling: touch;
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom));
   }
 
-  .app-bottom-nav {
-    @apply fixed bottom-0 left-0 right-0 z-40 grid grid-cols-5 gap-1 border-t bg-card/95 px-2 py-2 backdrop-blur;
-    padding-bottom: calc(0.5rem + env(safe-area-inset-bottom));
+  .app-content > * {
+    min-width: 0;
   }
 
-  .bottom-nav-item {
-    @apply flex flex-col items-center justify-center gap-1 rounded-lg px-2 py-2 text-xs text-muted-foreground transition-colors;
-  }
-
-  .bottom-nav-item:active {
-    @apply bg-muted;
-  }
-
-  .bottom-nav-active {
-    @apply text-foreground bg-muted;
-  }
-
-  .bottom-nav-icon {
-    @apply h-6 w-6;
-  }
-
-  .bottom-nav-label {
-    @apply text-[11px] font-medium;
+  @media (min-width: 768px) {
+    .app-content {
+      padding-bottom: 2.5rem;
+    }
   }
 
   .catalog-grid {
@@ -207,11 +199,29 @@
   }
 
   .page-container {
-    @apply space-y-6;
+    @apply w-full max-w-full min-w-0 space-y-6;
   }
 
   .page-header {
-    @apply -mx-4 flex flex-col gap-2 px-4 py-2 sm:-mx-6 sm:flex-row sm:items-center sm:justify-between sm:px-6;
+    @apply flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between;
+  }
+
+  .page-header > * {
+    min-width: 0;
+  }
+
+  .page-header > :last-child {
+    width: 100%;
+  }
+
+  .page-header > :last-child[class*='flex'] {
+    flex-wrap: wrap;
+  }
+
+  @media (min-width: 640px) {
+    .page-header > :last-child {
+      width: auto;
+    }
   }
 
   .page-title {
@@ -1094,11 +1104,13 @@
   .order-table-wrap {
     border: 1px solid var(--order-border);
     border-radius: 14px;
-    overflow: hidden;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
   }
 
   .order-items-table {
     width: 100%;
+    min-width: 620px;
     border-collapse: collapse;
   }
 
@@ -1521,6 +1533,16 @@
       padding-top: 16px;
     }
 
+    .order-card-header {
+      padding: 14px 16px;
+      flex-wrap: wrap;
+      align-items: flex-start;
+    }
+
+    .order-card-body {
+      padding: 16px;
+    }
+
     .order-layout {
       grid-template-columns: minmax(0, 1fr);
       gap: 16px;
@@ -1540,16 +1562,46 @@
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
+    .order-product-result {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .order-product-result-right {
+      width: 100%;
+      justify-content: space-between;
+    }
+
     .order-bottom-bar {
       flex-direction: column;
       align-items: stretch;
-      padding: 10px 12px;
+      bottom: 0;
+      padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+    }
+
+    .order-bottom-stats {
+      width: 100%;
+      overflow-x: auto;
+      flex-wrap: nowrap;
+      padding-bottom: 2px;
+    }
+
+    .order-bottom-stat {
+      min-width: max-content;
+    }
+
+    .order-bottom-sep {
+      display: none;
     }
 
     .order-bottom-actions {
       width: 100%;
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .order-bottom-actions .order-btn-primary {
+      grid-column: 1 / -1;
     }
 
     .order-btn {
@@ -1561,7 +1613,7 @@
     .order-floating-alert {
       left: 12px;
       right: 12px;
-      bottom: 88px;
+      bottom: calc(96px + env(safe-area-inset-bottom));
       border-radius: 12px;
     }
 

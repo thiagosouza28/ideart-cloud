@@ -289,7 +289,7 @@ export default function UserManagement() {
   });
 
   const handleRoleChange = async (userId: string, _roleId: string | null, newRole: AppRole) => {
-    if (userId === userá.id) {
+    if (userId === user.id) {
       toast.error('Você não pode alterar seu próprio perfil');
       return;
     }
@@ -448,7 +448,7 @@ export default function UserManagement() {
             </p>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button variant="outline" onClick={handleOpenInactiveDialog}>
             <Users className="mr-2 h-4 w-4" />
             Usuários Inativos
@@ -524,7 +524,7 @@ export default function UserManagement() {
                       <div>
                         <p className="font-medium">{u.full_name}</p>
                         <p className="text-xs text-slate-500">{u.email || 'Sem e-mail cadastrado'}</p>
-                        {u.id === userá.id && (
+                        {u.id === user.id && (
                           <p className="text-xs text-slate-500">(você)</p>
                         )}
                       </div>
@@ -548,7 +548,7 @@ export default function UserManagement() {
                     {formatDate(u.created_at)}
                   </TableCell>
                   <TableCell>
-                    {u.id === userá.id ? (
+                    {u.id === user.id ? (
                       <span className="text-sm text-slate-500">-</span>
                     ) : (
                       <Select
@@ -570,7 +570,7 @@ export default function UserManagement() {
                     )}
                   </TableCell>
                   <TableCell>
-                    {u.id === userá.id ? (
+                    {u.id === user.id ? (
                       <span className="text-sm text-slate-500">-</span>
                     ) : (
                       <Button

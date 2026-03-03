@@ -22,7 +22,7 @@ export function BarcodeSvg({ value, format, height = 44, moduleWidth = 2, classN
   return (
     <span
       className={className}
-      aria-label="Barcode"
+      aria-label="Codigo de barras"
       role="img"
       dangerouslySetInnerHTML={{ __html: markup }}
     />

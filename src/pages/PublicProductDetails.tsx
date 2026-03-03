@@ -587,7 +587,7 @@ export default function PublicProductDetails() {
         rating: reviewForm.rating,
         comment: comment || null,
         review_image_urls: uploadedImageUrls,
-        user_id: userá.id || null,
+        user_id: user.id || null,
       })
       .select('*')
       .single();
@@ -1536,7 +1536,7 @@ export default function PublicProductDetails() {
                         Envie fotos reais do produto para ajudar outros clientes.
                       </p>
                       {reviewImagePreviews.length > 0 && (
-                        <div className="mt-3 grid grid-cols-3 gap-2">
+                        <div className="mt-3 grid grid-cols-1 gap-2 min-[420px]:grid-cols-2 sm:grid-cols-3">
                           {reviewImagePreviews.map((previewUrl, index) => (
                             <div key={`${previewUrl}-${index}`} className="relative overflow-hidden rounded-md border border-slate-200 bg-white">
                               <img
@@ -1593,7 +1593,7 @@ export default function PublicProductDetails() {
                           <p className="mt-3 text-sm text-slate-600 leading-relaxed">{review.comment}</p>
                         )}
                         {review.review_image_urls && review.review_image_urls.length > 0 && (
-                          <div className="mt-3 grid grid-cols-3 gap-2">
+                          <div className="mt-3 grid grid-cols-1 gap-2 min-[420px]:grid-cols-2 sm:grid-cols-3">
                             {review.review_image_urls.slice(0, 3).map((imageUrl, imageIndex) => (
                               <button
                                 key={`${review.id}-image-${imageIndex}`}

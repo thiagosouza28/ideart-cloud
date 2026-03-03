@@ -1742,7 +1742,7 @@ export default function ProductForm() {
               <div className="flex flex-col gap-2">
                 <div className="flex flex-wrap gap-2">
                   <Select value={barcodeFormat} onValueChange={(value) => setBarcodeFormat(value as BarcodeFormat)}>
-                    <SelectTrigger className="w-[140px]">
+                    <SelectTrigger className="w-full sm:w-[140px]">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>

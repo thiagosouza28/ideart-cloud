@@ -292,7 +292,7 @@ export default function OrderForm() {
 
         if (!responsibleId) {
           const people = (salespeopleResult.data as SalespersonOption[] | null) || [];
-          const defaultResponsible = people.find((person) => person.id === userá.id)?.id || people[0]?.id || '';
+          const defaultResponsible = people.find((person) => person.id === user.id)?.id || people[0]?.id || '';
           setResponsibleId(defaultResponsible);
         }
       } catch (error) {
@@ -307,7 +307,7 @@ export default function OrderForm() {
     };
 
     fetchData();
-  }, [profile?.company_id, toast, userá.id]);
+  }, [profile?.company_id, toast, user.id]);
 
   useEffect(() => {
     if (loading || draftRestoredRef.current) return;
@@ -660,7 +660,7 @@ export default function OrderForm() {
 
   const handleSubmit = async () => {
     if (saving) return;
-    if (!userá.id) {
+    if (!user.id) {
       toast({ title: 'Sessão inválida', description: 'Faça login novamente', variant: 'destructive' });
       return;
     }

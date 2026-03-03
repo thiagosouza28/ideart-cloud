@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import { formatOrderNumber } from '@/lib/utils';
 import { Plus, Search, Eye, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -14,11 +14,11 @@ import { deleteOrder } from '@/services/orders';
 import { useConfirm } from '@/components/ui/confirm-dialog';
 
 const statusLabels: Record<OrderStatus, string> = {
-  orcamento: 'Orçamento',
+  orcamento: 'Orcamento',
   pendente: 'Pendente',
   produzindo_arte: 'Produzindo arte',
   arte_aprovada: 'Arte aprovada',
-  em_producao: 'Em Produção',
+  em_producao: 'Em producao',
   finalizado: 'Finalizado',
   pronto: 'Finalizado',
   aguardando_retirada: 'Aguardando retirada',
@@ -90,6 +90,18 @@ export default function Orders() {
   const formatCurrency = (value: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
   const formatDate = (value: string) => new Date(value).toLocaleDateString('pt-BR');
+  const getPaymentStatusLabel = (paymentStatus: Order['payment_status']) =>
+    paymentStatus === 'pago'
+      ? 'Pago'
+      : paymentStatus === 'parcial'
+        ? 'Pagamento parcial'
+        : 'Pendente';
+  const getPaymentStatusColor = (paymentStatus: Order['payment_status']) =>
+    paymentStatus === 'pago'
+      ? 'bg-green-100 text-green-800'
+      : paymentStatus === 'parcial'
+        ? 'bg-yellow-100 text-yellow-800'
+        : 'bg-gray-100 text-gray-800';
 
   const getStatusCounts = () => {
     const counts: Record<string, number> = { all: orders.length };
@@ -115,7 +127,7 @@ export default function Orders() {
     try {
       await deleteOrder(orderId);
       setOrders((prev) => prev.filter((item) => item.id !== orderId));
-      toast({ title: 'Pedido excluído com sucesso!' });
+      toast({ title: 'Pedido excluido com sucesso!' });
     } catch (error: any) {
       toast({
         title: 'Erro ao excluir pedido',
@@ -134,161 +146,215 @@ export default function Orders() {
           <h1 className="text-3xl font-bold text-slate-900">Pedidos</h1>
           <p className="text-sm text-slate-500">Gerencie pedidos e acompanhe o status.</p>
         </div>
-        <Button className="rounded-2xl bg-sky-500 shadow-sm hover:bg-sky-600" onClick={() => navigate('/pedidos/novo')}>
+        <Button
+          className="w-full rounded-2xl bg-sky-500 shadow-sm hover:bg-sky-600 sm:w-auto"
+          onClick={() => navigate('/pedidos/novo')}
+        >
           <Plus className="mr-2 h-4 w-4" />
           Novo Pedido
         </Button>
       </div>
 
       <Tabs value={statusFilter} onValueChange={setStatusFilter} className="mb-4">
-        <TabsList>
-          <TabsTrigger value="all" className={`${tabTitleColors.all} data-[state=active]:font-semibold`}>
-            Todos <span className="ml-1 text-xs opacity-70">({counts.all || 0})</span>
-          </TabsTrigger>
-          <TabsTrigger value="orcamento" className={`${tabTitleColors.orcamento} data-[state=active]:font-semibold`}>
-            Orçamentos <span className="ml-1 text-xs opacity-70">({counts.orcamento || 0})</span>
-          </TabsTrigger>
-          <TabsTrigger value="pendente" className={`${tabTitleColors.pendente} data-[state=active]:font-semibold`}>
-            Pendentes <span className="ml-1 text-xs opacity-70">({counts.pendente || 0})</span>
-          </TabsTrigger>
-          <TabsTrigger value="produzindo_arte" className={`${tabTitleColors.produzindo_arte} data-[state=active]:font-semibold`}>
-            Produzindo Arte <span className="ml-1 text-xs opacity-70">({counts.produzindo_arte || 0})</span>
-          </TabsTrigger>
-          <TabsTrigger value="arte_aprovada" className={`${tabTitleColors.arte_aprovada} data-[state=active]:font-semibold`}>
-            Arte Aprovada <span className="ml-1 text-xs opacity-70">({counts.arte_aprovada || 0})</span>
-          </TabsTrigger>
-          <TabsTrigger value="em_producao" className={`${tabTitleColors.em_producao} data-[state=active]:font-semibold`}>
-            Em Produção <span className="ml-1 text-xs opacity-70">({counts.em_producao || 0})</span>
-          </TabsTrigger>
-          <TabsTrigger value="finalizado" className={`${tabTitleColors.finalizado} data-[state=active]:font-semibold`}>
-            Finalizados <span className="ml-1 text-xs opacity-70">({counts.finalizado || 0})</span>
-          </TabsTrigger>
-          <TabsTrigger value="aguardando_retirada" className={`${tabTitleColors.aguardando_retirada} data-[state=active]:font-semibold`}>
-            Aguardando Retirada <span className="ml-1 text-xs opacity-70">({counts.aguardando_retirada || 0})</span>
-          </TabsTrigger>
-          <TabsTrigger value="entregue" className={`${tabTitleColors.entregue} data-[state=active]:font-semibold`}>
-            Entregues <span className="ml-1 text-xs opacity-70">({counts.entregue || 0})</span>
-          </TabsTrigger>
-          <TabsTrigger value="cancelado" className={`${tabTitleColors.cancelado} data-[state=active]:font-semibold`}>
-            Cancelados <span className="ml-1 text-xs opacity-70">({counts.cancelado || 0})</span>
-          </TabsTrigger>
-        </TabsList>
+        <div className="overflow-x-auto pb-1">
+          <TabsList className="h-auto w-max min-w-full justify-start">
+            <TabsTrigger value="all" className={`shrink-0 ${tabTitleColors.all} data-[state=active]:font-semibold`}>
+              Todos <span className="ml-1 text-xs opacity-70">({counts.all || 0})</span>
+            </TabsTrigger>
+            <TabsTrigger value="orcamento" className={`shrink-0 ${tabTitleColors.orcamento} data-[state=active]:font-semibold`}>
+              Orcamentos <span className="ml-1 text-xs opacity-70">({counts.orcamento || 0})</span>
+            </TabsTrigger>
+            <TabsTrigger value="pendente" className={`shrink-0 ${tabTitleColors.pendente} data-[state=active]:font-semibold`}>
+              Pendentes <span className="ml-1 text-xs opacity-70">({counts.pendente || 0})</span>
+            </TabsTrigger>
+            <TabsTrigger value="produzindo_arte" className={`shrink-0 ${tabTitleColors.produzindo_arte} data-[state=active]:font-semibold`}>
+              Produzindo Arte <span className="ml-1 text-xs opacity-70">({counts.produzindo_arte || 0})</span>
+            </TabsTrigger>
+            <TabsTrigger value="arte_aprovada" className={`shrink-0 ${tabTitleColors.arte_aprovada} data-[state=active]:font-semibold`}>
+              Arte Aprovada <span className="ml-1 text-xs opacity-70">({counts.arte_aprovada || 0})</span>
+            </TabsTrigger>
+            <TabsTrigger value="em_producao" className={`shrink-0 ${tabTitleColors.em_producao} data-[state=active]:font-semibold`}>
+              Em Producao <span className="ml-1 text-xs opacity-70">({counts.em_producao || 0})</span>
+            </TabsTrigger>
+            <TabsTrigger value="finalizado" className={`shrink-0 ${tabTitleColors.finalizado} data-[state=active]:font-semibold`}>
+              Finalizados <span className="ml-1 text-xs opacity-70">({counts.finalizado || 0})</span>
+            </TabsTrigger>
+            <TabsTrigger value="aguardando_retirada" className={`shrink-0 ${tabTitleColors.aguardando_retirada} data-[state=active]:font-semibold`}>
+              Aguardando Retirada <span className="ml-1 text-xs opacity-70">({counts.aguardando_retirada || 0})</span>
+            </TabsTrigger>
+            <TabsTrigger value="entregue" className={`shrink-0 ${tabTitleColors.entregue} data-[state=active]:font-semibold`}>
+              Entregues <span className="ml-1 text-xs opacity-70">({counts.entregue || 0})</span>
+            </TabsTrigger>
+            <TabsTrigger value="cancelado" className={`shrink-0 ${tabTitleColors.cancelado} data-[state=active]:font-semibold`}>
+              Cancelados <span className="ml-1 text-xs opacity-70">({counts.cancelado || 0})</span>
+            </TabsTrigger>
+          </TabsList>
+        </div>
       </Tabs>
 
       <Card className="border-slate-200 shadow-sm">
         <CardHeader>
-          <div className="relative max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <div className="relative w-full max-w-sm">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              placeholder="Buscar por número ou cliente..."
+              placeholder="Buscar por numero ou cliente..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-9"
             />
           </div>
         </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>No</TableHead>
-                <TableHead>Cliente</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Pagamento</TableHead>
-                <TableHead className="text-right">Total</TableHead>
-                <TableHead>Data</TableHead>
-                <TableHead className="w-[120px]">Ações</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8">
-                    Carregando...
-                  </TableCell>
-                </TableRow>
-              ) : filtered.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                    Nenhum pedido encontrado
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filtered.map((order) => (
-                  <TableRow
-                    key={order.id}
-                    className="cursor-pointer hover:bg-muted/50"
-                    onClick={() => navigate(`/pedidos/${order.id}`)}
-                  >
-                    <TableCell className="font-medium">#{formatOrderNumber(order.order_number)}</TableCell>
-                    <TableCell>
-                      {order.customer_id ? (
-                        <Button
-                          variant="link"
-                          className="h-auto p-0 text-primary"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            navigate(`/clientes/${order.customer_id}/historico`);
-                          }}
-                        >
-                          {order.customer_name || 'Cliente'}
-                        </Button>
-                      ) : (
-                        <span>{order.customer_name || 'Não informado'}</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <span className={`status-badge ${statusColors[order.status]}`}>
-                        {statusLabels[order.status]}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <span
-                        className={`text-xs px-2 py-1 rounded ${
-                          order.payment_status === 'pago'
-                            ? 'bg-green-100 text-green-800'
-                            : order.payment_status === 'parcial'
-                              ? 'bg-yellow-100 text-yellow-800'
-                              : 'bg-gray-100 text-gray-800'
-                        }`}
-                      >
-                        {order.payment_status === 'pago'
-                          ? 'Pago'
-                          : order.payment_status === 'parcial'
-                            ? 'Pagamento parcial'
-                            : 'Pendente'}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-right font-medium">
-                      {formatCurrency(Number(order.total))}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">{formatDate(order.created_at)}</TableCell>
-                    <TableCell>
+        <CardContent className="space-y-4">
+          <div className="space-y-3 md:hidden">
+            {loading ? (
+              <div className="rounded-lg border py-8 text-center text-sm text-muted-foreground">Carregando...</div>
+            ) : filtered.length === 0 ? (
+              <div className="rounded-lg border py-8 text-center text-sm text-muted-foreground">Nenhum pedido encontrado</div>
+            ) : (
+              filtered.map((order) => (
+                <div
+                  key={order.id}
+                  className="cursor-pointer space-y-3 rounded-lg border p-3"
+                  onClick={() => navigate(`/pedidos/${order.id}`)}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="font-medium">#{formatOrderNumber(order.order_number)}</p>
+                      <p className="text-xs text-muted-foreground">{formatDate(order.created_at)}</p>
+                    </div>
+                    <span className={`status-badge shrink-0 ${statusColors[order.status]}`}>
+                      {statusLabels[order.status]}
+                    </span>
+                  </div>
+
+                  <div className="space-y-1">
+                    <p className="truncate text-sm font-medium">{order.customer_name || 'Nao informado'}</p>
+                    <span className={`inline-flex rounded px-2 py-1 text-xs ${getPaymentStatusColor(order.payment_status)}`}>
+                      {getPaymentStatusLabel(order.payment_status)}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-semibold">{formatCurrency(Number(order.total))}</span>
+                    <div className="flex items-center gap-2">
                       <Button
-                        variant="ghost"
-                        size="icon"
+                        variant="outline"
+                        size="sm"
                         onClick={(event) => {
                           event.stopPropagation();
                           navigate(`/pedidos/${order.id}`);
                         }}
                       >
-                        <Eye className="h-4 w-4" />
+                        <Eye className="mr-1 h-4 w-4" />
+                        Abrir
                       </Button>
                       <Button
                         variant="ghost"
-                        size="icon"
+                        size="sm"
                         className="text-destructive"
                         onClick={(event) => handleDeleteOrder(event, order.id)}
                         disabled={deletingId === order.id}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          <div className="hidden overflow-x-auto md:block">
+            <Table className="min-w-[860px]">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>No</TableHead>
+                  <TableHead>Cliente</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Pagamento</TableHead>
+                  <TableHead className="text-right">Total</TableHead>
+                  <TableHead>Data</TableHead>
+                  <TableHead className="w-[120px]">Acoes</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {loading ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="py-8 text-center">
+                      Carregando...
                     </TableCell>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                ) : filtered.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                      Nenhum pedido encontrado
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filtered.map((order) => (
+                    <TableRow
+                      key={order.id}
+                      className="cursor-pointer hover:bg-muted/50"
+                      onClick={() => navigate(`/pedidos/${order.id}`)}
+                    >
+                      <TableCell className="font-medium">#{formatOrderNumber(order.order_number)}</TableCell>
+                      <TableCell>
+                        {order.customer_id ? (
+                          <Button
+                            variant="link"
+                            className="h-auto p-0 text-primary"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              navigate(`/clientes/${order.customer_id}/historico`);
+                            }}
+                          >
+                            {order.customer_name || 'Cliente'}
+                          </Button>
+                        ) : (
+                          <span>{order.customer_name || 'Nao informado'}</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <span className={`status-badge ${statusColors[order.status]}`}>
+                          {statusLabels[order.status]}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <span className={`rounded px-2 py-1 text-xs ${getPaymentStatusColor(order.payment_status)}`}>
+                          {getPaymentStatusLabel(order.payment_status)}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right font-medium">
+                        {formatCurrency(Number(order.total))}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">{formatDate(order.created_at)}</TableCell>
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            navigate(`/pedidos/${order.id}`);
+                          }}
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-destructive"
+                          onClick={(event) => handleDeleteOrder(event, order.id)}
+                          disabled={deletingId === order.id}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
         </CardContent>
       </Card>
     </div>
