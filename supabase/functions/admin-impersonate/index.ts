@@ -15,6 +15,76 @@ const jsonResponse = (headers: HeadersInit, status: number, payload: unknown) =>
     headers: { ...headers, "Content-Type": "application/json" },
   });
 
+const extractToken = (value: string | null) => {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const bearerMatch = /^Bearer\s+(.+)$/i.exec(trimmed);
+  return (bearerMatch?.[1] ?? trimmed).trim();
+};
+
+const isLikelyJwt = (token: string | null) => {
+  if (!token) return false;
+  return token.split(".").length === 3;
+};
+
+const getRequestAccessToken = (req: Request) => {
+  const xSupabaseAuthorization = extractToken(
+    req.headers.get("x-supabase-authorization") ??
+      req.headers.get("X-Supabase-Authorization"),
+  );
+  const authorization = extractToken(
+    req.headers.get("authorization") ?? req.headers.get("Authorization"),
+  );
+
+  // Prefer the user JWT when available.
+  if (isLikelyJwt(xSupabaseAuthorization)) return xSupabaseAuthorization;
+  if (isLikelyJwt(authorization)) return authorization;
+
+  return xSupabaseAuthorization ?? authorization ?? null;
+};
+
+const getAuthenticatedUser = async (
+  supabase: ReturnType<typeof createClient>,
+  supabaseUrl: string,
+  token: string,
+) => {
+  const { data: authData, error: authError } = await supabase.auth.getUser(token);
+  if (!authError && authData.user) {
+    return { user: authData.user, errorDetail: null as string | null };
+  }
+
+  const publicKey = Deno.env.get("SUPABASE_PUBLISHABLE_KEY") ??
+    Deno.env.get("SUPABASE_ANON_KEY") ??
+    "";
+  if (!publicKey) {
+    return {
+      user: null,
+      errorDetail: authError?.message ?? "Invalid session",
+    };
+  }
+
+  const userClient = createClient(supabaseUrl, publicKey, {
+    auth: { persistSession: false },
+    global: { headers: { Authorization: `Bearer ${token}` } },
+  });
+
+  const { data: fallbackAuthData, error: fallbackAuthError } = await userClient.auth.getUser();
+  if (!fallbackAuthError && fallbackAuthData.user) {
+    return { user: fallbackAuthData.user, errorDetail: authError?.message ?? null };
+  }
+
+  const detail = [
+    authError?.message,
+    fallbackAuthError?.message,
+  ].filter(Boolean).join(" | ");
+
+  return {
+    user: null,
+    errorDetail: detail || "Invalid session",
+  };
+};
+
 const getRequestIp = (req: Request) => {
   const forwarded = req.headers.get("x-forwarded-for");
   if (forwarded) {
@@ -99,23 +169,34 @@ Deno.serve(async (req) => {
       auth: { persistSession: false },
     });
 
-    const authHeader = req.headers.get("x-supabase-authorization") ??
-      req.headers.get("Authorization");
-    if (!authHeader) {
+    const token = getRequestAccessToken(req);
+    if (!token) {
       return jsonResponse(corsHeaders, 401, { error: "No authorization header" });
     }
 
-    const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : authHeader;
-    const { data: authData, error: authError } = await supabase.auth.getUser(token);
-    if (authError || !authData.user) {
-      return jsonResponse(corsHeaders, 401, { error: "Invalid session" });
+    const { user: authUser, errorDetail } = await getAuthenticatedUser(
+      supabase,
+      supabaseUrl,
+      token,
+    );
+    if (!authUser) {
+      return jsonResponse(corsHeaders, 401, {
+        error: "Invalid session",
+        detail: errorDetail,
+      });
     }
 
-    const { data: roleData } = await supabase
-      .from("super_admin_users")
-      .select("id")
-      .eq("user_id", authData.user.id)
-      .maybeSingle();
+    const { data: roleFromRpc } = await supabase.rpc("get_user_role", {
+      _user_id: authUser.id,
+    });
+
+    const { data: roleData } = roleFromRpc === "super_admin"
+      ? { data: { id: authUser.id } }
+      : await supabase
+        .from("super_admin_users")
+        .select("id")
+        .eq("user_id", authUser.id)
+        .maybeSingle();
 
     if (!roleData) {
       return jsonResponse(corsHeaders, 403, { error: "Not authorized" });
@@ -149,7 +230,7 @@ Deno.serve(async (req) => {
       return jsonResponse(corsHeaders, 404, { error: "User not found" });
     }
 
-    if (targetUser.id === authData.user.id) {
+    if (targetUser.id === authUser.id) {
       return jsonResponse(corsHeaders, 400, { error: "Cannot impersonate yourself" });
     }
 
@@ -185,7 +266,7 @@ Deno.serve(async (req) => {
     const { error: logError } = await supabase
       .from("admin_access_logs")
       .insert({
-        admin_id: authData.user.id,
+        admin_id: authUser.id,
         client_id: targetUser.id,
         client_email: email,
         ip,

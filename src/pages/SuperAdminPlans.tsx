@@ -37,6 +37,31 @@ type CaktoOffer = {
   interval?: number | null;
   status?: string | null;
   checkoutUrl?: string | null;
+  deleted?: boolean | null;
+  deletedAt?: string | null;
+};
+
+const parseBooleanLike = (value: unknown): boolean | null => {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') {
+    if (value === 1) return true;
+    if (value === 0) return false;
+    return null;
+  }
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (['true', '1', 'yes', 'sim'].includes(normalized)) return true;
+    if (['false', '0', 'no', 'nao', 'não'].includes(normalized)) return false;
+  }
+  return null;
+};
+
+const isOfferSyncEligible = (offer: CaktoOffer) => {
+  const normalizedStatus = offer.status?.trim().toLowerCase() || null;
+  const isActive = !normalizedStatus || normalizedStatus === 'active';
+  const hasDeletedAt = !!offer.deletedAt?.trim();
+  const isDeleted = offer.deleted === true || hasDeletedAt || normalizedStatus === 'deleted';
+  return Boolean(offer.id) && isActive && !isDeleted;
 };
 
 export default function SuperAdminPlans() {
@@ -123,8 +148,10 @@ export default function SuperAdminPlans() {
         interval: offer.interval ? Number(offer.interval) : null,
         status: offer.status ? String(offer.status) : null,
         checkoutUrl: offer.checkout_url ? String(offer.checkout_url) : null,
+        deleted: parseBooleanLike(offer.deleted ?? offer.is_deleted ?? offer.isDeleted),
+        deletedAt: offer.deleted_at || offer.deletedAt ? String(offer.deleted_at ?? offer.deletedAt) : null,
       }));
-      setOffers(mapped.filter((offer) => offer.id));
+      setOffers(mapped.filter(isOfferSyncEligible));
     } catch (error) {
       console.error('Failed to load CAKTO offers', error);
       toast.error('Erro ao carregar planos da Cakto');
@@ -352,14 +379,16 @@ export default function SuperAdminPlans() {
   }, [plans, offers]);
 
   const handleSyncOffers = async () => {
-    if (!offers.length) {
-      toast.error('Nenhum plano da Cakto encontrado');
+    const syncableOffers = offers.filter(isOfferSyncEligible);
+
+    if (!syncableOffers.length) {
+      toast.error('Nenhum plano ativo e não deletado da Cakto encontrado');
       return;
     }
 
     setSyncLoading(true);
     try {
-      const payload = offers.map((offer) => {
+      const payload = syncableOffers.map((offer) => {
         const billingPeriod = offer.intervalType === 'year' || offer.intervalType === 'yearly' ? 'yearly' : 'monthly';
         const intervalCount = offer.interval || 1;
         const periodDays = (billingPeriod === 'yearly' ? 365 : 30) * intervalCount;

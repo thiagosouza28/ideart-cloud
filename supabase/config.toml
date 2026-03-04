@@ -29,3 +29,6 @@ verify_jwt = false
 
 [functions.pagseguro-webhook]
 verify_jwt = false
+
+[functions.admin-impersonate]
+verify_jwt = false

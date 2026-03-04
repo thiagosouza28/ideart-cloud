@@ -205,7 +205,7 @@ export function AppLayout({ children }: AppLayoutProps) {
                 <Bell className="h-4 w-4" />
               </button>
               <div className="hidden flex-col items-end leading-tight sm:flex">
-                <span className="text-sm font-semibold text-slate-900">{company?.name || 'Ideart Gráfica'}</span>
+                <span className="text-sm font-semibold text-slate-900">{company?.name || 'Ideart Cloud'}</span>
                 <span className="text-[11px] font-semibold text-slate-400">{role ? roleLabels[role] : 'ADMIN'}</span>
               </div>
               {logoUrl ? (

@@ -279,7 +279,7 @@ export default function Landing() {
         <div className="mx-auto flex h-20 w-full max-w-6xl items-center justify-between px-4">
           <a href="#inicio" className="landing-logo flex items-center gap-3 text-foreground">
             <span className="h-8 w-8 rounded-lg bg-primary shadow-[0_8px_24px_hsl(var(--primary)/0.45)]" />
-            <span className="landing-heading text-base font-extrabold tracking-[0.04em]">GRAFICAERP</span>
+            <span className="landing-heading text-base font-extrabold tracking-[0.04em]">IDEART CLOUD</span>
           </a>
           <nav className="hidden items-center gap-7 text-sm text-muted-foreground lg:flex">
             <a href="#interface" className="landing-nav-link transition-colors hover:text-foreground">
@@ -393,7 +393,7 @@ export default function Landing() {
                 <aside className="border-r border-white/10 bg-[#171d29] p-4">
                   <div className="mb-6 flex items-center gap-2 text-white">
                     <span className="h-7 w-7 rounded-md bg-primary" />
-                    <span className="landing-heading text-sm font-bold tracking-[0.08em]">GRAFICAERP</span>
+                    <span className="landing-heading text-sm font-bold tracking-[0.08em]">IDEART CLOUD</span>
                   </div>
                   <div className="space-y-2 text-[0.86rem] text-slate-400">
                     {["Painel", "Pedidos", "Clientes", "Estoque", "Financeiro"].map((item, index) => (
@@ -579,7 +579,7 @@ export default function Landing() {
             <div className="space-y-4">
               <div className="flex items-center gap-3">
                 <span className="h-8 w-8 rounded-lg bg-primary" />
-                <span className="landing-heading text-sm font-bold tracking-[0.08em] text-white">GRAFICAERP</span>
+                <span className="landing-heading text-sm font-bold tracking-[0.08em] text-white">IDEART CLOUD</span>
               </div>
               <p className="landing-card-copy max-w-xs text-slate-400">
                 Plataforma para gráficas com foco em produtividade, controle e escala.
@@ -610,7 +610,7 @@ export default function Landing() {
         </div>
         <div className="border-t border-white/[0.07]">
           <div className="mx-auto flex w-full max-w-6xl flex-col gap-2 px-4 py-5 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
-            <span>(c) 2026 GraficaERP. Todos os direitos reservados.</span>
+            <span>(c) 2026 Ideart Cloud. Todos os direitos reservados.</span>
             <span className="uppercase tracking-[0.2em]">Feito para operações gráficas</span>
           </div>
         </div>

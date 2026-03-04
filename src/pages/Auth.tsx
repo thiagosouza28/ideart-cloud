@@ -191,7 +191,7 @@ export default function Auth() {
             </div>
           </div>
           <div className="space-y-2">
-            <CardTitle className="text-3xl font-bold tracking-tight">GráficaERP</CardTitle>
+            <CardTitle className="text-3xl font-bold tracking-tight">Ideart Cloud</CardTitle>
             <CardDescription className="text-base">Sistema de Gestão para Gráfica</CardDescription>
           </div>
         </CardHeader>

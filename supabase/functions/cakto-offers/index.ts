@@ -47,6 +47,34 @@ const jsonResponse = (headers: HeadersInit, status: number, payload: unknown) =>
     headers: { ...headers, "Content-Type": "application/json" },
   });
 
+const parseBooleanLike = (value: unknown): boolean | null => {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") {
+    if (value === 1) return true;
+    if (value === 0) return false;
+    return null;
+  }
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (["true", "1", "yes", "sim"].includes(normalized)) return true;
+    if (["false", "0", "no", "nao", "não"].includes(normalized)) return false;
+  }
+  return null;
+};
+
+const isEligibleOffer = (offer: {
+  id: string | null;
+  status: string | null;
+  deleted: boolean;
+  deleted_at: string | null;
+}) => {
+  if (!offer.id) return false;
+  const normalizedStatus = offer.status?.trim().toLowerCase() || null;
+  const isActive = !normalizedStatus || normalizedStatus === "active";
+  const isDeleted = offer.deleted || !!offer.deleted_at || normalizedStatus === "deleted";
+  return isActive && !isDeleted;
+};
+
 serve(async (req) => {
   const corsHeaders = getCorsHeaders(req);
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders, status: 204 });
@@ -65,24 +93,33 @@ serve(async (req) => {
         ? raw
         : [];
 
-    const normalized = offers.map((offer: any) => {
-      const id = offer?.id ?? offer?.short_id ?? offer?.offer_id ?? null;
+    const normalized = offers.map((offer: Record<string, unknown>) => {
+      const rawId = offer?.id ?? offer?.short_id ?? offer?.offer_id ?? null;
+      const id = rawId ? String(rawId) : null;
       const checkoutUrl =
         offer?.checkoutUrl ??
         offer?.checkout_url ??
         offer?.salesPage ??
         (id ? `https://pay.cakto.com.br/${id}` : null);
+      const rawDeleted = offer?.deleted ?? offer?.is_deleted ?? offer?.isDeleted;
+      const deleted = parseBooleanLike(rawDeleted) === true;
+      const rawDeletedAt = offer?.deleted_at ?? offer?.deletedAt ?? null;
+      const deletedAt = rawDeletedAt ? String(rawDeletedAt).trim() : null;
+      const rawStatus = offer?.status ?? null;
+      const status = rawStatus === null || rawStatus === undefined ? null : String(rawStatus);
       return ({
         id,
-      name: offer?.name ?? null,
-      price: typeof offer?.price === "string" ? Number(offer.price) : offer?.price ?? null,
-      intervalType: offer?.intervalType ?? offer?.interval_type ?? null,
-      interval: offer?.interval ?? offer?.interval_count ?? null,
-      status: offer?.status ?? null,
-      type: offer?.type ?? null,
-      checkout_url: checkoutUrl,
+        name: offer?.name ?? null,
+        price: typeof offer?.price === "string" ? Number(offer.price) : offer?.price ?? null,
+        intervalType: offer?.intervalType ?? offer?.interval_type ?? null,
+        interval: offer?.interval ?? offer?.interval_count ?? null,
+        status,
+        type: offer?.type ?? null,
+        checkout_url: checkoutUrl,
+        deleted,
+        deleted_at: deletedAt,
       });
-    }).filter((offer: any) => !!offer.id);
+    }).filter(isEligibleOffer);
 
     return jsonResponse(corsHeaders, 200, { offers: normalized });
   } catch (error) {

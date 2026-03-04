@@ -115,7 +115,7 @@ export function AppSidebar() {
           </div>
           {!collapsed && (
             <div className="flex flex-col leading-tight">
-              <span className="text-base font-semibold text-slate-900">GráficaERP</span>
+              <span className="text-base font-semibold text-slate-900">Ideart Cloud</span>
               <span className="text-[11px] font-medium tracking-wide text-slate-400">SISTEMA DE GESTÃO</span>
             </div>
           )}

@@ -25,6 +25,8 @@ type ParsedActionLink = {
   hasCode: boolean;
 };
 
+type VerifyOtpPayload = Parameters<typeof supabase.auth.verifyOtp>[0];
+
 const parseActionLink = (value?: string | null): ParsedActionLink => {
   if (!value) return { tokenHash: '', verificationType: '', hasCode: false };
   try {
@@ -39,6 +41,52 @@ const parseActionLink = (value?: string | null): ParsedActionLink => {
   }
 };
 
+const ensureFreshAdminSession = async () => {
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError) {
+    throw new Error('Não foi possível validar sua sessão. Faça login novamente.');
+  }
+
+  const session = sessionData.session;
+  if (!session?.access_token || !session.refresh_token) {
+    throw new Error('Sessão de administrador indisponível. Faça login novamente.');
+  }
+
+  const expiresAtMs = session.expires_at ? session.expires_at * 1000 : 0;
+  const shouldRefresh = !expiresAtMs || Date.now() > expiresAtMs - 120_000;
+
+  let activeSession = session;
+  if (shouldRefresh) {
+    const { data: refreshedData, error: refreshError } = await supabase.auth.refreshSession();
+    if (refreshError) {
+      throw new Error('Sessão expirada ou inválida. Faça login novamente.');
+    }
+    activeSession = refreshedData.session ?? null;
+  }
+
+  if (!activeSession?.access_token) {
+    throw new Error('Sessão expirada ou inválida. Faça login novamente.');
+  }
+
+  const { data: userData, error: userError } = await supabase.auth.getUser(activeSession.access_token);
+  if (userError || !userData.user) {
+    throw new Error('Sessão inválida para impersonação. Faça login novamente.');
+  }
+};
+
+const getImpersonationErrorMessage = (error: unknown) => {
+  const baseMessage = error instanceof Error
+    ? error.message
+    : 'Erro ao acessar a conta do cliente.';
+  const detail = (error && typeof error === 'object' && 'payload' in error)
+    ? (error as { payload?: { detail?: unknown } }).payload?.detail
+    : undefined;
+  if (typeof detail === 'string' && detail.trim()) {
+    return `${baseMessage} (${detail.trim()})`;
+  }
+  return baseMessage;
+};
+
 export default function SuperAdminImpersonate() {
   const navigate = useNavigate();
   const { startImpersonation, clearImpersonation, isImpersonating } = useAuth();
@@ -51,9 +99,9 @@ export default function SuperAdminImpersonate() {
     const tokenHash = response.token_hash || parsedLink.tokenHash || '';
     const attempts: Array<() => Promise<{ session: unknown; error: Error | null }>> = [];
 
-    const pushVerifyOtpAttempt = (payload: Record<string, unknown>) => {
+    const pushVerifyOtpAttempt = (payload: VerifyOtpPayload) => {
       attempts.push(async () => {
-        const { data, error } = await supabase.auth.verifyOtp(payload as any);
+        const { data, error } = await supabase.auth.verifyOtp(payload);
         return { session: data?.session ?? null, error: error ?? null };
       });
     };
@@ -124,6 +172,8 @@ export default function SuperAdminImpersonate() {
 
     setLoading(true);
     try {
+      await ensureFreshAdminSession();
+
       const response = await invokeEdgeFunction<ImpersonateResponse>('admin-impersonate', {
         email: trimmedEmail,
         redirect_to: `${window.location.origin}/dashboard`,
@@ -136,9 +186,9 @@ export default function SuperAdminImpersonate() {
       setEmail('');
       toast.success('Acesso concedido. Você está na conta do cliente.');
       navigate('/dashboard', { replace: true });
-    } catch (error: any) {
+    } catch (error: unknown) {
       clearImpersonation();
-      toast.error(error?.message || 'Erro ao acessar a conta do cliente.');
+      toast.error(getImpersonationErrorMessage(error));
     } finally {
       setLoading(false);
     }

@@ -25,6 +25,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { invokeEdgeFunction } from '@/services/edgeFunctions';
 import { toast } from 'sonner';
 import type { Company, Plan, SubscriptionStatus } from '@/types/database';
+import { ensurePublicStorageUrl } from '@/lib/storage';
 
 interface CompanyWithPlan extends Company {
   plan?: Plan;
@@ -37,6 +38,13 @@ interface CompanyUser {
   email: string | null;
   created_at: string | null;
 }
+
+const normalizeSearchText = (value: string) =>
+  value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
 
 const statusLabels: Record<string, string> = {
   trial: 'Teste',
@@ -101,6 +109,7 @@ export default function SuperAdminCompanies() {
     const profiles = profilesResult.data || [];
     const companiesData = (companiesResult.data || []).map((company: Company) => ({
       ...company,
+      logo_url: ensurePublicStorageUrl('product-images', company.logo_url),
       plan: plansData.find(p => p.id === company.plan_id),
       user_count: profiles.filter(p => p.company_id === company.id).length,
     }));
@@ -110,8 +119,10 @@ export default function SuperAdminCompanies() {
   };
 
   const filtered = companies.filter(c => {
-    const matchesSearch = c.name.toLowerCase().includes(search.toLowerCase()) ||
-      c.slug.toLowerCase().includes(search.toLowerCase());
+    const searchTerm = normalizeSearchText(search);
+    const matchesSearch = !searchTerm ||
+      normalizeSearchText(c.name).includes(searchTerm) ||
+      normalizeSearchText(c.slug).includes(searchTerm);
     const matchesStatus = statusFilter === 'all' || (c.subscription_status || 'trial') === statusFilter;
     return matchesSearch && matchesStatus;
   });
@@ -355,9 +366,10 @@ export default function SuperAdminCompanies() {
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                 <Input
-                  placeholder="Buscar empresas..."
+                  placeholder="Pesquisar empresa..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
+                  aria-label="Pesquisar empresa"
                   className="w-full pl-9 sm:w-[220px]"
                 />
               </div>
@@ -393,9 +405,17 @@ export default function SuperAdminCompanies() {
                 <TableRow key={company.id} className={!company.is_active ? 'opacity-60' : ''}>
                   <TableCell>
                     <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                        <Building2 className="h-5 w-5 text-primary" />
-                      </div>
+                      {company.logo_url ? (
+                        <img
+                          src={company.logo_url}
+                          alt={company.name}
+                          className="h-10 w-10 rounded-lg object-cover"
+                        />
+                      ) : (
+                        <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                          <Building2 className="h-5 w-5 text-primary" />
+                        </div>
+                      )}
                       <div>
                         <p className="font-medium">{company.name}</p>
                         <p className="text-sm text-slate-500">{company.slug}</p>
