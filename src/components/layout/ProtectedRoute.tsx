@@ -60,7 +60,7 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
   if (
     !isOnboardingRoute &&
     role !== 'super_admin' &&
-    (!subscription || !subscription.hasAccess) &&
+    subscription?.isExpired &&
     !isSubscriptionRoute
   ) {
     return <Navigate to="/assinatura" replace />;

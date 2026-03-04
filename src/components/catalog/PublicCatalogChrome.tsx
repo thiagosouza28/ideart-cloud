@@ -1,10 +1,12 @@
-import { Link } from 'react-router-dom';
+﻿import { Link } from 'react-router-dom';
 import { ArrowLeft, Mail, MapPin, MessageCircle, Phone, ShoppingCart } from 'lucide-react';
+import { ensurePublicStorageUrl } from '@/lib/storage';
 
 export interface CatalogChromeCompany {
   id?: string | null;
   slug?: string | null;
   name?: string | null;
+  logo_url?: string | null;
   city?: string | null;
   state?: string | null;
   phone?: string | null;
@@ -15,7 +17,7 @@ export interface CatalogChromeCompany {
 }
 
 const getInitials = (value?: string | null) => {
-  const safe = (value || 'Catálogo').trim();
+  const safe = (value || 'Catalogo').trim();
   if (!safe) return 'C';
   const parts = safe.split(/\s+/).filter(Boolean);
   if (parts.length === 1) return parts[0].slice(0, 1).toUpperCase();
@@ -27,6 +29,9 @@ const resolveCatalogPath = (company?: CatalogChromeCompany | null) => {
   if (company?.id) return `/loja/${company.id}`;
   return '/catalogo';
 };
+
+const resolveLogoUrl = (logoUrl?: string | null) =>
+  ensurePublicStorageUrl('product-images', logoUrl) || null;
 
 const openCatalogContact = (company?: CatalogChromeCompany | null) => {
   if (!company) return;
@@ -68,8 +73,9 @@ export function CatalogTopNav({
   accountLabel = 'Minha conta',
   showContact = false,
 }: CatalogTopNavProps) {
-  const brandName = company?.name || 'Catálogo';
-  const brandSub = subtitle || [company?.city, company?.state].filter(Boolean).join(', ') || 'Catálogo público';
+  const brandName = company?.name || 'Catalogo';
+  const brandLogoUrl = resolveLogoUrl(company?.logo_url);
+  const brandSub = subtitle || [company?.city, company?.state].filter(Boolean).join(', ') || 'Catalogo publico';
   const hasContact = Boolean(company?.catalog_contact_url || company?.whatsapp);
 
   return (
@@ -87,9 +93,17 @@ export function CatalogTopNav({
             </button>
           )}
           <div className="flex min-w-0 items-center gap-3">
-            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#3d8bef] text-xs font-bold">
-              {getInitials(brandName)}
-            </span>
+            {brandLogoUrl ? (
+              <img
+                src={brandLogoUrl}
+                alt={`Logo da ${brandName}`}
+                className="h-8 w-8 shrink-0 rounded-full object-cover"
+              />
+            ) : (
+              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#3d8bef] text-xs font-bold">
+                {getInitials(brandName)}
+              </span>
+            )}
             <div className="min-w-0">
               <p className="truncate text-sm font-bold">{brandName}</p>
               <p className="truncate text-xs text-white/75">{brandSub}</p>
@@ -125,7 +139,7 @@ export function CatalogTopNav({
               onClick={() => openCatalogContact(company)}
             >
               <MessageCircle size={14} />
-              WhatsApp
+              Falar no WhatsApp
             </button>
           )}
         </div>
@@ -190,8 +204,9 @@ export function CatalogFooter({
   accountHref = '/minha-conta/pedidos',
   accountLabel = 'Minha conta',
 }: CatalogFooterProps) {
-  const brandName = company?.name || 'Catálogo';
-  const brandSub = [company?.city, company?.state].filter(Boolean).join(', ') || 'Catálogo público';
+  const brandName = company?.name || 'Catalogo';
+  const brandLogoUrl = resolveLogoUrl(company?.logo_url);
+  const brandSub = [company?.city, company?.state].filter(Boolean).join(', ') || 'Catalogo publico';
   const hasContact = Boolean(company?.catalog_contact_url || company?.whatsapp);
   const catalogPath = resolveCatalogPath(company);
 
@@ -199,9 +214,17 @@ export function CatalogFooter({
     <footer className="mt-12 bg-[#0f1b3d] text-white">
       <div className="mx-auto flex w-[min(1220px,calc(100%-40px))] flex-wrap items-center justify-between gap-4 py-6">
         <div className="flex min-w-0 items-center gap-3">
-          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#3d8bef] text-xs font-bold">
-            {getInitials(brandName)}
-          </span>
+          {brandLogoUrl ? (
+            <img
+              src={brandLogoUrl}
+              alt={`Logo da ${brandName}`}
+              className="h-8 w-8 shrink-0 rounded-full object-cover"
+            />
+          ) : (
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#3d8bef] text-xs font-bold">
+              {getInitials(brandName)}
+            </span>
+          )}
           <div className="min-w-0">
             <p className="truncate text-sm font-bold">{brandName}</p>
             <p className="truncate text-xs text-white/75">{brandSub}</p>
@@ -234,7 +257,7 @@ export function CatalogFooter({
               onClick={() => openCatalogContact(company)}
             >
               <MessageCircle size={14} />
-              WhatsApp
+              Falar no WhatsApp
             </button>
           )}
           {showAccount && (
@@ -250,7 +273,7 @@ export function CatalogFooter({
               to={catalogPath}
               className="inline-flex h-10 items-center rounded-xl border border-white/45 px-4 text-sm font-semibold text-white hover:bg-white/10"
             >
-              Ver catálogo
+              Ver catalogo
             </Link>
           )}
         </div>

@@ -126,6 +126,14 @@ const pageStyles = `
   flex-shrink: 0;
 }
 
+.pc-brand-logo {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+  display: block;
+}
+
 .pc-brand-name {
   font-family: inherit;
   font-weight: 700;
@@ -173,9 +181,14 @@ const pageStyles = `
   border-radius: 12px;
   background: var(--pc-blue);
   color: var(--pc-white);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   font-family: inherit;
   font-size: 14px;
   font-weight: 500;
+  white-space: nowrap;
   padding: 0 15px;
   cursor: pointer;
   transition: opacity 0.2s ease;
@@ -1114,7 +1127,17 @@ export default function PublicCatalog() {
         <div className="pc-container pc-nav-inner">
           <div className="pc-nav-left">
             <div className="pc-brand">
-              <span className="pc-brand-avatar">{initials(company?.name)}</span>
+              <span className="pc-brand-avatar">
+                {company?.logo_url ? (
+                  <img
+                    src={company.logo_url}
+                    alt={`Logo da ${company?.name || 'loja'}`}
+                    className="pc-brand-logo"
+                  />
+                ) : (
+                  initials(company?.name)
+                )}
+              </span>
               <div>
                 <p className="pc-brand-name">{company?.name || 'Catálogo'}</p>
                 {company?.city && company?.state && (
@@ -1146,7 +1169,7 @@ export default function PublicCatalog() {
                 onClick={openContact}
               >
                 <Whatsapp size={16} />
-                <span>WhatsApp</span>
+                <span>Falar no WhatsApp</span>
               </button>
             )}
           </div>
@@ -1329,7 +1352,17 @@ export default function PublicCatalog() {
         <div className="pc-container">
           <div className="pc-footer-top">
             <div className="pc-brand">
-              <span className="pc-brand-avatar">{initials(company?.name)}</span>
+              <span className="pc-brand-avatar">
+                {company?.logo_url ? (
+                  <img
+                    src={company.logo_url}
+                    alt={`Logo da ${company?.name || 'loja'}`}
+                    className="pc-brand-logo"
+                  />
+                ) : (
+                  initials(company?.name)
+                )}
+              </span>
               <div>
                 <p className="pc-brand-name">{company?.name || 'Catálogo'}</p>
                 {company?.city && company?.state && (
@@ -1353,7 +1386,7 @@ export default function PublicCatalog() {
 
               {showContact && (company?.catalog_contact_url || company?.whatsapp) ? (
                 <button type="button" className="pc-footer-btn pc-footer-btn-primary" onClick={openContact}>
-                  <Whatsapp size={15} /> WhatsApp
+                  <Whatsapp size={15} /> Falar no WhatsApp
                 </button>
               ) : (
                 <Link to={catalogPath} className="pc-footer-btn pc-footer-btn-primary">

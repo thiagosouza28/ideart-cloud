@@ -136,7 +136,8 @@ export default function PublicCart() {
   }, [user]);
 
   useEffect(() => {
-    if (!user.id || !company?.id) {
+    const userId = user?.id;
+    if (!userId || !company?.id) {
       setHasSavedAddress(false);
       setEditingSavedAddress(true);
       setSavedAddressLoaded(true);
@@ -151,7 +152,7 @@ export default function PublicCart() {
         .from('customers')
         .select('name, phone, document, email, address, city, state, zip_code')
         .eq('company_id', company.id)
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .order('updated_at', { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -191,7 +192,7 @@ export default function PublicCart() {
     return () => {
       isMounted = false;
     };
-  }, [company?.id, user.id]);
+  }, [company?.id, user?.id]);
 
   useEffect(() => {
     const loadCompany = async () => {

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+﻿import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Edit, Trash2, Building2, Upload, Loader2, MapPin, Phone, Mail, Globe, ExternalLink, Copy, Check, Palette, LayoutGrid, List, Settings as SettingsIcon, MessageCircle, Gift } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -123,7 +123,7 @@ export default function Settings() {
     { value: '{pedido_id}', label: 'ID', description: 'Identificador do pedido' },
     { value: '{pedido_numero}', label: 'Pedido', description: 'Número do pedido' },
     { value: '{pedido_status}', label: 'Status', description: 'Status do pedido' },
-    { value: '{mensagem_status}', label: 'Mensagem status', description: 'Mensagem padrao conforme status do pedido' },
+    { value: '{mensagem_status}', label: 'Mensagem status', description: 'Mensagem padrão conforme status do pedido' },
     { value: '{pedido_total}', label: 'Total', description: 'Total do pedido' },
     { value: '{total}', label: 'Total curto', description: 'Alias do total do pedido' },
     { value: '{pedido_link}', label: 'Link', description: 'Link do pedido' },
@@ -134,8 +134,8 @@ export default function Settings() {
   const birthdayPlaceholders = [
     { value: '{cliente_nome}', label: 'Cliente', description: 'Nome do cliente' },
     { value: '{cliente_telefone}', label: 'Telefone', description: 'Telefone do cliente' },
-    { value: '{cliente_idade}', label: 'Idade', description: 'Idade que ira completar' },
-    { value: '{aniversario_data}', label: 'Aniversario', description: 'Dia e mes do aniversario' },
+    { value: '{cliente_idade}', label: 'Idade', description: 'Idade que irá completar' },
+    { value: '{aniversario_data}', label: 'Aniversário', description: 'Dia e mês do aniversário' },
     { value: '{empresa_nome}', label: 'Empresa', description: 'Nome da empresa' },
   ];
 
@@ -288,6 +288,10 @@ export default function Settings() {
       signatureFile !== null
     );
   }, [originalForm, companyForm, logoFile, signatureFile]);
+  const minimumOrderValue = Number(companyForm.minimum_order_value || 0);
+  const minimumDeliveryValue = Number(companyForm.minimum_delivery_value || 0);
+  const hasInvalidMinimumDelivery =
+    minimumDeliveryValue > 0 && minimumDeliveryValue < minimumOrderValue;
 
   // Update isSaved when form changes
   useEffect(() => {
@@ -322,6 +326,15 @@ export default function Settings() {
     }
     if (companyForm.whatsapp && !validatePhone(companyForm.whatsapp)) {
       toast({ title: "WhatsApp inválido", description: "Use um celular brasileiro válido.", variant: "destructive" });
+      return;
+    }
+
+    if (hasInvalidMinimumDelivery) {
+      toast({
+        title: "Valor mínimo para entrega inválido",
+        description: "O valor mínimo para entrega deve ser maior ou igual ao valor mínimo do pedido.",
+        variant: "destructive",
+      });
       return;
     }
 
@@ -720,16 +733,16 @@ export default function Settings() {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="company-signature-responsible">Responsavel pela assinatura</Label>
+                    <Label htmlFor="company-signature-responsible">Responsável pela assinatura</Label>
                     <Input
                       id="company-signature-responsible"
                       value={companyForm.signature_responsible}
                       onChange={(e) => setCompanyForm({ ...companyForm, signature_responsible: e.target.value })}
-                      placeholder="Nome do responsavel"
+                      placeholder="Nome do responsável"
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="company-signature-role">Cargo do responsavel</Label>
+                    <Label htmlFor="company-signature-role">Cargo do responsável</Label>
                     <Input
                       id="company-signature-role"
                       value={companyForm.signature_role}
@@ -784,7 +797,9 @@ export default function Settings() {
                   <CurrencyInput
                     id="company-min-order"
                     value={Number(companyForm.minimum_order_value || 0)}
-                    onChange={(value) => setCompanyForm({ ...companyForm, minimum_order_value: value })}
+                    onChange={(value) =>
+                      setCompanyForm((prev) => ({ ...prev, minimum_order_value: value }))
+                    }
                   />
                   <p className="text-sm text-muted-foreground">
                     Pedido só pode ser finalizado no catálogo a partir desse valor.
@@ -796,13 +811,24 @@ export default function Settings() {
                   <CurrencyInput
                     id="company-min-delivery"
                     value={Number(companyForm.minimum_delivery_value || 0)}
-                    onChange={(value) => setCompanyForm({ ...companyForm, minimum_delivery_value: value })}
+                    onChange={(value) =>
+                      setCompanyForm((prev) => ({ ...prev, minimum_delivery_value: value }))
+                    }
+                    className={hasInvalidMinimumDelivery ? "border-destructive focus-visible:ring-destructive" : undefined}
                   />
                   <p className="text-sm text-muted-foreground">
                     Valor mínimo para habilitar entrega. Abaixo disso, apenas retirada.
                   </p>
+                  {hasInvalidMinimumDelivery && (
+                    <p className="text-sm text-destructive">
+                      O valor mínimo para entrega deve ser maior ou igual ao valor mínimo do pedido.
+                    </p>
+                  )}
                 </div>
               </div>
+              <p className="text-xs text-muted-foreground">
+                Esses valores são independentes: um controla o pedido mínimo geral e o outro apenas a entrega.
+              </p>
 
               {/* Contact Info */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -930,7 +956,7 @@ export default function Settings() {
                   className="min-h-[120px]"
                   />
                   <div className="text-xs text-muted-foreground">
-                    Variaveis disponiveis:
+                    Variáveis disponíveis:
                     <div className="mt-2 grid grid-cols-1 gap-1 sm:grid-cols-2">
                       <span>{'{cliente_nome}'}</span>
                       <span>{'{cliente_telefone}'}</span>
@@ -948,7 +974,7 @@ export default function Settings() {
                 <div className="space-y-3">
                   <Label htmlFor="birthday-template" className="flex items-center gap-2">
                     <Gift className="h-4 w-4" />
-                    Mensagem de aniversario
+                    Mensagem de aniversário
                   </Label>
                   <TooltipProvider delayDuration={150}>
                     <div className="flex flex-wrap gap-2">
@@ -980,11 +1006,11 @@ export default function Settings() {
                     ref={birthdayTemplateRef}
                     value={companyForm.birthday_message_template}
                     onChange={(e) => setCompanyForm({ ...companyForm, birthday_message_template: e.target.value })}
-                    placeholder="Ola {cliente_nome}, feliz aniversario! Que seu dia seja especial. {empresa_nome}"
+                    placeholder="Olá {cliente_nome}, feliz aniversário! Que seu dia seja especial. {empresa_nome}"
                     className="min-h-[120px]"
                   />
                   <div className="text-xs text-muted-foreground">
-                    Variaveis disponiveis:
+                    Variáveis disponíveis:
                     <div className="mt-2 grid grid-cols-1 gap-1 sm:grid-cols-2">
                       <span>{'{cliente_nome}'}</span>
                       <span>{'{cliente_telefone}'}</span>
@@ -994,7 +1020,7 @@ export default function Settings() {
                     </div>
                   </div>
                 </div>
-                <Button onClick={saveCompany} disabled={savingCompany} className="w-full md:w-auto">
+                <Button onClick={saveCompany} disabled={savingCompany || hasInvalidMinimumDelivery} className="w-full md:w-auto">
                   {savingCompany && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   Salvar Alterações
                 </Button>
@@ -1071,7 +1097,7 @@ export default function Settings() {
                     </p>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="catalog-footer-bg" className="text-sm">Rodape - fundo</Label>
+                    <Label htmlFor="catalog-footer-bg" className="text-sm">Rodapé - fundo</Label>
                     <div className="flex gap-2">
                       <input
                         type="color"
@@ -1091,7 +1117,7 @@ export default function Settings() {
                     </p>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="catalog-footer-text" className="text-sm">Rodape - texto</Label>
+                    <Label htmlFor="catalog-footer-text" className="text-sm">Rodapé - texto</Label>
                     <div className="flex gap-2">
                       <input
                         type="color"
@@ -1179,7 +1205,7 @@ export default function Settings() {
                     </p>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="catalog-button-bg" className="text-sm">Botao principal - fundo</Label>
+                    <Label htmlFor="catalog-button-bg" className="text-sm">Botão principal - fundo</Label>
                     <div className="flex gap-2">
                       <input
                         type="color"
@@ -1207,7 +1233,7 @@ export default function Settings() {
                     </p>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="catalog-button-text" className="text-sm">Botao principal - texto</Label>
+                    <Label htmlFor="catalog-button-text" className="text-sm">Botão principal - texto</Label>
                     <div className="flex gap-2">
                       <input
                         type="color"
@@ -1227,7 +1253,7 @@ export default function Settings() {
                     </p>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="catalog-button-outline" className="text-sm">Botao outline - cor</Label>
+                    <Label htmlFor="catalog-button-outline" className="text-sm">Botão outline - cor</Label>
                     <div className="flex gap-2">
                       <input
                         type="color"
@@ -1356,11 +1382,11 @@ export default function Settings() {
                   </span>
                   <span className="flex items-center gap-1">
                     <span className="h-4 w-4 rounded border" style={{ backgroundColor: companyForm.catalog_footer_bg_color }} />
-                    Rodape fundo
+                    Rodapé fundo
                   </span>
                   <span className="flex items-center gap-1">
                     <span className="h-4 w-4 rounded border" style={{ backgroundColor: companyForm.catalog_button_bg_color }} />
-                    Botao fundo
+                    Botão fundo
                   </span>
                   <span className="flex items-center gap-1">
                     <span className="h-4 w-4 rounded border" style={{ backgroundColor: companyForm.catalog_badge_bg_color }} />
@@ -1371,7 +1397,7 @@ export default function Settings() {
                       className="h-4 w-4 rounded border"
                       style={{ borderColor: companyForm.catalog_button_outline_color }}
                     />
-                    Botao outline
+                    Botão outline
                   </span>
                   <span className="flex items-center gap-1">
                     <span className="h-4 w-4 rounded border" style={{ backgroundColor: companyForm.catalog_filter_bg_color }} />
@@ -1391,10 +1417,10 @@ export default function Settings() {
                     Topo texto
                   </span>
                   <span className="font-medium" style={{ color: companyForm.catalog_footer_text_color }}>
-                    Rodape texto
+                    Rodapé texto
                   </span>
                   <span className="font-medium" style={{ color: companyForm.catalog_button_text_color }}>
-                    Botao texto
+                    Botão texto
                   </span>
                   <span className="font-medium" style={{ color: companyForm.catalog_badge_text_color }}>
                     Badge texto
@@ -1443,7 +1469,7 @@ export default function Settings() {
               </div>
 
               
-                <Button onClick={saveCompany} disabled={savingCompany} className="w-full md:w-auto">
+                <Button onClick={saveCompany} disabled={savingCompany || hasInvalidMinimumDelivery} className="w-full md:w-auto">
                   {savingCompany && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   Salvar Alterações
                 </Button>
@@ -1521,7 +1547,7 @@ export default function Settings() {
                       key={catalogPreviewKey}
                       src={`/catalogo/${company.slug}`}
                       className="w-full h-[400px] border-0"
-                      title="Catologo Preview"
+                      title="Catálogo Preview"
                     />
                   ) : (
                     <div className="flex h-[240px] items-center justify-center text-sm text-muted-foreground">
@@ -1539,7 +1565,7 @@ export default function Settings() {
       {isAdmin && (
         <Card className="mt-8 border-red-200 bg-red-50/50">
           <CardHeader>
-            <CardTitle className="text-red-700">Area de perigo</CardTitle>
+            <CardTitle className="text-red-700">Área de perigo</CardTitle>
             <CardDescription className="text-red-600">
               Ações irreversíveis para dados da empresa.
             </CardDescription>
@@ -1649,7 +1675,7 @@ export default function Settings() {
               }
               saveCompany();
             }}
-            disabled={savingCompany || nameError || !company || !hasChanges}
+            disabled={savingCompany || nameError || !company || !hasChanges || hasInvalidMinimumDelivery}
             size="lg"
             className="min-w-[200px] hidden"
           >
@@ -1670,6 +1696,8 @@ export default function Settings() {
     </div>
   );
 }
+
+
 
 
 

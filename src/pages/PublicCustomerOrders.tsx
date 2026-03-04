@@ -137,7 +137,8 @@ export default function PublicCustomerOrders() {
 
   useEffect(() => {
     const loadOrders = async () => {
-      if (!user.id) return;
+      const userId = user?.id;
+      if (!userId) return;
 
       setOrdersLoading(true);
       setErrorMessage(null);
@@ -145,7 +146,7 @@ export default function PublicCustomerOrders() {
       const { data, error } = await customerSupabase
         .from('orders')
         .select('id, order_number, status, payment_status, total, created_at, customer_name, customer_user_id')
-        .eq('customer_user_id', user.id)
+        .eq('customer_user_id', userId)
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -158,7 +159,7 @@ export default function PublicCustomerOrders() {
     };
 
     void loadOrders();
-  }, [user.id]);
+  }, [user?.id]);
 
   const pendingCount = useMemo(
     () => orders.filter((order) => order.status !== 'entregue' && order.status !== 'cancelado').length,
@@ -169,7 +170,7 @@ export default function PublicCustomerOrders() {
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <CatalogTopNav
         company={catalogCompany}
-        subtitle={user.email || 'Cliente autenticado'}
+        subtitle={user?.email || 'Cliente autenticado'}
         showBack
         onBack={() => navigate(catalogPath)}
         showAccount
