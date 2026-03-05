@@ -14,6 +14,7 @@ import { createPublicPixPayment } from '@/services/payments';
 import type { OrderStatus, PublicOrderPayload } from '@/types/database';
 import { ensurePublicStorageUrl } from '@/lib/storage';
 import { formatAreaM2, parseM2Attributes } from '@/lib/measurements';
+import { localizeOrderHistoryNote } from '@/lib/orderHistoryNotes';
 import { CheckCircle, Clock, Copy, Package, Truck, XCircle, FileText, Image as ImageIcon } from 'lucide-react';
 
 const statusLabels: Record<OrderStatus, string> = {
@@ -714,7 +715,7 @@ export default function PublicOrder() {
                             <p className="font-medium text-sm">{statusLabels[h.status as OrderStatus]}</p>
                             <p className="text-xs text-muted-foreground">{formatDate(h.created_at)}</p>
                             {h.notes && (
-                              <p className="text-xs mt-1 p-2 bg-muted rounded">{h.notes}</p>
+                              <p className="text-xs mt-1 p-2 bg-muted rounded">{localizeOrderHistoryNote(h.notes)}</p>
                             )}
                           </div>
                         </div>

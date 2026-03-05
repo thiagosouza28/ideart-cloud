@@ -45,6 +45,7 @@ const PublicStoreExplorer = lazy(() => import("./pages/PublicStoreExplorer"));
 const PublicProductDetails = lazy(() => import("./pages/PublicProductDetails"));
 const PublicCart = lazy(() => import("./pages/PublicCart"));
 const PublicCustomerLogin = lazy(() => import("./pages/PublicCustomerLogin"));
+const PublicCustomerChangePassword = lazy(() => import("./pages/PublicCustomerChangePassword"));
 const PublicCustomerOrders = lazy(() => import("./pages/PublicCustomerOrders"));
 const PublicCustomerProfile = lazy(() => import("./pages/PublicCustomerProfile"));
 const PublicCustomerOrderDetails = lazy(() => import("./pages/PublicCustomerOrderDetails"));
@@ -111,7 +112,7 @@ const App = () => (
               <Route
                 path="/dashboard"
                 element={(
-                  <ProtectedRoute>
+                  <ProtectedRoute moduleKey="dashboard">
                     <AppLayout>{withSuspense(<Dashboard />)}</AppLayout>
                   </ProtectedRoute>
                 )}
@@ -120,7 +121,7 @@ const App = () => (
               <Route
                 path="/pdv"
                 element={(
-                  <ProtectedRoute allowedRoles={["admin", "caixa"]}>
+                  <ProtectedRoute allowedRoles={["admin", "caixa"]} moduleKey="pdv">
                     <AppLayout>{withSuspense(<GraphPOSPDV />)}</AppLayout>
                   </ProtectedRoute>
                 )}
@@ -129,7 +130,7 @@ const App = () => (
               <Route
                 path="/pagamento"
                 element={(
-                  <ProtectedRoute allowedRoles={["admin", "caixa"]}>
+                  <ProtectedRoute allowedRoles={["admin", "caixa"]} moduleKey="pdv">
                     <AppLayout>{withSuspense(<GraphPOSPagamento />)}</AppLayout>
                   </ProtectedRoute>
                 )}
@@ -138,7 +139,7 @@ const App = () => (
               <Route
                 path="/confirmacao"
                 element={(
-                  <ProtectedRoute allowedRoles={["admin", "caixa"]}>
+                  <ProtectedRoute allowedRoles={["admin", "caixa"]} moduleKey="pdv">
                     <AppLayout>{withSuspense(<GraphPOSConfirmacao />)}</AppLayout>
                   </ProtectedRoute>
                 )}
@@ -147,7 +148,7 @@ const App = () => (
               <Route
                 path="/pedidos"
                 element={(
-                  <ProtectedRoute allowedRoles={["admin", "atendente", "caixa"]}>
+                  <ProtectedRoute allowedRoles={["admin", "atendente", "caixa"]} moduleKey="pedidos">
                     <AppLayout>{withSuspense(<Orders />)}</AppLayout>
                   </ProtectedRoute>
                 )}
@@ -156,7 +157,7 @@ const App = () => (
               <Route
                 path="/pedidos/kanban"
                 element={(
-                  <ProtectedRoute allowedRoles={["admin", "atendente", "caixa", "producao"]}>
+                  <ProtectedRoute allowedRoles={["admin", "atendente", "caixa", "producao"]} moduleKey="kanban_pedidos">
                     <AppLayout>{withSuspense(<OrdersKanban />)}</AppLayout>
                   </ProtectedRoute>
                 )}
@@ -165,7 +166,7 @@ const App = () => (
               <Route
                 path="/pedidos/novo"
                 element={(
-                  <ProtectedRoute allowedRoles={["admin", "atendente", "caixa"]}>
+                  <ProtectedRoute allowedRoles={["admin", "atendente", "caixa"]} moduleKey="pedidos">
                     <AppLayout>{withSuspense(<OrderForm />)}</AppLayout>
                   </ProtectedRoute>
                 )}
@@ -174,7 +175,7 @@ const App = () => (
               <Route
                 path="/pedidos/:id"
                 element={(
-                  <ProtectedRoute allowedRoles={["admin", "atendente", "caixa", "producao"]}>
+                  <ProtectedRoute allowedRoles={["admin", "atendente", "caixa", "producao"]} moduleKey="pedidos">
                     <AppLayout>{withSuspense(<OrderDetails />)}</AppLayout>
                   </ProtectedRoute>
                 )}
@@ -183,7 +184,7 @@ const App = () => (
               <Route
                 path="/producao"
                 element={(
-                  <ProtectedRoute allowedRoles={["admin", "producao"]}>
+                  <ProtectedRoute allowedRoles={["admin", "producao"]} moduleKey="producao">
                     <AppLayout>{withSuspense(<Production />)}</AppLayout>
                   </ProtectedRoute>
                 )}
@@ -192,7 +193,7 @@ const App = () => (
               <Route
                 path="/produtos"
                 element={(
-                  <ProtectedRoute allowedRoles={["admin", "atendente"]}>
+                  <ProtectedRoute allowedRoles={["admin", "atendente"]} moduleKey="produtos">
                     <AppLayout>{withSuspense(<Products />)}</AppLayout>
                   </ProtectedRoute>
                 )}
@@ -201,7 +202,7 @@ const App = () => (
               <Route
                 path="/produtos/etiquetas"
                 element={(
-                  <ProtectedRoute allowedRoles={["admin", "atendente"]}>
+                  <ProtectedRoute allowedRoles={["admin", "atendente"]} moduleKey="etiquetas">
                     <AppLayout>{withSuspense(<ProductLabels />)}</AppLayout>
                   </ProtectedRoute>
                 )}
@@ -210,7 +211,7 @@ const App = () => (
               <Route
                 path="/produtos/novo"
                 element={(
-                  <ProtectedRoute allowedRoles={["admin", "atendente"]}>
+                  <ProtectedRoute allowedRoles={["admin", "atendente"]} moduleKey="produtos">
                     <AppLayout>{withSuspense(<ProductForm />)}</AppLayout>
                   </ProtectedRoute>
                 )}
@@ -219,7 +220,7 @@ const App = () => (
               <Route
                 path="/produtos/:id"
                 element={(
-                  <ProtectedRoute allowedRoles={["admin", "atendente"]}>
+                  <ProtectedRoute allowedRoles={["admin", "atendente"]} moduleKey="produtos">
                     <AppLayout>{withSuspense(<ProductForm />)}</AppLayout>
                   </ProtectedRoute>
                 )}
@@ -228,7 +229,7 @@ const App = () => (
               <Route
                 path="/catalogo-admin"
                 element={(
-                  <ProtectedRoute allowedRoles={["admin"]}>
+                  <ProtectedRoute allowedRoles={["admin"]} moduleKey="catalogo">
                     <AppLayout>{withSuspense(<CatalogManager />)}</AppLayout>
                   </ProtectedRoute>
                 )}
@@ -237,7 +238,7 @@ const App = () => (
               <Route
                 path="/insumos"
                 element={(
-                  <ProtectedRoute allowedRoles={["admin", "atendente"]}>
+                  <ProtectedRoute allowedRoles={["admin", "atendente"]} moduleKey="insumos">
                     <AppLayout>{withSuspense(<Supplies />)}</AppLayout>
                   </ProtectedRoute>
                 )}
@@ -246,7 +247,7 @@ const App = () => (
               <Route
                 path="/categorias"
                 element={(
-                  <ProtectedRoute allowedRoles={["admin", "atendente"]}>
+                  <ProtectedRoute allowedRoles={["admin", "atendente"]} moduleKey="categorias">
                     <AppLayout>{withSuspense(<Categories />)}</AppLayout>
                   </ProtectedRoute>
                 )}
@@ -255,7 +256,7 @@ const App = () => (
               <Route
                 path="/atributos"
                 element={(
-                  <ProtectedRoute allowedRoles={["admin", "atendente"]}>
+                  <ProtectedRoute allowedRoles={["admin", "atendente"]} moduleKey="atributos">
                     <AppLayout>{withSuspense(<Attributes />)}</AppLayout>
                   </ProtectedRoute>
                 )}
@@ -264,7 +265,7 @@ const App = () => (
               <Route
                 path="/estoque"
                 element={(
-                  <ProtectedRoute allowedRoles={["admin", "atendente"]}>
+                  <ProtectedRoute allowedRoles={["admin", "atendente"]} moduleKey="estoque">
                     <AppLayout>{withSuspense(<Stock />)}</AppLayout>
                   </ProtectedRoute>
                 )}
@@ -273,7 +274,7 @@ const App = () => (
               <Route
                 path="/clientes"
                 element={(
-                  <ProtectedRoute allowedRoles={["admin", "atendente"]}>
+                  <ProtectedRoute allowedRoles={["admin", "atendente"]} moduleKey="clientes">
                     <AppLayout>{withSuspense(<Customers />)}</AppLayout>
                   </ProtectedRoute>
                 )}
@@ -282,7 +283,7 @@ const App = () => (
               <Route
                 path="/clientes/aniversariantes"
                 element={(
-                  <ProtectedRoute allowedRoles={["admin", "atendente"]}>
+                  <ProtectedRoute allowedRoles={["admin", "atendente"]} moduleKey="aniversariantes">
                     <AppLayout>{withSuspense(<CustomerBirthdays />)}</AppLayout>
                   </ProtectedRoute>
                 )}
@@ -291,7 +292,7 @@ const App = () => (
               <Route
                 path="/clientes/novo"
                 element={(
-                  <ProtectedRoute allowedRoles={["admin", "atendente"]}>
+                  <ProtectedRoute allowedRoles={["admin", "atendente"]} moduleKey="clientes">
                     <AppLayout>{withSuspense(<CustomerForm />)}</AppLayout>
                   </ProtectedRoute>
                 )}
@@ -300,7 +301,7 @@ const App = () => (
               <Route
                 path="/clientes/:id"
                 element={(
-                  <ProtectedRoute allowedRoles={["admin", "atendente"]}>
+                  <ProtectedRoute allowedRoles={["admin", "atendente"]} moduleKey="clientes">
                     <AppLayout>{withSuspense(<CustomerForm />)}</AppLayout>
                   </ProtectedRoute>
                 )}
@@ -309,7 +310,7 @@ const App = () => (
               <Route
                 path="/clientes/:id/historico"
                 element={(
-                  <ProtectedRoute allowedRoles={["admin", "atendente"]}>
+                  <ProtectedRoute allowedRoles={["admin", "atendente"]} moduleKey="clientes">
                     <AppLayout>{withSuspense(<CustomerHistory />)}</AppLayout>
                   </ProtectedRoute>
                 )}
@@ -318,7 +319,7 @@ const App = () => (
               <Route
                 path="/relatorios"
                 element={(
-                  <ProtectedRoute allowedRoles={["admin", "financeiro", "atendente", "producao"]}>
+                  <ProtectedRoute allowedRoles={["admin", "financeiro", "atendente", "producao"]} moduleKey="relatorios">
                     <AppLayout>{withSuspense(<Reports />)}</AppLayout>
                   </ProtectedRoute>
                 )}
@@ -327,7 +328,7 @@ const App = () => (
               <Route
                 path="/financeiro/fluxo-caixa"
                 element={(
-                  <ProtectedRoute allowedRoles={["admin", "financeiro", "atendente", "producao"]}>
+                  <ProtectedRoute allowedRoles={["admin", "financeiro", "atendente", "producao"]} moduleKey="fluxo_caixa">
                     <AppLayout>{withSuspense(<CashFlow />)}</AppLayout>
                   </ProtectedRoute>
                 )}
@@ -336,7 +337,7 @@ const App = () => (
               <Route
                 path="/financeiro/relatorios"
                 element={(
-                  <ProtectedRoute allowedRoles={["admin", "financeiro", "atendente", "producao"]}>
+                  <ProtectedRoute allowedRoles={["admin", "financeiro", "atendente", "producao"]} moduleKey="relatorios">
                     <AppLayout>{withSuspense(<Reports />)}</AppLayout>
                   </ProtectedRoute>
                 )}
@@ -345,7 +346,7 @@ const App = () => (
               <Route
                 path="/comprovantes"
                 element={(
-                  <ProtectedRoute allowedRoles={["admin", "atendente", "caixa"]}>
+                  <ProtectedRoute allowedRoles={["admin", "atendente", "caixa"]} moduleKey="comprovantes">
                     <AppLayout>{withSuspense(<Receipts />)}</AppLayout>
                   </ProtectedRoute>
                 )}
@@ -354,7 +355,7 @@ const App = () => (
               <Route
                 path="/usuarios"
                 element={(
-                  <ProtectedRoute allowedRoles={["admin", "super_admin"]}>
+                  <ProtectedRoute allowedRoles={["admin", "super_admin"]} moduleKey="usuarios">
                     <AppLayout>{withSuspense(<UserManagement />)}</AppLayout>
                   </ProtectedRoute>
                 )}
@@ -363,7 +364,7 @@ const App = () => (
               <Route
                 path="/banners"
                 element={(
-                  <ProtectedRoute allowedRoles={["admin"]}>
+                  <ProtectedRoute allowedRoles={["admin"]} moduleKey="banners">
                     <AppLayout>{withSuspense(<BannerManagement />)}</AppLayout>
                   </ProtectedRoute>
                 )}
@@ -372,7 +373,7 @@ const App = () => (
               <Route
                 path="/empresas"
                 element={(
-                  <ProtectedRoute allowedRoles={["admin"]}>
+                  <ProtectedRoute allowedRoles={["admin"]} moduleKey="empresas">
                     <AppLayout>{withSuspense(<Companies />)}</AppLayout>
                   </ProtectedRoute>
                 )}
@@ -381,7 +382,7 @@ const App = () => (
               <Route
                 path="/empresas/nova"
                 element={(
-                  <ProtectedRoute allowedRoles={["admin"]}>
+                  <ProtectedRoute allowedRoles={["admin"]} moduleKey="empresas">
                     <AppLayout>{withSuspense(<CompanyForm />)}</AppLayout>
                   </ProtectedRoute>
                 )}
@@ -390,7 +391,7 @@ const App = () => (
               <Route
                 path="/empresas/:id/editar"
                 element={(
-                  <ProtectedRoute allowedRoles={["admin"]}>
+                  <ProtectedRoute allowedRoles={["admin"]} moduleKey="empresas">
                     <AppLayout>{withSuspense(<CompanyForm />)}</AppLayout>
                   </ProtectedRoute>
                 )}
@@ -399,7 +400,7 @@ const App = () => (
               <Route
                 path="/configuracoes"
                 element={(
-                  <ProtectedRoute allowedRoles={["admin"]}>
+                  <ProtectedRoute allowedRoles={["admin"]} moduleKey="configuracoes">
                     <AppLayout>{withSuspense(<Settings />)}</AppLayout>
                   </ProtectedRoute>
                 )}
@@ -408,7 +409,7 @@ const App = () => (
               <Route
                 path="/configuracoes/pagamentos/pix"
                 element={(
-                  <ProtectedRoute allowedRoles={["admin"]}>
+                  <ProtectedRoute allowedRoles={["admin"]} moduleKey="pagamentos_pix">
                     <AppLayout>{withSuspense(<PaymentSettings />)}</AppLayout>
                   </ProtectedRoute>
                 )}
@@ -417,7 +418,7 @@ const App = () => (
               <Route
                 path="/assinatura"
                 element={(
-                  <ProtectedRoute>
+                  <ProtectedRoute moduleKey="assinatura">
                     {withSuspense(<Subscription />)}
                   </ProtectedRoute>
                 )}
@@ -426,7 +427,7 @@ const App = () => (
               <Route
                 path="/assinatura/sucesso"
                 element={(
-                  <ProtectedRoute allowedRoles={["admin"]}>
+                  <ProtectedRoute allowedRoles={["admin"]} moduleKey="assinatura">
                     {withSuspense(<SubscriptionSuccess />)}
                   </ProtectedRoute>
                 )}
@@ -435,7 +436,7 @@ const App = () => (
               <Route
                 path="/assinatura/cancelar"
                 element={(
-                  <ProtectedRoute allowedRoles={["admin"]}>
+                  <ProtectedRoute allowedRoles={["admin"]} moduleKey="assinatura">
                     {withSuspense(<SubscriptionCancel />)}
                   </ProtectedRoute>
                 )}
@@ -506,6 +507,7 @@ const App = () => (
               <Route path="/catalogo/:slug/carrinho" element={withSuspense(<PublicCart />)} />
               <Route path="/catalogo/carrinho/:companyId" element={withSuspense(<PublicCart />)} />
               <Route path="/minha-conta/login" element={withSuspense(<PublicCustomerLogin />)} />
+              <Route path="/minha-conta/alterar-senha" element={withSuspense(<PublicCustomerChangePassword />)} />
               <Route path="/minha-conta/perfil" element={withSuspense(<PublicCustomerProfile />)} />
               <Route path="/minha-conta/pedidos" element={withSuspense(<PublicCustomerOrders />)} />
               <Route path="/minha-conta/pedidos/:orderId" element={withSuspense(<PublicCustomerOrderDetails />)} />

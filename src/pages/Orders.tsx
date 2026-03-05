@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react';
+﻿import { useEffect, useMemo, useState } from 'react';
 import { formatOrderNumber } from '@/lib/utils';
 import { Plus, Search, Eye, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -12,18 +12,24 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { deleteOrder } from '@/services/orders';
 import { useConfirm } from '@/components/ui/confirm-dialog';
+import { useAuth } from '@/contexts/AuthContext';
+import { buildOrderDetailsPath } from '@/lib/orderRouting';
+import {
+  buildOrderStatusCustomization,
+  configurableOrderStatuses,
+  defaultOrderStatusLabels,
+  type ConfigurableOrderStatus,
+} from '@/lib/orderStatusConfig';
 
-const statusLabels: Record<OrderStatus, string> = {
-  orcamento: 'Orcamento',
-  pendente: 'Pendente',
-  produzindo_arte: 'Produzindo arte',
-  arte_aprovada: 'Arte aprovada',
-  em_producao: 'Em producao',
-  finalizado: 'Finalizado',
-  pronto: 'Finalizado',
-  aguardando_retirada: 'Aguardando retirada',
-  entregue: 'Entregue',
-  cancelado: 'Cancelado',
+const getStatusLabel = (
+  status: OrderStatus,
+  labels: Record<OrderStatus, string>,
+) => {
+  if (status === 'pronto') {
+    return labels.finalizado || defaultOrderStatusLabels.finalizado;
+  }
+
+  return labels[status] || defaultOrderStatusLabels[status];
 };
 
 const statusColors: Record<OrderStatus, string> = {
@@ -56,11 +62,15 @@ const tabTitleColors: Record<
 };
 
 export default function Orders() {
+  const { company } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [statusCustomization, setStatusCustomization] = useState(() =>
+    buildOrderStatusCustomization(company?.order_status_customization),
+  );
   const navigate = useNavigate();
   const { toast } = useToast();
   const confirm = useConfirm();
@@ -76,16 +86,40 @@ export default function Orders() {
       });
   }, []);
 
-  const filtered = orders.filter((order) => {
-    const matchesSearch =
-      order.order_number.toString().includes(search) ||
-      order.customer_name?.toLowerCase().includes(search.toLowerCase());
-    const matchesStatus = statusFilter === 'all'
-      || (statusFilter === 'finalizado'
-        ? order.status === 'finalizado' || order.status === 'pronto'
-        : order.status === statusFilter);
-    return matchesSearch && matchesStatus;
-  });
+  useEffect(() => {
+    setStatusCustomization(buildOrderStatusCustomization(company?.order_status_customization));
+  }, [company?.order_status_customization]);
+
+  const visibleStatusTabs = useMemo(
+    () =>
+      configurableOrderStatuses.filter((status) =>
+        statusCustomization.enabled_statuses.includes(status),
+      ),
+    [statusCustomization.enabled_statuses],
+  );
+
+  useEffect(() => {
+    if (statusFilter === 'all') return;
+    if (!visibleStatusTabs.includes(statusFilter as ConfigurableOrderStatus)) {
+      setStatusFilter('all');
+    }
+  }, [statusFilter, visibleStatusTabs]);
+
+  const filtered = useMemo(
+    () =>
+      orders.filter((order) => {
+        const matchesSearch =
+          order.order_number.toString().includes(search) ||
+          order.customer_name?.toLowerCase().includes(search.toLowerCase());
+        const matchesStatus =
+          statusFilter === 'all' ||
+          (statusFilter === 'finalizado'
+            ? order.status === 'finalizado' || order.status === 'pronto'
+            : order.status === statusFilter);
+        return matchesSearch && matchesStatus;
+      }),
+    [orders, search, statusFilter],
+  );
 
   const formatCurrency = (value: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
@@ -113,6 +147,16 @@ export default function Orders() {
   };
 
   const counts = getStatusCounts();
+  const openOrderDetails = (order: Order) => {
+    navigate(
+      buildOrderDetailsPath({
+        id: order.id,
+        orderNumber: order.order_number,
+        customerName: order.customer_name,
+      }),
+    );
+  };
+
   const handleDeleteOrder = async (event: React.MouseEvent, orderId: string) => {
     event.stopPropagation();
     const approved = await confirm({
@@ -127,11 +171,15 @@ export default function Orders() {
     try {
       await deleteOrder(orderId);
       setOrders((prev) => prev.filter((item) => item.id !== orderId));
-      toast({ title: 'Pedido excluido com sucesso!' });
-    } catch (error: any) {
+      toast({ title: 'Pedido excluído com sucesso!' });
+    } catch (error: unknown) {
+      const message =
+        error && typeof error === 'object' && 'message' in error
+          ? String((error as { message?: unknown }).message || '')
+          : undefined;
       toast({
         title: 'Erro ao excluir pedido',
-        description: error?.message,
+        description: message,
         variant: 'destructive',
       });
     } finally {
@@ -161,33 +209,16 @@ export default function Orders() {
             <TabsTrigger value="all" className={`shrink-0 ${tabTitleColors.all} data-[state=active]:font-semibold`}>
               Todos <span className="ml-1 text-xs opacity-70">({counts.all || 0})</span>
             </TabsTrigger>
-            <TabsTrigger value="orcamento" className={`shrink-0 ${tabTitleColors.orcamento} data-[state=active]:font-semibold`}>
-              Orcamentos <span className="ml-1 text-xs opacity-70">({counts.orcamento || 0})</span>
-            </TabsTrigger>
-            <TabsTrigger value="pendente" className={`shrink-0 ${tabTitleColors.pendente} data-[state=active]:font-semibold`}>
-              Pendentes <span className="ml-1 text-xs opacity-70">({counts.pendente || 0})</span>
-            </TabsTrigger>
-            <TabsTrigger value="produzindo_arte" className={`shrink-0 ${tabTitleColors.produzindo_arte} data-[state=active]:font-semibold`}>
-              Produzindo Arte <span className="ml-1 text-xs opacity-70">({counts.produzindo_arte || 0})</span>
-            </TabsTrigger>
-            <TabsTrigger value="arte_aprovada" className={`shrink-0 ${tabTitleColors.arte_aprovada} data-[state=active]:font-semibold`}>
-              Arte Aprovada <span className="ml-1 text-xs opacity-70">({counts.arte_aprovada || 0})</span>
-            </TabsTrigger>
-            <TabsTrigger value="em_producao" className={`shrink-0 ${tabTitleColors.em_producao} data-[state=active]:font-semibold`}>
-              Em Producao <span className="ml-1 text-xs opacity-70">({counts.em_producao || 0})</span>
-            </TabsTrigger>
-            <TabsTrigger value="finalizado" className={`shrink-0 ${tabTitleColors.finalizado} data-[state=active]:font-semibold`}>
-              Finalizados <span className="ml-1 text-xs opacity-70">({counts.finalizado || 0})</span>
-            </TabsTrigger>
-            <TabsTrigger value="aguardando_retirada" className={`shrink-0 ${tabTitleColors.aguardando_retirada} data-[state=active]:font-semibold`}>
-              Aguardando Retirada <span className="ml-1 text-xs opacity-70">({counts.aguardando_retirada || 0})</span>
-            </TabsTrigger>
-            <TabsTrigger value="entregue" className={`shrink-0 ${tabTitleColors.entregue} data-[state=active]:font-semibold`}>
-              Entregues <span className="ml-1 text-xs opacity-70">({counts.entregue || 0})</span>
-            </TabsTrigger>
-            <TabsTrigger value="cancelado" className={`shrink-0 ${tabTitleColors.cancelado} data-[state=active]:font-semibold`}>
-              Cancelados <span className="ml-1 text-xs opacity-70">({counts.cancelado || 0})</span>
-            </TabsTrigger>
+            {visibleStatusTabs.map((status) => (
+              <TabsTrigger
+                key={status}
+                value={status}
+                className={`shrink-0 ${tabTitleColors[status]} data-[state=active]:font-semibold`}
+              >
+                {getStatusLabel(status, statusCustomization.labels)}{' '}
+                <span className="ml-1 text-xs opacity-70">({counts[status] || 0})</span>
+              </TabsTrigger>
+            ))}
           </TabsList>
         </div>
       </Tabs>
@@ -197,7 +228,7 @@ export default function Orders() {
           <div className="relative w-full max-w-sm">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              placeholder="Buscar por numero ou cliente..."
+              placeholder="Buscar por número ou cliente..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-9"
@@ -215,7 +246,7 @@ export default function Orders() {
                 <div
                   key={order.id}
                   className="cursor-pointer space-y-3 rounded-lg border p-3"
-                  onClick={() => navigate(`/pedidos/${order.id}`)}
+                  onClick={() => openOrderDetails(order)}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
@@ -223,12 +254,12 @@ export default function Orders() {
                       <p className="text-xs text-muted-foreground">{formatDate(order.created_at)}</p>
                     </div>
                     <span className={`status-badge shrink-0 ${statusColors[order.status]}`}>
-                      {statusLabels[order.status]}
+                      {getStatusLabel(order.status, statusCustomization.labels)}
                     </span>
                   </div>
 
                   <div className="space-y-1">
-                    <p className="truncate text-sm font-medium">{order.customer_name || 'Nao informado'}</p>
+                    <p className="truncate text-sm font-medium">{order.customer_name || 'Não informado'}</p>
                     <span className={`inline-flex rounded px-2 py-1 text-xs ${getPaymentStatusColor(order.payment_status)}`}>
                       {getPaymentStatusLabel(order.payment_status)}
                     </span>
@@ -242,7 +273,7 @@ export default function Orders() {
                         size="sm"
                         onClick={(event) => {
                           event.stopPropagation();
-                          navigate(`/pedidos/${order.id}`);
+                          openOrderDetails(order);
                         }}
                       >
                         <Eye className="mr-1 h-4 w-4" />
@@ -268,13 +299,13 @@ export default function Orders() {
             <Table className="min-w-[860px]">
               <TableHeader>
                 <TableRow>
-                  <TableHead>No</TableHead>
+                  <TableHead>Nº</TableHead>
                   <TableHead>Cliente</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Pagamento</TableHead>
                   <TableHead className="text-right">Total</TableHead>
                   <TableHead>Data</TableHead>
-                  <TableHead className="w-[120px]">Acoes</TableHead>
+                  <TableHead className="w-[120px]">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -295,7 +326,7 @@ export default function Orders() {
                     <TableRow
                       key={order.id}
                       className="cursor-pointer hover:bg-muted/50"
-                      onClick={() => navigate(`/pedidos/${order.id}`)}
+                      onClick={() => openOrderDetails(order)}
                     >
                       <TableCell className="font-medium">#{formatOrderNumber(order.order_number)}</TableCell>
                       <TableCell>
@@ -311,12 +342,12 @@ export default function Orders() {
                             {order.customer_name || 'Cliente'}
                           </Button>
                         ) : (
-                          <span>{order.customer_name || 'Nao informado'}</span>
+                          <span>{order.customer_name || 'Não informado'}</span>
                         )}
                       </TableCell>
                       <TableCell>
                         <span className={`status-badge ${statusColors[order.status]}`}>
-                          {statusLabels[order.status]}
+                          {getStatusLabel(order.status, statusCustomization.labels)}
                         </span>
                       </TableCell>
                       <TableCell>
@@ -334,7 +365,7 @@ export default function Orders() {
                           size="icon"
                           onClick={(event) => {
                             event.stopPropagation();
-                            navigate(`/pedidos/${order.id}`);
+                            openOrderDetails(order);
                           }}
                         >
                           <Eye className="h-4 w-4" />
@@ -360,3 +391,4 @@ export default function Orders() {
     </div>
   );
 }
+

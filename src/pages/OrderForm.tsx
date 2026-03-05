@@ -9,6 +9,7 @@ import { resolveProductPrice } from '@/lib/pricing';
 import { normalizeDigits } from '@/components/ui/masked-input';
 import { useUnsavedChanges } from '@/hooks/use-unsaved-changes';
 import { ensurePublicStorageUrl } from '@/lib/storage';
+import { buildOrderDetailsPath } from '@/lib/orderRouting';
 import {
   AlertCircle,
   ArrowLeft,
@@ -725,7 +726,7 @@ export default function OrderForm() {
           notes: buildOrderNotes(),
           created_by: user.id,
         })
-        .select('id')
+        .select('id, order_number, customer_name')
         .single();
 
       if (orderError || !createdOrder?.id) {
@@ -761,7 +762,13 @@ export default function OrderForm() {
       setInitialSnapshot(JSON.stringify({ ...formSnapshot, items: [] }));
 
       toast({ title: 'Pedido criado com sucesso' });
-      navigate(`/pedidos/${createdOrder.id}`);
+      navigate(
+        buildOrderDetailsPath({
+          id: createdOrder.id,
+          orderNumber: createdOrder.order_number,
+          customerName: createdOrder.customer_name || customerName,
+        }),
+      );
     } catch (error) {
       if (createdOrderId) {
         await supabase.from('order_items').delete().eq('order_id', createdOrderId);

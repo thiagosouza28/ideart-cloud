@@ -11,6 +11,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Customer, Order, OrderStatus } from '@/types/database';
 import { ensurePublicStorageUrl } from '@/lib/storage';
 import { calculateAge, formatDateBr, isBirthdayToday } from '@/lib/birthdays';
+import { buildOrderDetailsPath } from '@/lib/orderRouting';
 
 type DeliveryMap = Record<string, string>;
 
@@ -394,7 +395,15 @@ export default function CustomerHistory() {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => navigate(`/pedidos/${order.id}`)}
+                          onClick={() =>
+                            navigate(
+                              buildOrderDetailsPath({
+                                id: order.id,
+                                orderNumber: order.order_number,
+                                customerName: order.customer_name,
+                              }),
+                            )
+                          }
                         >
                           Abrir
                         </Button>

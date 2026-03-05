@@ -15,6 +15,8 @@ import type { PaymentReceiptPayload } from '@/templates/paymentReceiptTemplate';
 import { PaymentMethod } from '@/types/database';
 import { ensurePublicStorageUrl } from '@/lib/storage';
 import { buildReceiptA5Url } from '@/lib/receiptA5';
+import { buildOrderDetailsPath } from '@/lib/orderRouting';
+import { formatOrderNumber } from '@/lib/utils';
 
 type OrderPaymentRow = {
   id: string;
@@ -157,7 +159,7 @@ export default function Receipts() {
       const fromIso = `${dateFrom}T00:00:00.000Z`;
       const toIso = `${dateTo}T23:59:59.999Z`;
 
-      let paymentsQuery = supabase
+      const paymentsQuery = supabase
         .from('order_payments')
         .select('id, order_id, amount, status, method, paid_at, created_at, company_id')
         .eq('company_id', companyId)
@@ -167,7 +169,7 @@ export default function Receipts() {
         .order('created_at', { ascending: false })
         .limit(400);
 
-      let salesQuery = supabase
+      const salesQuery = supabase
         .from('sales')
         .select('id, customer_id, total, amount_paid, payment_method, created_at, company_id')
         .eq('company_id', companyId)
@@ -332,7 +334,7 @@ export default function Receipts() {
       const receiptNumber = buildOrderReceiptNumber(order.order_number, payment.id);
       const description = buildDescription(
         ((itemsData || []) as Array<{ product_name: string; quantity: number }>),
-        `Pedido #${order.order_number}`,
+        `Pedido #${formatOrderNumber(order.order_number)}`,
       );
       const customer = order.customer_id ? customersById[order.customer_id] : null;
       const paymentMethodLabel = payment.method ? paymentMethodLabels[payment.method] || String(payment.method) : 'Não informado';
@@ -362,7 +364,7 @@ export default function Receipts() {
         numeroRecibo: receiptNumber,
         referencia: {
           tipo: 'pedido',
-          numero: `#${order.order_number}`,
+          numero: `#${formatOrderNumber(order.order_number)}`,
           codigo: payment.id.slice(0, 8).toUpperCase(),
         },
       };
@@ -543,7 +545,9 @@ export default function Receipts() {
                         <TableRow key={payment.id}>
                           <TableCell>{formatDateTime(payment.paid_at || payment.created_at)}</TableCell>
                           <TableCell className="font-medium">
-                            #{payment.order_number || payment.order_id.slice(0, 8).toUpperCase()}
+                            {payment.order_number
+                              ? `#${formatOrderNumber(payment.order_number)}`
+                              : `#${payment.order_id.slice(0, 8).toUpperCase()}`}
                           </TableCell>
                           <TableCell>{payment.customer_name}</TableCell>
                           <TableCell>
@@ -557,7 +561,16 @@ export default function Receipts() {
                               <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={() => navigate(`/pedidos/${payment.order_id}`)}
+                                onClick={() => {
+                                  const order = ordersById[payment.order_id];
+                                  navigate(
+                                    buildOrderDetailsPath({
+                                      id: payment.order_id,
+                                      orderNumber: order?.order_number,
+                                      customerName: order?.customer_name || payment.customer_name,
+                                    }),
+                                  );
+                                }}
                               >
                                 <ExternalLink className="mr-1 h-4 w-4" />
                                 Pedido

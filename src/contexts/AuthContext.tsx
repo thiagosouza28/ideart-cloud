@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
@@ -7,6 +7,7 @@ import { computeSubscriptionState, type SubscriptionState } from '@/services/sub
 import { invokePublicFunction } from '@/services/publicFunctions';
 import { isInvalidRefreshTokenError, resetAuthSession, wasAuthResetRecently } from '@/lib/auth';
 import { isCustomerAccount } from '@/lib/access-control';
+import { AppModuleKey, hasModuleAccess, normalizeRoleModulePermissions } from '@/lib/modulePermissions';
 
 interface AuthContextType {
   user: User | null;
@@ -33,6 +34,7 @@ interface AuthContextType {
   stopImpersonation: () => Promise<boolean>;
   clearImpersonation: () => void;
   hasPermission: (allowedRoles: AppRole[]) => boolean;
+  hasModulePermission: (moduleKey: AppModuleKey) => boolean;
   refreshUserData: () => Promise<void>;
   refreshCompany: () => Promise<void>;
   getLoggedCompany: () => Company | null;
@@ -121,12 +123,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const url = window.location.href;
     const search = window.location.search;
     const hash = window.location.hash;
+    const isCustomerRecoveryPath = window.location.pathname.startsWith('/minha-conta/alterar-senha');
     const isRecovery =
       search.includes("type=recovery") ||
       hash.includes("type=recovery") ||
       hash.includes("access_token=");
 
-    if (isRecovery) {
+    if (isRecovery && !isCustomerRecoveryPath) {
       supabase.auth.exchangeCodeForSession(url).catch((error) => {
         console.error('Falha ao trocar codigo de recuperacao', error);
       }).finally(() => {
@@ -165,15 +168,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
-        if (event === 'PASSWORD_RECOVERY') {
-          setPasswordRecovery(true);
-          if (window.location.pathname !== '/alterar-senha') {
-            const currentSearch = window.location.search;
-            const currentHash = window.location.hash;
-            navigate({ pathname: '/alterar-senha', search: currentSearch, hash: currentHash }, { replace: true });
-          }
-        }
-
         if (session?.user && isCustomerAccount(session.user)) {
           setSession(null);
           setUser(null);
@@ -186,6 +180,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setLoading(false);
           void supabase.auth.signOut({ scope: 'local' });
           return;
+        }
+
+        if (event === 'PASSWORD_RECOVERY' && !window.location.pathname.startsWith('/minha-conta/')) {
+          setPasswordRecovery(true);
+          if (window.location.pathname !== '/alterar-senha') {
+            const currentSearch = window.location.search;
+            const currentHash = window.location.hash;
+            navigate({ pathname: '/alterar-senha', search: currentSearch, hash: currentHash }, { replace: true });
+          }
         }
 
         const nextUserId = session?.user.id ?? null;
@@ -538,6 +541,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return allowedRoles.includes(role);
   };
 
+  const roleModulePermissions = useMemo(
+    () => normalizeRoleModulePermissions(company?.role_module_permissions),
+    [company?.role_module_permissions],
+  );
+
+  const hasModulePermission = (moduleKey: AppModuleKey) =>
+    hasModuleAccess(roleModulePermissions, role, moduleKey);
+
   const getLoggedCompany = () => company;
   const clearPasswordRecovery = () => setPasswordRecovery(false);
 
@@ -559,6 +570,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       stopImpersonation,
       clearImpersonation,
       hasPermission,
+      hasModulePermission,
       refreshUserData,
       company,
       subscription,

@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { formatOrderNumber } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { supabase } from '@/integrations/supabase/client';
@@ -11,7 +12,8 @@ import { updateOrderStatus } from '@/services/orders';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
-import { CheckCircle, Clock, Eye, Package, Upload, X } from 'lucide-react';
+import { CheckCircle, Clock, Eye, Package, Search, Upload, X } from 'lucide-react';
+import { buildOrderDetailsPath } from '@/lib/orderRouting';
 
 export default function Production() {
   const [orders, setOrders] = useState<Order[]>([]);
@@ -20,6 +22,7 @@ export default function Production() {
   const [readyOrder, setReadyOrder] = useState<Order | null>(null);
   const [readyFiles, setReadyFiles] = useState<File[]>([]);
   const [readyPreviews, setReadyPreviews] = useState<string[]>([]);
+  const [search, setSearch] = useState('');
   const [savingReady, setSavingReady] = useState(false);
   const readyFileInputRef = useRef<HTMLInputElement>(null);
   const { user } = useAuth();
@@ -178,10 +181,36 @@ export default function Production() {
 
   const formatCurrency = (value: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
-  const pendingOrders = orders.filter((order) => order.status === 'pendente');
-  const artOrders = orders.filter((order) => order.status === 'produzindo_arte');
-  const artApprovedOrders = orders.filter((order) => order.status === 'arte_aprovada');
-  const inProductionOrders = orders.filter((order) => order.status === 'em_producao');
+  const openOrderDetails = (order: Order) =>
+    navigate(
+      buildOrderDetailsPath({
+        id: order.id,
+        orderNumber: order.order_number,
+        customerName: order.customer_name,
+      }),
+    );
+
+  const filteredOrders = useMemo(() => {
+    const normalized = search.trim().toLowerCase();
+    if (!normalized) return orders;
+    const normalizedDigits = normalized.replace(/\D/g, '');
+
+    return orders.filter((order) => {
+      const customer = (order.customer_name || '').toLowerCase();
+      const orderNumber = formatOrderNumber(order.order_number);
+      const rawOrderNumber = String(order.order_number || '');
+      const matchesCustomer = customer.includes(normalized);
+      const matchesNumber = normalizedDigits
+        ? orderNumber.includes(normalizedDigits) || rawOrderNumber.includes(normalizedDigits)
+        : false;
+      return matchesCustomer || matchesNumber;
+    });
+  }, [orders, search]);
+
+  const pendingOrders = filteredOrders.filter((order) => order.status === 'pendente');
+  const artOrders = filteredOrders.filter((order) => order.status === 'produzindo_arte');
+  const artApprovedOrders = filteredOrders.filter((order) => order.status === 'arte_aprovada');
+  const inProductionOrders = filteredOrders.filter((order) => order.status === 'em_producao');
 
   return (
     <div className="space-y-6">
@@ -192,8 +221,18 @@ export default function Production() {
         </div>
         <Badge variant="outline" className="text-sm px-3 py-1 rounded-full">
           <Clock className="mr-2 h-4 w-4" />
-          {orders.length} {orders.length === 1 ? 'pedido' : 'pedidos'}
+          {filteredOrders.length} {filteredOrders.length === 1 ? 'pedido' : 'pedidos'}
         </Badge>
+      </div>
+
+      <div className="relative max-w-md">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+        <Input
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="Buscar por número do pedido ou cliente..."
+          className="pl-9"
+        />
       </div>
 
       {loading ? (
@@ -203,6 +242,13 @@ export default function Production() {
           <CardContent className="py-12 text-center text-muted-foreground">
             <Package className="mx-auto h-12 w-12 mb-4 opacity-50" />
             Nenhum pedido pendente, arte ou produção
+          </CardContent>
+        </Card>
+      ) : filteredOrders.length === 0 ? (
+        <Card className="border-slate-200 shadow-sm">
+          <CardContent className="py-12 text-center text-muted-foreground">
+            <Package className="mx-auto h-12 w-12 mb-4 opacity-50" />
+            Nenhum pedido encontrado para a busca informada.
           </CardContent>
         </Card>
       ) : (
@@ -244,7 +290,7 @@ export default function Production() {
                         </div>
                       )}
                       <div className="grid gap-2">
-                        <Button variant="outline" className="w-full" onClick={() => navigate(`/pedidos/${order.id}`)}>
+                        <Button variant="outline" className="w-full" onClick={() => openOrderDetails(order)}>
                           <Eye className="mr-2 h-4 w-4" />
                           Ver Pedido
                         </Button>
@@ -292,7 +338,7 @@ export default function Production() {
                         </div>
                       )}
                       <div className="grid gap-2">
-                        <Button variant="outline" className="w-full" onClick={() => navigate(`/pedidos/${order.id}`)}>
+                        <Button variant="outline" className="w-full" onClick={() => openOrderDetails(order)}>
                           <Eye className="mr-2 h-4 w-4" />
                           Ver Pedido
                         </Button>
@@ -344,7 +390,7 @@ export default function Production() {
                         </div>
                       )}
                       <div className="grid gap-2">
-                        <Button variant="outline" className="w-full" onClick={() => navigate(`/pedidos/${order.id}`)}>
+                        <Button variant="outline" className="w-full" onClick={() => openOrderDetails(order)}>
                           <Eye className="mr-2 h-4 w-4" />
                           Ver Pedido
                         </Button>
@@ -396,7 +442,7 @@ export default function Production() {
                         </div>
                       )}
                       <div className="grid gap-2">
-                        <Button variant="outline" className="w-full" onClick={() => navigate(`/pedidos/${order.id}`)}>
+                        <Button variant="outline" className="w-full" onClick={() => openOrderDetails(order)}>
                           <Eye className="mr-2 h-4 w-4" />
                           Ver Pedido
                         </Button>

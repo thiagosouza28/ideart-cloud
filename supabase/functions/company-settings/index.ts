@@ -31,6 +31,23 @@ const getSupabaseClient = () =>
 
 type SettingsPayload = {
   whatsapp_message_template?: string | null;
+  order_status_message_templates?: Record<string, unknown> | null;
+};
+
+const normalizeStatusMessageTemplates = (value: unknown) => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+
+  const source = value as Record<string, unknown>;
+  const sanitized: Record<string, string> = {};
+  Object.entries(source).forEach(([status, message]) => {
+    if (typeof message !== "string") return;
+    const trimmed = message.trim();
+    if (!trimmed) return;
+    sanitized[status] = trimmed;
+  });
+  return sanitized;
 };
 
 Deno.serve(async (req) => {
@@ -75,7 +92,7 @@ Deno.serve(async (req) => {
     if (req.method === "GET") {
       const { data, error } = await supabase
         .from("companies")
-        .select("whatsapp_message_template")
+        .select("whatsapp_message_template, order_status_message_templates")
         .eq("id", companyId)
         .maybeSingle();
 
@@ -83,26 +100,38 @@ Deno.serve(async (req) => {
         return jsonResponse(corsHeaders, 400, { error: error.message });
       }
 
-      return jsonResponse(corsHeaders, 200, data ?? { whatsapp_message_template: null });
+      return jsonResponse(
+        corsHeaders,
+        200,
+        data ?? { whatsapp_message_template: null, order_status_message_templates: {} },
+      );
     }
 
     const body = (await req.json().catch(() => ({}))) as SettingsPayload;
     const templateRaw = body.whatsapp_message_template;
     const template =
       typeof templateRaw === "string" ? templateRaw.trim() || null : null;
+    const statusTemplates = normalizeStatusMessageTemplates(body.order_status_message_templates);
 
     const { data, error } = await supabase
       .from("companies")
-      .update({ whatsapp_message_template: template })
+      .update({
+        whatsapp_message_template: template,
+        order_status_message_templates: statusTemplates,
+      })
       .eq("id", companyId)
-      .select("whatsapp_message_template")
+      .select("whatsapp_message_template, order_status_message_templates")
       .maybeSingle();
 
     if (error) {
       return jsonResponse(corsHeaders, 400, { error: error.message });
     }
 
-    return jsonResponse(corsHeaders, 200, data ?? { whatsapp_message_template: null });
+    return jsonResponse(
+      corsHeaders,
+      200,
+      data ?? { whatsapp_message_template: null, order_status_message_templates: {} },
+    );
   } catch (error) {
     console.error("Erro em company-settings:", error);
     return jsonResponse(corsHeaders, 500, {

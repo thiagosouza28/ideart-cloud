@@ -22,6 +22,7 @@ import { fetchOrderStatuses, updateOrderStatus } from '@/services/orders';
 import type { Customer, Order, OrderItem, OrderStatus, PaymentMethod } from '@/types/database';
 import { useNavigate } from 'react-router-dom';
 import { useConfirm } from '@/components/ui/confirm-dialog';
+import { buildOrderDetailsPath } from '@/lib/orderRouting';
 
 const statusOrder: OrderStatus[] = [
   'orcamento',
@@ -335,7 +336,7 @@ type KanbanColumnProps = {
   column: ColumnConfig;
   orders: KanbanOrder[];
   updatingIds: Set<string>;
-  onOpenOrder: (orderId: string) => void;
+  onOpenOrder: (order: KanbanOrder) => void;
 };
 
 const KanbanColumn = ({ column, orders, updatingIds, onOpenOrder }: KanbanColumnProps) => {
@@ -380,7 +381,7 @@ const KanbanColumn = ({ column, orders, updatingIds, onOpenOrder }: KanbanColumn
               key={order.id}
               order={order}
               isUpdating={updatingIds.has(order.id)}
-              onOpen={() => onOpenOrder(order.id)}
+              onOpen={() => onOpenOrder(order)}
             />
           ))
         )}
@@ -661,7 +662,15 @@ export default function OrdersKanban() {
                 column={column}
                 orders={ordersByStatus[column.id] || []}
                 updatingIds={updatingIds}
-                onOpenOrder={(orderId) => navigate(`/pedidos/${orderId}`)}
+                onOpenOrder={(order) =>
+                  navigate(
+                    buildOrderDetailsPath({
+                      id: order.id,
+                      orderNumber: order.order_number,
+                      customerName: order.customer_name || order.customer?.name,
+                    }),
+                  )
+                }
               />
             ))}
           </div>

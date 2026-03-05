@@ -56,7 +56,7 @@ const paymentMethods: Array<{ value: PaymentMethod | 'all' | 'none'; label: stri
   { value: 'cartao', label: 'Cartão' },
   { value: 'credito', label: 'Cartão crédito' },
   { value: 'debito', label: 'Cartão débito' },
-  { value: 'transferencia', label: 'Transferencia' },
+  { value: 'transferencia', label: 'Transferência' },
   { value: 'boleto', label: 'Boleto' },
   { value: 'outro', label: 'Outros' },
 ];
@@ -245,7 +245,7 @@ export default function CashFlow() {
       Data: dateTimeLabel(tx.date),
       Tipo: tx.type,
       Origem: tx.origin,
-      Descricao: tx.description,
+      Descrição: tx.description,
       Valor: currency(tx.amount),
       Forma: tx.method || '-',
       'Saldo acumulado': currency(balancesById[tx.id] || 0),
@@ -643,7 +643,7 @@ export default function CashFlow() {
                 </div>
               ))
             ) : (
-              <p className="text-sm text-slate-500">Sem dados para o periodo selecionado.</p>
+              <p className="text-sm text-slate-500">Sem dados para o período selecionado.</p>
             )}
           </div>
         </CardContent>
@@ -651,7 +651,7 @@ export default function CashFlow() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Movimentacoes</CardTitle>
+          <CardTitle>Movimentações</CardTitle>
         </CardHeader>
         <CardContent>
           <Table>
@@ -660,12 +660,12 @@ export default function CashFlow() {
                 <TableHead>Data</TableHead>
                 <TableHead>Tipo</TableHead>
                 <TableHead>Origem</TableHead>
-                <TableHead>Descricao</TableHead>
+                <TableHead>Descrição</TableHead>
                 <TableHead>Forma</TableHead>
                 <TableHead className="text-right">Valor</TableHead>
                 <TableHead className="text-right">Saldo acumulado</TableHead>
                 <TableHead>Status</TableHead>
-                {canManage && <TableHead className="text-right">Acoes</TableHead>}
+                {canManage && <TableHead className="text-right">Ações</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -681,7 +681,7 @@ export default function CashFlow() {
                     <TableCell className="text-right">{currency(balancesById[tx.id] || 0)}</TableCell>
                     <TableCell>
                       <Badge variant={tx.isAutomatic ? 'secondary' : 'outline'}>
-                        {tx.isAutomatic ? 'Automatico' : 'Manual'}
+                        {tx.isAutomatic ? 'Automático' : 'Manual'}
                       </Badge>
                     </TableCell>
                     {canManage && (
@@ -713,7 +713,7 @@ export default function CashFlow() {
               ) : (
                 <TableRow>
                   <TableCell colSpan={canManage ? 9 : 8} className="py-8 text-center text-slate-500">
-                    {reportLoading ? 'Carregando movimentacoes...' : 'Nenhuma movimentacao encontrada.'}
+                    {reportLoading ? 'Carregando movimentações...' : 'Nenhuma movimentação encontrada.'}
                   </TableCell>
                 </TableRow>
               )}
@@ -795,19 +795,19 @@ export default function CashFlow() {
               />
             </div>
             <div className="space-y-2 md:col-span-2">
-              <Label>Descricao</Label>
+              <Label>Descrição</Label>
               <Input
                 value={entryForm.description}
                 onChange={(e) => setEntryForm((prev) => ({ ...prev, description: e.target.value }))}
-                placeholder="Descricao do lançamento"
+                placeholder="Descrição do lançamento"
               />
             </div>
             <div className="space-y-2 md:col-span-2">
-              <Label>Observa??es</Label>
+              <Label>Observações</Label>
               <Textarea
                 value={entryForm.notes}
                 onChange={(e) => setEntryForm((prev) => ({ ...prev, notes: e.target.value }))}
-                placeholder="Informa??es adicionais (opcional)"
+                placeholder="Informações adicionais (opcional)"
               />
             </div>
           </div>

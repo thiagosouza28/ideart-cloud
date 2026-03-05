@@ -1181,7 +1181,7 @@ export default function PublicCatalog() {
           <span className="pc-hero-tag">Catálogo de produtos</span>
           <h1 className="pc-title">{company?.catalog_title || 'Catálogo de Produtos'}</h1>
           <p className="pc-subtitle">
-            {company?.catalog_description || 'Explore os itens disponiveis, filtre por categoria e encontre o produto ideal para seu pedido.'}
+            {company?.catalog_description || 'Explore os itens disponíveis, filtre por categoria e encontre o produto ideal para seu pedido.'}
           </p>
 
           <div className="pc-contact-row">
@@ -1235,16 +1235,16 @@ export default function PublicCatalog() {
                 className="pc-sort-select"
                 value={sortBy}
                 onChange={(event) => setSortBy(event.target.value as SortMode)}
-                aria-label="Ordenacao"
+                aria-label="Ordenação"
               >
                 <option value="name_asc">Nome A-Z</option>
                 <option value="name_desc">Nome Z-A</option>
-                <option value="price_asc">Menor preco</option>
-                <option value="price_desc">Maior preco</option>
+                <option value="price_asc">Menor preço</option>
+                <option value="price_desc">Maior preço</option>
               </select>
             </div>
 
-            <div className="pc-view-toggle" role="group" aria-label="Visualizacao">
+            <div className="pc-view-toggle" role="group" aria-label="Visualização">
               <button
                 type="button"
                 className={`pc-view-btn ${viewMode === 'grid' ? 'active' : ''}`}
@@ -1333,7 +1333,7 @@ export default function PublicCatalog() {
                           </div>
                         ) : (
                           <div className="pc-price-wrap">
-                            <span className="pc-price-main">Preco sob consulta</span>
+                            <span className="pc-price-main">Preço sob consulta</span>
                           </div>
                         )}
 

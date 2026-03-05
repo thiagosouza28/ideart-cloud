@@ -14,13 +14,29 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Checkbox } from '@/components/ui/checkbox';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { supabase } from '@/integrations/supabase/client';
-import { Category, Supply, Attribute, AttributeValue, Company } from '@/types/database';
+import { Category, Supply, Attribute, AttributeValue, Company, OrderStatus } from '@/types/database';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { invokeEdgeFunction } from '@/services/edgeFunctions';
 import { z } from 'zod';
 import { ensurePublicStorageUrl } from '@/lib/storage';
 import { useUnsavedChanges } from '@/hooks/use-unsaved-changes';
+import {
+  allOrderStatuses,
+  buildOrderStatusCustomization,
+  configurableOrderStatuses,
+  defaultOrderStatusLabels,
+} from '@/lib/orderStatusConfig';
+import {
+  AppModuleKey,
+  StoreAppRole,
+  createDefaultRoleModulePermissions,
+  isModuleLockedForRole,
+  moduleDefinitions,
+  normalizeRoleModulePermissions,
+  storeAppRoles,
+  storeRoleLabels,
+} from '@/lib/modulePermissions';
 
 const categorySchema = z.object({ name: z.string().min(2).max(50) });
 const supplySchema = z.object({
@@ -31,9 +47,39 @@ const supplySchema = z.object({
 });
 const attributeSchema = z.object({ name: z.string().min(2).max(50) });
 
+const orderStatusTemplateKeys: OrderStatus[] = allOrderStatuses;
+const orderStatusLabels: Record<OrderStatus, string> = defaultOrderStatusLabels;
+
+const defaultOrderStatusMessages: Record<OrderStatus, string> = {
+  orcamento: 'Seu pedido está em orçamento.',
+  pendente: 'Recebemos seu pedido e ele está pendente.',
+  produzindo_arte: 'Sua arte está sendo produzida.',
+  arte_aprovada: 'Sua arte foi aprovada e seguirá para produção.',
+  em_producao: 'Seu pedido está em produção.',
+  finalizado: 'Seu pedido foi finalizado.',
+  pronto: 'Seu pedido foi finalizado.',
+  aguardando_retirada: 'Seu pedido está pronto e aguardando retirada.',
+  entregue: 'Seu pedido foi entregue.',
+  cancelado: 'Seu pedido foi cancelado.',
+};
+
+const buildOrderStatusMessageTemplates = (value?: unknown): Record<OrderStatus, string> => {
+  const source =
+    value && typeof value === 'object' && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
+
+  return orderStatusTemplateKeys.reduce((acc, status) => {
+    const candidate = source[status];
+    const normalized = typeof candidate === 'string' ? candidate.trim() : '';
+    acc[status] = normalized || defaultOrderStatusMessages[status];
+    return acc;
+  }, {} as Record<OrderStatus, string>);
+};
+
 export default function Settings() {
   const { toast } = useToast();
-  const { profile, user, hasPermission } = useAuth();
+  const { profile, user, hasPermission, refreshCompany } = useAuth();
   const navigate = useNavigate();
   const [categories, setCategories] = useState<Category[]>([]);
   const [supplies, setSupplies] = useState<Supply[]>([]);
@@ -55,6 +101,9 @@ export default function Settings() {
     phone: "",
     whatsapp: "",
     whatsapp_message_template: "",
+    order_status_message_templates: buildOrderStatusMessageTemplates(),
+    order_status_customization: buildOrderStatusCustomization(),
+    role_module_permissions: createDefaultRoleModulePermissions(),
     birthday_message_template: "",
     signature_responsible: "",
     signature_role: "",
@@ -101,6 +150,7 @@ export default function Settings() {
   const [resetError, setResetError] = useState<string | null>(null);
   // Controla a aba por estado para evitar reload e manter o estado dos formulários.
   const [activeTab, setActiveTab] = useState<'company' | 'catalog'>('company');
+  const [companySettingsTab, setCompanySettingsTab] = useState<'geral' | 'contato' | 'mensagens' | 'permissoes'>('geral');
 
   // Dialogs
   const [categoryDialog, setCategoryDialog] = useState(false);
@@ -243,6 +293,9 @@ export default function Settings() {
           catalog_filter_text_color: catalogFilterText,
           catalog_layout: ((data.catalog_layout as "grid" | "list" | null) || "grid"),
           whatsapp_message_template: data.whatsapp_message_template || "",
+          order_status_message_templates: buildOrderStatusMessageTemplates(data.order_status_message_templates),
+          order_status_customization: buildOrderStatusCustomization(data.order_status_customization),
+          role_module_permissions: normalizeRoleModulePermissions(data.role_module_permissions),
           birthday_message_template: data.birthday_message_template || "",
         };
         setCompanyForm(formData);
@@ -395,6 +448,16 @@ export default function Settings() {
         signatureUrl = ensurePublicStorageUrl('product-images', urlData.publicUrl);
       }
 
+      const normalizedStatusMessages = buildOrderStatusMessageTemplates(
+        companyForm.order_status_message_templates,
+      );
+      const normalizedStatusCustomization = buildOrderStatusCustomization(
+        companyForm.order_status_customization,
+      );
+      const normalizedRoleModulePermissions = normalizeRoleModulePermissions(
+        companyForm.role_module_permissions,
+      );
+
       const { data: updatedCompany, error } = await supabase
         .from('companies')
         .update({
@@ -434,6 +497,9 @@ export default function Settings() {
           catalog_filter_text_color: companyForm.catalog_filter_text_color,
           catalog_layout: companyForm.catalog_layout,
           whatsapp_message_template: companyForm.whatsapp_message_template?.trim() || null,
+          order_status_message_templates: normalizedStatusMessages,
+          order_status_customization: normalizedStatusCustomization,
+          role_module_permissions: normalizedRoleModulePermissions,
           birthday_message_template: companyForm.birthday_message_template?.trim() || null,
         })
         .eq('id', company.id)
@@ -452,12 +518,24 @@ export default function Settings() {
         logo_url: normalizedUpdatedLogo,
         signature_image_url: normalizedUpdatedSignature,
       });
+      await refreshCompany();
       setLogoFile(null);
       setLogoPreview(normalizedUpdatedLogo);
       setSignatureFile(null);
       setSignaturePreview(normalizedUpdatedSignature);
+      setCompanyForm((prev) => ({
+        ...prev,
+        order_status_message_templates: normalizedStatusMessages,
+        order_status_customization: normalizedStatusCustomization,
+        role_module_permissions: normalizedRoleModulePermissions,
+      }));
       setIsSaved(true);
-      setOriginalForm(companyForm);
+      setOriginalForm({
+        ...companyForm,
+        order_status_message_templates: normalizedStatusMessages,
+        order_status_customization: normalizedStatusCustomization,
+        role_module_permissions: normalizedRoleModulePermissions,
+      });
       if (activeTab === 'catalog') {
         setCatalogPreviewVisible(true);
         setCatalogPreviewKey((prev) => prev + 1);
@@ -516,6 +594,26 @@ export default function Settings() {
 
   const formatCurrency = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
   const isAdmin = hasPermission(['admin', 'super_admin']);
+  const setRoleModulePermission = (roleName: StoreAppRole, moduleKey: AppModuleKey, enabled: boolean) => {
+    setCompanyForm((prev) => ({
+      ...prev,
+      role_module_permissions: {
+        ...prev.role_module_permissions,
+        [roleName]: {
+          ...prev.role_module_permissions[roleName],
+          [moduleKey]: enabled,
+        },
+      },
+    }));
+  };
+
+  const resetRoleModulePermissions = () => {
+    setCompanyForm((prev) => ({
+      ...prev,
+      role_module_permissions: createDefaultRoleModulePermissions(),
+    }));
+  };
+
   const resetReady = isAdmin
     && !!profile?.company_id
     && resetChecked
@@ -673,6 +771,19 @@ export default function Settings() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
+              <Tabs
+                value={companySettingsTab}
+                onValueChange={(value) => setCompanySettingsTab(value as 'geral' | 'contato' | 'mensagens' | 'permissoes')}
+                className="space-y-6"
+              >
+                <TabsList className="h-auto flex-wrap justify-start gap-2">
+                  <TabsTrigger value="geral" type="button">Geral</TabsTrigger>
+                  <TabsTrigger value="contato" type="button">Contato</TabsTrigger>
+                  <TabsTrigger value="mensagens" type="button">Mensagens</TabsTrigger>
+                  <TabsTrigger value="permissoes" type="button">Permissões</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="geral" className="mt-0 space-y-6">
               {/* Logo Upload */}
               <div className="flex items-center gap-6">
                 <div className="relative">
@@ -830,6 +941,9 @@ export default function Settings() {
                 Esses valores são independentes: um controla o pedido mínimo geral e o outro apenas a entrega.
               </p>
 
+                </TabsContent>
+
+                <TabsContent value="contato" className="mt-0 space-y-6">
               {/* Contact Info */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-2">
@@ -917,6 +1031,9 @@ export default function Settings() {
                 </div>
               </div>
 
+                </TabsContent>
+
+                <TabsContent value="mensagens" className="mt-0 space-y-6">
               <div className="space-y-3">
                 <Label htmlFor="whatsapp-template" className="flex items-center gap-2">
                   <MessageCircle className="h-4 w-4" />
@@ -970,6 +1087,100 @@ export default function Settings() {
                   </div>
                 </div>
 
+                <div className="space-y-3">
+                  <Label className="flex items-center gap-2">
+                    <MessageCircle className="h-4 w-4" />
+                    Mensagem por status do pedido
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Este texto alimenta a variavel <span>{'{mensagem_status}'}</span> da mensagem do WhatsApp.
+                  </p>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {orderStatusTemplateKeys.map((status) => (
+                      <div key={status} className="space-y-2">
+                        <Label htmlFor={`status-message-${status}`}>{orderStatusLabels[status]}</Label>
+                        <Textarea
+                          id={`status-message-${status}`}
+                          value={companyForm.order_status_message_templates[status] || ''}
+                          onChange={(event) =>
+                            setCompanyForm((prev) => ({
+                              ...prev,
+                              order_status_message_templates: {
+                                ...prev.order_status_message_templates,
+                                [status]: event.target.value,
+                              },
+                            }))
+                          }
+                          className="min-h-[88px]"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <Label className="flex items-center gap-2">
+                    <SettingsIcon className="h-4 w-4" />
+                    Status personalizados no sistema
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Escolha os status que aparecem na tela de pedidos e personalize o nome exibido.
+                  </p>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {configurableOrderStatuses.map((status) => {
+                      const enabled = companyForm.order_status_customization.enabled_statuses.includes(status);
+                      return (
+                        <div key={`status-config-${status}`} className="space-y-2 rounded-lg border border-border p-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <Label htmlFor={`status-label-${status}`}>{defaultOrderStatusLabels[status]}</Label>
+                            <div className="flex items-center gap-2">
+                              <Checkbox
+                                id={`status-enabled-${status}`}
+                                checked={enabled}
+                                onCheckedChange={(checked) => {
+                                  const shouldEnable = checked === true;
+                                  setCompanyForm((prev) => {
+                                    const currentEnabled = prev.order_status_customization.enabled_statuses;
+                                    const nextEnabled = shouldEnable
+                                      ? Array.from(new Set([...currentEnabled, status]))
+                                      : currentEnabled.filter((item) => item !== status);
+
+                                    return {
+                                      ...prev,
+                                      order_status_customization: {
+                                        ...prev.order_status_customization,
+                                        enabled_statuses: nextEnabled,
+                                      },
+                                    };
+                                  });
+                                }}
+                              />
+                              <span className="text-xs text-muted-foreground">Exibir</span>
+                            </div>
+                          </div>
+                          <Input
+                            id={`status-label-${status}`}
+                            value={companyForm.order_status_customization.labels[status] || ''}
+                            onChange={(event) =>
+                              setCompanyForm((prev) => ({
+                                ...prev,
+                                order_status_customization: {
+                                  ...prev.order_status_customization,
+                                  labels: {
+                                    ...prev.order_status_customization.labels,
+                                    [status]: event.target.value,
+                                  },
+                                },
+                              }))
+                            }
+                            placeholder={defaultOrderStatusLabels[status]}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
                 
                 <div className="space-y-3">
                   <Label htmlFor="birthday-template" className="flex items-center gap-2">
@@ -1020,6 +1231,84 @@ export default function Settings() {
                     </div>
                   </div>
                 </div>
+
+                </TabsContent>
+
+                <TabsContent value="permissoes" className="mt-0 space-y-6">
+                <div className="space-y-3 rounded-lg border border-border p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <Label className="flex items-center gap-2">
+                        <SettingsIcon className="h-4 w-4" />
+                        Permissões por módulo e perfil
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        Libere ou bloqueie o acesso aos módulos por cargo de usuário desta empresa.
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={resetRoleModulePermissions}
+                    >
+                      Restaurar padrão
+                    </Button>
+                  </div>
+
+                  <div className="overflow-x-auto rounded-md border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Módulo</TableHead>
+                          {storeAppRoles.map((roleName) => (
+                            <TableHead key={`role-header-${roleName}`} className="text-center">
+                              {storeRoleLabels[roleName]}
+                            </TableHead>
+                          ))}
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {moduleDefinitions.map((moduleItem) => (
+                          <TableRow key={moduleItem.key}>
+                            <TableCell>
+                              <div className="font-medium">{moduleItem.label}</div>
+                              <div className="text-xs text-muted-foreground">{moduleItem.description}</div>
+                            </TableCell>
+                            {storeAppRoles.map((roleName) => {
+                              const locked = isModuleLockedForRole(roleName, moduleItem.key);
+                              const checked = Boolean(
+                                companyForm.role_module_permissions?.[roleName]?.[moduleItem.key],
+                              );
+
+                              return (
+                                <TableCell key={`${moduleItem.key}-${roleName}`} className="text-center align-middle">
+                                  <div className="flex items-center justify-center gap-2">
+                                    <Checkbox
+                                      id={`module-${moduleItem.key}-${roleName}`}
+                                      checked={checked}
+                                      disabled={locked}
+                                      onCheckedChange={(value) =>
+                                        setRoleModulePermission(roleName, moduleItem.key, value === true)
+                                      }
+                                    />
+                                    {locked && (
+                                      <span className="text-[10px] font-medium text-muted-foreground">
+                                        Obrigatório
+                                      </span>
+                                    )}
+                                  </div>
+                                </TableCell>
+                              );
+                            })}
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+                </TabsContent>
+              </Tabs>
                 <Button onClick={saveCompany} disabled={savingCompany || hasInvalidMinimumDelivery} className="w-full md:w-auto">
                   {savingCompany && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   Salvar Alterações

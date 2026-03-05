@@ -40,57 +40,60 @@ import {
   useSidebar,
 } from '@/components/ui/sidebar';
 import { AppRole } from '@/types/database';
+import { AppModuleKey } from '@/lib/modulePermissions';
 
 interface MenuItem {
   title: string;
   url: string;
   icon: React.ComponentType<{ className?: string }>;
   roles: AppRole[];
+  moduleKey: AppModuleKey;
 }
 
 const primaryMenu: MenuItem[] = [
-  { title: 'Painel', url: '/dashboard', icon: LayoutDashboard, roles: ['super_admin', 'admin', 'financeiro', 'atendente', 'caixa', 'producao'] },
-  { title: 'Pedidos', url: '/pedidos', icon: ClipboardList, roles: ['admin', 'atendente', 'caixa'] },
-  { title: 'Produção', url: '/producao', icon: Factory, roles: ['admin', 'producao'] },
-  { title: 'Fluxo de Caixa', url: '/financeiro/fluxo-caixa', icon: CreditCard, roles: ['admin', 'financeiro', 'atendente', 'producao'] },
-  { title: 'Relatórios', url: '/financeiro/relatorios', icon: BarChart3, roles: ['admin', 'financeiro', 'atendente', 'producao'] },
+  { title: 'Painel', url: '/dashboard', icon: LayoutDashboard, roles: ['super_admin', 'admin', 'financeiro', 'atendente', 'caixa', 'producao'], moduleKey: 'dashboard' },
+  { title: 'Pedidos', url: '/pedidos', icon: ClipboardList, roles: ['admin', 'atendente', 'caixa'], moduleKey: 'pedidos' },
+  { title: 'Produção', url: '/producao', icon: Factory, roles: ['admin', 'producao'], moduleKey: 'producao' },
+  { title: 'Fluxo de Caixa', url: '/financeiro/fluxo-caixa', icon: CreditCard, roles: ['admin', 'financeiro', 'atendente', 'producao'], moduleKey: 'fluxo_caixa' },
+  { title: 'Relatórios', url: '/financeiro/relatorios', icon: BarChart3, roles: ['admin', 'financeiro', 'atendente', 'producao'], moduleKey: 'relatorios' },
 ];
 
 const secondaryMenu: MenuItem[] = [
-  { title: 'PDV', url: '/pdv', icon: ShoppingCart, roles: ['admin', 'caixa'] },
-  { title: 'Comprovantes', url: '/comprovantes', icon: FileText, roles: ['admin', 'atendente', 'caixa'] },
-  { title: 'Kanban de Pedidos', url: '/pedidos/kanban', icon: Kanban, roles: ['admin', 'atendente', 'caixa', 'producao'] },
-  { title: 'Catálogo', url: '/catalogo-admin', icon: LayoutGrid, roles: ['admin'] },
-  { title: 'Produtos', url: '/produtos', icon: Package, roles: ['admin', 'atendente'] },
-  { title: 'Etiquetas', url: '/produtos/etiquetas', icon: Barcode, roles: ['admin', 'atendente'] },
-  { title: 'Categorias', url: '/categorias', icon: FolderTree, roles: ['admin', 'atendente'] },
-  { title: 'Insumos', url: '/insumos', icon: Layers, roles: ['admin', 'atendente'] },
-  { title: 'Atributos', url: '/atributos', icon: Tags, roles: ['admin', 'atendente'] },
-  { title: 'Estoque', url: '/estoque', icon: Boxes, roles: ['admin', 'atendente'] },
-  { title: 'Clientes', url: '/clientes', icon: Users, roles: ['admin', 'atendente'] },
-  { title: 'Aniversariantes do Mês', url: '/clientes/aniversariantes', icon: Gift, roles: ['admin', 'atendente'] },
-  { title: 'Empresas', url: '/empresas', icon: Building2, roles: ['admin'] },
-  { title: 'Pagamentos PIX', url: '/configuracoes/pagamentos/pix', icon: CreditCard, roles: ['admin'] },
-  { title: 'Banners', url: '/banners', icon: ImageIcon, roles: ['admin'] },
-  { title: 'Usuários', url: '/usuarios', icon: User, roles: ['admin'] },
-  { title: 'Assinatura', url: '/assinatura', icon: Crown, roles: ['admin', 'financeiro'] },
+  { title: 'PDV', url: '/pdv', icon: ShoppingCart, roles: ['admin', 'caixa'], moduleKey: 'pdv' },
+  { title: 'Comprovantes', url: '/comprovantes', icon: FileText, roles: ['admin', 'atendente', 'caixa'], moduleKey: 'comprovantes' },
+  { title: 'Kanban de Pedidos', url: '/pedidos/kanban', icon: Kanban, roles: ['admin', 'atendente', 'caixa', 'producao'], moduleKey: 'kanban_pedidos' },
+  { title: 'Catálogo', url: '/catalogo-admin', icon: LayoutGrid, roles: ['admin'], moduleKey: 'catalogo' },
+  { title: 'Produtos', url: '/produtos', icon: Package, roles: ['admin', 'atendente'], moduleKey: 'produtos' },
+  { title: 'Etiquetas', url: '/produtos/etiquetas', icon: Barcode, roles: ['admin', 'atendente'], moduleKey: 'etiquetas' },
+  { title: 'Categorias', url: '/categorias', icon: FolderTree, roles: ['admin', 'atendente'], moduleKey: 'categorias' },
+  { title: 'Insumos', url: '/insumos', icon: Layers, roles: ['admin', 'atendente'], moduleKey: 'insumos' },
+  { title: 'Atributos', url: '/atributos', icon: Tags, roles: ['admin', 'atendente'], moduleKey: 'atributos' },
+  { title: 'Estoque', url: '/estoque', icon: Boxes, roles: ['admin', 'atendente'], moduleKey: 'estoque' },
+  { title: 'Clientes', url: '/clientes', icon: Users, roles: ['admin', 'atendente'], moduleKey: 'clientes' },
+  { title: 'Aniversariantes do Mês', url: '/clientes/aniversariantes', icon: Gift, roles: ['admin', 'atendente'], moduleKey: 'aniversariantes' },
+  { title: 'Empresas', url: '/empresas', icon: Building2, roles: ['admin'], moduleKey: 'empresas' },
+  { title: 'Pagamentos PIX', url: '/configuracoes/pagamentos/pix', icon: CreditCard, roles: ['admin'], moduleKey: 'pagamentos_pix' },
+  { title: 'Banners', url: '/banners', icon: ImageIcon, roles: ['admin'], moduleKey: 'banners' },
+  { title: 'Usuários', url: '/usuarios', icon: User, roles: ['admin'], moduleKey: 'usuarios' },
+  { title: 'Assinatura', url: '/assinatura', icon: Crown, roles: ['admin', 'financeiro'], moduleKey: 'assinatura' },
 ];
 
 const superAdminMenu: MenuItem[] = [
-  { title: 'Empresas / Lojas', url: '/super-admin/empresas', icon: Building2, roles: ['super_admin'] },
-  { title: 'Planos', url: '/super-admin/planos', icon: Crown, roles: ['super_admin'] },
-  { title: 'Entrar como cliente', url: '/admin/entrar-como-cliente', icon: Shield, roles: ['super_admin'] },
-  { title: 'Usuários', url: '/usuarios', icon: Users, roles: ['super_admin'] },
+  { title: 'Empresas / Lojas', url: '/super-admin/empresas', icon: Building2, roles: ['super_admin'], moduleKey: 'empresas' },
+  { title: 'Planos', url: '/super-admin/planos', icon: Crown, roles: ['super_admin'], moduleKey: 'assinatura' },
+  { title: 'Entrar como cliente', url: '/admin/entrar-como-cliente', icon: Shield, roles: ['super_admin'], moduleKey: 'usuarios' },
+  { title: 'Usuários', url: '/usuarios', icon: Users, roles: ['super_admin'], moduleKey: 'usuarios' },
 ];
 
 export function AppSidebar() {
   const location = useLocation();
   const navigate = useNavigate();
   const { state } = useSidebar();
-  const { role, signOut, hasPermission } = useAuth();
+  const { role, signOut, hasPermission, hasModulePermission } = useAuth();
   const collapsed = state === 'collapsed';
 
-  const filterByRole = (items: MenuItem[]) => items.filter((item) => hasPermission(item.roles));
+  const filterByRole = (items: MenuItem[]) =>
+    items.filter((item) => hasPermission(item.roles) && hasModulePermission(item.moduleKey));
   const isSuperAdmin = role === 'super_admin';
   const primaryItems = isSuperAdmin ? [] : filterByRole(primaryMenu);
   const secondaryItems = isSuperAdmin ? [] : filterByRole(secondaryMenu);
@@ -229,7 +232,7 @@ export function AppSidebar() {
 
       <SidebarFooter className="border-t border-sidebar-border px-4 py-4">
         <SidebarMenu className={collapsed ? 'gap-1' : ''}>
-          {!isSuperAdmin && (
+          {!isSuperAdmin && hasModulePermission('configuracoes') && (
             <SidebarMenuItem>
               <SidebarMenuButton
                 asChild

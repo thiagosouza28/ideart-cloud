@@ -156,6 +156,9 @@ export type Database = {
           updated_at: string
           whatsapp: string | null
           whatsapp_message_template: string | null
+          order_status_message_templates: Json | null
+          order_status_customization: Json | null
+          role_module_permissions: Json | null
           birthday_message_template: string | null
         }
         Insert: {
@@ -220,6 +223,9 @@ export type Database = {
           updated_at?: string
           whatsapp?: string | null
           whatsapp_message_template?: string | null
+          order_status_message_templates?: Json | null
+          order_status_customization?: Json | null
+          role_module_permissions?: Json | null
           birthday_message_template?: string | null
         }
         Update: {
@@ -284,6 +290,9 @@ export type Database = {
           updated_at?: string
           whatsapp?: string | null
           whatsapp_message_template?: string | null
+          order_status_message_templates?: Json | null
+          order_status_customization?: Json | null
+          role_module_permissions?: Json | null
           birthday_message_template?: string | null
         }
         Relationships: [

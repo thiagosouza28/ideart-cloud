@@ -10,6 +10,7 @@ import { useCustomerAuth } from '@/hooks/use-customer-auth';
 import { CpfCnpjInput, PhoneInput, normalizeDigits, validateCpf, validatePhone } from '@/components/ui/masked-input';
 import { customerSupabase } from '@/integrations/supabase/customer-client';
 import { publicSupabase } from '@/integrations/supabase/public-client';
+import { invokePublicFunction } from '@/services/publicFunctions';
 
 export default function PublicCustomerLogin() {
   const navigate = useNavigate();
@@ -25,6 +26,7 @@ export default function PublicCustomerLogin() {
   const [signupPassword, setSignupPassword] = useState('');
   const [signupConfirmPassword, setSignupConfirmPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [recoveringPassword, setRecoveringPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [catalogCompany, setCatalogCompany] = useState<{
@@ -76,6 +78,20 @@ export default function PublicCustomerLogin() {
     const match = catalog.match(/^\/catalogo\/([^/?#]+)/i);
     return match?.[1] || null;
   }, [location.search]);
+
+  const passwordRecoveryRedirect = useMemo(() => {
+    const params = new URLSearchParams();
+    if (targetPath.startsWith('/')) params.set('next', targetPath);
+    if (catalogPath.startsWith('/')) params.set('catalog', catalogPath);
+    if (companyContext) params.set('company', companyContext);
+    const query = params.toString();
+
+    if (typeof window === 'undefined') {
+      return `/minha-conta/alterar-senha${query ? `?${query}` : ''}`;
+    }
+
+    return `${window.location.origin}/minha-conta/alterar-senha${query ? `?${query}` : ''}`;
+  }, [catalogPath, companyContext, targetPath]);
 
   useEffect(() => {
     let isMounted = true;
@@ -165,14 +181,14 @@ export default function PublicCustomerLogin() {
 
     if (!validatePhone(signupPhone)) {
       setSubmitting(false);
-      setErrorMessage('Informe um telefone valido.');
+      setErrorMessage('Informe um telefone válido.');
       return;
     }
 
     const cpfDigits = normalizeDigits(signupCpf);
     if (!validateCpf(cpfDigits)) {
       setSubmitting(false);
-      setErrorMessage('Informe um CPF valido.');
+      setErrorMessage('Informe um CPF válido.');
       return;
     }
 
@@ -219,6 +235,31 @@ export default function PublicCustomerLogin() {
     }
 
     navigate(targetPath, { replace: true });
+  };
+
+  const handleForgotPassword = async () => {
+    setErrorMessage(null);
+    setSuccessMessage(null);
+
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail) {
+      setErrorMessage('Informe seu e-mail para recuperar a senha.');
+      return;
+    }
+
+    setRecoveringPassword(true);
+    try {
+      await invokePublicFunction('password-recovery', {
+        email: normalizedEmail,
+        accountType: 'customer',
+        redirectTo: passwordRecoveryRedirect,
+      });
+      setSuccessMessage('Se o e-mail estiver cadastrado, enviamos um link de recuperação de senha.');
+    } catch {
+      setErrorMessage('Não foi possível enviar o e-mail de recuperação.');
+    } finally {
+      setRecoveringPassword(false);
+    }
   };
 
   return (
@@ -270,7 +311,7 @@ export default function PublicCustomerLogin() {
             <CardDescription>
               {mode === 'login'
                 ? 'Entre com seu e-mail e senha para acompanhar seus pedidos.'
-                : 'Crie sua conta para acompanhar pedidos e status de producao.'}
+                : 'Crie sua conta para acompanhar pedidos e status de produção.'}
             </CardDescription>
             {catalogCompany && (
               <p className="text-xs text-slate-500">
@@ -345,6 +386,19 @@ export default function PublicCustomerLogin() {
                 />
               </div>
 
+              {mode === 'login' && (
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    className="text-xs font-semibold text-[#1a3a8f] underline underline-offset-4 disabled:cursor-not-allowed disabled:opacity-60"
+                    onClick={handleForgotPassword}
+                    disabled={submitting || recoveringPassword}
+                  >
+                    {recoveringPassword ? 'Enviando...' : 'Esqueci minha senha'}
+                  </button>
+                </div>
+              )}
+
               {mode === 'signup' && (
                 <div className="space-y-2">
                   <Label htmlFor="customer-password-confirm">Confirmar senha</Label>
@@ -362,7 +416,11 @@ export default function PublicCustomerLogin() {
               {errorMessage && <p className="text-xs text-destructive">{errorMessage}</p>}
               {successMessage && <p className="text-xs text-emerald-600">{successMessage}</p>}
 
-              <Button type="submit" className="w-full bg-[#1a3a8f] hover:bg-[#16337e]" disabled={submitting}>
+              <Button
+                type="submit"
+                className="w-full bg-[#1a3a8f] hover:bg-[#16337e]"
+                disabled={submitting || recoveringPassword}
+              >
                 {submitting ? (mode === 'login' ? 'Entrando...' : 'Criando conta...') : (mode === 'login' ? 'Entrar' : 'Criar conta')}
               </Button>
             </form>

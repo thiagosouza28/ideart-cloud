@@ -2,6 +2,7 @@ import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { AppRole } from '@/types/database';
 import { Loader2 } from 'lucide-react';
+import { AppModuleKey } from '@/lib/modulePermissions';
 import {
   canSuperAdminAccessPath,
   getAccessScope,
@@ -11,10 +12,11 @@ import {
 interface ProtectedRouteProps {
   children: React.ReactNode;
   allowedRoles?: AppRole[];
+  moduleKey?: AppModuleKey;
 }
 
-export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {
-  const { user, role, loading, hasPermission, needsOnboarding, subscription, profile, company } = useAuth();
+export function ProtectedRoute({ children, allowedRoles, moduleKey }: ProtectedRouteProps) {
+  const { user, role, loading, hasPermission, hasModulePermission, needsOnboarding, subscription, profile, company } = useAuth();
   const location = useLocation();
   const isSubscriptionRoute = location.pathname.startsWith('/assinatura');
   const isOnboardingRoute = location.pathname.startsWith('/onboarding');
@@ -67,6 +69,14 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
   }
 
   if (allowedRoles && !hasPermission(allowedRoles)) {
+    const fallbackPath = role === 'super_admin' ? SUPER_ADMIN_HOME_PATH : '/dashboard';
+    if (location.pathname === fallbackPath) {
+      return <Navigate to="/auth" replace />;
+    }
+    return <Navigate to={fallbackPath} replace />;
+  }
+
+  if (moduleKey && !hasModulePermission(moduleKey)) {
     const fallbackPath = role === 'super_admin' ? SUPER_ADMIN_HOME_PATH : '/dashboard';
     if (location.pathname === fallbackPath) {
       return <Navigate to="/auth" replace />;

@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { useCustomerAuth } from '@/hooks/use-customer-auth';
 import { customerSupabase as supabase } from '@/integrations/supabase/customer-client';
 import type { Order, OrderItem, OrderStatus, OrderStatusHistory } from '@/types/database';
+import { localizeOrderHistoryNote } from '@/lib/orderHistoryNotes';
 
 const statusLabels: Record<OrderStatus, string> = {
   orcamento: 'Orcamento',
@@ -231,7 +232,7 @@ export default function PublicCustomerOrderDetails() {
                       <p className="font-medium">{statusLabels[entry.status] || entry.status}</p>
                       <p className="text-xs text-slate-500">{formatDateTime(entry.created_at)}</p>
                     </div>
-                    {entry.notes && <p className="mt-1 text-xs text-slate-500">{entry.notes}</p>}
+                    {entry.notes && <p className="mt-1 text-xs text-slate-500">{localizeOrderHistoryNote(entry.notes)}</p>}
                   </div>
                 ))}
               </CardContent>

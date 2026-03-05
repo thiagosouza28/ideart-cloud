@@ -11,6 +11,11 @@ export type OrderStatus =
   | 'aguardando_retirada'
   | 'entregue'
   | 'cancelado';
+export type ConfigurableOrderStatus = Exclude<OrderStatus, 'pronto'>;
+export interface OrderStatusCustomization {
+  labels?: Partial<Record<OrderStatus, string>> | null;
+  enabled_statuses?: ConfigurableOrderStatus[] | null;
+}
 export type StockMovementType = 'entrada' | 'saida' | 'ajuste';
 export type PaymentMethod =
   | 'dinheiro'
@@ -96,6 +101,9 @@ export interface Company {
   catalog_show_contact?: boolean | null;
   catalog_contact_url?: string | null;
   whatsapp_message_template?: string | null;
+  order_status_message_templates?: Partial<Record<OrderStatus, string>> | null;
+  order_status_customization?: OrderStatusCustomization | null;
+  role_module_permissions?: Record<string, Record<string, boolean>> | null;
   birthday_message_template?: string | null;
   pix_enabled?: boolean | null;
   pix_gateway?: PixGateway | string | null;

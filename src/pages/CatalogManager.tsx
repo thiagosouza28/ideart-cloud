@@ -49,6 +49,7 @@ type CatalogSettings = Pick<
   | "catalog_primary_color"
   | "catalog_secondary_color"
   | "catalog_text_color"
+  | "catalog_layout"
 >;
 
 type ProductFilter = "all" | "active" | "inactive" | "featured" | "incomplete";
@@ -75,6 +76,7 @@ const defaultCatalogSettings: CatalogSettings = {
   catalog_primary_color: "#2563eb",
   catalog_secondary_color: "#1d4ed8",
   catalog_text_color: "#1a1814",
+  catalog_layout: "grid",
 };
 
 const formatCurrency = (value: number | null | undefined) => {
@@ -163,7 +165,7 @@ export default function CatalogManager() {
     const { data, error } = await supabase
       .from("companies")
       .select(
-        "catalog_title,catalog_description,catalog_button_text,catalog_show_prices,catalog_show_contact,catalog_contact_url,catalog_primary_color,catalog_secondary_color,catalog_text_color"
+        "catalog_title,catalog_description,catalog_button_text,catalog_show_prices,catalog_show_contact,catalog_contact_url,catalog_primary_color,catalog_secondary_color,catalog_text_color,catalog_layout"
       )
       .eq("id", companyId)
       .maybeSingle();
@@ -175,10 +177,13 @@ export default function CatalogManager() {
     }
 
     if (data) {
+      const normalizedLayout: ViewMode = data.catalog_layout === "list" ? "list" : "grid";
       setSettings({
         ...defaultCatalogSettings,
         ...data,
+        catalog_layout: normalizedLayout,
       });
+      setViewMode(normalizedLayout);
     }
 
     setLoadingSettings(false);
@@ -314,6 +319,30 @@ export default function CatalogManager() {
     setSavingSettings(false);
   };
 
+  const handleViewModeChange = useCallback(
+    async (nextMode: ViewMode) => {
+      if (nextMode === viewMode) return;
+
+      const previousMode = viewMode;
+      setViewMode(nextMode);
+      setSettings((prev) => ({ ...prev, catalog_layout: nextMode }));
+
+      if (!companyId) return;
+
+      const { error } = await supabase
+        .from("companies")
+        .update({ catalog_layout: nextMode })
+        .eq("id", companyId);
+
+      if (!error) return;
+
+      setViewMode((currentMode) => (currentMode === nextMode ? previousMode : currentMode));
+      setSettings((prev) => ({ ...prev, catalog_layout: previousMode }));
+      toast.error("Não foi possível salvar o layout da visualização.");
+    },
+    [companyId, viewMode]
+  );
+
   const filterChips: Array<{ id: ProductFilter; label: string }> = [
     { id: "all", label: "Todos" },
     { id: "active", label: "Ativos" },
@@ -432,7 +461,7 @@ export default function CatalogManager() {
               <div className="inline-flex items-center rounded-xl border border-border bg-card p-1">
                 <button
                   type="button"
-                  onClick={() => setViewMode("grid")}
+                  onClick={() => void handleViewModeChange("grid")}
                   aria-label="Visualização em grade"
                   className={cn(
                     "rounded-lg p-2 transition-colors",
@@ -443,7 +472,7 @@ export default function CatalogManager() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setViewMode("list")}
+                  onClick={() => void handleViewModeChange("list")}
                   aria-label="Visualização em lista"
                   className={cn(
                     "rounded-lg p-2 transition-colors",
@@ -665,7 +694,7 @@ export default function CatalogManager() {
                           className="h-8 w-8"
                           onClick={() =>
                             void patchSingleProduct(product.id, {
-                              catalog_featured: !Boolean(product.catalog_featured),
+                              catalog_featured: !product.catalog_featured,
                             })
                           }
                         >
@@ -770,7 +799,7 @@ export default function CatalogManager() {
                         className="h-8 w-8"
                         onClick={() =>
                           void patchSingleProduct(product.id, {
-                            catalog_featured: !Boolean(product.catalog_featured),
+                            catalog_featured: !product.catalog_featured,
                           })
                         }
                       >

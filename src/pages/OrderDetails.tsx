@@ -38,6 +38,8 @@ import {
 import { ensurePublicStorageUrl } from '@/lib/storage';
 import { resolveProductPrice } from '@/lib/pricing';
 import { useUnsavedChanges } from '@/hooks/use-unsaved-changes';
+import { localizeOrderHistoryNote } from '@/lib/orderHistoryNotes';
+import { extractOrderIdFromParam } from '@/lib/orderRouting';
 
 const statusConfig: Record<OrderStatus, { label: string; icon: React.ComponentType<any>; color: string; next: OrderStatus[] }> = {
   orcamento: {
@@ -115,7 +117,7 @@ const statusLabels: Record<OrderStatus, string> = {
   cancelado: 'Cancelado',
 };
 
-const statusCustomerMessages: Record<OrderStatus, string> = {
+const defaultStatusCustomerMessages: Record<OrderStatus, string> = {
   orcamento: 'Seu pedido esta em orcamento.',
   pendente: 'Recebemos seu pedido e ele esta pendente.',
   produzindo_arte: 'Sua arte esta sendo produzida.',
@@ -126,6 +128,26 @@ const statusCustomerMessages: Record<OrderStatus, string> = {
   aguardando_retirada: 'Seu pedido esta pronto e aguardando retirada.',
   entregue: 'Seu pedido foi entregue.',
   cancelado: 'Seu pedido foi cancelado.',
+};
+
+const resolveOrderStatusMessageTemplates = (
+  value: unknown,
+): Partial<Record<OrderStatus, string>> => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {};
+  }
+
+  const source = value as Record<string, unknown>;
+  const resolved: Partial<Record<OrderStatus, string>> = {};
+
+  (Object.keys(defaultStatusCustomerMessages) as OrderStatus[]).forEach((status) => {
+    const candidate = source[status];
+    if (typeof candidate === 'string' && candidate.trim()) {
+      resolved[status] = candidate.trim();
+    }
+  });
+
+  return resolved;
 };
 
 const extractVisibleNotes = (value?: string | null) => {
@@ -139,7 +161,8 @@ const extractVisibleNotes = (value?: string | null) => {
 };
 
 export default function OrderDetails() {
-  const { id } = useParams<{ id: string }>();
+  const { id: routeParam } = useParams<{ id: string }>();
+  const orderId = useMemo(() => extractOrderIdFromParam(routeParam), [routeParam]);
   const navigate = useNavigate();
   const { toast } = useToast();
   const confirm = useConfirm();
@@ -207,8 +230,15 @@ export default function OrderDetails() {
   const formatCurrency = (v: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
 
+  const companyStatusMessages = useMemo(
+    () => resolveOrderStatusMessageTemplates(order?.company?.order_status_message_templates),
+    [order?.company?.order_status_message_templates],
+  );
+
   const getStatusCustomerMessage = (status: OrderStatus) =>
-    statusCustomerMessages[status] ||
+    companyStatusMessages[status] ||
+    (status === 'pronto' ? companyStatusMessages.finalizado : undefined) ||
+    defaultStatusCustomerMessages[status] ||
     `O status do seu pedido agora e ${statusLabels[status] ?? status}.`;
 
   const getWhatsAppTemplateReplacements = (link: string): Record<string, string> => {
@@ -895,8 +925,14 @@ const sendWhatsAppMessage = (message: string) => {
   };
 
   useEffect(() => {
-    if (id) fetchOrder();
-  }, [id]);
+    if (!routeParam) return;
+    if (!orderId) {
+      toast({ title: 'Pedido não encontrado', variant: 'destructive' });
+      navigate('/pedidos');
+      return;
+    }
+    fetchOrder(orderId);
+  }, [orderId, routeParam]);
 
   useEffect(() => {
     if (!isBudget && isEditingItems) {
@@ -905,19 +941,20 @@ const sendWhatsAppMessage = (message: string) => {
     }
   }, [isBudget, isEditingItems]);
 
-  const fetchOrder = async () => {
+  const fetchOrder = async (targetOrderId: string | null = orderId) => {
+    if (!targetOrderId) return;
     const [orderResult, itemsResult, historyResult, paymentsResult, linkResult, finalPhotosResult, artFilesResult] = await Promise.all([
       supabase.from('orders')
         .select('*, customer:customers(*), company:companies(*)')
-        .eq('id', id)
+        .eq('id', targetOrderId)
         .is('deleted_at', null)
         .single(),
-      supabase.from('order_items').select('*').eq('order_id', id).order('created_at'),
-      supabase.from('order_status_history').select('*').eq('order_id', id).order('created_at', { ascending: false }),
-      supabase.from('order_payments').select('*').eq('order_id', id).order('created_at', { ascending: false }),
-      supabase.from('order_public_links').select('token').eq('order_id', id).maybeSingle(),
-      (supabase.from('order_final_photos' as any).select('*').eq('order_id', id).order('created_at', { ascending: false })) as any,
-      (supabase.from('order_art_files' as any).select('*').eq('order_id', id).order('created_at', { ascending: false })) as any,
+      supabase.from('order_items').select('*').eq('order_id', targetOrderId).order('created_at'),
+      supabase.from('order_status_history').select('*').eq('order_id', targetOrderId).order('created_at', { ascending: false }),
+      supabase.from('order_payments').select('*').eq('order_id', targetOrderId).order('created_at', { ascending: false }),
+      supabase.from('order_public_links').select('token').eq('order_id', targetOrderId).maybeSingle(),
+      (supabase.from('order_final_photos' as any).select('*').eq('order_id', targetOrderId).order('created_at', { ascending: false })) as any,
+      (supabase.from('order_art_files' as any).select('*').eq('order_id', targetOrderId).order('created_at', { ascending: false })) as any,
     ]) as any[];
 
     if (orderResult.error || !orderResult.data) {
@@ -2088,7 +2125,7 @@ const canSendWhatsApp = Boolean(order?.customer?.phone);
                           )}
                           {h.notes && (
                             <p className="text-xs mt-1 p-2 bg-muted rounded">
-                              {h.notes}
+                              {localizeOrderHistoryNote(h.notes)}
                             </p>
                           )}
                         </div>

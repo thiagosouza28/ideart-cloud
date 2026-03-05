@@ -18,6 +18,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { formatOrderNumber } from '@/lib/utils';
 import { Order, OrderStatus, Sale } from '@/types/database';
+import { buildOrderDetailsPath } from '@/lib/orderRouting';
 
 const statusLabels: Record<OrderStatus, string> = {
   orcamento: 'Orçamento',
@@ -335,7 +336,15 @@ export default function Dashboard() {
                     key={order.id}
                     type="button"
                     className="group flex w-full items-center justify-between rounded-2xl border border-slate-100 px-4 py-3 text-left transition hover:border-slate-200 hover:bg-slate-50"
-                    onClick={() => navigate(`/pedidos/${order.id}`)}
+                    onClick={() =>
+                      navigate(
+                        buildOrderDetailsPath({
+                          id: order.id,
+                          orderNumber: order.order_number,
+                          customerName: order.customer_name,
+                        }),
+                      )
+                    }
                   >
                     <div>
                       <p className="text-sm font-semibold text-slate-800">#{formatOrderNumber(order.order_number)}</p>

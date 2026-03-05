@@ -2,6 +2,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { invokeEdgeFunction } from '@/services/edgeFunctions';
 import { generateAndUploadPaymentReceipt } from '@/services/paymentReceipts';
 import { ensurePublicStorageUrl } from '@/lib/storage';
+import { formatOrderNumber } from '@/lib/utils';
 import type {
   AppRole,
   Order,
@@ -46,6 +47,11 @@ const isStatusTransitionAllowed = (from: OrderStatus, to: OrderStatus) =>
 const formatStatusLabel = (value: string) => {
   const normalized = value.replace(/_/g, ' ');
   return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+};
+
+const formatOrderReference = (orderNumber: number | string | null | undefined) => {
+  const formatted = formatOrderNumber(orderNumber);
+  return `#${formatted || '00000'}`;
 };
 
 const fetchUserRole = async (userId?: string | null) => {
@@ -149,7 +155,7 @@ const buildReceiptDescription = (
     .map((item) => `${item.quantity}x ${item.product_name}`)
     .filter(Boolean)
     .join(', ');
-  const fallback = `Pedido #${orderNumber}`;
+  const fallback = `Pedido ${formatOrderReference(orderNumber)}`;
   const result = description || fallback;
   return result.length > 160 ? `${result.slice(0, 157)}...` : result;
 };
@@ -277,7 +283,7 @@ const generateReceiptForPayment = async ({
     numeroRecibo: receiptNumber,
     referencia: {
       tipo: 'pedido',
-      numero: `#${order.order_number}`,
+      numero: formatOrderReference(order.order_number),
       codigo: payment.id.slice(0, 8).toUpperCase(),
     },
   };
@@ -564,7 +570,7 @@ export const createOrderPayment = async ({
         amount,
         status: 'pago',
         payment_method: method,
-        description: `Receita de pedido #${order.order_number}`,
+        description: `Receita de pedido ${formatOrderReference(order.order_number)}`,
         occurred_at: paidAt || new Date().toISOString(),
         related_id: orderId,
         is_automatic: true,
@@ -599,7 +605,7 @@ export const createOrderPayment = async ({
       company_id: companyId,
       order_id: orderId,
       type: 'payment',
-      title: `Pagamento recebido - Pedido #${order.order_number}`,
+      title: `Pagamento recebido - Pedido ${formatOrderReference(order.order_number)}`,
       body: `Pagamento de R$ ${amount.toFixed(2)} registrado.`,
     });
   }
@@ -791,7 +797,7 @@ export const updateOrderStatus = async ({
       company_id: order.company_id,
       order_id: orderId,
       type: 'status_change',
-      title: `Pedido #${order.order_number}`,
+      title: `Pedido ${formatOrderReference(order.order_number)}`,
       body: `Status alterado para: ${statusLabels[status]}`,
     });
   }
@@ -943,7 +949,7 @@ export const cancelOrderPayment = async (
       amount: Number(originalPayment.amount || 0),
       status: 'pago',
       payment_method: originalPayment.method,
-      description: `Estorno pagamento pedido #${order.order_number}`,
+      description: `Estorno pagamento pedido ${formatOrderReference(order.order_number)}`,
       occurred_at: new Date().toISOString(),
       related_id: orderId,
       is_automatic: true,
@@ -955,7 +961,7 @@ export const cancelOrderPayment = async (
       company_id: order.company_id,
       order_id: orderId,
       type: 'payment',
-      title: `Pagamento cancelado - Pedido #${order.order_number}`,
+      title: `Pagamento cancelado - Pedido ${formatOrderReference(order.order_number)}`,
       body: `Um pagamento foi cancelado.`,
     });
   }
@@ -996,7 +1002,7 @@ export const deleteOrderPayment = async (
       amount: Number(originalPayment.amount || 0),
       status: 'pago',
       payment_method: originalPayment.method,
-      description: `Estorno pagamento pedido #${order.order_number}`,
+      description: `Estorno pagamento pedido ${formatOrderReference(order.order_number)}`,
       occurred_at: new Date().toISOString(),
       related_id: orderId,
       is_automatic: true,
@@ -1008,7 +1014,7 @@ export const deleteOrderPayment = async (
       company_id: order.company_id,
       order_id: orderId,
       type: 'payment',
-      title: `Pagamento excluído - Pedido #${order.order_number}`,
+      title: `Pagamento excluído - Pedido ${formatOrderReference(order.order_number)}`,
       body: `Um pagamento foi removido.`,
     });
   }

@@ -1,18 +1,23 @@
-import { useState } from "react";
-import { Link } from "react-router-dom";
-import { AlertCircle, Loader2 } from "lucide-react";
-import { invokePublicFunction } from "@/services/publicFunctions";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { AlertCircle, Loader2 } from 'lucide-react';
+import { invokePublicFunction } from '@/services/publicFunctions';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 export default function ForgotPassword() {
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const redirectTo = useMemo(() => {
+    if (typeof window === 'undefined') return '/alterar-senha';
+    return `${window.location.origin}/alterar-senha`;
+  }, []);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -21,10 +26,14 @@ export default function ForgotPassword() {
     setLoading(true);
 
     try {
-      await invokePublicFunction("password-recovery", { email: email.trim() });
-      setNotice("Se o e-mail estiver cadastrado, enviamos um link de recuperação.");
+      await invokePublicFunction('password-recovery', {
+        email: email.trim(),
+        accountType: 'store',
+        redirectTo,
+      });
+      setNotice('Se o e-mail estiver cadastrado, enviamos um link de recuperação.');
     } catch {
-      setError("Não foi possível enviar o e-mail de recuperação.");
+      setError('Não foi possível enviar o e-mail de recuperação.');
     } finally {
       setLoading(false);
     }

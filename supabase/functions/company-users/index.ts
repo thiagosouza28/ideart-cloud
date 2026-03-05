@@ -33,6 +33,65 @@ const getSupabaseClient = () =>
     { auth: { persistSession: false } },
   );
 
+const extractToken = (value: string | null) => {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const bearerMatch = /^Bearer\s+(.+)$/i.exec(trimmed);
+  return (bearerMatch?.[1] ?? trimmed).trim();
+};
+
+const isLikelyJwt = (token: string | null) => {
+  if (!token) return false;
+  return token.split(".").length === 3;
+};
+
+const getRequestAccessToken = (req: Request) => {
+  const xSupabaseAuthorization = extractToken(
+    req.headers.get("x-supabase-authorization") ??
+      req.headers.get("X-Supabase-Authorization"),
+  );
+  const authorization = extractToken(
+    req.headers.get("authorization") ?? req.headers.get("Authorization"),
+  );
+
+  // Prefer user JWT when both headers are present.
+  if (isLikelyJwt(xSupabaseAuthorization)) return xSupabaseAuthorization;
+  if (isLikelyJwt(authorization)) return authorization;
+
+  return xSupabaseAuthorization ?? authorization ?? null;
+};
+
+const getAuthenticatedUser = async (
+  supabase: ReturnType<typeof getSupabaseClient>,
+  token: string,
+) => {
+  const { data: authData, error: authError } = await supabase.auth.getUser(token);
+  if (!authError && authData.user) {
+    return { user: authData.user, errorDetail: null as string | null };
+  }
+
+  const publicKey = Deno.env.get("SUPABASE_PUBLISHABLE_KEY") ??
+    Deno.env.get("SUPABASE_ANON_KEY") ??
+    "";
+  if (!publicKey) {
+    return { user: null, errorDetail: authError?.message ?? "Invalid session" };
+  }
+
+  const userClient = createClient(SUPABASE_URL!, publicKey, {
+    auth: { persistSession: false },
+    global: { headers: { Authorization: `Bearer ${token}` } },
+  });
+
+  const { data: fallbackAuthData, error: fallbackAuthError } = await userClient.auth.getUser();
+  if (!fallbackAuthError && fallbackAuthData.user) {
+    return { user: fallbackAuthData.user, errorDetail: authError?.message ?? null };
+  }
+
+  const detail = [authError?.message, fallbackAuthError?.message].filter(Boolean).join(" | ");
+  return { user: null, errorDetail: detail || "Invalid session" };
+};
+
 type CreateUserPayload = {
   email?: string;
   password?: string;
@@ -97,20 +156,21 @@ Deno.serve(async (req) => {
 
   try {
     const supabase = getSupabaseClient();
-    const authHeader = req.headers.get("x-supabase-authorization") ?? req.headers.get("Authorization");
+    const token = getRequestAccessToken(req);
 
-    if (!authHeader) {
+    if (!token) {
       return jsonResponse(corsHeaders, 401, { error: "No authorization header" });
     }
 
-    const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : authHeader;
-    const { data: authData, error: authError } = await supabase.auth.getUser(token);
-
-    if (authError || !authData.user) {
-      return jsonResponse(corsHeaders, 401, { error: "Sessao invalida" });
+    const { user: authUser, errorDetail } = await getAuthenticatedUser(supabase, token);
+    if (!authUser) {
+      return jsonResponse(corsHeaders, 401, {
+        error: "Sessao invalida",
+        detail: errorDetail,
+      });
     }
 
-    const requesterId = authData.user.id;
+    const requesterId = authUser.id;
 
     // Check requester role
     const isSuperAdmin = await isSuperAdminUser(supabase, requesterId);

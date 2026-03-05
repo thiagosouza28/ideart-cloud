@@ -32,3 +32,6 @@ verify_jwt = false
 
 [functions.admin-impersonate]
 verify_jwt = false
+
+[functions.company-users]
+verify_jwt = false

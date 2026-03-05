@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { formatOrderNumber } from '@/lib/utils';
 import type {
   Customer,
   ExpenseCategory,
@@ -117,6 +118,7 @@ type ReportSources = {
   productSupplies: ProductSupply[];
   financialEntries: FinancialEntry[];
   expenseCategories: ExpenseCategory[];
+  orderRefsById: Record<string, Pick<Order, 'id' | 'order_number' | 'customer_name'>>;
 };
 
 const buildDate = (value: string) => {
@@ -173,7 +175,7 @@ const getShiftLabel = (dateValue: string) => {
   const date = new Date(dateValue);
   const hour = date.getHours();
   const dayLabel = date.toLocaleDateString('pt-BR');
-  if (hour >= 6 && hour < 14) return `${dayLabel} - Manha`;
+  if (hour >= 6 && hour < 14) return `${dayLabel} - Manhã`;
   if (hour >= 14 && hour < 22) return `${dayLabel} - Tarde`;
   return `${dayLabel} - Noite`;
 };
@@ -237,6 +239,27 @@ export const buildPeriodSeries = (
 
 const orderOriginAliases = new Set(['order_payment', 'order_payment_cancel', 'order_payment_delete']);
 const duplicatedFinancialOrigins = new Set(['order_payment', 'order_payment_cancel', 'order_payment_delete', 'venda', 'reembolso', 'pdv']);
+const uuidPattern = /[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i;
+const uuidGlobalPattern = /[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/gi;
+
+const buildOrderRef = (order?: Pick<Order, 'order_number'> | null) => {
+  const number = formatOrderNumber(order?.order_number);
+  return number ? `#${number}` : null;
+};
+
+const normalizeOrderDescription = (
+  description: string | null | undefined,
+  fallback: string,
+  orderRef?: string | null,
+) => {
+  const trimmed = description?.trim();
+  if (!trimmed) return fallback;
+  if (!orderRef) return trimmed;
+  if (uuidPattern.test(trimmed)) {
+    return trimmed.replace(uuidGlobalPattern, orderRef);
+  }
+  return trimmed;
+};
 
 const normalizeCashOrigin = (value: string | null | undefined) => {
   const normalized = (value || '').toLowerCase();
@@ -286,22 +309,35 @@ const applyCashFilters = (transactions: CashTransaction[], filters: ReportFilter
 };
 
 const buildCashTransactions = (sources: ReportSources) => {
+  const resolveOrderRef = (orderId: string | null | undefined) => {
+    if (!orderId) return undefined;
+    return sources.orderRefsById[orderId];
+  };
+
   const paymentTransactions: CashTransaction[] = sources.orderPayments
     .filter((payment) => payment.status !== 'pendente')
-    .map((payment) => ({
-      id: payment.id,
-      date: payment.paid_at || payment.created_at,
-      type: 'entrada',
-      rawType: 'receita',
-      origin: 'venda',
-      description: `Pagamento pedido ${payment.order_id}`,
-      amount: Number(payment.amount),
-      method: payment.method || null,
-      status: payment.status,
-      relatedId: payment.order_id,
-      createdBy: payment.created_by || null,
-      isAutomatic: true,
-    }));
+    .map((payment) => {
+      const order = resolveOrderRef(payment.order_id);
+      const orderRef = buildOrderRef(order);
+      const description = orderRef
+        ? `Pagamento pedido ${orderRef}`
+        : `Pagamento pedido ${payment.order_id}`;
+
+      return {
+        id: payment.id,
+        date: payment.paid_at || payment.created_at,
+        type: 'entrada',
+        rawType: 'receita',
+        origin: 'venda',
+        description,
+        amount: Number(payment.amount),
+        method: payment.method || null,
+        status: payment.status,
+        relatedId: payment.order_id,
+        createdBy: payment.created_by || null,
+        isAutomatic: true,
+      };
+    });
 
   const saleTransactions: CashTransaction[] = sources.sales
     .filter((sale) => Number(sale.amount_paid) >= Number(sale.total))
@@ -322,20 +358,35 @@ const buildCashTransactions = (sources: ReportSources) => {
 
   const entryTransactions: CashTransaction[] = sources.financialEntries
     .filter((entry) => entry.status === 'pago' && !duplicatedFinancialOrigins.has(normalizeCashOrigin(entry.origin)))
-    .map((entry) => ({
-      id: entry.id,
-      date: entry.paid_at || entry.occurred_at,
-      type: entry.type === 'receita' ? 'entrada' : 'saida',
-      rawType: entry.type,
-      origin: normalizeCashOrigin(entry.origin),
-      description: entry.description || entry.notes || 'Lancamento manual',
-      amount: Number(entry.amount),
-      method: entry.payment_method || null,
-      status: entry.status,
-      relatedId: entry.related_id || null,
-      createdBy: entry.created_by || null,
-      isAutomatic: Boolean(entry.is_automatic),
-    }));
+    .map((entry) => {
+      const order = resolveOrderRef(entry.related_id);
+      const orderRef = buildOrderRef(order);
+      const normalizedOrigin = normalizeCashOrigin(entry.origin);
+      const fallbackDescription = orderRef
+        ? normalizedOrigin === 'reembolso'
+          ? `Estorno de pedido ${orderRef}`
+          : `Movimentação de pedido ${orderRef}`
+        : 'Lançamento manual';
+
+      return {
+        id: entry.id,
+        date: entry.paid_at || entry.occurred_at,
+        type: entry.type === 'receita' ? 'entrada' : 'saida',
+        rawType: entry.type,
+        origin: normalizedOrigin,
+        description: normalizeOrderDescription(
+          entry.description || entry.notes,
+          fallbackDescription,
+          orderRef,
+        ),
+        amount: Number(entry.amount),
+        method: entry.payment_method || null,
+        status: entry.status,
+        relatedId: entry.related_id || null,
+        createdBy: entry.created_by || null,
+        isAutomatic: Boolean(entry.is_automatic),
+      };
+    });
 
   return [...paymentTransactions, ...saleTransactions, ...entryTransactions].sort(
     (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
@@ -618,7 +669,7 @@ const buildSalesReport = (sources: ReportSources): SalesReport => {
       type: 'entrada',
       rawType: 'receita',
       origin: 'pedido',
-      description: `Pedido #${order.order_number}`,
+      description: `Pedido #${formatOrderNumber(order.order_number)}`,
       amount: Number(order.total),
       method: order.payment_method || null,
       status: order.status,
@@ -813,6 +864,17 @@ const loadSources = async (filters: ReportFilters): Promise<ReportSources> => {
   const ordersResult = await ordersQuery;
   const orders = (ordersResult.data as Order[]) || [];
   const orderIds = orders.map((order) => order.id);
+  const orderRefsById = orders.reduce(
+    (acc, order) => {
+      acc[order.id] = {
+        id: order.id,
+        order_number: order.order_number,
+        customer_name: order.customer_name,
+      };
+      return acc;
+    },
+    {} as Record<string, Pick<Order, 'id' | 'order_number' | 'customer_name'>>,
+  );
 
   let paymentsQuery = applyDateRange(
     supabase.from('order_payments').select('*'),
@@ -890,6 +952,33 @@ const loadSources = async (filters: ReportFilters): Promise<ReportSources> => {
       productsQuery,
     ]);
 
+  const orderPayments = (paymentsResult.data as OrderPayment[]) || [];
+  const financialEntries = (entriesResult.data as FinancialEntry[]) || [];
+
+  const missingOrderRefIds = Array.from(
+    new Set([
+      ...orderPayments.map((payment) => payment.order_id),
+      ...financialEntries.map((entry) => entry.related_id).filter(Boolean),
+    ]),
+  ).filter((candidateId): candidateId is string =>
+    Boolean(candidateId) && uuidPattern.test(candidateId) && !orderRefsById[candidateId],
+  );
+
+  if (missingOrderRefIds.length > 0) {
+    const { data: missingOrderRefs } = await supabase
+      .from('orders')
+      .select('id, order_number, customer_name')
+      .in('id', missingOrderRefIds);
+
+    (missingOrderRefs || []).forEach((order) => {
+      orderRefsById[order.id] = {
+        id: order.id,
+        order_number: order.order_number,
+        customer_name: order.customer_name,
+      };
+    });
+  }
+
   const sales = (salesResult.data as Sale[]) || [];
   const saleIds = sales.map((sale) => sale.id);
 
@@ -919,14 +1008,15 @@ const loadSources = async (filters: ReportFilters): Promise<ReportSources> => {
   return {
     orders,
     orderItems: (orderItemsResult.data as OrderItem[]) || [],
-    orderPayments: (paymentsResult.data as OrderPayment[]) || [],
+    orderPayments,
     sales,
     saleItems: (saleItemsResult.data as SaleItem[]) || [],
     customers: (customersResult.data as Customer[]) || [],
     products,
     productSupplies: (suppliesResult.data as ProductSupply[]) || [],
-    financialEntries: (entriesResult.data as FinancialEntry[]) || [],
+    financialEntries,
     expenseCategories: (categoriesResult.data as ExpenseCategory[]) || [],
+    orderRefsById,
   };
 };
 
