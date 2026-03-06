@@ -4,7 +4,7 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ERP Design System - Dark sidebar, light workspace */
+/* ERP Design System */
 
 @layer base {
   :root {
@@ -60,26 +60,26 @@
   }
 
   .dark {
-    --background: 222 47% 11%;
-    --foreground: 210 40% 98%;
+    --background: 224 45% 10%;
+    --foreground: 210 40% 96%;
 
-    --card: 217 33% 17%;
-    --card-foreground: 210 40% 98%;
+    --card: 224 32% 14%;
+    --card-foreground: 210 40% 96%;
 
-    --popover: 217 33% 17%;
-    --popover-foreground: 210 40% 98%;
+    --popover: 224 32% 14%;
+    --popover-foreground: 210 40% 96%;
 
     --primary: 217 91% 60%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 217 33% 17%;
-    --secondary-foreground: 210 40% 98%;
+    --secondary: 223 27% 18%;
+    --secondary-foreground: 210 40% 96%;
 
-    --muted: 217 33% 17%;
-    --muted-foreground: 215 20% 65%;
+    --muted: 223 27% 18%;
+    --muted-foreground: 215 20% 72%;
 
-    --accent: 217 33% 17%;
-    --accent-foreground: 210 40% 98%;
+    --accent: 223 27% 20%;
+    --accent-foreground: 210 40% 96%;
 
     --destructive: 0 63% 31%;
     --destructive-foreground: 210 40% 98%;
@@ -93,19 +93,19 @@
     --info: 199 89% 48%;
     --info-foreground: 0 0% 100%;
 
-    --border: 217 33% 17%;
-    --input: 217 33% 17%;
+    --border: 223 23% 24%;
+    --input: 223 23% 24%;
     --ring: 217 91% 60%;
 
-    --sidebar-background: 222 47% 8%;
-    --sidebar-foreground: 210 40% 98%;
-    --sidebar-primary: 262 83% 58%;
+    --sidebar-background: 223 55% 8%;
+    --sidebar-foreground: 210 36% 94%;
+    --sidebar-primary: 262 83% 62%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 262 83% 58%;
-    --sidebar-accent-foreground: 0 0% 100%;
-    --sidebar-border: 217 33% 14%;
-    --sidebar-ring: 262 83% 58%;
-    --sidebar-muted: 215 20% 65%;
+    --sidebar-accent: 223 33% 16%;
+    --sidebar-accent-foreground: 210 36% 94%;
+    --sidebar-border: 223 28% 18%;
+    --sidebar-ring: 262 83% 62%;
+    --sidebar-muted: 215 20% 70%;
   }
 }
 
@@ -141,7 +141,8 @@
 @layer components {
   .app-shell {
     @apply flex h-svh w-full min-w-0 flex-col bg-background;
-    background: #f7f9fc;
+    background-image: radial-gradient(circle at 100% 0%, hsl(var(--primary) / 0.08), transparent 42%);
+    background-attachment: fixed;
   }
 
   .app-header {
@@ -333,6 +334,112 @@
 
   .status-cancelado {
     @apply bg-red-100 text-red-800;
+  }
+
+  .dark .app-shell {
+    background-image:
+      radial-gradient(circle at 100% 0%, hsl(var(--primary) / 0.18), transparent 46%),
+      linear-gradient(180deg, hsl(var(--background)) 0%, hsl(224 45% 8%) 100%);
+  }
+
+  .dark .app-header {
+    background-color: hsl(var(--card) / 0.92);
+    backdrop-filter: blur(10px);
+  }
+
+  .dark .app-shell .bg-white {
+    background-color: hsl(var(--card));
+  }
+
+  .dark .app-shell .bg-slate-50 {
+    background-color: hsl(var(--muted) / 0.75);
+  }
+
+  .dark .app-shell .bg-slate-100,
+  .dark .app-shell .bg-slate-200 {
+    background-color: hsl(var(--muted));
+  }
+
+  .dark .app-shell .border-slate-50,
+  .dark .app-shell .border-slate-100,
+  .dark .app-shell .border-slate-200,
+  .dark .app-shell .border-slate-300 {
+    border-color: hsl(var(--border));
+  }
+
+  .dark .app-shell .text-slate-900,
+  .dark .app-shell .text-slate-800,
+  .dark .app-shell .text-slate-700 {
+    color: hsl(var(--foreground));
+  }
+
+  .dark .app-shell .text-slate-600,
+  .dark .app-shell .text-slate-500 {
+    color: hsl(var(--muted-foreground));
+  }
+
+  .dark .app-shell .text-slate-400,
+  .dark .app-shell .text-slate-300 {
+    color: hsl(var(--muted-foreground) / 0.82);
+  }
+
+  .dark .app-shell .hover\:bg-slate-50:hover,
+  .dark .app-shell .hover\:bg-slate-100:hover {
+    background-color: hsl(var(--muted) / 0.9);
+  }
+
+  .dark .app-shell .hover\:border-slate-200:hover,
+  .dark .app-shell .hover\:border-slate-300:hover {
+    border-color: hsl(var(--border) / 0.9);
+  }
+
+  .dark .app-shell .hover\:text-slate-700:hover,
+  .dark .app-shell .hover\:text-slate-900:hover {
+    color: hsl(var(--foreground));
+  }
+
+  .dark .app-shell .bg-amber-100 {
+    background-color: hsl(38 92% 50% / 0.18);
+  }
+
+  .dark .app-shell .text-amber-700 {
+    color: hsl(40 94% 70%);
+  }
+
+  .dark .app-shell .bg-emerald-100 {
+    background-color: hsl(142 76% 36% / 0.2);
+  }
+
+  .dark .app-shell .text-emerald-700 {
+    color: hsl(141 79% 74%);
+  }
+
+  .dark .app-shell .bg-blue-50 {
+    background-color: hsl(217 91% 60% / 0.16);
+  }
+
+  .dark .app-shell .text-blue-600 {
+    color: hsl(213 94% 74%);
+  }
+
+  .dark .app-shell .bg-orange-50 {
+    background-color: hsl(25 95% 53% / 0.16);
+  }
+
+  .dark .app-shell .text-orange-600 {
+    color: hsl(30 97% 72%);
+  }
+
+  .dark .app-shell .bg-red-100 {
+    background-color: hsl(0 84% 60% / 0.18);
+  }
+
+  .dark .app-shell .text-red-700 {
+    color: hsl(0 94% 76%);
+  }
+
+  .dark .table-stack tr {
+    box-shadow: 0 10px 24px rgba(2, 8, 23, 0.35);
   }
 }
 

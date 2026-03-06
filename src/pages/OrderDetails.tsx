@@ -40,6 +40,7 @@ import { resolveProductPrice } from '@/lib/pricing';
 import { useUnsavedChanges } from '@/hooks/use-unsaved-changes';
 import { localizeOrderHistoryNote } from '@/lib/orderHistoryNotes';
 import { extractOrderIdFromParam } from '@/lib/orderRouting';
+import { isPendingCustomerInfoOrder, isPublicCatalogPersonalizedOrder } from '@/lib/orderMetadata';
 
 const statusConfig: Record<OrderStatus, { label: string; icon: React.ComponentType<any>; color: string; next: OrderStatus[] }> = {
   orcamento: {
@@ -396,6 +397,10 @@ export default function OrderDetails() {
         tipo: 'pedido',
         numero: `#${formatOrderNumber(order.order_number)}`,
         codigo: payment.id.slice(0, 8).toUpperCase(),
+      },
+      pedido: {
+        tempoProducaoDias: order.production_time_days_used ?? null,
+        previsaoEntrega: order.estimated_delivery_date ?? null,
       },
     };
   };
@@ -1310,7 +1315,7 @@ const sendWhatsAppMessage = (message: string) => {
     }
   };
 
-  const allowedArtMimeTypes = ['image/jpeg', 'image/png', 'application/pdf'];
+  const allowedArtMimeTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
 
   const normalizeClipboardFile = (file: File, index: number) => {
     if (file.name && file.name !== 'image.png') {
@@ -1531,6 +1536,9 @@ const canSendWhatsApp = Boolean(order?.customer?.phone);
         : order.status === 'arte_aprovada'
           ? { label: 'Arte: aprovada', color: 'bg-emerald-100 text-emerald-800' }
           : null;
+  const pendingCustomerInfo =
+    order.status === 'pendente' && isPendingCustomerInfoOrder(order.notes);
+  const personalizedOrder = isPublicCatalogPersonalizedOrder(order.notes);
   const canManageArtFiles = order.status === 'produzindo_arte';
   const showArtFilesSection = canManageArtFiles || artFilesReady.length > 0;
 
@@ -1551,6 +1559,16 @@ const canSendWhatsApp = Boolean(order?.customer?.phone);
               {artIndicator && (
                 <span className={`status-badge ${artIndicator.color}`}>
                   {artIndicator.label}
+                </span>
+              )}
+              {pendingCustomerInfo && (
+                <span className="status-badge bg-slate-100 text-slate-700">
+                  Aguardando informacoes do cliente
+                </span>
+              )}
+              {personalizedOrder && (
+                <span className="status-badge bg-indigo-100 text-indigo-800">
+                  Pedido personalizado
                 </span>
               )}
             </h1>
@@ -1953,7 +1971,7 @@ const canSendWhatsApp = Boolean(order?.customer?.phone);
                     <input
                       ref={artFileInputRef}
                       type="file"
-                      accept="image/jpeg,image/png,application/pdf"
+                      accept="image/jpeg,image/png,image/webp,application/pdf"
                       multiple
                       onChange={handleArtFilesUpload}
                       className="hidden"

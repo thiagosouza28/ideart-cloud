@@ -246,16 +246,16 @@ export default function Dashboard() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900">Painel</h1>
-          <p className="text-sm text-slate-500">Visão geral do sistema</p>
+          <h1 className="text-3xl font-bold text-foreground">Painel</h1>
+          <p className="text-sm text-muted-foreground">Visão geral do sistema</p>
         </div>
-        <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-500">
+        <span className="rounded-full border border-border bg-card px-3 py-1 text-xs font-semibold text-muted-foreground">
           Atualizado agora
         </span>
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <button className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm">
+        <button className="flex items-center gap-2 rounded-2xl border border-border bg-card px-4 py-2 text-sm font-semibold text-muted-foreground shadow-sm">
           <Filter className="h-4 w-4" />
           Filtro
         </button>
@@ -268,7 +268,7 @@ export default function Dashboard() {
         </button>
       </div>
 
-      <p className="text-xs text-slate-400">
+      <p className="text-xs text-muted-foreground">
         Considera apenas pagamentos aprovados.
       </p>
 
@@ -286,12 +286,12 @@ export default function Dashboard() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs text-slate-400">Total recebido</p>
-          <p className="text-lg font-semibold text-slate-900">{formatCurrency(metrics.paidTotal)}</p>
+        <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+          <p className="text-xs text-muted-foreground">Total recebido</p>
+          <p className="text-lg font-semibold text-foreground">{formatCurrency(metrics.paidTotal)}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs text-slate-400">Saldo pendente</p>
+        <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+          <p className="text-xs text-muted-foreground">Saldo pendente</p>
           <p className="text-lg font-semibold text-amber-600">{formatCurrency(metrics.pendingTotal)}</p>
         </div>
       </div>
@@ -318,24 +318,24 @@ export default function Dashboard() {
             icon={<ShoppingBag className="h-5 w-5" />}
           />
         ) : (
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
             <div className="flex items-center justify-between">
-              <h3 className="text-base font-semibold text-slate-900">Fila de Produção</h3>
+              <h3 className="text-base font-semibold text-foreground">Fila de Produção</h3>
               <button
-                className="text-sm font-semibold text-slate-500 hover:text-slate-700"
+                className="text-sm font-semibold text-muted-foreground hover:text-foreground"
                 onClick={() => navigate('/producao')}
               >
                 Ver Fila Completa
               </button>
             </div>
-            <div className="mt-6 space-y-4 text-sm text-slate-600">
+            <div className="mt-6 space-y-4 text-sm text-muted-foreground">
               <p>{productionQueue.length} pedido(s) aguardando produção.</p>
               <div className="space-y-3">
                 {productionQueue.slice(0, 3).map((order) => (
                   <button
                     key={order.id}
                     type="button"
-                    className="group flex w-full items-center justify-between rounded-2xl border border-slate-100 px-4 py-3 text-left transition hover:border-slate-200 hover:bg-slate-50"
+                    className="group flex w-full items-center justify-between rounded-2xl border border-border/80 px-4 py-3 text-left transition hover:bg-muted/70"
                     onClick={() =>
                       navigate(
                         buildOrderDetailsPath({
@@ -347,19 +347,19 @@ export default function Dashboard() {
                     }
                   >
                     <div>
-                      <p className="text-sm font-semibold text-slate-800">#{formatOrderNumber(order.order_number)}</p>
-                      <p className="text-xs text-slate-400">{order.customer_name || 'Cliente'}</p>
+                      <p className="text-sm font-semibold text-foreground">#{formatOrderNumber(order.order_number)}</p>
+                      <p className="text-xs text-muted-foreground">{order.customer_name || 'Cliente'}</p>
                     </div>
                     <div className="flex items-center gap-3">
-                      <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
+                      <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700 dark:bg-amber-500/20 dark:text-amber-300">
                         {statusLabels[order.status]}
                       </span>
-                      <span className="text-slate-300 group-hover:text-slate-400">→</span>
+                      <span className="text-muted-foreground/70 group-hover:text-foreground">→</span>
                     </div>
                   </button>
                 ))}
               </div>
-              <p className="text-xs text-slate-400">Use a fila para acompanhar o andamento.</p>
+              <p className="text-xs text-muted-foreground">Use a fila para acompanhar o andamento.</p>
             </div>
           </div>
         )}

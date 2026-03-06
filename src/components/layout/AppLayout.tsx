@@ -7,6 +7,8 @@ import { useOrderNotifications } from '@/hooks/useOrderNotifications';
 import { useAuth } from '@/contexts/AuthContext';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { AppRole } from '@/types/database';
 import { ensurePublicStorageUrl } from '@/lib/storage';
 import { useTheme } from 'next-themes';
@@ -41,6 +43,7 @@ export function AppLayout({ children }: AppLayoutProps) {
     () => localStorage.getItem('subscriptionBannerHidden') === 'true',
   );
   const [restoringAdmin, setRestoringAdmin] = useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
 
   const company = getLoggedCompany();
   const logoFromCompany = ensurePublicStorageUrl('product-images', company?.logo_url);
@@ -55,7 +58,13 @@ export function AppLayout({ children }: AppLayoutProps) {
     .join('')
     .toUpperCase();
 
-  useOrderNotifications();
+  const {
+    unreadOrdersCount,
+    notifications,
+    isLoadingNotifications,
+    refreshNotifications,
+    markUnreadOrdersAsRead,
+  } = useOrderNotifications();
 
   useEffect(() => {
     refreshCompany();
@@ -71,6 +80,21 @@ export function AppLayout({ children }: AppLayoutProps) {
   const formatDate = (value: Date | null) => {
     if (!value || Number.isNaN(value.getTime())) return null;
     return value.toLocaleDateString('pt-BR');
+  };
+
+  const formatNotificationDateTime = (value: string) => {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toLocaleString('pt-BR');
+  };
+
+  const handleNotificationsOpenChange = (open: boolean) => {
+    setIsNotificationsOpen(open);
+    if (!open) return;
+    void refreshNotifications();
+    if (unreadOrdersCount > 0) {
+      void markUnreadOrdersAsRead();
+    }
   };
 
   const subscriptionBanner = (() => {
@@ -105,7 +129,14 @@ export function AppLayout({ children }: AppLayoutProps) {
 
     return (
       <div className="fixed bottom-4 left-4 right-4 z-50 sm:bottom-6 sm:left-auto sm:right-6 sm:w-full sm:max-w-md">
-        <Alert variant={isExpired ? 'destructive' : 'default'} className={!isExpired ? 'border-amber-300 text-amber-900' : undefined}>
+        <Alert
+          variant={isExpired ? 'destructive' : 'default'}
+          className={
+            !isExpired
+              ? 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-700/70 dark:bg-amber-950/30 dark:text-amber-100'
+              : undefined
+          }
+        >
           <AlertTitle>{title}</AlertTitle>
           <AlertDescription className="relative flex flex-col gap-2 pb-10">
             <div className="flex flex-col gap-1">
@@ -141,7 +172,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   })();
 
   const impersonationBanner = isImpersonating ? (
-    <Alert className="mb-4 border-amber-300 bg-amber-50 text-amber-900">
+    <Alert className="mb-4 border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-700/70 dark:bg-amber-950/30 dark:text-amber-100">
       <AlertTitle>Modo administrador</AlertTitle>
       <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <span>Você está acessando esta conta como administrador.</span>
@@ -173,10 +204,10 @@ export function AppLayout({ children }: AppLayoutProps) {
           <header className="app-header">
             <div className="flex items-center gap-2">
               <SidebarTrigger className="-ml-1" />
-              <Menu className="hidden h-5 w-5 text-slate-500" />
+              <Menu className="hidden h-5 w-5 text-muted-foreground" />
             </div>
             <div className="ml-auto flex items-center gap-4">
-              <div className="hidden items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 sm:flex">
+              <div className="hidden items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-semibold text-muted-foreground sm:flex">
                 <span className="h-2 w-2 rounded-full bg-emerald-500" />
                 Plano ativo
               </div>
@@ -196,26 +227,102 @@ export function AppLayout({ children }: AppLayoutProps) {
               <button
                 type="button"
                 onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
-                className="hidden h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 sm:flex"
+                className="hidden h-9 w-9 items-center justify-center rounded-full border border-border bg-card text-muted-foreground transition-colors hover:text-foreground sm:flex"
                 aria-label={resolvedTheme === 'dark' ? 'Ativar modo claro' : 'Ativar modo escuro'}
               >
                 {resolvedTheme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
               </button>
-              <button className="hidden h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 sm:flex">
-                <Bell className="h-4 w-4" />
-              </button>
+              <Popover open={isNotificationsOpen} onOpenChange={handleNotificationsOpenChange}>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    className="relative hidden h-9 w-9 items-center justify-center rounded-full border border-border bg-card text-muted-foreground transition-colors hover:text-foreground sm:flex"
+                    aria-label={
+                      unreadOrdersCount > 0
+                        ? `${unreadOrdersCount} pedido(s) novo(s)`
+                        : 'Notificações'
+                    }
+                    title={
+                      unreadOrdersCount > 0
+                        ? `${unreadOrdersCount} pedido(s) novo(s)`
+                        : 'Sem novos pedidos'
+                    }
+                  >
+                    <Bell className="h-4 w-4" />
+                    {unreadOrdersCount > 0 && (
+                      <span className="absolute -right-1 -top-1 inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-semibold leading-none text-destructive-foreground">
+                        {unreadOrdersCount > 99 ? '99+' : unreadOrdersCount}
+                      </span>
+                    )}
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent align="end" className="w-[360px] p-0">
+                  <div className="border-b border-border px-4 py-3">
+                    <p className="text-sm font-semibold text-foreground">Notificações de pedidos</p>
+                    <p className="text-xs text-muted-foreground">Clique em uma notificação para abrir o pedido.</p>
+                  </div>
+                  <ScrollArea className="max-h-96">
+                    {isLoadingNotifications ? (
+                      <div className="flex items-center gap-2 px-4 py-6 text-sm text-muted-foreground">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Carregando notificações...
+                      </div>
+                    ) : notifications.length === 0 ? (
+                      <div className="px-4 py-6 text-sm text-muted-foreground">
+                        Nenhuma notificação de pedido.
+                      </div>
+                    ) : (
+                      <div className="divide-y divide-border">
+                        {notifications.map((notification) => (
+                          <button
+                            key={notification.id}
+                            type="button"
+                            onClick={() => {
+                              if (!notification.order_id) return;
+                              setIsNotificationsOpen(false);
+                              navigate(`/pedidos/${notification.order_id}`);
+                            }}
+                            className={`w-full px-4 py-3 text-left transition-colors ${
+                              notification.order_id ? 'hover:bg-muted/50' : ''
+                            }`}
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium text-foreground">
+                                  {notification.title}
+                                </p>
+                                {notification.body && (
+                                  <p className="mt-1 text-xs text-muted-foreground">
+                                    {notification.body}
+                                  </p>
+                                )}
+                                <p className="mt-2 text-[11px] text-muted-foreground">
+                                  {formatNotificationDateTime(notification.created_at)}
+                                </p>
+                              </div>
+                              {!notification.read_at && (
+                                <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-primary" />
+                              )}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </ScrollArea>
+                </PopoverContent>
+              </Popover>
               <div className="hidden flex-col items-end leading-tight sm:flex">
-                <span className="text-sm font-semibold text-slate-900">{company?.name || 'Ideart Cloud'}</span>
-                <span className="text-[11px] font-semibold text-slate-400">{role ? roleLabels[role] : 'ADMIN'}</span>
+                <span className="text-sm font-semibold text-foreground">{company?.name || 'Ideart Cloud'}</span>
+                <span className="text-[11px] font-semibold text-muted-foreground">{role ? roleLabels[role] : 'ADMIN'}</span>
               </div>
               {logoUrl ? (
                 <img
                   src={logoUrl}
                   alt={company?.name || 'Logo da empresa'}
-                  className="h-9 w-9 rounded-full border border-slate-200 object-cover"
+                  className="h-9 w-9 rounded-full border border-border object-cover"
                 />
               ) : (
-                <div className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-slate-100 text-xs font-semibold text-slate-500">
+                <div className="flex h-9 w-9 items-center justify-center rounded-full border border-border bg-muted text-xs font-semibold text-muted-foreground">
                   {fallbackText || 'LG'}
                 </div>
               )}

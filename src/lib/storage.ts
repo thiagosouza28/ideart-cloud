@@ -26,3 +26,13 @@ export const getStoragePathFromUrl = (bucket: string, url: string) => {
   }
   return url;
 };
+
+export const buildSystemStorageViewerUrl = (bucket: string, value?: string | null) => {
+  if (!value) return null;
+  const normalizedPath = getStoragePathFromUrl(bucket, value);
+  const params = new URLSearchParams({
+    bucket,
+    path: normalizedPath,
+  });
+  return `/arquivo?${params.toString()}`;
+};

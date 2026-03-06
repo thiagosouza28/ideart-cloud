@@ -615,6 +615,7 @@ export type Database = {
           customer_user_id: string | null
           customer_name: string | null
           discount: number
+          estimated_delivery_date: string | null
           gateway: string | null
           gateway_order_id: string | null
           id: string
@@ -628,6 +629,7 @@ export type Database = {
           payment_link_id: string | null
           payment_link_url: string | null
           payment_status: Database["public"]["Enums"]["payment_status"]
+          production_time_days_used: number | null
           status: Database["public"]["Enums"]["order_status"]
           subtotal: number
           total: number
@@ -646,6 +648,7 @@ export type Database = {
           customer_user_id?: string | null
           customer_name?: string | null
           discount?: number
+          estimated_delivery_date?: string | null
           gateway?: string | null
           gateway_order_id?: string | null
           id?: string
@@ -659,6 +662,7 @@ export type Database = {
           payment_link_id?: string | null
           payment_link_url?: string | null
           payment_status?: Database["public"]["Enums"]["payment_status"]
+          production_time_days_used?: number | null
           status?: Database["public"]["Enums"]["order_status"]
           subtotal?: number
           total?: number
@@ -677,6 +681,7 @@ export type Database = {
           customer_user_id?: string | null
           customer_name?: string | null
           discount?: number
+          estimated_delivery_date?: string | null
           gateway?: string | null
           gateway_order_id?: string | null
           id?: string
@@ -690,6 +695,7 @@ export type Database = {
           payment_link_id?: string | null
           payment_link_url?: string | null
           payment_status?: Database["public"]["Enums"]["payment_status"]
+          production_time_days_used?: number | null
           status?: Database["public"]["Enums"]["order_status"]
           subtotal?: number
           total?: number
@@ -1121,6 +1127,7 @@ export type Database = {
           owner_id: string
           product_type: Database["public"]["Enums"]["product_type"]
           personalization_enabled: boolean
+          production_time_days: number | null
           product_colors: Json
           profit_margin: number
           promo_end_at: string | null
@@ -1157,6 +1164,7 @@ export type Database = {
           owner_id?: string
           product_type?: Database["public"]["Enums"]["product_type"]
           personalization_enabled?: boolean
+          production_time_days?: number | null
           product_colors?: Json
           profit_margin?: number
           promo_end_at?: string | null
@@ -1193,6 +1201,7 @@ export type Database = {
           owner_id?: string
           product_type?: Database["public"]["Enums"]["product_type"]
           personalization_enabled?: boolean
+          production_time_days?: number | null
           product_colors?: Json
           profit_margin?: number
           promo_end_at?: string | null

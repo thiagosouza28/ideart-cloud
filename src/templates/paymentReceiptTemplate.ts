@@ -37,6 +37,10 @@ export type PaymentReceiptPayload = {
   loja: PaymentReceiptStore;
   numeroRecibo: string;
   referencia?: PaymentReceiptReference | null;
+  pedido?: {
+    tempoProducaoDias?: number | null;
+    previsaoEntrega?: string | null;
+  } | null;
 };
 
 export type PaymentReceiptTheme = {
@@ -103,6 +107,20 @@ const formatDateTime = (value: string) => {
   });
 };
 
+const formatDateOnly = (value: string) => {
+  const raw = String(value || "").trim();
+  if (!raw) return "-";
+
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return raw;
+
+  return parsed.toLocaleDateString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+};
+
 const resolvePersonType = (
   documento?: string | null,
   tipoPessoa?: ReceiptPersonType | null,
@@ -127,8 +145,8 @@ const renderLogo = (logo?: string | null, nome?: string | null) => {
 
 const renderSignature = (payload: PaymentReceiptPayload) => {
   const signatureImage = payload.loja.assinaturaImagem;
-  const responsavel = payload.loja.responsavel || payload.loja.nome || "Responsável";
-  const cargo = payload.loja.cargo || "Responsável";
+  const responsavel = payload.loja.responsavel || payload.loja.nome || "Responsavel";
+  const cargo = payload.loja.cargo || "Responsavel";
 
   if (signatureImage) {
     return `
@@ -195,6 +213,14 @@ export const buildPaymentReceiptHtml = (
   const paymentMethod = payload.pagamento.forma || "-";
   const paymentDescription = payload.pagamento.descricao || "-";
   const paymentValue = formatCurrency(payload.pagamento.valor || 0);
+  const productionTimeRaw = Number(payload.pedido?.tempoProducaoDias);
+  const productionTimeDays =
+    Number.isFinite(productionTimeRaw) && productionTimeRaw >= 0
+      ? Math.trunc(productionTimeRaw)
+      : null;
+  const estimatedDeliveryRaw = payload.pedido?.previsaoEntrega || "";
+  const estimatedDeliveryLabel = estimatedDeliveryRaw ? formatDateOnly(estimatedDeliveryRaw) : "-";
+  const hasProductionInfo = productionTimeDays !== null || Boolean(estimatedDeliveryRaw);
 
   const referenceType = payload.referencia?.tipo || null;
   const referenceLabel =
@@ -202,7 +228,7 @@ export const buildPaymentReceiptHtml = (
       ? "Pedido"
       : referenceType === "pdv" || referenceType === "venda"
         ? "Venda PDV"
-        : "Referência";
+        : "Referencia";
   const referenceNumber = payload.referencia?.numero || "-";
   const referenceCode = payload.referencia?.codigo || "-";
 
@@ -457,11 +483,11 @@ export const buildPaymentReceiptHtml = (
             <h1>${escapeHtml(storeName)}</h1>
             <p>Tipo de pessoa: ${escapeHtml(personType || "-")}</p>
             <p>${escapeHtml(storeDocLabel)}: ${escapeHtml(storeDocValue)}</p>
-            <p>Endereço: ${escapeHtml(storeAddress)}</p>
+            <p>Endereco: ${escapeHtml(storeAddress)}</p>
           </div>
         </div>
         <div class="receipt-header-side">
-          <span>Número do recibo</span>
+          <span>Numero do recibo</span>
           <strong>${escapeHtml(receiptNumber)}</strong>
         </div>
       </div>
@@ -491,7 +517,7 @@ export const buildPaymentReceiptHtml = (
           <strong>${escapeHtml(paymentValue)}</strong>
         </div>
         <div class="receipt-field">
-          <span>Código interno</span>
+          <span>Codigo interno</span>
           <strong>${escapeHtml(referenceCode)}</strong>
         </div>
       </div>
@@ -503,9 +529,21 @@ export const buildPaymentReceiptHtml = (
       </div>
 
       <div class="receipt-section">
-        <h3>Descrição</h3>
+        <h3>Descricao</h3>
         <p>${escapeHtml(paymentDescription)}</p>
       </div>
+
+      ${hasProductionInfo ? `
+        <div class="receipt-section">
+          <h3>Prazos do pedido</h3>
+          <p>Tempo de producao: <strong>${escapeHtml(
+            productionTimeDays !== null
+              ? `${productionTimeDays} ${productionTimeDays === 1 ? "dia" : "dias"}`
+              : "-"
+          )}</strong></p>
+          <p class="receipt-small">Previsao de entrega: ${escapeHtml(estimatedDeliveryLabel)}</p>
+        </div>
+      ` : ""}
 
       <div class="receipt-section">
         <h3>Assinatura da loja</h3>
@@ -514,7 +552,7 @@ export const buildPaymentReceiptHtml = (
         </div>
       </div>
 
-      <div class="receipt-footer">Documento não fiscal</div>
+      <div class="receipt-footer">Documento nao fiscal</div>
     </div>
   `;
 };

@@ -33,37 +33,50 @@ import {
 } from '@/lib/barcode';
 import { useUnsavedChanges } from '@/hooks/use-unsaved-changes';
 
-const productSchema = z.object({
-  name: z.string().min(2, 'Nome deve ter no mínimo 2 caracteres').max(100),
-  sku: z.string().max(50).optional().nullable(),
-  barcode: z.string().max(64).optional().nullable(),
-  description: z.string().max(500).optional().nullable(),
-  product_type: z.enum(['produto', 'confeccionado', 'servico']),
-  category_id: z.string().uuid().optional().nullable(),
-  unit: z.string().min(1, 'Unidade é obrigatória').max(10),
-  is_active: z.boolean(),
-  base_cost: z.number().min(0, 'Custo base deve ser positivo'),
-  labor_cost: z.number().min(0, 'Custo de mão de obra deve ser positivo'),
-  waste_percentage: z.number().min(0).max(100, 'Desperdício deve ser entre 0 e 100%'),
-  profit_margin: z.number().min(0).max(1000, 'Margem deve ser entre 0 e 1000%'),
-  final_price: z.number().min(0, 'Preço final deve ser positivo'),
-  stock_quantity: z.number().min(0),
-  min_stock: z.number().min(0),
-  min_order_quantity: z.number().int().min(1, 'Quantidade mínima deve ser pelo menos 1'),
-  track_stock: z.boolean(),
-  promo_price: z.number().min(0, 'Preço promocional deve ser positivo').optional().nullable(),
-  promo_start_at: z.string().optional().nullable(),
-  promo_end_at: z.string().optional().nullable(),
-  image_urls: z.array(z.string().min(1)).max(5).optional(),
-  product_colors: z.array(
-    z.object({
-      name: z.string().min(1, 'Nome da cor é obrigatório'),
-      hex: z.string().regex(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/, 'HEX inválido'),
-      active: z.boolean(),
-    })
-  ).optional(),
-  personalization_enabled: z.boolean(),
-});
+const productSchema = z
+  .object({
+    name: z.string().min(2, 'Nome deve ter no mínimo 2 caracteres').max(100),
+    sku: z.string().max(50).optional().nullable(),
+    barcode: z.string().max(64).optional().nullable(),
+    description: z.string().max(500).optional().nullable(),
+    product_type: z.enum(['produto', 'confeccionado', 'servico']),
+    category_id: z.string().uuid().optional().nullable(),
+    unit: z.string().min(1, 'Unidade é obrigatória').max(10),
+    is_active: z.boolean(),
+    base_cost: z.number().min(0, 'Custo base deve ser positivo'),
+    labor_cost: z.number().min(0, 'Custo de mão de obra deve ser positivo'),
+    waste_percentage: z.number().min(0).max(100, 'Desperdício deve ser entre 0 e 100%'),
+    profit_margin: z.number().min(0).max(1000, 'Margem deve ser entre 0 e 1000%'),
+    final_price: z.number().min(0, 'Preço final deve ser positivo'),
+    stock_quantity: z.number().min(0),
+    min_stock: z.number().min(0),
+    min_order_quantity: z.number().int().min(1, 'Quantidade mínima deve ser pelo menos 1'),
+    track_stock: z.boolean(),
+    promo_price: z.number().min(0, 'Preço promocional deve ser positivo').optional().nullable(),
+    promo_start_at: z.string().optional().nullable(),
+    promo_end_at: z.string().optional().nullable(),
+    image_urls: z.array(z.string().min(1)).max(5).optional(),
+    product_colors: z
+      .array(
+        z.object({
+          name: z.string().min(1, 'Nome da cor é obrigatório'),
+          hex: z.string().regex(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/, 'HEX inválido'),
+          active: z.boolean(),
+        }),
+      )
+      .optional(),
+    personalization_enabled: z.boolean(),
+    production_time_days: z.number().int().min(0, 'Informe um valor maior ou igual a 0').nullable().optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.personalization_enabled && value.production_time_days === null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['production_time_days'],
+        message: 'Informe o tempo de produção para produtos personalizados.',
+      });
+    }
+  });
 
 const MAX_PRODUCT_IMAGES = 5;
 const ALLOWED_IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
@@ -181,6 +194,7 @@ export default function ProductForm() {
   const [catalogLongDescription, setCatalogLongDescription] = useState('');
   const [productColors, setProductColors] = useState<ProductColor[]>([]);
   const [personalizationEnabled, setPersonalizationEnabled] = useState(false);
+  const [productionTimeDays, setProductionTimeDays] = useState<number | null>(null);
   const [generatingDescription, setGeneratingDescription] = useState(false);
   const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [baseCost, setBaseCost] = useState(0);
@@ -365,6 +379,11 @@ export default function ProductForm() {
       setCatalogLongDescription(product.catalog_long_description || '');
       setProductColors(normalizeProductColors(product.product_colors));
       setPersonalizationEnabled(product.personalization_enabled ?? false);
+      setProductionTimeDays(
+        product.production_time_days !== null && product.production_time_days !== undefined
+          ? Math.max(0, Math.trunc(Number(product.production_time_days)))
+          : null,
+      );
       const normalizedPrimaryImage = ensurePublicStorageUrl('product-images', product.image_url);
       setImageUrls(normalizeProductImages(product.image_urls, normalizedPrimaryImage));
       setBaseCost(Number(product.base_cost));
@@ -600,6 +619,7 @@ export default function ProductForm() {
     productOwnerId,
     productColors,
     personalizationEnabled,
+    productionTimeDays,
     productSupplies: productSupplies.map((ps) => ({
       supply_id: ps.supply_id,
       quantity: ps.quantity,
@@ -647,6 +667,7 @@ export default function ProductForm() {
     productOwnerId,
     productColors,
     personalizationEnabled,
+    productionTimeDays,
     productSupplies,
     priceTiers,
     productAttributes,
@@ -729,6 +750,11 @@ export default function ProductForm() {
       setProductOwnerId((draftData as any).productOwnerId ?? currentUserId);
       setProductColors(normalizeProductColors(draftData.productColors));
       setPersonalizationEnabled(Boolean(draftData.personalizationEnabled));
+      setProductionTimeDays(
+        draftData.productionTimeDays === null || draftData.productionTimeDays === undefined
+          ? null
+          : Math.max(0, Math.trunc(Number(draftData.productionTimeDays))),
+      );
 
       if (Array.isArray(draftData.productSupplies)) {
         setProductSupplies(
@@ -1297,6 +1323,7 @@ export default function ProductForm() {
         catalog_min_order: (sourceProduct as any).catalog_min_order ?? sourceProduct.min_order_quantity ?? 1,
         product_colors: (sourceProduct as any).product_colors ?? [],
         personalization_enabled: (sourceProduct as any).personalization_enabled ?? false,
+        production_time_days: (sourceProduct as any).production_time_days ?? null,
         unit: sourceProduct.unit || 'un',
         is_active: Boolean(sourceProduct.is_active),
         base_cost: Number(sourceProduct.base_cost || 0),
@@ -1418,6 +1445,10 @@ export default function ProductForm() {
       hex: color.hex.trim(),
       active: color.active,
     }));
+    const normalizedProductionTimeDays =
+      productionTimeDays === null || Number.isNaN(Number(productionTimeDays))
+        ? null
+        : Math.max(0, Math.trunc(Number(productionTimeDays)));
     const normalizedImageUrls = normalizeProductImages(imageUrls);
     const primaryImageUrl = normalizedImageUrls[0] ?? null;
     const hasInvalidColor = normalizedColors.some((color) => !color.name || !color.hex);
@@ -1449,6 +1480,7 @@ export default function ProductForm() {
       catalog_min_order: minOrderQuantity,
       product_colors: normalizedColors,
       personalization_enabled: personalizationEnabled,
+      production_time_days: normalizedProductionTimeDays,
       unit,
       is_active: isActive,
       base_cost: baseCost,
@@ -2017,14 +2049,44 @@ export default function ProductForm() {
               )}
             </div>
 
-            <div className="md:col-span-2 flex items-center justify-between rounded-lg border p-3">
-              <div className="space-y-1">
-                <Label className="text-sm font-medium">Personalização (Nome na capa)</Label>
-                <p className="text-xs text-muted-foreground">
-                  Exiba o campo de personalização na página do produto.
-                </p>
+            <div className="md:col-span-2 space-y-3 rounded-lg border p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="space-y-1">
+                  <Label className="text-sm font-medium">Produto personalizado</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Quando ativo, o cliente pode anexar opcionalmente a arte/modelo no pedido do catálogo (JPG, PNG, WEBP ou PDF).
+                  </p>
+                </div>
+                <Switch checked={personalizationEnabled} onCheckedChange={setPersonalizationEnabled} />
               </div>
-              <Switch checked={personalizationEnabled} onCheckedChange={setPersonalizationEnabled} />
+
+              {(productType === 'confeccionado' || personalizationEnabled) && (
+                <div className="space-y-2">
+                  <Label htmlFor="productionTimeDays">Tempo de produção (dias corridos)</Label>
+                  <Input
+                    id="productionTimeDays"
+                    type="number"
+                    min={0}
+                    step={1}
+                    value={productionTimeDays ?? ''}
+                    onChange={(event) => {
+                      const rawValue = event.target.value;
+                      setProductionTimeDays(
+                        rawValue === '' ? null : Math.max(0, Math.trunc(Number(rawValue) || 0)),
+                      );
+                    }}
+                    className={errors?.production_time_days ? 'border-destructive' : ''}
+                    placeholder="Ex.: 3"
+                  />
+                  {errors?.production_time_days ? (
+                    <p className="text-xs text-destructive">{errors.production_time_days}</p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      Defina em dias corridos. Esse prazo sera exibido no catalogo e no pedido.
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>

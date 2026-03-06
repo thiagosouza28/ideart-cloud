@@ -105,21 +105,21 @@ export function AppSidebar() {
   };
 
   const navButtonClass =
-    'min-h-11 h-auto rounded-2xl px-3 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100 data-[active=true]:bg-purple-600 data-[active=true]:text-white [&>span:last-child]:whitespace-normal [&>span:last-child]:overflow-visible [&>span:last-child]:text-clip [&>span:last-child]:leading-tight';
+    'min-h-11 h-auto rounded-2xl px-3 py-2.5 text-sm font-medium text-sidebar-foreground/80 hover:bg-sidebar-accent/70 hover:text-sidebar-foreground data-[active=true]:bg-sidebar-primary data-[active=true]:text-sidebar-primary-foreground [&>span:last-child]:whitespace-normal [&>span:last-child]:overflow-visible [&>span:last-child]:text-clip [&>span:last-child]:leading-tight';
   const neutralNavButtonClass =
-    'min-h-11 h-auto rounded-2xl px-3 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100 [&>span:last-child]:whitespace-normal [&>span:last-child]:overflow-visible [&>span:last-child]:text-clip [&>span:last-child]:leading-tight';
+    'min-h-11 h-auto rounded-2xl px-3 py-2.5 text-sm font-medium text-sidebar-foreground/80 hover:bg-sidebar-accent/70 hover:text-sidebar-foreground [&>span:last-child]:whitespace-normal [&>span:last-child]:overflow-visible [&>span:last-child]:text-clip [&>span:last-child]:leading-tight';
 
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border bg-sidebar">
       <SidebarHeader className="border-b border-sidebar-border">
         <div className={`flex items-center gap-3 px-3 py-4 ${collapsed ? 'justify-center' : ''}`}>
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-purple-600 text-white shadow-sm">
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-sidebar-primary text-sidebar-primary-foreground shadow-sm">
             <Package className="h-5 w-5" />
           </div>
           {!collapsed && (
             <div className="flex flex-col leading-tight">
-              <span className="text-base font-semibold text-slate-900">Ideart Cloud</span>
-              <span className="text-[11px] font-medium tracking-wide text-slate-400">SISTEMA DE GESTÃO</span>
+              <span className="text-base font-semibold text-sidebar-foreground">Ideart Cloud</span>
+              <span className="text-[11px] font-medium tracking-wide text-sidebar-muted">SISTEMA DE GESTÃO</span>
             </div>
           )}
         </div>
@@ -128,7 +128,7 @@ export function AppSidebar() {
       <SidebarContent className={collapsed ? 'scrollbar-thin px-2 py-4' : 'scrollbar-thin px-4 py-4'}>
         <SidebarGroup>
           {!collapsed && (
-            <SidebarGroupLabel className="text-[11px] font-semibold tracking-wide text-slate-400">
+            <SidebarGroupLabel className="text-[11px] font-semibold tracking-wide text-sidebar-muted">
               MENU PRINCIPAL
             </SidebarGroupLabel>
           )}
@@ -162,7 +162,7 @@ export function AppSidebar() {
         {secondaryItems.length > 0 && !isSuperAdmin && (
           <SidebarGroup className="pt-2">
             {!collapsed && (
-              <SidebarGroupLabel className="text-[11px] font-semibold tracking-wide text-slate-400">
+              <SidebarGroupLabel className="text-[11px] font-semibold tracking-wide text-sidebar-muted">
                 OUTROS
               </SidebarGroupLabel>
             )}
@@ -197,7 +197,7 @@ export function AppSidebar() {
         {isSuperAdmin && superAdminItems.length > 0 && (
           <SidebarGroup>
             {!collapsed && (
-              <SidebarGroupLabel className="text-[11px] font-semibold tracking-wide text-slate-400">
+              <SidebarGroupLabel className="text-[11px] font-semibold tracking-wide text-sidebar-muted">
                 SUPER ADMIN
               </SidebarGroupLabel>
             )}

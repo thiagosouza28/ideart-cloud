@@ -17,6 +17,7 @@ import { publicSupabase as supabase } from '@/integrations/supabase/public-clien
 import { useCustomerAuth } from '@/hooks/use-customer-auth';
 import { PUBLIC_CART_UPDATED_EVENT, getPublicCartItemsCount } from '@/lib/public-cart';
 import { ensurePublicStorageUrl } from '@/lib/storage';
+import { normalizeProductionTimeDays } from '@/lib/productionTime';
 import { isPromotionActive, resolveProductBasePrice, resolveProductPrice } from '@/lib/pricing';
 import { Category, Company as DatabaseCompany, Product } from '@/types/database';
 
@@ -557,6 +558,26 @@ const pageStyles = `
   color: var(--pc-muted);
   font-size: 12px;
   font-weight: 500;
+}
+
+.pc-product-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pc-personalized-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  border-radius: 999px;
+  padding: 0 8px;
+  background: rgba(201, 168, 76, 0.18);
+  border: 1px solid rgba(201, 168, 76, 0.5);
+  color: #775f1f;
+  font-size: 11px;
+  font-weight: 700;
 }
 
 .pc-product-title {
@@ -1294,6 +1315,7 @@ export default function PublicCatalog() {
                   : `/catalogo/produto/${product.id}`;
                 const inPromotion = isPromotionActive(product as unknown as Product);
                 const categoryName = product.category?.name || 'Produto';
+                const productionTimeDays = normalizeProductionTimeDays(product.production_time_days);
 
                 return (
                   <Link key={product.id} to={productHref} className="pc-product-card">
@@ -1313,11 +1335,22 @@ export default function PublicCatalog() {
                     </div>
 
                     <div className="pc-product-body">
-                      <span className="pc-product-category">{categoryName}</span>
+                      <div className="pc-product-meta">
+                        <span className="pc-product-category">{categoryName}</span>
+                        {product.personalization_enabled && (
+                          <span className="pc-personalized-badge">Personalizado</span>
+                        )}
+                      </div>
                       <h3 className="pc-product-title">{product.name}</h3>
                       <p className="pc-product-description">
-                        {product.catalog_short_description || 'Produto personalizado com acabamento profissional.'}
+                        {product.catalog_short_description || 'Produto disponível no catálogo.'}
                       </p>
+                      {productionTimeDays !== null && (
+                        <p className="mt-1 text-xs text-slate-500">
+                          Tempo de producao: {productionTimeDays}{' '}
+                          {productionTimeDays === 1 ? 'dia' : 'dias'}
+                        </p>
+                      )}
 
                       <div className="pc-product-footer">
                         {showPrices ? (

@@ -6,6 +6,10 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { Customer, PaymentMethod, PriceTier, Product, type OrderStatus } from '@/types/database';
 import { resolveProductPrice } from '@/lib/pricing';
+import {
+  calculateEstimatedDeliveryInfo,
+  normalizeProductionTimeDays,
+} from '@/lib/productionTime';
 import { normalizeDigits } from '@/components/ui/masked-input';
 import { useUnsavedChanges } from '@/hooks/use-unsaved-changes';
 import { ensurePublicStorageUrl } from '@/lib/storage';
@@ -659,6 +663,31 @@ export default function OrderForm() {
     return sanitizedNotes.length > 0 ? sanitizedNotes : null;
   };
 
+  const resolveOrderProductionInfo = () => {
+    let maxProductionDays: number | null = null;
+
+    items.forEach((item) => {
+      const isCustomProduct =
+        item.product.personalization_enabled === true ||
+        item.product.product_type === 'confeccionado';
+      if (!isCustomProduct) return;
+
+      const productDays = normalizeProductionTimeDays(item.product.production_time_days);
+      if (productDays === null) return;
+      maxProductionDays =
+        maxProductionDays === null ? productDays : Math.max(maxProductionDays, productDays);
+    });
+
+    const estimatedDeliveryInfo = calculateEstimatedDeliveryInfo({
+      productionTimeDays: maxProductionDays,
+    });
+
+    return {
+      productionTimeDaysUsed: maxProductionDays,
+      estimatedDeliveryDate: estimatedDeliveryInfo?.isoDate ?? null,
+    };
+  };
+
   const handleSubmit = async () => {
     if (saving) return;
     if (!user.id) {
@@ -709,6 +738,7 @@ export default function OrderForm() {
       }
 
       const status: OrderStatus = documentType === 'orcamento' ? 'orcamento' : 'pendente';
+      const productionInfo = resolveOrderProductionInfo();
 
       const { data: createdOrder, error: orderError } = await supabase
         .from('orders')
@@ -724,6 +754,8 @@ export default function OrderForm() {
           payment_status: 'pendente',
           payment_method: paymentMethod,
           notes: buildOrderNotes(),
+          production_time_days_used: productionInfo.productionTimeDaysUsed,
+          estimated_delivery_date: productionInfo.estimatedDeliveryDate,
           created_by: user.id,
         })
         .select('id, order_number, customer_name')

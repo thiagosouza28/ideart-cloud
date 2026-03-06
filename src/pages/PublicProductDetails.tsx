@@ -31,6 +31,12 @@ import {
   upsertPublicCartItem,
 } from '@/lib/public-cart';
 import { ensurePublicStorageUrl } from '@/lib/storage';
+import {
+  calculateEstimatedDeliveryInfo,
+  formatDatePtBr,
+  normalizeProductionTimeDays,
+  resolveCompanyDeliveryTimeDays,
+} from '@/lib/productionTime';
 import { isPromotionActive, resolveProductBasePrice, resolveProductPrice } from '@/lib/pricing';
 import { useToast } from '@/hooks/use-toast';
 import { Company, Product, ProductColor, ProductReview } from '@/types/database';
@@ -370,6 +376,12 @@ export default function PublicProductDetails() {
     ? productImages
     : Array.from({ length: 4 }, () => null);
   const isPersonalizationAllowed = product?.personalization_enabled === true;
+  const productionTimeDays = normalizeProductionTimeDays(product?.production_time_days);
+  const companyDeliveryTimeDays = resolveCompanyDeliveryTimeDays(company);
+  const estimatedDeliveryInfo = calculateEstimatedDeliveryInfo({
+    productionTimeDays,
+    companyDeliveryDays: companyDeliveryTimeDays,
+  });
   const reviewCount = reviews.length;
   const averageRating = useMemo(() => {
     if (reviews.length === 0) return 0;
@@ -455,6 +467,8 @@ export default function PublicProductDetails() {
         quantity,
         minOrderQuantity: minimumQuantity,
         notes: notes || null,
+        isPersonalized: isPersonalizationAllowed,
+        productionTimeDays,
       },
       mode,
     );
@@ -1306,6 +1320,19 @@ export default function PublicProductDetails() {
                 <div className="text-sm text-slate-500">Preco sob consulta</div>
               )}
 
+              {estimatedDeliveryInfo && (
+                <div className="rounded-md border border-sky-200 bg-sky-50 p-3 text-xs text-sky-900">
+                  <p>
+                    <strong>Tempo de producao:</strong> {estimatedDeliveryInfo.productionTimeDays}{' '}
+                    {estimatedDeliveryInfo.productionTimeDays === 1 ? 'dia' : 'dias'}
+                  </p>
+                  <p className="mt-1">
+                    <strong>Previsao de entrega:</strong>{' '}
+                    {formatDatePtBr(estimatedDeliveryInfo.isoDate)}
+                  </p>
+                </div>
+              )}
+
               {availableColors.length > 0 && (
                 <div>
                   <Label className="text-xs uppercase text-slate-500">Cor da Capa</Label>
@@ -1330,19 +1357,22 @@ export default function PublicProductDetails() {
               {isPersonalizationAllowed && (
                 <div>
                   <div className="flex items-center justify-between text-xs text-slate-500">
-                    <Label>Personalizacao (Nome na capa)</Label>
-                    <span>Gratis</span>
+                    <Label>Observações do modelo (opcional)</Label>
+                    <span>Referência opcional no carrinho</span>
                   </div>
                   <Input
-                    placeholder="Ex: Ana Silva"
+                    placeholder="Ex: Logo centralizado e fundo azul"
                     className="mt-2"
-                    maxLength={20}
+                    maxLength={120}
                     value={orderForm.customization}
                     onChange={(event) =>
-                      setOrderForm((prev) => ({ ...prev, customization: event.target.value.slice(0, 20) }))
+                      setOrderForm((prev) => ({ ...prev, customization: event.target.value.slice(0, 120) }))
                     }
                   />
-                  <p className="mt-1 text-xs text-slate-400">Maximo de 20 caracteres.</p>
+                  <p className="mt-1 text-xs text-slate-400">Campo opcional para orientar a loja sobre o modelo.</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Produto personalizado: no carrinho você pode anexar a arte/modelo (JPG, PNG, WEBP ou PDF).
+                  </p>
                 </div>
               )}
               <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
@@ -1444,12 +1474,25 @@ export default function PublicProductDetails() {
                 <p><strong>SKU:</strong> {product.sku || 'Não informado'}</p>
                 <p><strong>Código de barras:</strong> {product.barcode || 'Não informado'}</p>
                 <p><strong>Unidade:</strong> {product.unit || 'Não informada'}</p>
-                <p><strong>Quantidade minima:</strong> {minimumOrderQuantity}</p>
+                <p><strong>Quantidade mínima:</strong> {minimumOrderQuantity}</p>
               </div>
             )}
             {activeTab === 'envio' && (
-              <div className="text-sm text-slate-600">
-                Consulte prazos e modalidades de entrega com a equipe. Pedidos acima de R$199 possuem frete gratis.
+              <div className="space-y-2 text-sm text-slate-600">
+                {estimatedDeliveryInfo ? (
+                  <>
+                    <p>
+                      Tempo de producao: <strong>{estimatedDeliveryInfo.productionTimeDays}</strong>{' '}
+                      {estimatedDeliveryInfo.productionTimeDays === 1 ? 'dia' : 'dias'}.
+                    </p>
+                    <p>
+                      Previsao de entrega: <strong>{formatDatePtBr(estimatedDeliveryInfo.isoDate)}</strong>.
+                    </p>
+                  </>
+                ) : (
+                  <p>Consulte prazos e modalidades de entrega com a equipe.</p>
+                )}
+                <p>Pedidos acima de R$199 possuem frete gratis.</p>
               </div>
             )}
             {activeTab === 'avaliacoes' && (
@@ -1519,7 +1562,7 @@ export default function PublicProductDetails() {
                         value={reviewForm.comment}
                         maxLength={600}
                         onChange={(event) => handleReviewFieldChange('comment', event.target.value)}
-                        placeholder="Conte o que voce achou do produto..."
+                        placeholder="Conte o que você achou do produto..."
                       />
                     </div>
 

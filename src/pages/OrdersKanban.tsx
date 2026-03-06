@@ -23,6 +23,7 @@ import type { Customer, Order, OrderItem, OrderStatus, PaymentMethod } from '@/t
 import { useNavigate } from 'react-router-dom';
 import { useConfirm } from '@/components/ui/confirm-dialog';
 import { buildOrderDetailsPath } from '@/lib/orderRouting';
+import { isPendingCustomerInfoOrder, isPublicCatalogPersonalizedOrder } from '@/lib/orderMetadata';
 
 const statusOrder: OrderStatus[] = [
   'orcamento',
@@ -229,74 +230,94 @@ const OrderCard = ({
   dragHandleProps,
   onOpen,
   isOverlay,
-}: OrderCardProps) => (
-  <div
-    className={cn(
-      'rounded-lg border bg-card p-3 shadow-sm transition-shadow',
-      isUpdating && 'opacity-60',
-      isOverlay && 'shadow-lg'
-    )}
-  >
-    <div className="flex items-start justify-between gap-2">
-      <div>
-        <p className="text-sm font-semibold">#{formatOrderNumber(order.order_number)}</p>
-        <p className="text-xs text-muted-foreground">
-          {order.customer_name || order.customer?.name || 'Sem cliente'}
-        </p>
+}: OrderCardProps) => {
+  const isPersonalized = isPublicCatalogPersonalizedOrder(order.notes);
+  const pendingCustomerInfo =
+    order.status === 'pendente' && isPendingCustomerInfoOrder(order.notes);
+
+  return (
+    <div
+      className={cn(
+        'rounded-lg border bg-card p-3 shadow-sm transition-shadow',
+        isUpdating && 'opacity-60',
+        isOverlay && 'shadow-lg'
+      )}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <p className="text-sm font-semibold">#{formatOrderNumber(order.order_number)}</p>
+          <p className="text-xs text-muted-foreground">
+            {order.customer_name || order.customer?.name || 'Sem cliente'}
+          </p>
+        </div>
+        <div className="flex items-center gap-1">
+          {dragHandleProps && (
+            <button
+              type="button"
+              {...dragHandleProps}
+              className="rounded-md p-1 text-muted-foreground hover:text-foreground"
+              aria-label="Arrastar pedido"
+            >
+              <GripVertical className="h-4 w-4" />
+            </button>
+          )}
+          {onOpen && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={(event) => {
+                event.stopPropagation();
+                onOpen();
+              }}
+            >
+              <Eye className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
       </div>
-      <div className="flex items-center gap-1">
-        {dragHandleProps && (
-          <button
-            type="button"
-            {...dragHandleProps}
-            className="rounded-md p-1 text-muted-foreground hover:text-foreground"
-            aria-label="Arrastar pedido"
-          >
-            <GripVertical className="h-4 w-4" />
-          </button>
-        )}
-        {onOpen && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            onClick={(event) => {
-              event.stopPropagation();
-              onOpen();
-            }}
-          >
-            <Eye className="h-4 w-4" />
-          </Button>
-        )}
+      <div className="mt-2 flex items-center justify-between">
+        <span className={cn('status-badge', statusColor)}>{statusLabel}</span>
+        {isUpdating && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+      </div>
+      {(pendingCustomerInfo || isPersonalized) && (
+        <div className="mt-1 flex flex-wrap gap-1">
+          {pendingCustomerInfo && (
+            <span className="inline-flex rounded bg-slate-100 px-2 py-0.5 text-[11px] text-slate-700">
+              Aguardando informacoes
+            </span>
+          )}
+          {isPersonalized && (
+            <span className="inline-flex rounded bg-indigo-100 px-2 py-0.5 text-[11px] font-medium text-indigo-800">
+              Personalizado
+            </span>
+          )}
+        </div>
+      )}
+      <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+        <div className="flex items-center justify-between gap-2">
+          <span>Telefone</span>
+          <span className="max-w-[140px] truncate">{order.customer?.phone || '-'}</span>
+        </div>
+        <div className="flex items-center justify-between gap-2">
+          <span>CPF</span>
+          <span className="max-w-[140px] truncate">{order.customer?.document || '-'}</span>
+        </div>
+        <div className="flex items-center justify-between gap-2">
+          <span>Pagamento</span>
+          <span className="max-w-[140px] truncate">{formatPaymentMethod(order.payment_method)}</span>
+        </div>
+      </div>
+      <div className="mt-2 text-xs text-muted-foreground">
+        Produtos: <span className="font-medium text-foreground/80">{formatOrderItems(order.items)}</span>
+      </div>
+      <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
+        <span>{formatCurrency(Number(order.total))}</span>
+        <span>{formatDate(order.created_at)}</span>
       </div>
     </div>
-    <div className="mt-2 flex items-center justify-between">
-      <span className={cn('status-badge', statusColor)}>{statusLabel}</span>
-      {isUpdating && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
-    </div>
-    <div className="mt-2 space-y-1 text-xs text-muted-foreground">
-      <div className="flex items-center justify-between gap-2">
-        <span>Telefone</span>
-        <span className="max-w-[140px] truncate">{order.customer?.phone || '-'}</span>
-      </div>
-      <div className="flex items-center justify-between gap-2">
-        <span>CPF</span>
-        <span className="max-w-[140px] truncate">{order.customer?.document || '-'}</span>
-      </div>
-      <div className="flex items-center justify-between gap-2">
-        <span>Pagamento</span>
-        <span className="max-w-[140px] truncate">{formatPaymentMethod(order.payment_method)}</span>
-      </div>
-    </div>
-    <div className="mt-2 text-xs text-muted-foreground">
-      Produtos: <span className="font-medium text-foreground/80">{formatOrderItems(order.items)}</span>
-    </div>
-    <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
-      <span>{formatCurrency(Number(order.total))}</span>
-      <span>{formatDate(order.created_at)}</span>
-    </div>
-  </div>
-);
+  );
+};
 
 type DraggableOrderCardProps = {
   order: KanbanOrder;
@@ -417,7 +438,7 @@ export default function OrdersKanban() {
     const { data, error } = await supabase
       .from('orders')
       .select(
-        'id, order_number, customer_id, customer_name, status, total, created_at, payment_method, customer:customers(name, phone, document), items:order_items(product_name, quantity)'
+        'id, order_number, customer_id, customer_name, status, total, created_at, payment_method, notes, customer:customers(name, phone, document), items:order_items(product_name, quantity)'
       )
       .order('created_at', { ascending: false });
 

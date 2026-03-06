@@ -15,6 +15,8 @@ import type { OrderStatus, PublicOrderPayload } from '@/types/database';
 import { ensurePublicStorageUrl } from '@/lib/storage';
 import { formatAreaM2, parseM2Attributes } from '@/lib/measurements';
 import { localizeOrderHistoryNote } from '@/lib/orderHistoryNotes';
+import { isPublicCatalogOrder } from '@/lib/orderMetadata';
+import { formatDatePtBr, normalizeProductionTimeDays } from '@/lib/productionTime';
 import { CheckCircle, Clock, Copy, Package, Truck, XCircle, FileText, Image as ImageIcon } from 'lucide-react';
 
 const statusLabels: Record<OrderStatus, string> = {
@@ -68,6 +70,11 @@ const isLikelyValidPixCode = (value: string | null | undefined) => {
   return normalized.startsWith('000201') && normalized.includes('6304');
 };
 
+const normalizePublicCatalogStatus = (status: OrderStatus, notes?: string | null): OrderStatus => {
+  if (isPublicCatalogOrder(notes) && status === 'orcamento') return 'pendente';
+  return status;
+};
+
 export default function PublicOrder() {
   const { token } = useParams<{ token: string }>();
   const { toast } = useToast();
@@ -109,14 +116,16 @@ export default function PublicOrder() {
         return;
       }
 
-      if (silent && lastStatusRef.current && data.order.status !== lastStatusRef.current) {
+      const trackedStatus = normalizePublicCatalogStatus(data.order.status, data.order.notes);
+
+      if (silent && lastStatusRef.current && trackedStatus !== lastStatusRef.current) {
         toast({
           title: 'Status atualizado',
-          description: `Novo status: ${statusLabels[data.order.status]}`,
+          description: `Novo status: ${statusLabels[trackedStatus]}`,
         });
       }
 
-      lastStatusRef.current = data.order.status;
+      lastStatusRef.current = trackedStatus;
       setPayload(data);
       setError(null);
       if (!silent) setLoading(false);
@@ -297,14 +306,20 @@ export default function PublicOrder() {
     url: ensurePublicStorageUrl('order-art-files', file.storage_path),
     isImage: file.file_type ? file.file_type.startsWith('image/') : false,
   }));
+  const isCatalogSourceOrder = isPublicCatalogOrder(payload.order.notes);
+  const orderStatus = normalizePublicCatalogStatus(payload.order.status, payload.order.notes);
+  const productionTimeDays = normalizeProductionTimeDays(payload.order.production_time_days_used);
+  const estimatedDeliveryDate = payload.order.estimated_delivery_date
+    ? formatDatePtBr(payload.order.estimated_delivery_date)
+    : null;
   const artFilesReady = artFilesWithUrls.filter((file) => file.url);
   const readyPhotos = finalPhotosWithUrls.filter((photo) => photo.url);
   const showReadyPhotos =
     readyPhotos.length > 0 && (
-      payload.order.status === 'finalizado' ||
-      payload.order.status === 'pronto' ||
-      payload.order.status === 'aguardando_retirada' ||
-      payload.order.status === 'entregue'
+      orderStatus === 'finalizado' ||
+      orderStatus === 'pronto' ||
+      orderStatus === 'aguardando_retirada' ||
+      orderStatus === 'entregue'
     );
   const showArtFiles =
     artFilesReady.length > 0 &&
@@ -316,10 +331,10 @@ export default function PublicOrder() {
       'pronto',
       'aguardando_retirada',
       'entregue',
-    ].includes(payload.order.status);
+    ].includes(orderStatus);
   const canApproveArt =
-    payload.order.status === 'produzindo_arte' && artFilesReady.length > 0;
-  const StatusIcon = statusIcons[payload.order.status];
+    orderStatus === 'produzindo_arte' && artFilesReady.length > 0;
+  const StatusIcon = statusIcons[orderStatus];
   const companyInfo = {
     name: payload.company.name,
     city: payload.company.city,
@@ -354,9 +369,9 @@ export default function PublicOrder() {
               />
             )}
             <h1 className="page-title">Pedido #{formatOrderNumber(payload.order.order_number)}</h1>
-            <span className={`status-badge ${statusColors[payload.order.status]}`}>
+            <span className={`status-badge ${statusColors[orderStatus]}`}>
               {StatusIcon && <StatusIcon className="h-4 w-4 mr-1" />}
-              {statusLabels[payload.order.status]}
+              {statusLabels[orderStatus]}
             </span>
           </div>
           <p className="text-muted-foreground">Criado em {formatDate(payload.order.created_at)}</p>
@@ -438,6 +453,20 @@ export default function PublicOrder() {
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Desconto</span>
                       <span className="text-destructive">-{formatCurrency(Number(payload.order.discount))}</span>
+                    </div>
+                  )}
+                  {productionTimeDays !== null && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Tempo de producao</span>
+                      <span>
+                        {productionTimeDays} {productionTimeDays === 1 ? 'dia' : 'dias'}
+                      </span>
+                    </div>
+                  )}
+                  {estimatedDeliveryDate && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Previsao de entrega</span>
+                      <span>{estimatedDeliveryDate}</span>
                     </div>
                   )}
                   <Separator />
@@ -650,8 +679,9 @@ export default function PublicOrder() {
               </CardContent>
             </Card>
 
-            {(payload.order.status === 'orcamento' ||
-              (payload.order.status === 'pendente' && !payload.order.approved_at)) && (
+            {!isCatalogSourceOrder &&
+              (orderStatus === 'orcamento' ||
+                (orderStatus === 'pendente' && !payload.order.approved_at)) && (
               <Card>
                 <CardHeader>
                   <CardTitle>Aprovação do Orçamento</CardTitle>

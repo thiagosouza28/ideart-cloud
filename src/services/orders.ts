@@ -134,9 +134,9 @@ const roleLabels: Record<AppRole, string> = {
 const paymentMethodLabels: Record<PaymentMethod, string> = {
   dinheiro: 'Dinheiro',
   cartao: 'Cartão',
-  credito: 'Cart�o cr�dito',
-  debito: 'Cart�o d�bito',
-  transferencia: 'Transfer�ncia',
+  credito: 'Cartão de crédito',
+  debito: 'Cartão de débito',
+  transferencia: 'Transferência',
   pix: 'PIX',
   boleto: 'Boleto',
   outro: 'Outro',
@@ -170,7 +170,7 @@ const fetchOrderForReceipt = async (orderId: string) => {
   const { data, error } = await supabase
     .from('orders')
     .select(
-      'id, order_number, company_id, customer_name, payment_method, amount_paid, total, company:companies(name, document, address, city, state, logo_url, signature_image_url, signature_responsible, signature_role), customer:customers(name, document)',
+      'id, order_number, company_id, customer_name, payment_method, amount_paid, total, production_time_days_used, estimated_delivery_date, company:companies(name, document, address, city, state, logo_url, signature_image_url, signature_responsible, signature_role), customer:customers(name, document)',
     )
     .eq('id', orderId)
     .single();
@@ -285,6 +285,10 @@ const generateReceiptForPayment = async ({
       tipo: 'pedido',
       numero: formatOrderReference(order.order_number),
       codigo: payment.id.slice(0, 8).toUpperCase(),
+    },
+    pedido: {
+      tempoProducaoDias: order.production_time_days_used ?? null,
+      previsaoEntrega: order.estimated_delivery_date ?? null,
     },
   };
 

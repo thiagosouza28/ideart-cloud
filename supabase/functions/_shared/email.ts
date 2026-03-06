@@ -7,27 +7,64 @@ type EmailPayload = {
   text: string;
 };
 
-  const getSmtpConfig = () => {
+type SmtpConfig = {
+  host: string;
+  port: number;
+  user: string;
+  pass: string;
+  emailFrom: string;
+  senderName: string;
+};
+
+const parseSmtpPort = () => {
+  const rawPort = Deno.env.get("SMTP_PORT") ?? "587";
+  const parsed = Number(rawPort);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 587;
+};
+
+const getSmtpConfig = (): SmtpConfig => {
   return {
     host: Deno.env.get("SMTP_HOST") ?? "",
-    port: Number(Deno.env.get("SMTP_PORT") ?? "465"),
+    port: parseSmtpPort(),
     user: Deno.env.get("SMTP_USER") ?? "",
     pass: Deno.env.get("SMTP_PASS") ?? "",
     emailFrom: Deno.env.get("EMAIL_FROM") ?? "",
-    senderName: Deno.env.get("SMTP_SENDER_NAME") ?? "IdeartCloud",
-    senderEmail: "suporte@ideartcloud.com.br",
+    senderName: Deno.env.get("SMTP_SENDER_NAME") ?? "Ideart Cloud",
   };
+};
+
+const buildFrom = (cfg: SmtpConfig) => {
+  const configured = cfg.emailFrom.trim();
+  const senderName = cfg.senderName.trim() || "Ideart Cloud";
+
+  if (!configured) {
+    return `${senderName} <${cfg.user}>`;
+  }
+
+  // Keep as-is when it already follows "Name <email@domain>".
+  if (configured.includes("<") && configured.includes(">")) {
+    return configured;
+  }
+
+  return `${senderName} <${configured}>`;
 };
 
 export const sendSmtpEmail = async (payload: EmailPayload) => {
   const cfg = getSmtpConfig();
   if (!cfg.host || !cfg.user || !cfg.pass) {
-    console.warn("SMTP não configurado. Ignorando envio de e-mail.");
+    console.warn("SMTP is not configured. Skipping e-mail send.");
     return false;
   }
 
   if (!(Deno as { writeAll?: unknown }).writeAll) {
-    (Deno as { writeAll?: (writer: { write: (p: Uint8Array) => Promise<number> }, data: Uint8Array) => Promise<void> }).writeAll =
+    (
+      Deno as {
+        writeAll?: (
+          writer: { write: (p: Uint8Array) => Promise<number> },
+          data: Uint8Array,
+        ) => Promise<void>;
+      }
+    ).writeAll =
       async (writer, data) => {
         let offset = 0;
         while (offset < data.length) {
@@ -40,10 +77,7 @@ export const sendSmtpEmail = async (payload: EmailPayload) => {
 
   const client = new SmtpClient();
   try {
-    const supportEmail = "suporte@ideartcloud.com.br";
-    const from = cfg.emailFrom.trim().length
-      ? cfg.emailFrom.trim()
-      : `${cfg.senderName} <${supportEmail}>`;
+    const from = buildFrom(cfg);
     if (cfg.port === 587) {
       await client.connect({
         hostname: cfg.host,

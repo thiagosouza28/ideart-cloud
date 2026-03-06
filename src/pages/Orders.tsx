@@ -14,6 +14,7 @@ import { deleteOrder } from '@/services/orders';
 import { useConfirm } from '@/components/ui/confirm-dialog';
 import { useAuth } from '@/contexts/AuthContext';
 import { buildOrderDetailsPath } from '@/lib/orderRouting';
+import { isPendingCustomerInfoOrder, isPublicCatalogPersonalizedOrder } from '@/lib/orderMetadata';
 import {
   buildOrderStatusCustomization,
   configurableOrderStatuses,
@@ -136,6 +137,10 @@ export default function Orders() {
       : paymentStatus === 'parcial'
         ? 'bg-yellow-100 text-yellow-800'
         : 'bg-gray-100 text-gray-800';
+  const getPendingDetailLabel = (order: Order) =>
+    order.status === 'pendente' && isPendingCustomerInfoOrder(order.notes)
+      ? 'Aguardando informacoes do cliente'
+      : null;
 
   const getStatusCounts = () => {
     const counts: Record<string, number> = { all: orders.length };
@@ -253,13 +258,23 @@ export default function Orders() {
                       <p className="font-medium">#{formatOrderNumber(order.order_number)}</p>
                       <p className="text-xs text-muted-foreground">{formatDate(order.created_at)}</p>
                     </div>
-                    <span className={`status-badge shrink-0 ${statusColors[order.status]}`}>
-                      {getStatusLabel(order.status, statusCustomization.labels)}
-                    </span>
+                    <div className="flex flex-col items-end gap-1">
+                      <span className={`status-badge shrink-0 ${statusColors[order.status]}`}>
+                        {getStatusLabel(order.status, statusCustomization.labels)}
+                      </span>
+                      {getPendingDetailLabel(order) && (
+                        <span className="text-[11px] text-muted-foreground">{getPendingDetailLabel(order)}</span>
+                      )}
+                    </div>
                   </div>
 
                   <div className="space-y-1">
                     <p className="truncate text-sm font-medium">{order.customer_name || 'Não informado'}</p>
+                    {isPublicCatalogPersonalizedOrder(order.notes) && (
+                      <span className="inline-flex rounded bg-indigo-100 px-2 py-1 text-[11px] font-medium text-indigo-800">
+                        Personalizado
+                      </span>
+                    )}
                     <span className={`inline-flex rounded px-2 py-1 text-xs ${getPaymentStatusColor(order.payment_status)}`}>
                       {getPaymentStatusLabel(order.payment_status)}
                     </span>
@@ -330,25 +345,39 @@ export default function Orders() {
                     >
                       <TableCell className="font-medium">#{formatOrderNumber(order.order_number)}</TableCell>
                       <TableCell>
-                        {order.customer_id ? (
-                          <Button
-                            variant="link"
-                            className="h-auto p-0 text-primary"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              navigate(`/clientes/${order.customer_id}/historico`);
-                            }}
-                          >
-                            {order.customer_name || 'Cliente'}
-                          </Button>
-                        ) : (
-                          <span>{order.customer_name || 'Não informado'}</span>
-                        )}
+                        <div className="flex flex-col gap-1">
+                          {order.customer_id ? (
+                            <Button
+                              variant="link"
+                              className="h-auto w-fit p-0 text-primary"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                navigate(`/clientes/${order.customer_id}/historico`);
+                              }}
+                            >
+                              {order.customer_name || 'Cliente'}
+                            </Button>
+                          ) : (
+                            <span>{order.customer_name || 'Não informado'}</span>
+                          )}
+                          {isPublicCatalogPersonalizedOrder(order.notes) && (
+                            <span className="inline-flex w-fit rounded bg-indigo-100 px-2 py-1 text-[11px] font-medium text-indigo-800">
+                              Personalizado
+                            </span>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell>
-                        <span className={`status-badge ${statusColors[order.status]}`}>
-                          {getStatusLabel(order.status, statusCustomization.labels)}
-                        </span>
+                        <div className="flex flex-col gap-1">
+                          <span className={`status-badge ${statusColors[order.status]}`}>
+                            {getStatusLabel(order.status, statusCustomization.labels)}
+                          </span>
+                          {getPendingDetailLabel(order) && (
+                            <span className="text-[11px] text-muted-foreground">
+                              {getPendingDetailLabel(order)}
+                            </span>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell>
                         <span className={`rounded px-2 py-1 text-xs ${getPaymentStatusColor(order.payment_status)}`}>

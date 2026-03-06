@@ -41,6 +41,8 @@ export default function PublicCustomerProfile() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, signOut, loading } = useCustomerAuth();
+  const userId = user?.id ?? null;
+  const userEmail = user?.email ?? null;
 
   const [catalogCompany, setCatalogCompany] = useState<{
     id: string;
@@ -149,12 +151,12 @@ export default function PublicCustomerProfile() {
 
   useEffect(() => {
     const loadFallbackCompany = async () => {
-      if (!user.id || catalogCompany?.id || (companyContext && isUuid(companyContext))) return;
+      if (!userId || catalogCompany?.id || (companyContext && isUuid(companyContext))) return;
 
       const { data } = await customerSupabase
         .from('orders')
         .select('company_id')
-        .eq('customer_user_id', user.id)
+        .eq('customer_user_id', userId)
         .not('company_id', 'is', null)
         .order('created_at', { ascending: false })
         .limit(1)
@@ -164,7 +166,7 @@ export default function PublicCustomerProfile() {
     };
 
     void loadFallbackCompany();
-  }, [catalogCompany?.id, companyContext, user.id]);
+  }, [catalogCompany?.id, companyContext, userId]);
 
   useEffect(() => {
     if (!user) return;
@@ -185,7 +187,7 @@ export default function PublicCustomerProfile() {
   }, [catalogCompany?.id, companyContext, fallbackCompanyId]);
 
   useEffect(() => {
-    if (!user.id || !profileCompanyId) {
+    if (!userId || !profileCompanyId) {
       setProfileLoaded(true);
       return;
     }
@@ -198,7 +200,7 @@ export default function PublicCustomerProfile() {
         .from('customers')
         .select('name, phone, document, email, address, city, state, zip_code')
         .eq('company_id', profileCompanyId)
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .order('updated_at', { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -225,7 +227,7 @@ export default function PublicCustomerProfile() {
     return () => {
       isMounted = false;
     };
-  }, [profileCompanyId, user.id]);
+  }, [profileCompanyId, userId]);
 
   const validateProfile = () => {
     const nextErrors: Partial<Record<keyof ProfileForm, string>> = {};
@@ -268,7 +270,7 @@ export default function PublicCustomerProfile() {
 
   const handleProfileSubmit = async (event: FormEvent) => {
     event.preventDefault();
-    if (!user.id || !profileCompanyId) return;
+    if (!userId || !profileCompanyId) return;
     if (!validateProfile()) return;
 
     setProfileSaving(true);
@@ -301,7 +303,7 @@ export default function PublicCustomerProfile() {
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <CatalogTopNav
         company={catalogCompany}
-        subtitle={user.email || 'Cliente autenticado'}
+        subtitle={userEmail || 'Cliente autenticado'}
         showBack
         onBack={() => navigate(catalogPath)}
         showAccount

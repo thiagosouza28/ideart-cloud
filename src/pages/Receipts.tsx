@@ -53,6 +53,8 @@ type OrderLite = {
   order_number: number;
   customer_id: string | null;
   customer_name: string | null;
+  production_time_days_used: number | null;
+  estimated_delivery_date: string | null;
 };
 
 type CompanyReceiptData = {
@@ -217,7 +219,7 @@ export default function Receipts() {
       const ordersResult = orderIds.length
         ? await supabase
             .from('orders')
-            .select('id, order_number, customer_id, customer_name')
+            .select('id, order_number, customer_id, customer_name, production_time_days_used, estimated_delivery_date')
             .in('id', orderIds)
         : { data: [], error: null };
 
@@ -366,6 +368,10 @@ export default function Receipts() {
           tipo: 'pedido',
           numero: `#${formatOrderNumber(order.order_number)}`,
           codigo: payment.id.slice(0, 8).toUpperCase(),
+        },
+        pedido: {
+          tempoProducaoDias: order.production_time_days_used ?? null,
+          previsaoEntrega: order.estimated_delivery_date ?? null,
         },
       };
 

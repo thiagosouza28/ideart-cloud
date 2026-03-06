@@ -7,6 +7,11 @@ export interface PublicCartItem {
   quantity: number;
   minOrderQuantity: number;
   notes?: string | null;
+  isPersonalized?: boolean;
+  productionTimeDays?: number | null;
+  referenceFilePath?: string | null;
+  referenceFileName?: string | null;
+  referenceFileType?: string | null;
 }
 
 export const PUBLIC_CART_UPDATED_EVENT = 'public-cart-updated';
@@ -25,6 +30,13 @@ const emitCartUpdated = (companyId: string) => {
 const toValidNumber = (value: unknown, fallback = 0) => {
   const numberValue = Number(value);
   return Number.isFinite(numberValue) ? numberValue : fallback;
+};
+
+const toValidOptionalInteger = (value: unknown) => {
+  const numberValue = Number(value);
+  if (!Number.isFinite(numberValue)) return null;
+  const normalized = Math.trunc(numberValue);
+  return normalized >= 0 ? normalized : null;
 };
 
 const sanitizeCartItem = (value: unknown): PublicCartItem | null => {
@@ -48,6 +60,14 @@ const sanitizeCartItem = (value: unknown): PublicCartItem | null => {
     quantity,
     minOrderQuantity,
     notes: typeof item.notes === 'string' ? item.notes : null,
+    isPersonalized: Boolean(item.isPersonalized),
+    productionTimeDays: toValidOptionalInteger(item.productionTimeDays),
+    referenceFilePath:
+      typeof item.referenceFilePath === 'string' ? item.referenceFilePath : null,
+    referenceFileName:
+      typeof item.referenceFileName === 'string' ? item.referenceFileName : null,
+    referenceFileType:
+      typeof item.referenceFileType === 'string' ? item.referenceFileType : null,
   };
 };
 
@@ -148,4 +168,3 @@ export const upsertPublicCartItem = (
 
 export const getPublicCartItemsCount = (companyId: string) =>
   getPublicCart(companyId).reduce((total, item) => total + item.quantity, 0);
-

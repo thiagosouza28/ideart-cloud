@@ -50,6 +50,7 @@ const PublicCustomerOrders = lazy(() => import("./pages/PublicCustomerOrders"));
 const PublicCustomerProfile = lazy(() => import("./pages/PublicCustomerProfile"));
 const PublicCustomerOrderDetails = lazy(() => import("./pages/PublicCustomerOrderDetails"));
 const PublicOrder = lazy(() => import("./pages/PublicOrder"));
+const SystemStorageFile = lazy(() => import("./pages/SystemStorageFile"));
 const Subscription = lazy(() => import("./pages/Subscription"));
 const SubscriptionSuccess = lazy(() => import("./pages/SubscriptionSuccess"));
 const SubscriptionCancel = lazy(() => import("./pages/SubscriptionCancel"));
@@ -512,6 +513,7 @@ const App = () => (
               <Route path="/minha-conta/pedidos" element={withSuspense(<PublicCustomerOrders />)} />
               <Route path="/minha-conta/pedidos/:orderId" element={withSuspense(<PublicCustomerOrderDetails />)} />
               <Route path="/pedido/:token" element={withSuspense(<PublicOrder />)} />
+              <Route path="/arquivo" element={withSuspense(<SystemStorageFile />)} />
 
               <Route path="*" element={withSuspense(<NotFound />)} />
               </Routes>

@@ -242,6 +242,7 @@ export interface Product {
   slug?: string | null;
   product_colors?: ProductColor[] | null;
   personalization_enabled?: boolean | null;
+  production_time_days?: number | null;
   base_cost: number;
   labor_cost: number;
   waste_percentage: number;
@@ -398,6 +399,8 @@ export interface Order {
   updated_at: string;
   approved_at?: string | null;
   approved_by?: string | null;
+  production_time_days_used?: number | null;
+  estimated_delivery_date?: string | null;
   customer?: Customer;
   company?: Company;
   items?: OrderItem[];
@@ -527,6 +530,8 @@ export interface PublicOrderPayload {
     | 'notes'
     | 'created_at'
     | 'approved_at'
+    | 'production_time_days_used'
+    | 'estimated_delivery_date'
   >;
   customer: {
     name: string | null;

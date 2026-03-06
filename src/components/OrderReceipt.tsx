@@ -2,6 +2,7 @@
 import { formatOrderNumber } from '@/lib/utils';
 import { Order, OrderItem, OrderPayment, PaymentStatus, PaymentMethod } from '@/types/database';
 import { formatAreaM2, parseM2Attributes, stripM2Attributes } from '@/lib/measurements';
+import { formatDatePtBr, normalizeProductionTimeDays } from '@/lib/productionTime';
 
 interface OrderReceiptProps {
   order: Order;
@@ -91,6 +92,10 @@ const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
     const storeDocument = documentLabel(company?.document);
     const customerLabel = order.customer?.name || order.customer_name || 'Cliente não informado';
     const totalLabel = formatCurrency(Number(order.total));
+    const productionTimeDays = normalizeProductionTimeDays(order.production_time_days_used);
+    const estimatedDeliveryDateLabel = order.estimated_delivery_date
+      ? formatDatePtBr(order.estimated_delivery_date)
+      : null;
 
     if (company?.phone) contactLines.push(`Tel: ${company.phone}`);
     if (company?.whatsapp && company?.whatsapp !== company?.phone) {
@@ -170,6 +175,25 @@ const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
               <div>
                 <p className="uppercase tracking-wide text-slate-500">Contato</p>
                 <p className="font-medium text-slate-700">{order.customer?.phone || order.customer?.email || '-'}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {(productionTimeDays !== null || estimatedDeliveryDateLabel) && (
+          <div className="receipt-block mt-4 rounded-lg border border-slate-200 px-3 py-2 text-[11px]">
+            <div className="grid gap-2 sm:grid-cols-2">
+              <div>
+                <p className="uppercase tracking-wide text-slate-500">Tempo de produção</p>
+                <p className="font-medium text-slate-700">
+                  {productionTimeDays !== null
+                    ? `${productionTimeDays} ${productionTimeDays === 1 ? 'dia' : 'dias'}`
+                    : '-'}
+                </p>
+              </div>
+              <div>
+                <p className="uppercase tracking-wide text-slate-500">Previsão de entrega</p>
+                <p className="font-medium text-slate-700">{estimatedDeliveryDateLabel || '-'}</p>
               </div>
             </div>
           </div>

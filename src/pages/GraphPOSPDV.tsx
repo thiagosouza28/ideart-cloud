@@ -492,7 +492,7 @@ export default function GraphPOSPDV() {
   };
 
   return (
-    <div className="w-full bg-slate-50 font-sans text-slate-900 lg:h-full lg:min-h-0 lg:overflow-hidden">
+    <div className="w-full bg-background font-sans text-foreground lg:h-full lg:min-h-0 lg:overflow-hidden">
       <main className="w-full pb-14 pt-2 lg:flex lg:h-full lg:min-h-0 lg:flex-col lg:pb-0">
         <div className="mb-4 flex items-center justify-between lg:shrink-0">
           <div>
@@ -525,7 +525,7 @@ export default function GraphPOSPDV() {
             </div>
 
             <GraphPOSCard className="flex min-h-0 flex-1 p-0">
-              <div className="h-[52vh] min-h-[320px] w-full flex-1 overflow-hidden rounded-xl border border-dashed border-slate-200 bg-white p-6 shadow-[0_6px_20px_rgba(15,23,42,0.06)] bg-[radial-gradient(circle,_#e2e8f0_0.8px,_transparent_0.8px)] [background-size:20px_20px] lg:h-full lg:min-h-0">
+              <div className="h-[52vh] min-h-[320px] w-full flex-1 overflow-hidden rounded-xl border border-dashed border-slate-200 bg-white p-6 shadow-[0_6px_20px_rgba(15,23,42,0.06)] bg-[radial-gradient(circle,_#e2e8f0_0.8px,_transparent_0.8px)] [background-size:20px_20px] dark:bg-background dark:[background-image:none] lg:h-full lg:min-h-0">
                 {!search.trim() ? (
                   <div className="flex h-full items-center justify-center text-center">
                     <div className="flex max-w-md flex-col items-center gap-4 text-slate-500">
@@ -667,7 +667,7 @@ export default function GraphPOSPDV() {
 
                 <div className="min-h-0 flex-1 overflow-y-auto pr-1">
                   {cart.length === 0 ? (
-                    <div className="flex min-h-[220px] h-full flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-slate-200 bg-slate-50 text-sm text-slate-400">
+                    <div className="flex min-h-[220px] h-full flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-slate-200 bg-slate-50 text-sm text-slate-400 dark:bg-transparent">
                       <ShoppingCart className="h-8 w-8 text-slate-300" />
                       Carrinho vazio
                     </div>
