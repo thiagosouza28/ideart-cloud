@@ -16,6 +16,8 @@ type SmtpConfig = {
   senderName: string;
 };
 
+const isGmailHost = (host: string) => host.trim().toLowerCase() === "smtp.gmail.com";
+
 const parseSmtpPort = () => {
   const rawPort = Deno.env.get("SMTP_PORT") ?? "587";
   const parsed = Number(rawPort);
@@ -23,12 +25,17 @@ const parseSmtpPort = () => {
 };
 
 const getSmtpConfig = (): SmtpConfig => {
+  const host = (Deno.env.get("SMTP_HOST") ?? "").trim();
+  const user = (Deno.env.get("SMTP_USER") ?? "").trim();
+  const rawPass = Deno.env.get("SMTP_PASS") ?? "";
+  const pass = isGmailHost(host) ? rawPass.replace(/\s+/g, "") : rawPass;
+
   return {
-    host: Deno.env.get("SMTP_HOST") ?? "",
+    host,
     port: parseSmtpPort(),
-    user: Deno.env.get("SMTP_USER") ?? "",
-    pass: Deno.env.get("SMTP_PASS") ?? "",
-    emailFrom: Deno.env.get("EMAIL_FROM") ?? "",
+    user,
+    pass,
+    emailFrom: (Deno.env.get("EMAIL_FROM") ?? "").trim(),
     senderName: Deno.env.get("SMTP_SENDER_NAME") ?? "Ideart Cloud",
   };
 };
@@ -47,6 +54,59 @@ const buildFrom = (cfg: SmtpConfig) => {
   }
 
   return `${senderName} <${configured}>`;
+};
+
+const connectClient = async (cfg: SmtpConfig) => {
+  const openConnection = async (client: SmtpClient, port: number, secure: boolean) => {
+    if (secure) {
+      await client.connectTLS({
+        hostname: cfg.host,
+        port,
+        username: cfg.user,
+        password: cfg.pass,
+      });
+      return;
+    }
+
+    await client.connect({
+      hostname: cfg.host,
+      port,
+      username: cfg.user,
+      password: cfg.pass,
+    });
+  };
+
+  const client = new SmtpClient();
+
+  try {
+    await openConnection(client, cfg.port, cfg.port === 465);
+    return client;
+  } catch (primaryError) {
+    try {
+      await client.close();
+    } catch {
+      // ignore close errors
+    }
+
+    if (!isGmailHost(cfg.host) || cfg.port !== 587) {
+      throw primaryError;
+    }
+
+    console.warn("SMTP connect on port 587 failed, retrying Gmail on port 465");
+
+    const fallbackClient = new SmtpClient();
+    try {
+      await openConnection(fallbackClient, 465, true);
+      return fallbackClient;
+    } catch (fallbackError) {
+      try {
+        await fallbackClient.close();
+      } catch {
+        // ignore close errors
+      }
+      throw fallbackError;
+    }
+  }
 };
 
 export const sendSmtpEmail = async (payload: EmailPayload) => {
@@ -75,24 +135,10 @@ export const sendSmtpEmail = async (payload: EmailPayload) => {
       };
   }
 
-  const client = new SmtpClient();
+  let client: SmtpClient | null = null;
   try {
     const from = buildFrom(cfg);
-    if (cfg.port === 587) {
-      await client.connect({
-        hostname: cfg.host,
-        port: cfg.port,
-        username: cfg.user,
-        password: cfg.pass,
-      });
-    } else {
-      await client.connectTLS({
-        hostname: cfg.host,
-        port: cfg.port,
-        username: cfg.user,
-        password: cfg.pass,
-      });
-    }
+    client = await connectClient(cfg);
 
     await client.send({
       from,
@@ -107,7 +153,7 @@ export const sendSmtpEmail = async (payload: EmailPayload) => {
     return false;
   } finally {
     try {
-      await client.close();
+      await client?.close();
     } catch {
       // ignore close errors
     }

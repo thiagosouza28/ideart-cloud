@@ -123,21 +123,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const url = window.location.href;
     const search = window.location.search;
     const hash = window.location.hash;
+    const searchParams = new URLSearchParams(search);
+    const hashParams = new URLSearchParams(hash.replace(/^#/, ''));
     const isCustomerRecoveryPath = window.location.pathname.startsWith('/minha-conta/alterar-senha');
+    const hasCode = searchParams.has('code');
     const isRecovery =
-      search.includes("type=recovery") ||
-      hash.includes("type=recovery") ||
-      hash.includes("access_token=");
+      hasCode ||
+      searchParams.has('token_hash') ||
+      searchParams.get('type') === 'recovery' ||
+      hashParams.get('type') === 'recovery' ||
+      hashParams.has('access_token');
 
     if (isRecovery && !isCustomerRecoveryPath) {
-      supabase.auth.exchangeCodeForSession(url).catch((error) => {
-        console.error('Falha ao trocar codigo de recuperacao', error);
-      }).finally(() => {
+      const finishRecoveryRedirect = () => {
         setPasswordRecovery(true);
         if (window.location.pathname !== '/alterar-senha') {
           navigate({ pathname: '/alterar-senha', search, hash }, { replace: true });
         }
-      });
+      };
+
+      if (hasCode) {
+        supabase.auth.exchangeCodeForSession(url).catch((error) => {
+          console.error('Falha ao trocar codigo de recuperacao', error);
+        }).finally(finishRecoveryRedirect);
+      } else {
+        finishRecoveryRedirect();
+      }
     }
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(

@@ -13,6 +13,8 @@ import { CatalogFooter, CatalogHero, CatalogTopNav } from '@/components/catalog/
 const isCustomerAccount = (candidate: User | null | undefined) =>
   String(candidate?.user_metadata?.account_type || '').toLowerCase() === 'customer';
 
+type VerifyOtpPayload = Parameters<typeof customerSupabase.auth.verifyOtp>[0];
+
 export default function PublicCustomerChangePassword() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -30,6 +32,7 @@ export default function PublicCustomerChangePassword() {
     return {
       hasRecoverySignal:
         searchParams.has('code') ||
+        searchParams.has('token_hash') ||
         searchParams.get('type') === 'recovery' ||
         hashParams.get('type') === 'recovery' ||
         hashParams.has('access_token'),
@@ -60,6 +63,8 @@ export default function PublicCustomerChangePassword() {
       const searchParams = new URLSearchParams(window.location.search);
       const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
       const code = searchParams.get('code');
+      const tokenHash = searchParams.get('token_hash');
+      const verificationType = (searchParams.get('type') || 'recovery').toLowerCase();
       const accessToken = hashParams.get('access_token');
       const refreshToken = hashParams.get('refresh_token');
 
@@ -68,6 +73,14 @@ export default function PublicCustomerChangePassword() {
           const { error: exchangeError } = await customerSupabase.auth.exchangeCodeForSession(window.location.href);
           if (exchangeError) {
             console.warn('[customer-password-recovery] exchangeCodeForSession failed', exchangeError.message);
+          }
+        } else if (tokenHash) {
+          const { error: verifyError } = await customerSupabase.auth.verifyOtp({
+            token_hash: tokenHash,
+            type: verificationType as VerifyOtpPayload['type'],
+          });
+          if (verifyError) {
+            console.warn('[customer-password-recovery] verifyOtp failed', verifyError.message);
           }
         } else if (accessToken && refreshToken) {
           const { error: setSessionError } = await customerSupabase.auth.setSession({

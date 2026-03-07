@@ -4,6 +4,15 @@ import { sendSmtpEmail } from '../_shared/email.ts';
 
 export const config = { verify_jwt: false };
 
+type AccountType = 'store' | 'customer';
+
+type AdminUser = {
+  id: string;
+  email?: string | null;
+  user_metadata?: Record<string, unknown> | null;
+  raw_user_meta_data?: Record<string, unknown> | null;
+};
+
 const defaultAllowedOrigins = [
   'http://127.0.0.1:3000',
   'http://127.0.0.1:4173',
@@ -18,6 +27,7 @@ const defaultAllowedOrigins = [
 const getAppOrigin = () => {
   const appUrl = Deno.env.get('APP_PUBLIC_URL');
   if (!appUrl) return null;
+
   try {
     return new URL(appUrl).origin;
   } catch {
@@ -70,6 +80,7 @@ const jsonResponse = (headers: HeadersInit, status: number, payload: unknown) =>
 const normalizeAppUrl = () => {
   const appUrl = Deno.env.get('APP_PUBLIC_URL')?.trim();
   if (!appUrl) return 'https://ideartcloud.com.br';
+
   try {
     return new URL(appUrl).toString();
   } catch {
@@ -77,13 +88,10 @@ const normalizeAppUrl = () => {
   }
 };
 
-const getDefaultRecoveryPath = (accountType: 'store' | 'customer') =>
+const getDefaultRecoveryPath = (accountType: AccountType) =>
   accountType === 'customer' ? '/minha-conta/alterar-senha' : '/alterar-senha';
 
-const resolveRedirectTo = (
-  rawRedirectTo: string | null,
-  accountType: 'store' | 'customer',
-) => {
+const resolveRedirectTo = (rawRedirectTo: string | null, accountType: AccountType) => {
   const appUrl = normalizeAppUrl();
   const fallback = new URL(getDefaultRecoveryPath(accountType), appUrl).toString();
   if (!rawRedirectTo) return fallback;
@@ -106,10 +114,139 @@ const getSupabaseClient = () =>
     { auth: { persistSession: false } },
   );
 
+const getLinkProperties = (linkData: unknown) => {
+  const data = linkData as Record<string, any> | null;
+  return {
+    actionLink: data?.action_link ?? data?.properties?.action_link ?? data?.properties?.actionLink ?? null,
+    hashedToken: data?.hashed_token ?? data?.properties?.hashed_token ?? null,
+    verificationType:
+      data?.verification_type ?? data?.properties?.verification_type ?? data?.properties?.verificationType ?? null,
+  };
+};
+
+const buildPublicRecoveryLink = (redirectTo: string, linkData: unknown) => {
+  const { actionLink, hashedToken, verificationType } = getLinkProperties(linkData);
+  if (!actionLink) return null;
+  if (!hashedToken || !verificationType) return actionLink;
+
+  try {
+    const parsedRedirect = new URL(redirectTo);
+    parsedRedirect.searchParams.set('token_hash', hashedToken);
+    parsedRedirect.searchParams.set('type', verificationType);
+    return parsedRedirect.toString();
+  } catch {
+    return actionLink;
+  }
+};
+
+const getUserMetadata = (user: AdminUser | null | undefined) =>
+  (user?.user_metadata ?? user?.raw_user_meta_data ?? {}) as Record<string, unknown>;
+
+const getUserAccountType = (user: AdminUser | null | undefined): AccountType =>
+  String(getUserMetadata(user).account_type || '').toLowerCase() === 'customer' ? 'customer' : 'store';
+
+const getUserFullName = (user: AdminUser | null | undefined) => {
+  const fullName = String(getUserMetadata(user).full_name || '').trim();
+  return fullName || null;
+};
+
+const findUserByEmail = async (
+  supabase: ReturnType<typeof getSupabaseClient>,
+  email: string,
+) => {
+  const admin = supabase.auth?.admin as {
+    getUserByEmail?: (
+      email: string,
+    ) => Promise<{ data?: { user?: AdminUser | null }; error?: { message: string } | null }>;
+    listUsers?: (
+      params?: { page?: number; perPage?: number },
+    ) => Promise<{ data?: { users?: AdminUser[] }; error?: { message: string } | null }>;
+  } | undefined;
+
+  if (!admin) {
+    return { user: null, error: 'Supabase admin API is unavailable' };
+  }
+
+  if (admin.getUserByEmail) {
+    const { data, error } = await admin.getUserByEmail(email);
+    if (error) {
+      return { user: null, error: error.message };
+    }
+    return { user: data?.user ?? null, error: null };
+  }
+
+  if (!admin.listUsers) {
+    return { user: null, error: 'Supabase admin lookup by email is unavailable' };
+  }
+
+  const normalizedEmail = email.toLowerCase();
+  const perPage = 1000;
+
+  for (let page = 1; page <= 50; page += 1) {
+    const { data, error } = await admin.listUsers({ page, perPage });
+    if (error) {
+      return { user: null, error: error.message };
+    }
+
+    const users = data?.users ?? [];
+    const match = users.find((candidate) => candidate.email?.toLowerCase() === normalizedEmail);
+    if (match) {
+      return { user: match, error: null };
+    }
+
+    if (users.length < perPage) {
+      break;
+    }
+  }
+
+  return { user: null, error: null };
+};
+
+const buildRecoveryMessage = (
+  accountType: AccountType,
+  recoveryLink: string,
+  fullName: string | null,
+) => {
+  const greeting = fullName ? `Ola ${fullName},` : 'Ola,';
+  const accountLabel = accountType === 'customer' ? 'conta do cliente' : 'acesso da loja';
+  const buttonLabel = accountType === 'customer' ? 'Criar nova senha da conta' : 'Criar nova senha da loja';
+  const subject =
+    accountType === 'customer'
+      ? 'Recuperacao de senha - Conta do cliente'
+      : 'Recuperacao de senha - Loja';
+
+  const text = [
+    'Solicitacao de recuperacao de senha',
+    '',
+    greeting,
+    '',
+    `Recebemos um pedido para redefinir a senha da sua ${accountLabel}.`,
+    `Clique no link para criar uma nova senha: ${recoveryLink}`,
+    '',
+    'Se voce nao solicitou, ignore este e-mail.',
+  ].join('\n');
+
+  const html = `
+    <div style="font-family:Arial, sans-serif;color:#0f172a;">
+      <h2>Recuperacao de senha</h2>
+      <p>${greeting}</p>
+      <p>Recebemos um pedido para redefinir a senha da sua ${accountLabel}.</p>
+      <p>
+        <a href="${recoveryLink}" style="display:inline-block;padding:12px 18px;background:#0f172a;color:#fff;text-decoration:none;border-radius:8px;">
+          ${buttonLabel}
+        </a>
+      </p>
+      <p style="font-size:12px;color:#64748b;">Se voce nao solicitou, ignore este e-mail.</p>
+    </div>
+  `;
+
+  return { subject, text, html };
+};
+
 serve(async (req) => {
   const corsHeaders = getCorsHeaders(req);
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders, status: 204 });
-  if (req.method !== 'POST') return jsonResponse(corsHeaders, 405, { error: 'Método inválido' });
+  if (req.method !== 'POST') return jsonResponse(corsHeaders, 405, { error: 'Metodo invalido' });
 
   try {
     const body = (await req.json().catch(() => ({}))) as {
@@ -119,12 +256,30 @@ serve(async (req) => {
     };
 
     const email = body.email?.trim().toLowerCase();
-    const accountType = body.accountType?.trim().toLowerCase() === 'customer' ? 'customer' : 'store';
-    if (!email) return jsonResponse(corsHeaders, 400, { error: 'E-mail obrigatório' });
+    const requestedAccountType: AccountType =
+      body.accountType?.trim().toLowerCase() === 'customer' ? 'customer' : 'store';
+    if (!email) {
+      return jsonResponse(corsHeaders, 400, { error: 'E-mail obrigatorio' });
+    }
 
-    const redirectTo = resolveRedirectTo(body.redirectTo?.trim() || null, accountType);
     const supabase = getSupabaseClient();
+    const { user, error: lookupError } = await findUserByEmail(supabase, email);
 
+    if (lookupError) {
+      console.error('[password-recovery] user lookup error', lookupError);
+      return jsonResponse(corsHeaders, 500, { error: 'Falha ao processar a recuperacao de senha.' });
+    }
+
+    if (!user) {
+      return jsonResponse(corsHeaders, 200, { ok: true, status: 'ignored' });
+    }
+
+    const actualAccountType = getUserAccountType(user);
+    if (actualAccountType !== requestedAccountType) {
+      return jsonResponse(corsHeaders, 200, { ok: true, status: 'ignored' });
+    }
+
+    const redirectTo = resolveRedirectTo(body.redirectTo?.trim() || null, actualAccountType);
     const { data, error } = await supabase.auth.admin.generateLink({
       type: 'recovery',
       email,
@@ -133,49 +288,33 @@ serve(async (req) => {
 
     if (error) {
       console.warn('[password-recovery] generateLink error', error.message);
-      return jsonResponse(corsHeaders, 200, { ok: true });
+      return jsonResponse(corsHeaders, 500, { error: 'Falha ao gerar o link de recuperacao.' });
     }
 
-    const actionLink =
-      (data as any)?.action_link ??
-      (data as any)?.properties?.action_link ??
-      (data as any)?.properties?.actionLink ??
-      null;
-
-    if (!actionLink) {
+    const recoveryLink = buildPublicRecoveryLink(redirectTo, data);
+    if (!recoveryLink) {
       console.warn('[password-recovery] action link missing');
-      return jsonResponse(corsHeaders, 200, { ok: true });
+      return jsonResponse(corsHeaders, 500, { error: 'Falha ao gerar o link de recuperacao.' });
     }
 
-    const text = [
-      'Solicitação de recuperação de senha',
-      '',
-      `Clique no link para criar uma nova senha: ${actionLink}`,
-      '',
-      'Se você não solicitou, ignore este e-mail.',
-    ].join('\n');
+    const { subject, text, html } = buildRecoveryMessage(
+      actualAccountType,
+      recoveryLink,
+      getUserFullName(user),
+    );
 
-    const html = `
-      <div style="font-family:Arial, sans-serif;color:#0f172a;">
-        <h2>Recuperação de senha</h2>
-        <p>Clique no botão abaixo para criar uma nova senha.</p>
-        <p>
-          <a href="${actionLink}" style="display:inline-block;padding:12px 18px;background:#0f172a;color:#fff;text-decoration:none;border-radius:8px;">
-            Criar nova senha
-          </a>
-        </p>
-        <p style="font-size:12px;color:#64748b;">Se você não solicitou, ignore este e-mail.</p>
-      </div>
-    `;
-
-    await sendSmtpEmail({
+    const sent = await sendSmtpEmail({
       to: email,
-      subject: 'Recuperação de senha - IDEART CLOUD',
+      subject,
       text,
       html,
     });
 
-    return jsonResponse(corsHeaders, 200, { ok: true });
+    if (!sent) {
+      return jsonResponse(corsHeaders, 500, { error: 'Falha ao enviar o e-mail de recuperacao.' });
+    }
+
+    return jsonResponse(corsHeaders, 200, { ok: true, status: 'sent' });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return jsonResponse(corsHeaders, 500, { error: message });
