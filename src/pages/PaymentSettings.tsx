@@ -52,7 +52,7 @@ const STATUS_LABELS: Record<string, string> = {
   pending: 'Pendente',
   paid: 'Pago',
   in_process: 'Em processamento',
-  in_review: 'Em analise',
+  in_review: 'Em análise',
   authorized: 'Autorizado',
   processing: 'Processando',
   rejected: 'Rejeitado',
@@ -71,9 +71,9 @@ const LOG_WORD_LABELS: Record<string, string> = {
   payment: 'pagamento',
   webhook: 'webhook',
   order: 'pedido',
-  transaction: 'transacao',
-  charge: 'cobranca',
-  notification: 'notificacao',
+  transaction: 'transação',
+  charge: 'cobrança',
+  notification: 'notificação',
   pix: 'pix',
   created: 'criado',
   updated: 'atualizado',
@@ -167,7 +167,7 @@ export default function PaymentSettings() {
     } catch (error) {
       console.error(error);
       toast({
-        title: 'Erro ao carregar configuracoes de pagamento',
+        title: 'Erro ao carregar configurações de pagamento',
         variant: 'destructive',
       });
     } finally {
@@ -211,8 +211,8 @@ export default function PaymentSettings() {
     if (requiresManualPixFields) {
       if (!form.pix_key_type || !form.pix_key.trim() || !form.pix_beneficiary_name.trim()) {
         toast({
-          title: 'Preencha a configuracao manual do PIX',
-          description: 'Tipo da chave, chave e favorecido sao obrigatorios.',
+          title: 'Preencha a configuração manual do PIX',
+          description: 'Tipo da chave, chave e favorecido são obrigatórios.',
           variant: 'destructive',
         });
         return;
@@ -260,12 +260,12 @@ export default function PaymentSettings() {
       }));
 
       toast({
-        title: 'Configuracao PIX salva',
+        title: 'Configuração PIX salva',
       });
 
       await loadLogs();
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Erro ao salvar configuracao';
+      const message = error instanceof Error ? error.message : 'Erro ao salvar configuração';
       toast({
         title: 'Falha ao salvar',
         description: message,
@@ -280,7 +280,7 @@ export default function PaymentSettings() {
     return (
       <div className="page-container">
         <div className="flex min-h-[260px] items-center justify-center text-sm text-muted-foreground">
-          Carregando configuracoes de pagamento...
+          Carregando configurações de pagamento...
         </div>
       </div>
     );
@@ -290,7 +290,7 @@ export default function PaymentSettings() {
     <div className="page-container space-y-6">
       <Card className="border-slate-200">
         <CardHeader>
-          <CardTitle>Configuracoes de Pagamento - PIX</CardTitle>
+          <CardTitle>Configurações de Pagamento - PIX</CardTitle>
           <CardDescription>
             Tokens financeiros ficam protegidos no backend e nunca sao exibidos completos.
           </CardDescription>
@@ -300,7 +300,7 @@ export default function PaymentSettings() {
             <div>
               <p className="text-sm font-medium">Ativar PIX no pagamento</p>
               <p className="text-xs text-slate-500">
-                O cliente so vera o botao PIX quando a configuracao estiver completa.
+                O cliente só verá o botão PIX quando a configuração estiver completa.
               </p>
             </div>
             <Switch
@@ -439,7 +439,7 @@ export default function PaymentSettings() {
           <div className="flex justify-end">
             <Button onClick={handleSave} disabled={saving} className="gap-2">
               <Save className="h-4 w-4" />
-              {saving ? 'Salvando...' : 'Salvar configuracoes'}
+              {saving ? 'Salvando...' : 'Salvar configurações'}
             </Button>
           </div>
         </CardContent>
@@ -490,7 +490,7 @@ export default function PaymentSettings() {
                     <TableCell>{getGatewayLabel(log.gateway)}</TableCell>
                     <TableCell>{getEventLabel(log.event_type)}</TableCell>
                     <TableCell>{getStatusLabel(log.status)}</TableCell>
-                    <TableCell>{log.signature_valid === null ? '-' : log.signature_valid ? 'Valida' : 'Invalida'}</TableCell>
+                    <TableCell>{log.signature_valid === null ? '-' : log.signature_valid ? 'Válida' : 'Inválida'}</TableCell>
                     <TableCell className="max-w-[320px] truncate text-xs">{log.error_message || '-'}</TableCell>
                   </TableRow>
                 ))

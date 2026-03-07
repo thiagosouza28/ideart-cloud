@@ -93,6 +93,113 @@ export type Database = {
           },
         ]
       }
+      catalog_settings: {
+        Row: {
+          accent_color: string
+          accepted_payment_methods: Database["public"]["Enums"]["payment_method"][]
+          badge_bg_color: string
+          badge_text_color: string
+          button_bg_color: string
+          button_text: string
+          button_outline_color: string
+          button_text_color: string
+          card_bg_color: string
+          card_border_color: string
+          catalog_description: string
+          catalog_layout: string
+          catalog_title: string
+          contact_link: string | null
+          created_at: string
+          filter_bg_color: string
+          filter_text_color: string
+          footer_bg_color: string
+          footer_text_color: string
+          header_bg_color: string
+          header_text_color: string
+          id: string
+          primary_color: string
+          price_color: string
+          secondary_color: string
+          show_contact: boolean
+          show_prices: boolean
+          store_id: string
+          text_color: string
+          updated_at: string
+        }
+        Insert: {
+          accent_color?: string
+          accepted_payment_methods?: Database["public"]["Enums"]["payment_method"][]
+          badge_bg_color?: string
+          badge_text_color?: string
+          button_bg_color?: string
+          button_text?: string
+          button_outline_color?: string
+          button_text_color?: string
+          card_bg_color?: string
+          card_border_color?: string
+          catalog_description?: string
+          catalog_layout?: string
+          catalog_title?: string
+          contact_link?: string | null
+          created_at?: string
+          filter_bg_color?: string
+          filter_text_color?: string
+          footer_bg_color?: string
+          footer_text_color?: string
+          header_bg_color?: string
+          header_text_color?: string
+          id?: string
+          primary_color?: string
+          price_color?: string
+          secondary_color?: string
+          show_contact?: boolean
+          show_prices?: boolean
+          store_id: string
+          text_color?: string
+          updated_at?: string
+        }
+        Update: {
+          accent_color?: string
+          accepted_payment_methods?: Database["public"]["Enums"]["payment_method"][]
+          badge_bg_color?: string
+          badge_text_color?: string
+          button_bg_color?: string
+          button_text?: string
+          button_outline_color?: string
+          button_text_color?: string
+          card_bg_color?: string
+          card_border_color?: string
+          catalog_description?: string
+          catalog_layout?: string
+          catalog_title?: string
+          contact_link?: string | null
+          created_at?: string
+          filter_bg_color?: string
+          filter_text_color?: string
+          footer_bg_color?: string
+          footer_text_color?: string
+          header_bg_color?: string
+          header_text_color?: string
+          id?: string
+          primary_color?: string
+          price_color?: string
+          secondary_color?: string
+          show_contact?: boolean
+          show_prices?: boolean
+          store_id?: string
+          text_color?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "catalog_settings_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: true
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       companies: {
         Row: {
           address: string | null
@@ -334,6 +441,77 @@ export type Database = {
           {
             foreignKeyName: "company_payment_tokens_company_id_fkey"
             columns: ["company_id"]
+            isOneToOne: true
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      company_theme: {
+        Row: {
+          background_color: string
+          border_radius: string
+          button_color: string
+          button_hover_color: string
+          button_style: string
+          created_at: string
+          dark_palette: Json | null
+          font_family: string
+          id: string
+          layout_density: string
+          light_palette: Json | null
+          menu_hover_color: string
+          primary_color: string
+          secondary_color: string
+          store_id: string
+          text_color: string
+          theme_mode: string
+          updated_at: string
+        }
+        Insert: {
+          background_color?: string
+          border_radius?: string
+          button_color?: string
+          button_hover_color?: string
+          button_style?: string
+          created_at?: string
+          dark_palette?: Json | null
+          font_family?: string
+          id?: string
+          layout_density?: string
+          light_palette?: Json | null
+          menu_hover_color?: string
+          primary_color?: string
+          secondary_color?: string
+          store_id: string
+          text_color?: string
+          theme_mode?: string
+          updated_at?: string
+        }
+        Update: {
+          background_color?: string
+          border_radius?: string
+          button_color?: string
+          button_hover_color?: string
+          button_style?: string
+          created_at?: string
+          dark_palette?: Json | null
+          font_family?: string
+          id?: string
+          layout_density?: string
+          light_palette?: Json | null
+          menu_hover_color?: string
+          primary_color?: string
+          secondary_color?: string
+          store_id?: string
+          text_color?: string
+          theme_mode?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "company_theme_store_id_fkey"
+            columns: ["store_id"]
             isOneToOne: true
             referencedRelation: "companies"
             referencedColumns: ["id"]
@@ -614,6 +792,8 @@ export type Database = {
           customer_id: string | null
           customer_user_id: string | null
           customer_name: string | null
+          delivered_at: string | null
+          delivered_by: string | null
           discount: number
           estimated_delivery_date: string | null
           gateway: string | null
@@ -630,6 +810,7 @@ export type Database = {
           payment_link_url: string | null
           payment_status: Database["public"]["Enums"]["payment_status"]
           production_time_days_used: number | null
+          show_notes_on_pdf: boolean
           status: Database["public"]["Enums"]["order_status"]
           subtotal: number
           total: number
@@ -647,6 +828,8 @@ export type Database = {
           customer_id?: string | null
           customer_user_id?: string | null
           customer_name?: string | null
+          delivered_at?: string | null
+          delivered_by?: string | null
           discount?: number
           estimated_delivery_date?: string | null
           gateway?: string | null
@@ -663,6 +846,7 @@ export type Database = {
           payment_link_url?: string | null
           payment_status?: Database["public"]["Enums"]["payment_status"]
           production_time_days_used?: number | null
+          show_notes_on_pdf?: boolean
           status?: Database["public"]["Enums"]["order_status"]
           subtotal?: number
           total?: number
@@ -680,6 +864,8 @@ export type Database = {
           customer_id?: string | null
           customer_user_id?: string | null
           customer_name?: string | null
+          delivered_at?: string | null
+          delivered_by?: string | null
           discount?: number
           estimated_delivery_date?: string | null
           gateway?: string | null
@@ -696,6 +882,7 @@ export type Database = {
           payment_link_url?: string | null
           payment_status?: Database["public"]["Enums"]["payment_status"]
           production_time_days_used?: number | null
+          show_notes_on_pdf?: boolean
           status?: Database["public"]["Enums"]["order_status"]
           subtotal?: number
           total?: number
@@ -1690,6 +1877,7 @@ export type Database = {
           p_customer_document: string
           p_customer_email?: string
           p_customer_name: string
+          p_order_notes?: string
           p_customer_phone: string
           p_customer_state?: string
           p_customer_zip_code?: string

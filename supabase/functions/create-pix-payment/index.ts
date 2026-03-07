@@ -96,7 +96,7 @@ const buildManualPixBrCode = (params: {
 }) => {
   const key = normalizeText(params.pixKey);
   if (!key) {
-    throw new Error("Chave PIX manual nao configurada");
+    throw new Error("Chave PIX manual não configurada");
   }
 
   const description = normalizeText(params.description)?.slice(0, 72) || null;
@@ -220,7 +220,7 @@ const createMercadoPagoCharge = async (
 
   if (!response.ok) {
     throw new Error(
-      `Falha ao criar cobranca PIX no MercadoPago: ${data?.message || response.status}`,
+      `Falha ao criar cobrança PIX no MercadoPago: ${data?.message || response.status}`,
     );
   }
 
@@ -232,7 +232,7 @@ const createMercadoPagoCharge = async (
     "";
 
   if (!copyPaste) {
-    throw new Error("MercadoPago nao retornou codigo PIX copia e cola");
+    throw new Error("O MercadoPago não retornou o código PIX copia e cola");
   }
 
   const base64Qr = normalizeText(txData?.qr_code_base64);
@@ -303,7 +303,7 @@ const createPagSeguroCharge = async (
 
   if (!response.ok) {
     throw new Error(
-      `Falha ao criar cobranca PIX no PagSeguro: ${data?.error_messages?.[0]?.description || data?.message || response.status}`,
+      `Falha ao criar cobrança PIX no PagSeguro: ${data?.error_messages?.[0]?.description || data?.message || response.status}`,
     );
   }
 
@@ -316,7 +316,7 @@ const createPagSeguroCharge = async (
     "";
 
   if (!copyPaste) {
-    throw new Error("PagSeguro nao retornou codigo PIX copia e cola");
+    throw new Error("O PagSeguro não retornou o código PIX copia e cola");
   }
 
   const qrImage = normalizeText(qrCodeNode?.links?.[0]?.href);
@@ -342,7 +342,7 @@ Deno.serve(async (req) => {
   }
 
   if (req.method !== "POST") {
-    return jsonResponse(corsHeaders, 405, { error: "Metodo invalido" });
+    return jsonResponse(corsHeaders, 405, { error: "Método inválido" });
   }
 
   try {
@@ -353,7 +353,7 @@ Deno.serve(async (req) => {
 
     if (!publicToken) {
       return jsonResponse(corsHeaders, 400, {
-        error: "public_token obrigatorio para gerar cobranca PIX",
+        error: "public_token obrigatório para gerar cobrança PIX",
       });
     }
 
@@ -366,11 +366,11 @@ Deno.serve(async (req) => {
       .maybeSingle();
 
     if (linkError || !linkData?.order_id) {
-      return jsonResponse(corsHeaders, 404, { error: "Pedido publico nao encontrado" });
+      return jsonResponse(corsHeaders, 404, { error: "Pedido público não encontrado" });
     }
 
     if (orderId && orderId !== linkData.order_id) {
-      return jsonResponse(corsHeaders, 403, { error: "Token nao pertence ao pedido informado" });
+      return jsonResponse(corsHeaders, 403, { error: "O token não pertence ao pedido informado" });
     }
 
     const { data: orderData, error: orderError } = await supabase
@@ -382,7 +382,7 @@ Deno.serve(async (req) => {
       .maybeSingle();
 
     if (orderError || !orderData) {
-      return jsonResponse(corsHeaders, 404, { error: "Pedido nao encontrado" });
+      return jsonResponse(corsHeaders, 404, { error: "Pedido não encontrado" });
     }
 
     if (!orderData.company_id) {
@@ -390,7 +390,7 @@ Deno.serve(async (req) => {
     }
 
     if (companyId && companyId !== orderData.company_id) {
-      return jsonResponse(corsHeaders, 403, { error: "Pedido nao pertence a empresa informada" });
+      return jsonResponse(corsHeaders, 403, { error: "O pedido não pertence à empresa informada" });
     }
 
     const { data: optionsData, error: optionsError } = await supabase.rpc(
@@ -409,7 +409,7 @@ Deno.serve(async (req) => {
 
     if (!pixAvailable || !pixGateway) {
       return jsonResponse(corsHeaders, 403, {
-        error: "PIX indisponivel para esta loja",
+        error: "PIX indisponível para esta loja",
       });
     }
 
@@ -446,7 +446,7 @@ Deno.serve(async (req) => {
 
     if (companyError || !companyData) {
       return jsonResponse(corsHeaders, 400, {
-        error: companyError?.message || "Empresa nao encontrada",
+        error: companyError?.message || "Empresa não encontrada",
       });
     }
 
@@ -476,7 +476,7 @@ Deno.serve(async (req) => {
       const mpToken = normalizeText(tokenData?.mp_access_token);
       if (!mpToken) {
         return jsonResponse(corsHeaders, 403, {
-          error: "Token MercadoPago nao configurado",
+          error: "Token do MercadoPago não configurado",
         });
       }
 
@@ -494,7 +494,7 @@ Deno.serve(async (req) => {
       const pagSeguroToken = normalizeText(tokenData?.pagseguro_token);
       if (!pagSeguroToken) {
         return jsonResponse(corsHeaders, 403, {
-          error: "Token PagSeguro nao configurado",
+          error: "Token do PagSeguro não configurado",
         });
       }
 
@@ -510,7 +510,7 @@ Deno.serve(async (req) => {
         pagSeguroToken,
       );
     } else {
-      return jsonResponse(corsHeaders, 403, { error: "Gateway PIX invalido" });
+      return jsonResponse(corsHeaders, 403, { error: "Gateway PIX inválido" });
     }
 
     const paidAt = null;

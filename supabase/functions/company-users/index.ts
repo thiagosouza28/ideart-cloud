@@ -151,7 +151,7 @@ Deno.serve(async (req) => {
   }
 
   if (req.method !== "POST") {
-    return jsonResponse(corsHeaders, 405, { error: "Metodo invalido" });
+    return jsonResponse(corsHeaders, 405, { error: "Método inválido" });
   }
 
   try {
@@ -165,7 +165,7 @@ Deno.serve(async (req) => {
     const { user: authUser, errorDetail } = await getAuthenticatedUser(supabase, token);
     if (!authUser) {
       return jsonResponse(corsHeaders, 401, {
-        error: "Sessao invalida",
+        error: "Sessão inválida",
         detail: errorDetail,
       });
     }
@@ -196,11 +196,11 @@ Deno.serve(async (req) => {
     const requestedCompanyId = body.company_id?.trim();
 
     if (!email || !password || !fullName || !role) {
-      return jsonResponse(corsHeaders, 400, { error: "Dados obrigatorios ausentes" });
+      return jsonResponse(corsHeaders, 400, { error: "Dados obrigatórios ausentes" });
     }
 
     if (!allowedRoles.has(role)) {
-      return jsonResponse(corsHeaders, 400, { error: "Cargo invalido" });
+      return jsonResponse(corsHeaders, 400, { error: "Cargo inválido" });
     }
 
     if (!isSuperAdmin && role === "super_admin") {
@@ -224,11 +224,11 @@ Deno.serve(async (req) => {
       companyIdToUse = requesterProfile?.company_id || null;
 
       if (!companyIdToUse) {
-        return jsonResponse(corsHeaders, 400, { error: "Empresa do administrador nao encontrada" });
+        return jsonResponse(corsHeaders, 400, { error: "Empresa do administrador não encontrada" });
       }
 
       if (requestedCompanyId && requestedCompanyId !== companyIdToUse) {
-        return jsonResponse(corsHeaders, 403, { error: "Voce so pode criar usuarios para sua propria empresa" });
+        return jsonResponse(corsHeaders, 403, { error: "Você só pode criar usuários para a sua própria empresa" });
       }
     }
 
@@ -254,7 +254,7 @@ Deno.serve(async (req) => {
       const existingUser = await findUserByEmail(supabase, email);
       if (!existingUser?.id) {
         return jsonResponse(corsHeaders, 400, {
-          error: "Usuario ja cadastrado, mas nao foi possivel localiza-lo.",
+          error: "Usuário já cadastrado, mas não foi possível localizá-lo.",
         });
       }
 

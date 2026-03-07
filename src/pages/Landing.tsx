@@ -347,7 +347,7 @@ export default function Landing() {
               </Button>
             </div>
             <p className="landing-hero-anim landing-hero-delay-5 text-sm text-muted-foreground">
-              Comece agora com teste gratis de 3 dias e cadastro rapido.
+              Comece agora com teste grátis de 3 dias e cadastro rápido.
             </p>
 
             <div className="landing-hero-anim landing-hero-delay-5 grid w-full max-w-3xl gap-3 sm:grid-cols-3">

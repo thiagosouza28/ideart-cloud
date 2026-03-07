@@ -3,6 +3,7 @@ import { invokeEdgeFunction } from '@/services/edgeFunctions';
 import { generateAndUploadPaymentReceipt } from '@/services/paymentReceipts';
 import { ensurePublicStorageUrl } from '@/lib/storage';
 import { formatOrderNumber } from '@/lib/utils';
+import { stripPendingCustomerInfoNotes } from '@/lib/orderMetadata';
 import type {
   AppRole,
   Order,
@@ -731,7 +732,7 @@ export const updateOrderStatus = async ({
 
   const { data: order, error: orderError } = await supabase
     .from('orders')
-    .select('id, order_number, company_id, customer_name, status')
+    .select('id, order_number, company_id, customer_name, status, notes')
     .eq('id', orderId)
     .single();
 
@@ -756,14 +757,25 @@ export const updateOrderStatus = async ({
   const toLabel = statusLabels[status] ?? formatStatusLabel(String(status));
   const transitionNote = `Status alterado de ${fromLabel} para ${toLabel}.`;
   const historyNotes = notes ? `${transitionNote} ${notes}` : transitionNote;
+  const deliveredAt = status === 'entregue' ? new Date().toISOString() : null;
+  const updatePayload: Record<string, unknown> = {
+    status,
+    updated_by: userId || null,
+    cancel_reason: status === 'cancelado' ? notes || null : null,
+  };
+
+  if (order.status === 'pendente' && status !== 'pendente') {
+    updatePayload.notes = stripPendingCustomerInfoNotes(order.notes);
+  }
+
+  if (status === 'entregue') {
+    updatePayload.delivered_at = deliveredAt;
+    updatePayload.delivered_by = userId || null;
+  }
 
   const { data: updatedOrder, error: updateError } = await supabase
     .from('orders')
-    .update({
-      status,
-      updated_by: userId || null,
-      cancel_reason: status === 'cancelado' ? notes || null : null,
-    })
+    .update(updatePayload)
     .eq('id', orderId)
     .select('*')
     .single();
@@ -828,12 +840,26 @@ export const cancelOrder = async ({
     return response.order;
   }
 
+  const { data: existingOrder, error: existingOrderError } = await supabase
+    .from('orders')
+    .select('status, notes')
+    .eq('id', orderId)
+    .single();
+
+  if (existingOrderError || !existingOrder) {
+    throw existingOrderError || new Error('Falha ao localizar pedido');
+  }
+
   const { data, error } = await supabase
     .from('orders')
     .update({
       status: 'cancelado',
       cancel_reason: motivo || null,
       cancelled_at: new Date().toISOString(),
+      notes:
+        existingOrder.status === 'pendente'
+          ? stripPendingCustomerInfoNotes(existingOrder.notes)
+          : undefined,
     })
     .eq('id', orderId)
     .select('*')
@@ -1031,12 +1057,16 @@ export const uploadOrderFinalPhoto = async (
   file: File,
   userId?: string | null
 ) => {
-  const fileExt = file.name.split('.').pop();
+  const rawExt = file.name.split('.').pop()?.trim().toLowerCase() || '';
+  const fallbackExt = file.type.split('/').pop()?.split('+')[0]?.toLowerCase() || 'jpg';
+  const fileExt = /^[a-z0-9]+$/i.test(rawExt) ? rawExt : fallbackExt;
   const fileName = `${orderId}/${generateFileId()}.${fileExt}`;
 
   const { error: uploadError } = await supabase.storage
     .from('order-final-photos')
-    .upload(fileName, file);
+    .upload(fileName, file, {
+      contentType: file.type || undefined,
+    });
 
   if (uploadError) {
     throw uploadError;

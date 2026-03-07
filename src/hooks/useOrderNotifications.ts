@@ -5,7 +5,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import type { Database } from '@/integrations/supabase/types';
 
 const NEW_ORDER_NOTIFICATION_TYPE = 'new_order';
-const RECENT_NOTIFICATIONS_LIMIT = 20;
 
 type OrderNotification = Database['public']['Tables']['order_notifications']['Row'];
 
@@ -16,6 +15,8 @@ export const useOrderNotifications = () => {
   const [unreadOrdersCount, setUnreadOrdersCount] = useState(0);
   const [notifications, setNotifications] = useState<OrderNotification[]>([]);
   const [isLoadingNotifications, setIsLoadingNotifications] = useState(false);
+  const [isUpdatingNotifications, setIsUpdatingNotifications] = useState(false);
+  const [isClearingNotifications, setIsClearingNotifications] = useState(false);
 
   const refreshUnreadOrdersCount = useCallback(async () => {
     if (!profile?.company_id) {
@@ -48,8 +49,7 @@ export const useOrderNotifications = () => {
       .select('*')
       .eq('company_id', profile.company_id)
       .eq('type', NEW_ORDER_NOTIFICATION_TYPE)
-      .order('created_at', { ascending: false })
-      .limit(RECENT_NOTIFICATIONS_LIMIT);
+      .order('created_at', { ascending: false });
 
     if (!error) {
       setNotifications((data as OrderNotification[]) ?? []);
@@ -58,9 +58,44 @@ export const useOrderNotifications = () => {
     setIsLoadingNotifications(false);
   }, [profile?.company_id]);
 
+  const markNotificationAsRead = useCallback(
+    async (notificationId: string) => {
+      if (!profile?.company_id) return;
+
+      const target = notifications.find((notification) => notification.id === notificationId);
+      if (!target || target.read_at) return;
+
+      const nowIso = new Date().toISOString();
+
+      const { error } = await supabase
+        .from('order_notifications')
+        .update({ read_at: nowIso })
+        .eq('id', notificationId)
+        .eq('company_id', profile.company_id)
+        .is('read_at', null);
+
+      if (!error) {
+        setUnreadOrdersCount((prev) => Math.max(prev - 1, 0));
+        setNotifications((prev) =>
+          prev.map((notification) =>
+            notification.id === notificationId
+              ? {
+                  ...notification,
+                  read_at: notification.read_at ?? nowIso,
+                }
+              : notification,
+          ),
+        );
+      }
+    },
+    [notifications, profile?.company_id],
+  );
+
   const markUnreadOrdersAsRead = useCallback(async () => {
     if (!profile?.company_id) return;
+    if (unreadOrdersCount === 0) return;
 
+    setIsUpdatingNotifications(true);
     const nowIso = new Date().toISOString();
 
     const { error } = await supabase
@@ -82,8 +117,41 @@ export const useOrderNotifications = () => {
               }
         )
       );
+    } else {
+      toast({
+        title: 'Erro ao marcar notificações como lidas',
+        variant: 'destructive',
+      });
     }
-  }, [profile?.company_id]);
+    setIsUpdatingNotifications(false);
+  }, [profile?.company_id, toast, unreadOrdersCount]);
+
+  const clearNotifications = useCallback(async () => {
+    if (!profile?.company_id) return;
+    if (notifications.length === 0) return;
+
+    setIsClearingNotifications(true);
+
+    const { error } = await supabase
+      .from('order_notifications')
+      .delete()
+      .eq('company_id', profile.company_id)
+      .eq('type', NEW_ORDER_NOTIFICATION_TYPE);
+
+    if (!error) {
+      setNotifications([]);
+      setUnreadOrdersCount(0);
+      handledRef.current.clear();
+      toast({ title: 'Notificações removidas' });
+    } else {
+      toast({
+        title: 'Erro ao limpar notificações',
+        variant: 'destructive',
+      });
+    }
+
+    setIsClearingNotifications(false);
+  }, [notifications.length, profile?.company_id, toast]);
 
   useEffect(() => {
     handledRef.current.clear();
@@ -129,10 +197,7 @@ export const useOrderNotifications = () => {
           if (notification.type === NEW_ORDER_NOTIFICATION_TYPE) {
             setUnreadOrdersCount((prev) => prev + 1);
             setNotifications((prev) =>
-              [notification, ...prev.filter((item) => item.id !== notification.id)].slice(
-                0,
-                RECENT_NOTIFICATIONS_LIMIT
-              )
+              [notification, ...prev.filter((item) => item.id !== notification.id)]
             );
           }
         }
@@ -148,7 +213,11 @@ export const useOrderNotifications = () => {
     unreadOrdersCount,
     notifications,
     isLoadingNotifications,
+    isUpdatingNotifications,
+    isClearingNotifications,
     refreshNotifications,
+    markNotificationAsRead,
     markUnreadOrdersAsRead,
+    clearNotifications,
   };
 };

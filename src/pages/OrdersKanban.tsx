@@ -191,7 +191,7 @@ const formatPaymentMethod = (value?: PaymentMethod | null) => {
     cartao: 'Cartão',
     credito: 'Cartão crédito',
     debito: 'Cartão débito',
-    transferencia: 'Transferencia',
+    transferencia: 'Transferência',
     pix: 'Pix',
     boleto: 'Boleto',
     outro: 'Outro',
@@ -557,6 +557,30 @@ export default function OrdersKanban() {
     const order = orders.find((item) => item.id === orderId);
     if (!order) return;
     if (String(order.status) === targetStatus) return;
+
+    if (order.status === 'entregue' && targetStatus !== 'entregue') {
+      toast({
+        title: 'Pedido já entregue',
+        description: 'Pedidos entregues não podem ser movidos pelo kanban.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (targetStatus === 'entregue') {
+      toast({
+        title: 'Use Confirmar Entrega',
+        description: 'Abra o pedido e use "Confirmar Entrega" para registrar a data, a hora e imprimir o comprovante.',
+      });
+      navigate(
+        buildOrderDetailsPath({
+          id: order.id,
+          orderNumber: order.order_number,
+          customerName: order.customer_name || order.customer?.name,
+        }),
+      );
+      return;
+    }
 
     if (order.status === 'pendente' && targetStatus !== 'cancelado') {
       const needsArt = await confirm({

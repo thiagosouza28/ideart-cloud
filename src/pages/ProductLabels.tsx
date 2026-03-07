@@ -529,7 +529,7 @@ export default function ProductLabels() {
         <div className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Configuracoes</CardTitle>
+              <CardTitle>Configurações</CardTitle>
               <CardDescription>Defina tamanho e conteudo das etiquetas.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">

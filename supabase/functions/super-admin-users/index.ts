@@ -94,38 +94,38 @@ const sendRecoveryEmail = async ({
   const greeting = displayName ? `Ola ${displayName},` : "Ola,";
 
   const text = [
-    "Solicitacao de recuperacao de senha",
+    "Solicitação de recuperação de senha",
     "",
     greeting,
     "",
     `Clique no link para criar uma nova senha: ${actionLink}`,
     "",
-    "Se voce nao solicitou, ignore este e-mail.",
+    "Se você não solicitou, ignore este e-mail.",
   ].join("\n");
 
   const html = `
     <div style="font-family:Arial, sans-serif;color:#0f172a;">
-      <h2>Recuperacao de senha</h2>
+      <h2>Recuperação de senha</h2>
       <p>${greeting}</p>
-      <p>Clique no botao abaixo para criar uma nova senha.</p>
+      <p>Clique no botão abaixo para criar uma nova senha.</p>
       <p>
         <a href="${actionLink}" style="display:inline-block;padding:12px 18px;background:#0f172a;color:#fff;text-decoration:none;border-radius:8px;">
           Criar nova senha
         </a>
       </p>
-      <p style="font-size:12px;color:#64748b;">Se voce nao solicitou, ignore este e-mail.</p>
+      <p style="font-size:12px;color:#64748b;">Se você não solicitou, ignore este e-mail.</p>
     </div>
   `;
 
   const sent = await sendSmtpEmail({
     to: email,
-    subject: "Recuperacao de senha - IDEART CLOUD",
+    subject: "Recuperação de senha - IDEART CLOUD",
     text,
     html,
   });
 
   if (!sent) {
-    throw new Error("Falha ao enviar e-mail de recuperacao por SMTP");
+    throw new Error("Falha ao enviar e-mail de recuperação por SMTP");
   }
 };
 
@@ -138,14 +138,14 @@ Deno.serve(async (req) => {
   }
 
   if (req.method !== "POST") {
-    return jsonResponse(corsHeaders, 400, { error: "Metodo invalido" });
+    return jsonResponse(corsHeaders, 400, { error: "Método inválido" });
   }
 
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
     if (!supabaseUrl || !serviceKey) {
-      return jsonResponse(corsHeaders, 400, { error: "Configuracao do Supabase ausente" });
+      return jsonResponse(corsHeaders, 400, { error: "Configuração do Supabase ausente" });
     }
 
     const supabase = createClient(supabaseUrl, serviceKey, {
@@ -161,7 +161,7 @@ Deno.serve(async (req) => {
     const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : authHeader;
     const { data: authData, error: authError } = await supabase.auth.getUser(token);
     if (authError || !authData.user) {
-      return jsonResponse(corsHeaders, 401, { error: "Sessao invalida" });
+      return jsonResponse(corsHeaders, 401, { error: "Sessão inválida" });
     }
 
     const { data: roleData } = await supabase
@@ -223,13 +223,13 @@ Deno.serve(async (req) => {
         .maybeSingle();
 
       if (!profile) {
-        return jsonResponse(corsHeaders, 404, { error: "Usuario nao encontrado para esta empresa" });
+        return jsonResponse(corsHeaders, 404, { error: "Usuário não encontrado para esta empresa" });
       }
 
       const { data: userData } = await supabase.auth.admin.getUserById(userId);
       const email = userData?.user?.email;
       if (!email) {
-        return jsonResponse(corsHeaders, 400, { error: "E-mail do usuario nao encontrado" });
+        return jsonResponse(corsHeaders, 400, { error: "E-mail do usuário não encontrado" });
       }
 
       const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
@@ -267,13 +267,13 @@ Deno.serve(async (req) => {
         .maybeSingle();
 
       if (!profile) {
-        return jsonResponse(corsHeaders, 404, { error: "Usuario nao encontrado para esta empresa" });
+        return jsonResponse(corsHeaders, 404, { error: "Usuário não encontrado para esta empresa" });
       }
 
       const { data: userData } = await supabase.auth.admin.getUserById(userId);
       const email = userData?.user?.email;
       if (!email) {
-        return jsonResponse(corsHeaders, 400, { error: "E-mail do usuario nao encontrado" });
+        return jsonResponse(corsHeaders, 400, { error: "E-mail do usuário não encontrado" });
       }
 
       const redirectTo = resolveRedirectTo(rawRedirectTo, accountType);

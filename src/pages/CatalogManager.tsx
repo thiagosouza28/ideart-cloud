@@ -9,6 +9,7 @@ import {
   Search,
   Star,
 } from "lucide-react";
+import { CatalogManagerPreview } from "@/components/catalog/CatalogManagerPreview";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,7 +17,16 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { Company, Product } from "@/types/database";
+import {
+  type CatalogCheckoutPaymentMethod,
+  type CatalogSettingsData,
+  catalogPaymentMethodLabels,
+  defaultCatalogSettings as buildDefaultCatalogSettings,
+  fetchCatalogSettings,
+  normalizeCatalogSettings,
+  suggestedCatalogColors,
+} from "@/lib/catalogSettings";
+import { Product } from "@/types/database";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { ensurePublicStorageUrl } from "@/lib/storage";
@@ -38,20 +48,6 @@ type CatalogProduct = Pick<
   | "slug"
 >;
 
-type CatalogSettings = Pick<
-  Company,
-  | "catalog_title"
-  | "catalog_description"
-  | "catalog_button_text"
-  | "catalog_show_prices"
-  | "catalog_show_contact"
-  | "catalog_contact_url"
-  | "catalog_primary_color"
-  | "catalog_secondary_color"
-  | "catalog_text_color"
-  | "catalog_layout"
->;
-
 type ProductFilter = "all" | "active" | "inactive" | "featured" | "incomplete";
 type ViewMode = "grid" | "list";
 type TabMode = "products" | "personalization";
@@ -63,21 +59,79 @@ type CompletenessInfo = {
   tone: "success" | "warn" | "danger";
 };
 
+type CatalogColorField = keyof Pick<
+  CatalogSettingsData,
+  | "primary_color"
+  | "secondary_color"
+  | "text_color"
+  | "accent_color"
+  | "header_bg_color"
+  | "header_text_color"
+  | "footer_bg_color"
+  | "footer_text_color"
+  | "price_color"
+  | "badge_bg_color"
+  | "badge_text_color"
+  | "button_bg_color"
+  | "button_text_color"
+  | "button_outline_color"
+  | "card_bg_color"
+  | "card_border_color"
+  | "filter_bg_color"
+  | "filter_text_color"
+>;
+
+const catalogColorSections: Array<{
+  title: string;
+  description: string;
+  fields: Array<{ key: CatalogColorField; label: string }>;
+}> = [
+  {
+    title: "Identidade base",
+    description: "Cores principais usadas como base das demais variações.",
+    fields: [
+      { key: "primary_color", label: "Cor primária" },
+      { key: "secondary_color", label: "Cor secundária" },
+      { key: "accent_color", label: "Cor de destaque" },
+      { key: "text_color", label: "Cor do texto" },
+    ],
+  },
+  {
+    title: "Cabeçalho e rodapé",
+    description: "Controla topo, hero e rodapé do catálogo.",
+    fields: [
+      { key: "header_bg_color", label: "Fundo do cabeçalho" },
+      { key: "header_text_color", label: "Texto do cabeçalho" },
+      { key: "footer_bg_color", label: "Fundo do rodapé" },
+      { key: "footer_text_color", label: "Texto do rodapé" },
+    ],
+  },
+  {
+    title: "Botões e selos",
+    description: "Define chamadas para ação, selos e preço em destaque.",
+    fields: [
+      { key: "button_bg_color", label: "Fundo do botão" },
+      { key: "button_text_color", label: "Texto do botão" },
+      { key: "button_outline_color", label: "Borda do botão outline" },
+      { key: "price_color", label: "Cor do preço" },
+      { key: "badge_bg_color", label: "Fundo do selo" },
+      { key: "badge_text_color", label: "Texto do selo" },
+    ],
+  },
+  {
+    title: "Cards e filtros",
+    description: "Ajusta a área de listagem dos produtos e filtros rápidos.",
+    fields: [
+      { key: "card_bg_color", label: "Fundo do card" },
+      { key: "card_border_color", label: "Borda do card" },
+      { key: "filter_bg_color", label: "Fundo do filtro ativo" },
+      { key: "filter_text_color", label: "Texto do filtro ativo" },
+    ],
+  },
+];
+
 const PRODUCT_SELECT =
   "id,name,sku,barcode,image_url,catalog_enabled,catalog_featured,catalog_min_order,catalog_price,catalog_sort_order,show_in_catalog,is_active,slug";
-
-const defaultCatalogSettings: CatalogSettings = {
-  catalog_title: "",
-  catalog_description: "",
-  catalog_button_text: "",
-  catalog_show_prices: true,
-  catalog_show_contact: true,
-  catalog_contact_url: "",
-  catalog_primary_color: "#2563eb",
-  catalog_secondary_color: "#1d4ed8",
-  catalog_text_color: "#1a1814",
-  catalog_layout: "grid",
-};
 
 const formatCurrency = (value: number | null | undefined) => {
   if (value === null || value === undefined) return "-";
@@ -123,7 +177,7 @@ export default function CatalogManager() {
   const [loadingSettings, setLoadingSettings] = useState(false);
   const [products, setProducts] = useState<CatalogProduct[]>([]);
 
-  const [settings, setSettings] = useState<CatalogSettings>(defaultCatalogSettings);
+  const [settings, setSettings] = useState<CatalogSettingsData>(buildDefaultCatalogSettings());
   const [savingSettings, setSavingSettings] = useState(false);
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -158,32 +212,20 @@ export default function CatalogManager() {
   }, [companyId]);
 
   const loadSettings = useCallback(async () => {
-    if (!companyId) return;
-
-    setLoadingSettings(true);
-
-    const { data, error } = await supabase
-      .from("companies")
-      .select(
-        "catalog_title,catalog_description,catalog_button_text,catalog_show_prices,catalog_show_contact,catalog_contact_url,catalog_primary_color,catalog_secondary_color,catalog_text_color,catalog_layout"
-      )
-      .eq("id", companyId)
-      .maybeSingle();
-
-    if (error) {
-      toast.error("Erro ao carregar personalização do catálogo.");
-      setLoadingSettings(false);
+    if (!companyId) {
+      setSettings(buildDefaultCatalogSettings());
       return;
     }
 
-    if (data) {
+    setLoadingSettings(true);
+
+    try {
+      const data = await fetchCatalogSettings(supabase, companyId);
       const normalizedLayout: ViewMode = data.catalog_layout === "list" ? "list" : "grid";
-      setSettings({
-        ...defaultCatalogSettings,
-        ...data,
-        catalog_layout: normalizedLayout,
-      });
+      setSettings(data);
       setViewMode(normalizedLayout);
+    } catch {
+      toast.error("Erro ao carregar personalização do catálogo.");
     }
 
     setLoadingSettings(false);
@@ -307,7 +349,17 @@ export default function CatalogManager() {
 
     setSavingSettings(true);
 
-    const { error } = await supabase.from("companies").update(settings).eq("id", companyId);
+    const payload = normalizeCatalogSettings(
+      {
+        ...settings,
+        store_id: companyId,
+      },
+      companyId
+    );
+
+    const { error } = await supabase
+      .from("catalog_settings")
+      .upsert(payload, { onConflict: "store_id" });
 
     if (error) {
       toast.error("Não foi possível salvar as configurações.");
@@ -315,6 +367,7 @@ export default function CatalogManager() {
       return;
     }
 
+    setSettings(payload);
     toast.success("Personalização salva.");
     setSavingSettings(false);
   };
@@ -329,10 +382,18 @@ export default function CatalogManager() {
 
       if (!companyId) return;
 
+      const payload = normalizeCatalogSettings(
+        {
+          ...settings,
+          store_id: companyId,
+          catalog_layout: nextMode,
+        },
+        companyId
+      );
+
       const { error } = await supabase
-        .from("companies")
-        .update({ catalog_layout: nextMode })
-        .eq("id", companyId);
+        .from("catalog_settings")
+        .upsert(payload, { onConflict: "store_id" });
 
       if (!error) return;
 
@@ -340,8 +401,35 @@ export default function CatalogManager() {
       setSettings((prev) => ({ ...prev, catalog_layout: previousMode }));
       toast.error("Não foi possível salvar o layout da visualização.");
     },
-    [companyId, viewMode]
+    [companyId, settings, viewMode]
   );
+
+  const toggleAcceptedPaymentMethod = (method: CatalogCheckoutPaymentMethod) => {
+    setSettings((prev) => {
+      const hasMethod = prev.accepted_payment_methods.includes(method);
+      const nextMethods = hasMethod
+        ? prev.accepted_payment_methods.filter((item) => item !== method)
+        : [...prev.accepted_payment_methods, method];
+
+      if (nextMethods.length === 0) {
+        toast.error("Selecione ao menos uma forma de pagamento.");
+        return prev;
+      }
+
+      return {
+        ...prev,
+        accepted_payment_methods: nextMethods,
+      };
+    });
+  };
+
+  const applySuggestedPalette = () => {
+    setSettings((prev) => ({
+      ...prev,
+      ...suggestedCatalogColors,
+    }));
+    toast.success("Paleta sugerida aplicada. Salve para publicar.");
+  };
 
   const filterChips: Array<{ id: ProductFilter; label: string }> = [
     { id: "all", label: "Todos" },
@@ -834,7 +922,7 @@ export default function CatalogManager() {
             <div className="space-y-3 rounded-2xl border border-border bg-card p-4">
               <Label>Título do catálogo</Label>
               <Input
-                value={settings.catalog_title || ""}
+                value={settings.catalog_title}
                 onChange={(event) => setSettings((prev) => ({ ...prev, catalog_title: event.target.value }))}
                 className="border-border"
                 placeholder="Ex: Catálogo da loja"
@@ -843,24 +931,24 @@ export default function CatalogManager() {
               <Label>Descrição</Label>
               <Textarea
                 rows={4}
-                value={settings.catalog_description || ""}
+                value={settings.catalog_description}
                 onChange={(event) => setSettings((prev) => ({ ...prev, catalog_description: event.target.value }))}
                 className="border-border"
                 placeholder="Resumo para SEO e compartilhamento"
               />
 
-              <Label>Texto do botao principal</Label>
+              <Label>Texto do botão principal</Label>
               <Input
-                value={settings.catalog_button_text || ""}
-                onChange={(event) => setSettings((prev) => ({ ...prev, catalog_button_text: event.target.value }))}
+                value={settings.button_text}
+                onChange={(event) => setSettings((prev) => ({ ...prev, button_text: event.target.value }))}
                 className="border-border"
                 placeholder="Comprar agora"
               />
 
               <Label>Link de contato</Label>
               <Input
-                value={settings.catalog_contact_url || ""}
-                onChange={(event) => setSettings((prev) => ({ ...prev, catalog_contact_url: event.target.value }))}
+                value={settings.contact_link || ""}
+                onChange={(event) => setSettings((prev) => ({ ...prev, contact_link: event.target.value }))}
                 className="border-border"
                 placeholder="https://wa.me/55..."
               />
@@ -871,8 +959,8 @@ export default function CatalogManager() {
                   <p className="text-xs text-muted-foreground">Mostra valores no catálogo público.</p>
                 </div>
                 <Switch
-                  checked={Boolean(settings.catalog_show_prices ?? true)}
-                  onCheckedChange={(checked) => setSettings((prev) => ({ ...prev, catalog_show_prices: checked }))}
+                  checked={settings.show_prices}
+                  onCheckedChange={(checked) => setSettings((prev) => ({ ...prev, show_prices: checked }))}
                 />
               </div>
 
@@ -882,67 +970,97 @@ export default function CatalogManager() {
                   <p className="text-xs text-muted-foreground">Habilita atalho para contato rápido.</p>
                 </div>
                 <Switch
-                  checked={Boolean(settings.catalog_show_contact ?? true)}
-                  onCheckedChange={(checked) => setSettings((prev) => ({ ...prev, catalog_show_contact: checked }))}
+                  checked={settings.show_contact}
+                  onCheckedChange={(checked) => setSettings((prev) => ({ ...prev, show_contact: checked }))}
                 />
+              </div>
+
+              <div className="rounded-xl border border-border p-3">
+                <div className="mb-3">
+                  <p className="text-sm font-semibold">Formas de pagamento aceitas</p>
+                  <p className="text-xs text-muted-foreground">
+                    Essas opções aparecerão no checkout público do catálogo.
+                  </p>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {(Object.entries(catalogPaymentMethodLabels) as Array<
+                    [CatalogCheckoutPaymentMethod, string]
+                  >).map(([method, label]) => {
+                    const checked = settings.accepted_payment_methods.includes(method);
+                    return (
+                      <label
+                        key={method}
+                        className={cn(
+                          "flex cursor-pointer items-center justify-between rounded-xl border px-3 py-2 text-sm transition-colors",
+                          checked
+                            ? "border-primary/40 bg-primary/5 text-foreground"
+                            : "border-border bg-background text-muted-foreground"
+                        )}
+                      >
+                        <span>{label}</span>
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4"
+                          checked={checked}
+                          onChange={() => toggleAcceptedPaymentMethod(method)}
+                        />
+                      </label>
+                    );
+                  })}
+                </div>
               </div>
             </div>
 
             <div className="space-y-3 rounded-2xl border border-border bg-card p-4">
-              <h3 className="text-lg font-semibold">
-                Cores principais
-              </h3>
-
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
-                  <Label>Cor primaria</Label>
-                  <Input
-                    type="color"
-                    value={settings.catalog_primary_color || "#2563eb"}
-                    onChange={(event) => setSettings((prev) => ({ ...prev, catalog_primary_color: event.target.value }))}
-                    className="h-11 border-border p-1"
-                  />
+                  <h3 className="text-lg font-semibold">
+                    Cores do catálogo
+                  </h3>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Personalize elementos específicos da vitrine pública sem depender das configurações gerais da loja.
+                  </p>
                 </div>
-                <div>
-                  <Label>Cor secundaria</Label>
-                  <Input
-                    type="color"
-                    value={settings.catalog_secondary_color || "#1d4ed8"}
-                    onChange={(event) =>
-                      setSettings((prev) => ({ ...prev, catalog_secondary_color: event.target.value }))
-                    }
-                    className="h-11 border-border p-1"
-                  />
-                </div>
-                <div>
-                  <Label>Cor do texto</Label>
-                  <Input
-                    type="color"
-                    value={settings.catalog_text_color || "#1a1814"}
-                    onChange={(event) => setSettings((prev) => ({ ...prev, catalog_text_color: event.target.value }))}
-                    className="h-11 border-border p-1"
-                  />
-                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="gap-2 self-start"
+                  onClick={applySuggestedPalette}
+                >
+                  <Star className="h-4 w-4" />
+                  Aplicar paleta sugerida
+                </Button>
               </div>
 
-              <div className="rounded-xl border border-border bg-muted/30 p-4">
-                <p className="text-sm font-semibold">Preview rápido</p>
-                <div className="mt-3 rounded-xl border border-border bg-white p-4">
-                  <p className="text-base font-semibold" title={settings.catalog_title || ""}>
-                    {settings.catalog_title || "Título do catálogo"}
-                  </p>
-                  <p className="mt-1 text-sm text-muted-foreground" title={settings.catalog_description || ""}>
-                    {settings.catalog_description || "Descrição do catálogo público"}
-                  </p>
-                  <button
-                    type="button"
-                    className="mt-3 rounded-lg px-4 py-2 text-sm font-semibold text-white"
-                    style={{ backgroundColor: settings.catalog_primary_color || "#2563eb" }}
-                  >
-                    {settings.catalog_button_text || "Botao principal"}
-                  </button>
+              {catalogColorSections.map((section) => (
+                <div key={section.title} className="rounded-xl border border-border p-3">
+                  <div className="mb-3">
+                    <p className="text-sm font-semibold">{section.title}</p>
+                    <p className="text-xs text-muted-foreground">{section.description}</p>
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                    {section.fields.map((field) => (
+                      <div key={field.key}>
+                        <Label>{field.label}</Label>
+                        <Input
+                          type="color"
+                          value={settings[field.key]}
+                          onChange={(event) =>
+                            setSettings((prev) => ({ ...prev, [field.key]: event.target.value }))
+                          }
+                          className="h-11 border-border p-1"
+                        />
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              ))}
+
+              <CatalogManagerPreview
+                settings={settings}
+                company={company}
+                product={products.find((product) => isCatalogVisible(product)) || products[0] || null}
+              />
 
               <div className="flex justify-end pt-2">
                 <Button onClick={saveSettings} disabled={savingSettings || loadingSettings}>

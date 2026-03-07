@@ -7,7 +7,7 @@ interface GraphPOSCardProps extends PropsWithChildren {
 
 export default function GraphPOSCard({ className, children }: GraphPOSCardProps) {
   return (
-    <div className={cn('rounded-2xl border border-slate-200 bg-white p-6 shadow-sm', className)}>
+    <div className={cn('rounded-2xl border border-border bg-card p-6 text-card-foreground shadow-sm', className)}>
       {children}
     </div>
   );

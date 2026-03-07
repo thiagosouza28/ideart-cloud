@@ -457,7 +457,7 @@ export default function PublicOrder() {
                   )}
                   {productionTimeDays !== null && (
                     <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Tempo de producao</span>
+                      <span className="text-muted-foreground">Tempo de produção</span>
                       <span>
                         {productionTimeDays} {productionTimeDays === 1 ? 'dia' : 'dias'}
                       </span>
@@ -465,7 +465,7 @@ export default function PublicOrder() {
                   )}
                   {estimatedDeliveryDate && (
                     <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Previsao de entrega</span>
+                      <span className="text-muted-foreground">Previsão de entrega</span>
                       <span>{estimatedDeliveryDate}</span>
                     </div>
                   )}

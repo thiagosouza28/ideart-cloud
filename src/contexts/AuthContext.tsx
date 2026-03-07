@@ -144,7 +144,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (hasCode) {
         supabase.auth.exchangeCodeForSession(url).catch((error) => {
-          console.error('Falha ao trocar codigo de recuperacao', error);
+          console.error('Falha ao trocar código de recuperação', error);
         }).finally(finishRecoveryRedirect);
       } else {
         finishRecoveryRedirect();
@@ -440,7 +440,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (data.user && isCustomerAccount(data.user)) {
       await supabase.auth.signOut({ scope: 'local' });
       return {
-        error: new Error('Este login e exclusivo para equipe da loja. Cliente deve usar /minha-conta/login.'),
+        error: new Error('Este login é exclusivo para a equipe da loja. O cliente deve usar /minha-conta/login.'),
       };
     }
 
@@ -481,12 +481,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const startImpersonation = useCallback(async () => {
     if (isImpersonating) {
-      throw new Error('A impersonacao ja esta ativa.');
+      throw new Error('A impersonação já está ativa.');
     }
     const { data, error } = await supabase.auth.getSession();
     const activeSession = data.session ?? null;
     if (error || !activeSession?.access_token || !activeSession?.refresh_token || !activeSession.user.id) {
-      throw new Error('Sessao de administrador indisponivel.');
+      throw new Error('Sessão de administrador indisponível.');
     }
 
     const storedSession: StoredAdminSession = {

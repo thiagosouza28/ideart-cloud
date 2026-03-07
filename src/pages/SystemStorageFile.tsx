@@ -37,13 +37,13 @@ export default function SystemStorageFile() {
 
     const loadFile = async () => {
       if (!bucket || !path) {
-        setErrorMessage('Arquivo invalido.');
+        setErrorMessage('Arquivo inválido.');
         setLoading(false);
         return;
       }
 
       if (!ALLOWED_BUCKETS.has(bucket)) {
-        setErrorMessage('Bucket nao permitido.');
+        setErrorMessage('Bucket não permitido.');
         setLoading(false);
         return;
       }
@@ -58,7 +58,7 @@ export default function SystemStorageFile() {
       if (!active) return;
 
       if (error || !data) {
-        setErrorMessage(error?.message || 'Nao foi possivel carregar o arquivo.');
+        setErrorMessage(error?.message || 'Não foi possível carregar o arquivo.');
         setLoading(false);
         return;
       }
@@ -84,7 +84,7 @@ export default function SystemStorageFile() {
 
   return (
     <main className="min-h-screen bg-background p-4 md:p-6">
-      <div className="mx-auto w-full max-w-5xl space-y-4">
+      <div className="w-full space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h1 className="text-base font-semibold text-foreground">Arquivo anexado</h1>
           <Button asChild variant="outline" size="sm">
@@ -122,7 +122,7 @@ export default function SystemStorageFile() {
                 <iframe title={fileName} src={blobUrl} className="h-[78vh] w-full" />
               ) : (
                 <div className="p-4 text-sm text-muted-foreground">
-                  Sem visualizacao para este tipo de arquivo. Use o botao de download.
+                  Sem visualização para este tipo de arquivo. Use o botão de download.
                 </div>
               )}
             </div>

@@ -210,7 +210,7 @@ export default function SuperAdminImpersonate() {
         <CardHeader>
           <CardTitle>Impersonacao administrativa</CardTitle>
           <CardDescription>
-            Use este acesso apenas para suporte. Ao sair, voce retorna para sua conta admin.
+            Use este acesso apenas para suporte. Ao sair, você retorna para sua conta de administrador.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

@@ -3,6 +3,8 @@ import { formatOrderNumber } from '@/lib/utils';
 import { Order, OrderItem, OrderPayment, PaymentStatus, PaymentMethod } from '@/types/database';
 import { formatAreaM2, parseM2Attributes, stripM2Attributes } from '@/lib/measurements';
 import { formatDatePtBr, normalizeProductionTimeDays } from '@/lib/productionTime';
+import { stripPendingCustomerInfoNotes } from '@/lib/orderMetadata';
+import { extractVisibleOrderNotes } from '@/lib/orderNotes';
 
 interface OrderReceiptProps {
   order: Order;
@@ -57,16 +59,6 @@ const paymentMethodLabels: Record<PaymentMethod, string> = {
   outro: 'Outro',
 };
 
-const extractVisibleNotes = (value?: string | null) => {
-  if (!value) return '';
-  return value
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0 && !line.startsWith('[meta]'))
-    .join('\n')
-    .trim();
-};
-
 const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
   ({ order, items, payment, summary }, ref) => {
     const paidTotal = Number(summary?.paidTotal ?? order.amount_paid ?? 0);
@@ -84,7 +76,14 @@ const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
     const paymentMethodLabel = paymentMethodValue ? paymentMethodLabels[paymentMethodValue] : '-';
     const company = order.company;
     const companyName = company?.name || receiptTitle;
-    const visibleOrderNotes = extractVisibleNotes(order.notes);
+    const visibleOrderNotes =
+      order.show_notes_on_pdf === false
+        ? ''
+        : extractVisibleOrderNotes(
+            order.status === 'pendente'
+              ? order.notes
+              : stripPendingCustomerInfoNotes(order.notes),
+          );
     const addressLine = company?.address ? `Endereço: ${company.address}` : '';
     const cityState = [company?.city, company?.state].filter(Boolean).join(' - ');
     const cityStateLine = cityState ? `Cidade/UF: ${cityState}` : '';
@@ -349,7 +348,7 @@ const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
 
         <div className="receipt-block mt-5 text-center text-[11px] text-slate-500">
           <p>Documento não fiscal</p>
-          <p className="mt-1">Obrigado pela preferencia!</p>
+          <p className="mt-1">Obrigado pela preferência!</p>
         </div>
       </div>
     );

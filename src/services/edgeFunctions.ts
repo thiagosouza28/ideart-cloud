@@ -16,6 +16,12 @@ const REFRESH_FAILURE_COOLDOWN_MS = 30_000;
 let refreshPromise: Promise<Session | null> | null = null;
 let lastRefreshFailureAt = 0;
 
+const normalizeSearchText = (value: string) =>
+  String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+
 const decodeJwtPayload = (token: string) => {
   try {
     const payload = token.split('.')[1] ?? '';
@@ -117,7 +123,7 @@ const getActiveSession = async (
 
 const shouldResetAuthForEdgeError = (status: number, message: string) => {
   if (status !== 401) return false;
-  const normalized = message.toLowerCase();
+  const normalized = normalizeSearchText(message);
   const mentionsToken = /token|jwt|sessao|session/.test(normalized);
   const invalidToken = /invalid|inval|expirad|expired|revoked|not found|nao encontrado/.test(normalized);
   return mentionsToken && invalidToken;
@@ -127,7 +133,7 @@ const shouldRetryWithRefresh = (status: number, payload: unknown) => {
   if (status !== 401) return false;
   if (!payload || typeof payload !== 'object') return true;
 
-  const message = String((payload as any).error || (payload as any).message || '').toLowerCase();
+  const message = normalizeSearchText(String((payload as any).error || (payload as any).message || ''));
   if (!message) return true;
 
   return /auth|token|jwt|sessao|session|authorization/.test(message);
@@ -226,7 +232,7 @@ export async function invokeEdgeFunction<T>(
       }
 
       if (response.status === 401) {
-        message = /sessao|session/i.test(message)
+        message = /sessao|session/i.test(normalizeSearchText(message))
           ? message
           : 'Sessão inválida ou expirada. Saia e entre novamente.';
       } else if (response.status === 403) {

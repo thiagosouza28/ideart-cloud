@@ -1,6 +1,33 @@
 ﻿import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Edit, Trash2, Building2, Upload, Loader2, MapPin, Phone, Mail, Globe, ExternalLink, Copy, Check, Palette, LayoutGrid, List, Settings as SettingsIcon, MessageCircle, Gift } from 'lucide-react';
+import { useLayoutEffect } from 'react';
+import {
+  Plus,
+  Edit,
+  Trash2,
+  Building2,
+  Upload,
+  Loader2,
+  MapPin,
+  Phone,
+  Mail,
+  Globe,
+  ExternalLink,
+  Copy,
+  Check,
+  Palette,
+  LayoutGrid,
+  List,
+  Settings as SettingsIcon,
+  MessageCircle,
+  Gift,
+  Monitor,
+  Moon,
+  Sun,
+  Type,
+  LayoutTemplate,
+  Paintbrush2,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { CurrencyInput } from '@/components/ui/currency-input';
@@ -12,15 +39,43 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { supabase } from '@/integrations/supabase/client';
-import { Category, Supply, Attribute, AttributeValue, Company, OrderStatus } from '@/types/database';
+import {
+  Attribute,
+  AttributeValue,
+  Category,
+  Company,
+  CompanyTheme,
+  CompanyThemeBorderRadius,
+  CompanyThemeButtonStyle,
+  CompanyThemeFontFamily,
+  CompanyThemeLayoutDensity,
+  CompanyThemeMode,
+  CompanyThemePalette,
+  CompanyThemePaletteMode,
+  OrderStatus,
+  Supply,
+} from '@/types/database';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
+import { useCompanyTheme } from '@/contexts/CompanyThemeContext';
 import { invokeEdgeFunction } from '@/services/edgeFunctions';
 import { z } from 'zod';
 import { ensurePublicStorageUrl } from '@/lib/storage';
+import {
+  defaultCompanyTheme,
+  extractDominantColorFromFile,
+  getCompanyThemePalette,
+  normalizeCompanyTheme,
+  normalizeHexColor,
+  setCompanyThemePalette,
+  suggestThemeFromLogoColor,
+} from '@/lib/companyTheme';
 import { useUnsavedChanges } from '@/hooks/use-unsaved-changes';
+import { CompanyThemePreview } from '@/components/settings/CompanyThemePreview';
 import {
   allOrderStatuses,
   buildOrderStatusCustomization,
@@ -77,9 +132,91 @@ const buildOrderStatusMessageTemplates = (value?: unknown): Record<OrderStatus, 
   }, {} as Record<OrderStatus, string>);
 };
 
+const themeModeOptions: Array<{
+  value: CompanyThemeMode;
+  title: string;
+  description: string;
+  icon: typeof Sun;
+}> = [
+  { value: 'light', title: 'Claro', description: 'Aplica o tema claro em todo o sistema.', icon: Sun },
+  { value: 'dark', title: 'Escuro', description: 'Aplica o tema escuro em todo o sistema.', icon: Moon },
+  {
+    value: 'system',
+    title: 'Automático',
+    description: 'Segue a preferência do navegador do usuário.',
+    icon: Monitor,
+  },
+];
+
+const buttonStyleOptions: Array<{
+  value: CompanyThemeButtonStyle;
+  title: string;
+  description: string;
+}> = [
+  { value: 'soft', title: 'Suave', description: 'Botões mais leves, com contraste suave.' },
+  { value: 'modern', title: 'Moderno', description: 'Botões com mais presença visual e profundidade.' },
+  { value: 'solid', title: 'Sólido', description: 'Botões chapados, diretos e com alto contraste.' },
+  { value: 'outline', title: 'Outline', description: 'Botões transparentes com borda e hover suave.' },
+];
+
+const borderRadiusOptions: Array<{
+  value: CompanyThemeBorderRadius;
+  title: string;
+  description: string;
+}> = [
+  { value: 'small', title: 'Pequeno', description: 'Raio aproximado de 6px.' },
+  { value: 'medium', title: 'Médio', description: 'Raio aproximado de 12px.' },
+  { value: 'large', title: 'Grande', description: 'Raio aproximado de 20px.' },
+];
+
+const densityOptions: Array<{
+  value: CompanyThemeLayoutDensity;
+  title: string;
+  description: string;
+}> = [
+  { value: 'compact', title: 'Compacto', description: 'Menos espaçamento em cards, tabelas e formulários.' },
+  { value: 'normal', title: 'Normal', description: 'Equilíbrio entre respiro visual e densidade.' },
+  { value: 'spacious', title: 'Espaçado', description: 'Mais respiro em toda a interface.' },
+];
+
+const fontOptions: CompanyThemeFontFamily[] = ['Inter', 'Roboto', 'Poppins', 'Open Sans'];
+
+const themeColorFields: Array<{
+  key: keyof Pick<
+    CompanyTheme,
+    | 'primary_color'
+    | 'secondary_color'
+    | 'background_color'
+    | 'text_color'
+    | 'button_color'
+    | 'button_hover_color'
+    | 'menu_hover_color'
+  >;
+  label: string;
+}> = [
+  { key: 'primary_color', label: 'Cor primária' },
+  { key: 'secondary_color', label: 'Cor secundária' },
+  { key: 'background_color', label: 'Cor de fundo' },
+  { key: 'text_color', label: 'Cor do texto' },
+  { key: 'button_color', label: 'Cor dos botões' },
+  { key: 'button_hover_color', label: 'Hover dos botões' },
+  { key: 'menu_hover_color', label: 'Hover do menu' },
+];
+
+const themePaletteModeOptions: Array<{
+  value: CompanyThemePaletteMode;
+  title: string;
+  description: string;
+  icon: typeof Sun;
+}> = [
+  { value: 'light', title: 'Paleta clara', description: 'Usada quando o sistema estiver em modo claro.', icon: Sun },
+  { value: 'dark', title: 'Paleta escura', description: 'Usada quando o sistema estiver em modo escuro.', icon: Moon },
+];
+
 export default function Settings() {
   const { toast } = useToast();
   const { profile, user, hasPermission, refreshCompany } = useAuth();
+  const { companyTheme, loadingCompanyTheme, refreshCompanyTheme, setCompanyThemeLocally } = useCompanyTheme();
   const navigate = useNavigate();
   const [categories, setCategories] = useState<Category[]>([]);
   const [supplies, setSupplies] = useState<Supply[]>([]);
@@ -142,14 +279,22 @@ export default function Settings() {
   const companyFetchRef = useRef<string | null>(null);
   const whatsappTemplateRef = useRef<HTMLTextAreaElement>(null);
   const birthdayTemplateRef = useRef<HTMLTextAreaElement>(null);
+  const messageTextareaRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
   const [dangerOpen, setDangerOpen] = useState(false);
   const [resetPassword, setResetPassword] = useState('');
   const [resetConfirmText, setResetConfirmText] = useState('');
   const [resetChecked, setResetChecked] = useState(false);
   const [resetLoading, setResetLoading] = useState(false);
   const [resetError, setResetError] = useState<string | null>(null);
+  const [themeForm, setThemeForm] = useState<CompanyTheme>(() =>
+    defaultCompanyTheme(profile?.company_id ?? '')
+  );
+  const [originalThemeForm, setOriginalThemeForm] = useState<CompanyTheme | null>(null);
+  const [themePaletteMode, setThemePaletteMode] = useState<CompanyThemePaletteMode>('light');
+  const [savingTheme, setSavingTheme] = useState(false);
+  const themeCompanyRef = useRef<string | null>(null);
   // Controla a aba por estado para evitar reload e manter o estado dos formulários.
-  const [activeTab, setActiveTab] = useState<'company' | 'catalog'>('company');
+  const [activeTab, setActiveTab] = useState<'company' | 'catalog' | 'theme'>('company');
   const [companySettingsTab, setCompanySettingsTab] = useState<'geral' | 'contato' | 'mensagens' | 'permissoes'>('geral');
 
   // Dialogs
@@ -309,7 +454,59 @@ export default function Settings() {
     setCompanyLoading(false);
   }, [originalForm, toast]);
 
-  const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  useEffect(() => {
+    if (!profile?.company_id) {
+      themeCompanyRef.current = null;
+      setThemeForm(defaultCompanyTheme(''));
+      setOriginalThemeForm(null);
+      return;
+    }
+
+    if (!companyTheme) return;
+
+    const nextTheme = normalizeCompanyTheme(companyTheme, profile.company_id);
+    const shouldHydrate =
+      themeCompanyRef.current !== nextTheme.store_id || originalThemeForm === null;
+
+    if (!shouldHydrate) return;
+
+    themeCompanyRef.current = nextTheme.store_id;
+    setThemeForm(nextTheme);
+    setOriginalThemeForm(nextTheme);
+    setThemePaletteMode(nextTheme.theme_mode === 'dark' ? 'dark' : 'light');
+  }, [companyTheme, originalThemeForm, profile?.company_id]);
+
+  const updateThemeField = useCallback(
+    <K extends keyof CompanyTheme,>(field: K, value: CompanyTheme[K]) => {
+      setThemeForm((prev) => ({
+        ...prev,
+        [field]: value,
+      }));
+    },
+    [],
+  );
+
+  const activeThemePalette = useMemo(
+    () => getCompanyThemePalette(themeForm, themePaletteMode),
+    [themeForm, themePaletteMode],
+  );
+
+  const handleThemeColorChange = useCallback(
+    (
+      field: keyof CompanyThemePalette,
+      value: string,
+    ) => {
+      setThemeForm((prev) =>
+        setCompanyThemePalette(prev, themePaletteMode, {
+          ...getCompanyThemePalette(prev, themePaletteMode),
+          [field]: normalizeHexColor(value, getCompanyThemePalette(prev, themePaletteMode)[field]),
+        }),
+      );
+    },
+    [themePaletteMode],
+  );
+
+  const handleLogoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       setLogoFile(file);
@@ -318,6 +515,27 @@ export default function Settings() {
         setLogoPreview(reader.result as string);
       };
       reader.readAsDataURL(file);
+
+      try {
+        const suggestedColor = await extractDominantColorFromFile(file);
+        setThemeForm((prev) =>
+          setCompanyThemePalette(
+            normalizeCompanyTheme(prev, profile?.company_id ?? company?.id ?? ''),
+            themePaletteMode,
+            suggestThemeFromLogoColor(
+              suggestedColor,
+              themePaletteMode,
+              getCompanyThemePalette(prev, themePaletteMode),
+            ),
+          ),
+        );
+        toast({
+          title: 'Cor principal sugerida a partir da logo',
+          description: `Revise a nova paleta ${themePaletteMode === 'dark' ? 'escura' : 'clara'} na aba Tema da Empresa antes de salvar.`,
+        });
+      } catch (error) {
+        console.error('Erro ao extrair cor da logo:', error);
+      }
     }
   };
 
@@ -341,6 +559,23 @@ export default function Settings() {
       signatureFile !== null
     );
   }, [originalForm, companyForm, logoFile, signatureFile]);
+  const hasThemeChanges = useMemo(() => {
+    if (!originalThemeForm) return false;
+
+    const sanitize = (theme: CompanyTheme) => ({
+      store_id: theme.store_id,
+      theme_mode: theme.theme_mode,
+      light_palette: getCompanyThemePalette(theme, 'light'),
+      dark_palette: getCompanyThemePalette(theme, 'dark'),
+      border_radius: theme.border_radius,
+      button_style: theme.button_style,
+      layout_density: theme.layout_density,
+      font_family: theme.font_family,
+    });
+
+    return JSON.stringify(sanitize(themeForm)) !== JSON.stringify(sanitize(originalThemeForm));
+  }, [originalThemeForm, themeForm]);
+  const hasPendingChanges = hasChanges || hasThemeChanges;
   const minimumOrderValue = Number(companyForm.minimum_order_value || 0);
   const minimumDeliveryValue = Number(companyForm.minimum_delivery_value || 0);
   const hasInvalidMinimumDelivery =
@@ -348,10 +583,10 @@ export default function Settings() {
 
   // Update isSaved when form changes
   useEffect(() => {
-    if (hasChanges) {
+    if (hasPendingChanges) {
       setIsSaved(false);
     }
-  }, [hasChanges]);
+  }, [hasPendingChanges]);
 
   useEffect(() => {
     if (activeTab === 'catalog' && hasChanges) {
@@ -359,7 +594,33 @@ export default function Settings() {
     }
   }, [activeTab, hasChanges]);
 
-  useUnsavedChanges(hasChanges && !savingCompany);
+  const autoResizeTextarea = useCallback((textarea: HTMLTextAreaElement | null) => {
+    if (!textarea) return;
+    textarea.style.height = '0px';
+    textarea.style.overflowY = 'hidden';
+    textarea.style.height = `${textarea.scrollHeight}px`;
+  }, []);
+
+  const registerMessageTextarea = useCallback(
+    (key: string, textarea: HTMLTextAreaElement | null) => {
+      messageTextareaRefs.current[key] = textarea;
+      autoResizeTextarea(textarea);
+    },
+    [autoResizeTextarea],
+  );
+
+  useLayoutEffect(() => {
+    if (companySettingsTab !== 'mensagens') return;
+    Object.values(messageTextareaRefs.current).forEach(autoResizeTextarea);
+  }, [
+    autoResizeTextarea,
+    companySettingsTab,
+    companyForm.birthday_message_template,
+    companyForm.order_status_message_templates,
+    companyForm.whatsapp_message_template,
+  ]);
+
+  useUnsavedChanges((hasChanges && !savingCompany) || (hasThemeChanges && !savingTheme));
 
   const saveCompany = async () => {
     if (!company) {
@@ -545,6 +806,39 @@ export default function Settings() {
       toast({ title: "Erro ao salvar", variant: "destructive" });
     } finally {
       setSavingCompany(false);
+    }
+  };
+
+  const saveTheme = async () => {
+    if (!profile?.company_id) {
+      toast({ title: 'Empresa não encontrada', variant: 'destructive' });
+      return;
+    }
+
+    setSavingTheme(true);
+
+    try {
+      const payload = normalizeCompanyTheme(themeForm, profile.company_id);
+      const { data, error } = await supabase
+        .from('company_theme')
+        .upsert(payload, { onConflict: 'store_id' })
+        .select('*')
+        .maybeSingle();
+
+      if (error) throw error;
+
+      const savedTheme = normalizeCompanyTheme(data ?? payload, profile.company_id);
+      setThemeForm(savedTheme);
+      setOriginalThemeForm(savedTheme);
+      setCompanyThemeLocally(savedTheme);
+      await refreshCompanyTheme();
+      setIsSaved(true);
+      toast({ title: 'Tema da empresa salvo com sucesso!' });
+    } catch (error) {
+      console.error('Erro ao salvar tema da empresa:', error);
+      toast({ title: 'Erro ao salvar tema da empresa', variant: 'destructive' });
+    } finally {
+      setSavingTheme(false);
     }
   };
 
@@ -751,11 +1045,12 @@ export default function Settings() {
         <h1 className="page-title">Configurações</h1>
       </div>
 
-      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'company' | 'catalog')}>
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'company' | 'catalog' | 'theme')}>
 
         <TabsList>
-          <TabsTrigger value="company" type="button">Empresa</TabsTrigger>
-          <TabsTrigger value="catalog" type="button">Personalização</TabsTrigger>
+          <TabsTrigger value="company" type="button">Dados da Empresa</TabsTrigger>
+          <TabsTrigger value="catalog" type="button">Personalização do Sistema</TabsTrigger>
+          <TabsTrigger value="theme" type="button">Tema da Empresa</TabsTrigger>
         </TabsList>
 
         {/* Company */}
@@ -837,7 +1132,7 @@ export default function Settings() {
                   <div>
                     <p className="font-medium">Assinatura para recibos</p>
                     <p className="text-sm text-muted-foreground">
-                      Envie uma imagem PNG/JPG (de preferencia com fundo transparente).
+                      Envie uma imagem PNG/JPG (de preferência com fundo transparente).
                     </p>
                   </div>
                 </div>
@@ -1066,12 +1361,19 @@ export default function Settings() {
                 </TooltipProvider>
                 <Textarea
                   id="whatsapp-template"
-                  ref={whatsappTemplateRef}
+                  ref={(textarea) => {
+                    whatsappTemplateRef.current = textarea;
+                    registerMessageTextarea('whatsapp-template', textarea);
+                  }}
                   value={companyForm.whatsapp_message_template}
-                  onChange={(e) => setCompanyForm({ ...companyForm, whatsapp_message_template: e.target.value })}
+                  onChange={(e) => {
+                    setCompanyForm({ ...companyForm, whatsapp_message_template: e.target.value });
+                    autoResizeTextarea(e.currentTarget);
+                  }}
                   placeholder="Ola {cliente_nome}! {mensagem_status} Pedido #{pedido_numero}. Acompanhe: {pedido_link}"
-                  className="min-h-[120px]"
-                  />
+                  className="!min-h-0 resize-none overflow-hidden"
+                  rows={1}
+                />
                   <div className="text-xs text-muted-foreground">
                     Variáveis disponíveis:
                     <div className="mt-2 grid grid-cols-1 gap-1 sm:grid-cols-2">
@@ -1101,17 +1403,22 @@ export default function Settings() {
                         <Label htmlFor={`status-message-${status}`}>{orderStatusLabels[status]}</Label>
                         <Textarea
                           id={`status-message-${status}`}
+                          ref={(textarea) =>
+                            registerMessageTextarea(`status-message-${status}`, textarea)
+                          }
                           value={companyForm.order_status_message_templates[status] || ''}
-                          onChange={(event) =>
+                          onChange={(event) => {
                             setCompanyForm((prev) => ({
                               ...prev,
                               order_status_message_templates: {
                                 ...prev.order_status_message_templates,
                                 [status]: event.target.value,
                               },
-                            }))
-                          }
-                          className="min-h-[88px]"
+                            }));
+                            autoResizeTextarea(event.currentTarget);
+                          }}
+                          className="!min-h-0 resize-none overflow-hidden"
+                          rows={1}
                         />
                       </div>
                     ))}
@@ -1214,11 +1521,18 @@ export default function Settings() {
                   </TooltipProvider>
                   <Textarea
                     id="birthday-template"
-                    ref={birthdayTemplateRef}
+                    ref={(textarea) => {
+                      birthdayTemplateRef.current = textarea;
+                      registerMessageTextarea('birthday-template', textarea);
+                    }}
                     value={companyForm.birthday_message_template}
-                    onChange={(e) => setCompanyForm({ ...companyForm, birthday_message_template: e.target.value })}
+                    onChange={(e) => {
+                      setCompanyForm({ ...companyForm, birthday_message_template: e.target.value });
+                      autoResizeTextarea(e.currentTarget);
+                    }}
                     placeholder="Olá {cliente_nome}, feliz aniversário! Que seu dia seja especial. {empresa_nome}"
-                    className="min-h-[120px]"
+                    className="!min-h-0 resize-none overflow-hidden"
+                    rows={1}
                   />
                   <div className="text-xs text-muted-foreground">
                     Variáveis disponíveis:
@@ -1317,552 +1631,335 @@ export default function Settings() {
           </Card>
 
         </TabsContent>
-        {/* Personalização */}
         <TabsContent value="catalog">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Palette className="h-5 w-5" />
-                Personalização do Catálogo
+                Personalização do Sistema
               </CardTitle>
+              <CardDescription>
+                A personalização do catálogo foi centralizada no módulo Catálogo para não depender mais das configurações gerais da loja.
+              </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
-              {/* Catalog Colors */}
-              <div className="space-y-4" data-catalog-settings>
-                <Label className="flex items-center gap-2">
-                  <Palette className="h-4 w-4" />
-                  Cores do Catálogo
-                </Label>
-                <p className="text-sm text-muted-foreground">
-                  Personalize as cores do seu catálogo público
+            <CardContent className="space-y-4">
+              <div className="rounded-lg border bg-muted/30 p-4">
+                <p className="text-sm font-medium">Gerencie em um único lugar:</p>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  título, descrição, botão principal, contato, exibição de preços, exibição de contato, cores, layout e formas de pagamento do checkout público.
                 </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="catalog-header-bg" className="text-sm">Topo - fundo</Label>
-                    <div className="flex gap-2">
-                      <input
-                        type="color"
-                        id="catalog-header-bg"
-                        value={companyForm.catalog_header_bg_color}
-                        onChange={(e) => setCompanyForm({
-                          ...companyForm,
-                          catalog_header_bg_color: e.target.value,
-                          catalog_secondary_color: e.target.value,
-                        })}
-                        className="h-10 w-14 rounded border cursor-pointer"
-                      />
-                      <Input
-                        value={companyForm.catalog_header_bg_color}
-                        onChange={(e) => setCompanyForm({
-                          ...companyForm,
-                          catalog_header_bg_color: e.target.value,
-                          catalog_secondary_color: e.target.value,
-                        })}
-                        className="flex-1 font-mono text-sm"
-                      />
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Fundo da barra superior do catálogo.
-                    </p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="catalog-header-text" className="text-sm">Topo - texto e icones</Label>
-                    <div className="flex gap-2">
-                      <input
-                        type="color"
-                        id="catalog-header-text"
-                        value={companyForm.catalog_header_text_color}
-                        onChange={(e) => setCompanyForm({ ...companyForm, catalog_header_text_color: e.target.value })}
-                        className="h-10 w-14 rounded border cursor-pointer"
-                      />
-                      <Input
-                        value={companyForm.catalog_header_text_color}
-                        onChange={(e) => setCompanyForm({ ...companyForm, catalog_header_text_color: e.target.value })}
-                        className="flex-1 font-mono text-sm"
-                      />
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Cor dos textos e icones no topo.
-                    </p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="catalog-footer-bg" className="text-sm">Rodapé - fundo</Label>
-                    <div className="flex gap-2">
-                      <input
-                        type="color"
-                        id="catalog-footer-bg"
-                        value={companyForm.catalog_footer_bg_color}
-                        onChange={(e) => setCompanyForm({ ...companyForm, catalog_footer_bg_color: e.target.value })}
-                        className="h-10 w-14 rounded border cursor-pointer"
-                      />
-                      <Input
-                        value={companyForm.catalog_footer_bg_color}
-                        onChange={(e) => setCompanyForm({ ...companyForm, catalog_footer_bg_color: e.target.value })}
-                        className="flex-1 font-mono text-sm"
-                      />
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Fundo do rodapé do catálogo.
-                    </p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="catalog-footer-text" className="text-sm">Rodapé - texto</Label>
-                    <div className="flex gap-2">
-                      <input
-                        type="color"
-                        id="catalog-footer-text"
-                        value={companyForm.catalog_footer_text_color}
-                        onChange={(e) => setCompanyForm({ ...companyForm, catalog_footer_text_color: e.target.value })}
-                        className="h-10 w-14 rounded border cursor-pointer"
-                      />
-                      <Input
-                        value={companyForm.catalog_footer_text_color}
-                        onChange={(e) => setCompanyForm({ ...companyForm, catalog_footer_text_color: e.target.value })}
-                        className="flex-1 font-mono text-sm"
-                      />
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Cor do texto do rodape.
-                    </p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="catalog-price" className="text-sm">Preço</Label>
-                    <div className="flex gap-2">
-                      <input
-                        type="color"
-                        id="catalog-price"
-                        value={companyForm.catalog_price_color}
-                        onChange={(e) => setCompanyForm({
-                          ...companyForm,
-                          catalog_price_color: e.target.value,
-                          catalog_accent_color: e.target.value,
-                        })}
-                        className="h-10 w-14 rounded border cursor-pointer"
-                      />
-                      <Input
-                        value={companyForm.catalog_price_color}
-                        onChange={(e) => setCompanyForm({
-                          ...companyForm,
-                          catalog_price_color: e.target.value,
-                          catalog_accent_color: e.target.value,
-                        })}
-                        className="flex-1 font-mono text-sm"
-                      />
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Cor usada no preço do produto.
-                    </p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="catalog-badge-bg" className="text-sm">Badge - fundo</Label>
-                    <div className="flex gap-2">
-                      <input
-                        type="color"
-                        id="catalog-badge-bg"
-                        value={companyForm.catalog_badge_bg_color}
-                        onChange={(e) => setCompanyForm({ ...companyForm, catalog_badge_bg_color: e.target.value })}
-                        className="h-10 w-14 rounded border cursor-pointer"
-                      />
-                      <Input
-                        value={companyForm.catalog_badge_bg_color}
-                        onChange={(e) => setCompanyForm({ ...companyForm, catalog_badge_bg_color: e.target.value })}
-                        className="flex-1 font-mono text-sm"
-                      />
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Fundo dos badges de categoria.
-                    </p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="catalog-badge-text" className="text-sm">Badge - texto</Label>
-                    <div className="flex gap-2">
-                      <input
-                        type="color"
-                        id="catalog-badge-text"
-                        value={companyForm.catalog_badge_text_color}
-                        onChange={(e) => setCompanyForm({ ...companyForm, catalog_badge_text_color: e.target.value })}
-                        className="h-10 w-14 rounded border cursor-pointer"
-                      />
-                      <Input
-                        value={companyForm.catalog_badge_text_color}
-                        onChange={(e) => setCompanyForm({ ...companyForm, catalog_badge_text_color: e.target.value })}
-                        className="flex-1 font-mono text-sm"
-                      />
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Cor do texto dentro dos badges.
-                    </p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="catalog-button-bg" className="text-sm">Botão principal - fundo</Label>
-                    <div className="flex gap-2">
-                      <input
-                        type="color"
-                        id="catalog-button-bg"
-                        value={companyForm.catalog_button_bg_color}
-                        onChange={(e) => setCompanyForm({
-                          ...companyForm,
-                          catalog_button_bg_color: e.target.value,
-                          catalog_primary_color: e.target.value,
-                        })}
-                        className="h-10 w-14 rounded border cursor-pointer"
-                      />
-                      <Input
-                        value={companyForm.catalog_button_bg_color}
-                        onChange={(e) => setCompanyForm({
-                          ...companyForm,
-                          catalog_button_bg_color: e.target.value,
-                          catalog_primary_color: e.target.value,
-                        })}
-                        className="flex-1 font-mono text-sm"
-                      />
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Fundo do botão principal.
-                    </p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="catalog-button-text" className="text-sm">Botão principal - texto</Label>
-                    <div className="flex gap-2">
-                      <input
-                        type="color"
-                        id="catalog-button-text"
-                        value={companyForm.catalog_button_text_color}
-                        onChange={(e) => setCompanyForm({ ...companyForm, catalog_button_text_color: e.target.value })}
-                        className="h-10 w-14 rounded border cursor-pointer"
-                      />
-                      <Input
-                        value={companyForm.catalog_button_text_color}
-                        onChange={(e) => setCompanyForm({ ...companyForm, catalog_button_text_color: e.target.value })}
-                        className="flex-1 font-mono text-sm"
-                      />
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Cor do texto do botão principal.
-                    </p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="catalog-button-outline" className="text-sm">Botão outline - cor</Label>
-                    <div className="flex gap-2">
-                      <input
-                        type="color"
-                        id="catalog-button-outline"
-                        value={companyForm.catalog_button_outline_color}
-                        onChange={(e) => setCompanyForm({ ...companyForm, catalog_button_outline_color: e.target.value })}
-                        className="h-10 w-14 rounded border cursor-pointer"
-                      />
-                      <Input
-                        value={companyForm.catalog_button_outline_color}
-                        onChange={(e) => setCompanyForm({ ...companyForm, catalog_button_outline_color: e.target.value })}
-                        className="flex-1 font-mono text-sm"
-                      />
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Cor da borda e do texto no botão outline.
-                    </p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="catalog-card-bg" className="text-sm">Card - fundo</Label>
-                    <div className="flex gap-2">
-                      <input
-                        type="color"
-                        id="catalog-card-bg"
-                        value={companyForm.catalog_card_bg_color}
-                        onChange={(e) => setCompanyForm({ ...companyForm, catalog_card_bg_color: e.target.value })}
-                        className="h-10 w-14 rounded border cursor-pointer"
-                      />
-                      <Input
-                        value={companyForm.catalog_card_bg_color}
-                        onChange={(e) => setCompanyForm({ ...companyForm, catalog_card_bg_color: e.target.value })}
-                        className="flex-1 font-mono text-sm"
-                      />
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Fundo dos cards de produto.
-                    </p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="catalog-card-border" className="text-sm">Card - borda</Label>
-                    <div className="flex gap-2">
-                      <input
-                        type="color"
-                        id="catalog-card-border"
-                        value={companyForm.catalog_card_border_color}
-                        onChange={(e) => setCompanyForm({ ...companyForm, catalog_card_border_color: e.target.value })}
-                        className="h-10 w-14 rounded border cursor-pointer"
-                      />
-                      <Input
-                        value={companyForm.catalog_card_border_color}
-                        onChange={(e) => setCompanyForm({ ...companyForm, catalog_card_border_color: e.target.value })}
-                        className="flex-1 font-mono text-sm"
-                      />
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Cor da borda dos cards.
-                    </p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="catalog-filter-bg" className="text-sm">Filtros/abas - fundo</Label>
-                    <div className="flex gap-2">
-                      <input
-                        type="color"
-                        id="catalog-filter-bg"
-                        value={companyForm.catalog_filter_bg_color}
-                        onChange={(e) => setCompanyForm({ ...companyForm, catalog_filter_bg_color: e.target.value })}
-                        className="h-10 w-14 rounded border cursor-pointer"
-                      />
-                      <Input
-                        value={companyForm.catalog_filter_bg_color}
-                        onChange={(e) => setCompanyForm({ ...companyForm, catalog_filter_bg_color: e.target.value })}
-                        className="flex-1 font-mono text-sm"
-                      />
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Fundo do filtro selecionado.
-                    </p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="catalog-filter-text" className="text-sm">Filtros/abas - texto</Label>
-                    <div className="flex gap-2">
-                      <input
-                        type="color"
-                        id="catalog-filter-text"
-                        value={companyForm.catalog_filter_text_color}
-                        onChange={(e) => setCompanyForm({ ...companyForm, catalog_filter_text_color: e.target.value })}
-                        className="h-10 w-14 rounded border cursor-pointer"
-                      />
-                      <Input
-                        value={companyForm.catalog_filter_text_color}
-                        onChange={(e) => setCompanyForm({ ...companyForm, catalog_filter_text_color: e.target.value })}
-                        className="flex-1 font-mono text-sm"
-                      />
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Cor do texto do filtro selecionado.
-                    </p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="catalog-text" className="text-sm">Texto geral</Label>
-                    <div className="flex gap-2">
-                      <input
-                        type="color"
-                        id="catalog-text"
-                        value={companyForm.catalog_text_color}
-                        onChange={(e) => setCompanyForm({ ...companyForm, catalog_text_color: e.target.value })}
-                        className="h-10 w-14 rounded border cursor-pointer"
-                      />
-                      <Input
-                        value={companyForm.catalog_text_color}
-                        onChange={(e) => setCompanyForm({ ...companyForm, catalog_text_color: e.target.value })}
-                        className="flex-1 font-mono text-sm"
-                      />
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Cor padrão dos textos do catálogo.
-                    </p>
-                  </div>
-                </div>
-                {/* Color Preview */}
-                <div className="flex flex-wrap items-center gap-3 p-3 rounded-lg border bg-muted/30 text-xs">
-                  <span className="text-muted-foreground">Preview:</span>
-                  <span className="flex items-center gap-1">
-                    <span className="h-4 w-4 rounded border" style={{ backgroundColor: companyForm.catalog_header_bg_color }} />
-                    Topo fundo
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <span className="h-4 w-4 rounded border" style={{ backgroundColor: companyForm.catalog_footer_bg_color }} />
-                    Rodapé fundo
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <span className="h-4 w-4 rounded border" style={{ backgroundColor: companyForm.catalog_button_bg_color }} />
-                    Botão fundo
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <span className="h-4 w-4 rounded border" style={{ backgroundColor: companyForm.catalog_badge_bg_color }} />
-                    Badge fundo
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <span
-                      className="h-4 w-4 rounded border"
-                      style={{ borderColor: companyForm.catalog_button_outline_color }}
-                    />
-                    Botão outline
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <span className="h-4 w-4 rounded border" style={{ backgroundColor: companyForm.catalog_filter_bg_color }} />
-                    Filtro fundo
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <span
-                      className="h-4 w-4 rounded border"
-                      style={{
-                        backgroundColor: companyForm.catalog_card_bg_color,
-                        borderColor: companyForm.catalog_card_border_color,
-                      }}
-                    />
-                    Card
-                  </span>
-                  <span className="font-medium" style={{ color: companyForm.catalog_header_text_color }}>
-                    Topo texto
-                  </span>
-                  <span className="font-medium" style={{ color: companyForm.catalog_footer_text_color }}>
-                    Rodapé texto
-                  </span>
-                  <span className="font-medium" style={{ color: companyForm.catalog_button_text_color }}>
-                    Botão texto
-                  </span>
-                  <span className="font-medium" style={{ color: companyForm.catalog_badge_text_color }}>
-                    Badge texto
-                  </span>
-                  <span className="font-medium" style={{ color: companyForm.catalog_price_color }}>
-                    Preço
-                  </span>
-                  <span className="font-medium" style={{ color: companyForm.catalog_filter_text_color }}>
-                    Filtro texto
-                  </span>
-                  <span className="font-medium" style={{ color: companyForm.catalog_text_color }}>
-                    Texto geral
-                  </span>
-                </div>
               </div>
 
-              {/* Layout Option */}
-              <div className="space-y-4">
-                <Label className="flex items-center gap-2">
-                  <LayoutGrid className="h-4 w-4" />
-                  Layout Padrão do Catálogo
-                </Label>
-                <p className="text-sm text-muted-foreground">
-                  Escolha o layout padrão para exibição dos produtos
-                </p>
-                <div className="flex gap-4">
-                  <Button
-                    type="button"
-                    variant={companyForm.catalog_layout === 'grid' ? 'default' : 'outline'}
-                    onClick={() => setCompanyForm({ ...companyForm, catalog_layout: 'grid' })}
-                    className="flex-1 gap-2"
-                  >
-                    <LayoutGrid className="h-4 w-4" />
-                    Grade
-                  </Button>
-                  <Button
-                    type="button"
-                    variant={companyForm.catalog_layout === 'list' ? 'default' : 'outline'}
-                    onClick={() => setCompanyForm({ ...companyForm, catalog_layout: 'list' })}
-                    className="flex-1 gap-2"
-                  >
-                    <List className="h-4 w-4" />
-                    Lista
-                  </Button>
-                </div>
-              </div>
-
-              
-                <Button onClick={saveCompany} disabled={savingCompany || hasInvalidMinimumDelivery} className="w-full md:w-auto">
-                  {savingCompany && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Salvar Alterações
-                </Button>
-            </CardContent>
-          </Card>
-          {/* Catalog Preview Card */}
-          {activeTab === 'catalog' && company?.slug && (
-            <Card className="mt-6">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Globe className="h-5 w-5" />
-                  Catálogo Público
-                </CardTitle>
-                <CardDescription>
-                  Compartilhe seu catálogo de produtos com clientes
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center gap-2 p-3 bg-muted rounded-lg">
-                  <code className="flex-1 text-sm truncate">
+              {company?.slug && (
+                <div className="rounded-lg border bg-background p-4">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Catálogo público</p>
+                  <code className="mt-2 block truncate text-sm">
                     {window.location.origin}/catalogo/{company.slug}
                   </code>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      navigator.clipboard.writeText(`${window.location.origin}/catalogo/${company.slug}`);
-                      setCopied(true);
-                      setTimeout(() => setCopied(false), 2000);
-                    }}
-                  >
-                    {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                  </Button>
                 </div>
+              )}
 
-                <div className="flex flex-col sm:flex-row gap-3">
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <Button type="button" className="gap-2" onClick={() => navigate('/catalogo-admin')}>
+                  <SettingsIcon className="h-4 w-4" />
+                  Abrir módulo Catálogo
+                </Button>
+                {company?.slug && (
                   <Button
+                    type="button"
                     variant="outline"
-                    className="flex-1"
+                    className="gap-2"
                     onClick={() => window.open(`/catalogo/${company.slug}`, '_blank')}
                   >
-                    <ExternalLink className="h-4 w-4 mr-2" />
-                    Abrir Catálogo
+                    <ExternalLink className="h-4 w-4" />
+                    Ver catálogo público
                   </Button>
-                  <Button
-                    variant="default"
-                    className="flex-1"
-                    onClick={() => {
-                      // Mantém a troca de abas via estado para evitar reload.
-                      setActiveTab('catalog');
-                      setTimeout(() => {
-                        document.querySelector('[data-catalog-settings]')?.scrollIntoView({ behavior: 'smooth' });
-                      }, 100);
-                    }}
-                  >
-                    <SettingsIcon className="h-4 w-4 mr-2" />
-                    Configurar Catálogo
-                  </Button>
-                </div>
-
-                {/* Preview iframe */}
-                <div className="border rounded-lg overflow-hidden bg-background">
-                  <div className="bg-muted px-3 py-2 border-b flex items-center gap-2">
-                    <div className="flex gap-1.5">
-                      <div className="h-3 w-3 rounded-full bg-destructive/50" />
-                      <div className="h-3 w-3 rounded-full bg-yellow-500/50" />
-                      <div className="h-3 w-3 rounded-full bg-green-500/50" />
-                    </div>
-                    <span className="text-xs text-muted-foreground truncate flex-1 text-center">
-                      {window.location.origin}/catalogo/{company.slug}
-                    </span>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+        <TabsContent value="theme">
+          <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)]">
+            <div className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Paintbrush2 className="h-5 w-5" />
+                    Tema da Empresa
+                  </CardTitle>
+                  <CardDescription>
+                    Personalize o visual do painel com a identidade da sua loja. As alterações são aplicadas globalmente após salvar.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground">
+                    Ao enviar uma nova logo em Dados da Empresa, o sistema extrai automaticamente a cor principal e sugere uma nova paleta aqui.
                   </div>
-                  {catalogPreviewVisible ? (
-                    <iframe
-                      key={catalogPreviewKey}
-                      src={`/catalogo/${company.slug}`}
-                      className="w-full h-[400px] border-0"
-                      title="Catálogo Preview"
-                    />
-                  ) : (
-                    <div className="flex h-[240px] items-center justify-center text-sm text-muted-foreground">
-                      Salve as alterações para atualizar o preview do catálogo.
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          )}
 
+                  <div className="space-y-3">
+                    <Label className="flex items-center gap-2">
+                      <Monitor className="h-4 w-4" />
+                      Modo do sistema
+                    </Label>
+                    <RadioGroup
+                      value={themeForm.theme_mode}
+                      onValueChange={(value) => {
+                        const nextMode = value as CompanyThemeMode;
+                        updateThemeField('theme_mode', nextMode);
+                        if (nextMode === 'light' || nextMode === 'dark') {
+                          setThemePaletteMode(nextMode);
+                        }
+                      }}
+                      className="grid gap-3 md:grid-cols-3"
+                    >
+                      {themeModeOptions.map((option) => (
+                        <Label
+                          key={option.value}
+                          htmlFor={`theme-mode-${option.value}`}
+                          className="flex cursor-pointer items-start gap-3 rounded-lg border border-border p-4"
+                        >
+                          <RadioGroupItem id={`theme-mode-${option.value}`} value={option.value} className="mt-1" />
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2 font-medium text-foreground">
+                              <option.icon className="h-4 w-4" />
+                              {option.title}
+                            </div>
+                            <p className="text-xs text-muted-foreground">{option.description}</p>
+                          </div>
+                        </Label>
+                      ))}
+                    </RadioGroup>
+                  </div>
+
+                  <div className="space-y-4">
+                    <Label className="flex items-center gap-2">
+                      <Palette className="h-4 w-4" />
+                      Cores do sistema
+                    </Label>
+                    <RadioGroup
+                      value={themePaletteMode}
+                      onValueChange={(value) => setThemePaletteMode(value as CompanyThemePaletteMode)}
+                      className="grid gap-3 md:grid-cols-2"
+                    >
+                      {themePaletteModeOptions.map((option) => (
+                        <Label
+                          key={option.value}
+                          htmlFor={`theme-palette-mode-${option.value}`}
+                          className="flex cursor-pointer items-start gap-3 rounded-lg border border-border p-4"
+                        >
+                          <RadioGroupItem
+                            id={`theme-palette-mode-${option.value}`}
+                            value={option.value}
+                            className="mt-1"
+                          />
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2 font-medium text-foreground">
+                              <option.icon className="h-4 w-4" />
+                              {option.title}
+                            </div>
+                            <p className="text-xs text-muted-foreground">{option.description}</p>
+                          </div>
+                        </Label>
+                      ))}
+                    </RadioGroup>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      {themeColorFields.map((field) => (
+                        <div key={field.key} className="space-y-2">
+                          <Label htmlFor={`theme-${themePaletteMode}-${field.key}`}>{field.label}</Label>
+                          <div className="flex items-center gap-3">
+                            <Input
+                              id={`theme-${themePaletteMode}-${field.key}`}
+                              type="color"
+                              value={activeThemePalette[field.key]}
+                              onChange={(event) => handleThemeColorChange(field.key, event.target.value)}
+                              className="h-12 w-16 p-1"
+                            />
+                            <Input
+                              value={activeThemePalette[field.key]}
+                              onChange={(event) => handleThemeColorChange(field.key, event.target.value)}
+                              onBlur={(event) =>
+                                handleThemeColorChange(field.key, event.target.value)
+                              }
+                              placeholder="#000000"
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <LayoutTemplate className="h-5 w-5" />
+                    Estilo, densidade e fonte
+                  </CardTitle>
+                  <CardDescription>
+                    Ajuste a presença visual dos botões, o arredondamento da interface e a densidade do layout.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="space-y-3">
+                    <Label>Estilo dos botões</Label>
+                    <RadioGroup
+                      value={themeForm.button_style}
+                      onValueChange={(value) =>
+                        updateThemeField('button_style', value as CompanyThemeButtonStyle)
+                      }
+                      className="grid gap-3 md:grid-cols-2"
+                    >
+                      {buttonStyleOptions.map((option) => (
+                        <Label
+                          key={option.value}
+                          htmlFor={`button-style-${option.value}`}
+                          className="flex cursor-pointer items-start gap-3 rounded-lg border border-border p-4"
+                        >
+                          <RadioGroupItem id={`button-style-${option.value}`} value={option.value} className="mt-1" />
+                          <div className="space-y-1">
+                            <div className="font-medium text-foreground">{option.title}</div>
+                            <p className="text-xs text-muted-foreground">{option.description}</p>
+                          </div>
+                        </Label>
+                      ))}
+                    </RadioGroup>
+                  </div>
+
+                  <div className="grid gap-6 md:grid-cols-2">
+                    <div className="space-y-3">
+                      <Label>Arredondamento</Label>
+                      <RadioGroup
+                        value={themeForm.border_radius}
+                        onValueChange={(value) =>
+                          updateThemeField('border_radius', value as CompanyThemeBorderRadius)
+                        }
+                        className="space-y-2"
+                      >
+                        {borderRadiusOptions.map((option) => (
+                          <Label
+                            key={option.value}
+                            htmlFor={`border-radius-${option.value}`}
+                            className="flex cursor-pointer items-start gap-3 rounded-lg border border-border p-3"
+                          >
+                            <RadioGroupItem id={`border-radius-${option.value}`} value={option.value} className="mt-1" />
+                            <div className="space-y-1">
+                              <div className="font-medium text-foreground">{option.title}</div>
+                              <p className="text-xs text-muted-foreground">{option.description}</p>
+                            </div>
+                          </Label>
+                        ))}
+                      </RadioGroup>
+                    </div>
+
+                    <div className="space-y-3">
+                      <Label>Layout do sistema</Label>
+                      <RadioGroup
+                        value={themeForm.layout_density}
+                        onValueChange={(value) =>
+                          updateThemeField('layout_density', value as CompanyThemeLayoutDensity)
+                        }
+                        className="space-y-2"
+                      >
+                        {densityOptions.map((option) => (
+                          <Label
+                            key={option.value}
+                            htmlFor={`layout-density-${option.value}`}
+                            className="flex cursor-pointer items-start gap-3 rounded-lg border border-border p-3"
+                          >
+                            <RadioGroupItem id={`layout-density-${option.value}`} value={option.value} className="mt-1" />
+                            <div className="space-y-1">
+                              <div className="font-medium text-foreground">{option.title}</div>
+                              <p className="text-xs text-muted-foreground">{option.description}</p>
+                            </div>
+                          </Label>
+                        ))}
+                      </RadioGroup>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <Label className="flex items-center gap-2">
+                      <Type className="h-4 w-4" />
+                      Fonte do sistema
+                    </Label>
+                    <Select
+                      value={themeForm.font_family}
+                      onValueChange={(value) =>
+                        updateThemeField('font_family', value as CompanyThemeFontFamily)
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione a fonte" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {fontOptions.map((fontName) => (
+                          <SelectItem key={fontName} value={fontName}>
+                            {fontName}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="flex flex-col gap-3 sm:flex-row">
+                    <Button
+                      type="button"
+                      onClick={saveTheme}
+                      disabled={savingTheme || loadingCompanyTheme || !profile?.company_id || !hasThemeChanges}
+                    >
+                      {savingTheme && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                      Salvar tema
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={!originalThemeForm || savingTheme}
+                      onClick={() => {
+                        if (!originalThemeForm) return;
+                        setThemeForm(originalThemeForm);
+                      }}
+                    >
+                      Restaurar edição
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="space-y-6 xl:sticky xl:top-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <LayoutGrid className="h-5 w-5" />
+                    Preview em tempo real
+                  </CardTitle>
+                  <CardDescription>
+                    Navbar, menu lateral, botões, cards, inputs e listagens usando o tema configurado.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <CompanyThemePreview theme={themeForm} previewMode={themePaletteMode} />
+                </CardContent>
+              </Card>
+            </div>
+          </div>
         </TabsContent>
       </Tabs>
 
       {isAdmin && (
-        <Card className="mt-8 border-red-200 bg-red-50/50">
+        <Card className="mt-8 border-destructive/35 bg-[linear-gradient(135deg,hsl(var(--destructive)/0.16),transparent_58%),hsl(var(--card))]">
           <CardHeader>
-            <CardTitle className="text-red-700">Área de perigo</CardTitle>
-            <CardDescription className="text-red-600">
+            <CardTitle className="text-destructive">Área de perigo</CardTitle>
+            <CardDescription className="text-destructive/80">
               Ações irreversíveis para dados da empresa.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="font-medium">Zerar dados da empresa</p>
+                <p className="font-medium text-foreground">Zerar dados da empresa</p>
                 <p className="text-sm text-muted-foreground">
                   Remove pedidos, produtos, clientes e movimentações da empresa.
                 </p>
@@ -1885,7 +1982,7 @@ export default function Settings() {
           </DialogHeader>
 
           <div className="space-y-4">
-            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
               Esta ação é irreversível. Todos os pedidos, produtos e clientes serão apagados permanentemente.
             </div>
 
@@ -1917,7 +2014,7 @@ export default function Settings() {
               <Label htmlFor="reset-confirm">Eu entendo que isso é irreversível</Label>
             </div>
 
-            {resetError && <p className="text-sm text-red-600">{resetError}</p>}
+            {resetError && <p className="text-sm text-destructive">{resetError}</p>}
           </div>
 
           <DialogFooter>
@@ -1939,12 +2036,12 @@ export default function Settings() {
       <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50">
         <div className="inline-flex items-center gap-2 rounded-full border bg-background/95 px-3 py-1.5 shadow-sm">
           <div className="text-sm text-muted-foreground">
-            {companyLoading ? (
+            {companyLoading || loadingCompanyTheme ? (
               <span className="flex items-center gap-2">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Carregando...
               </span>
-            ) : !company ? null : hasChanges ? (
+            ) : !company ? null : hasPendingChanges ? (
               <span className="text-amber-600 dark:text-amber-400">
                 Alterações não salvas
               </span>
@@ -1964,16 +2061,23 @@ export default function Settings() {
               }
               saveCompany();
             }}
-            disabled={savingCompany || nameError || !company || !hasChanges || hasInvalidMinimumDelivery}
+            disabled={
+              savingCompany ||
+              savingTheme ||
+              nameError ||
+              !company ||
+              !hasPendingChanges ||
+              hasInvalidMinimumDelivery
+            }
             size="lg"
             className="min-w-[200px] hidden"
           >
-            {savingCompany ? (
+            {savingCompany || savingTheme ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 Salvando...
               </>
-            ) : hasChanges ? (
+            ) : hasPendingChanges ? (
               "Salvar Alterações"
             ) : (
               "Salvo"

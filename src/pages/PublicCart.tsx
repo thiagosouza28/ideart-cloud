@@ -30,12 +30,25 @@ import {
   normalizeProductionTimeDays,
   resolveCompanyDeliveryTimeDays,
 } from '@/lib/productionTime';
+import {
+  catalogPaymentMethodLabels,
+  normalizeCatalogPaymentMethods,
+  type CatalogCheckoutPaymentMethod,
+} from '@/lib/catalogSettings';
+import { normalizeHexColor } from '@/lib/companyTheme';
+import { loadPublicCatalogCompany } from '@/lib/publicCatalogCompany';
 import { buildSystemStorageViewerUrl, ensurePublicStorageUrl } from '@/lib/storage';
 import { createPublicPixPayment, type PublicPixPaymentResult } from '@/services/payments';
 import { Company, PaymentMethod } from '@/types/database';
 
 const asCurrency = (value: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+
+const normalizeSearchText = (value: string) =>
+  String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
 
 const PERSONALIZED_REFERENCE_ACCEPT = 'image/jpeg,image/png,image/webp,application/pdf';
 const PERSONALIZED_REFERENCE_MIME_TYPES = new Set([
@@ -47,10 +60,10 @@ const PERSONALIZED_REFERENCE_MIME_TYPES = new Set([
 
 const paymentMethodLabels: Record<PaymentMethod, string> = {
   dinheiro: 'Dinheiro',
-  cartao: 'Cartao',
-  credito: 'Cartao de credito',
-  debito: 'Cartao de debito',
-  transferencia: 'Transferencia',
+  cartao: 'Cartão',
+  credito: 'Cartão de crédito',
+  debito: 'Cartão de débito',
+  transferencia: 'Transferência',
   pix: 'Pix',
   boleto: 'Boleto',
   outro: 'Outro',
@@ -60,7 +73,7 @@ const CHECKOUT_STEPS = [
   { key: 'cart', label: 'Carrinho' },
   { key: 'customer', label: 'Dados do cliente' },
   { key: 'payment', label: 'Pagamento' },
-  { key: 'review', label: 'Finalizacao' },
+  { key: 'review', label: 'Finalização' },
 ] as const;
 
 type OrderResultItem = {
@@ -131,10 +144,12 @@ export default function PublicCart() {
     pixAvailable: boolean;
     pixGateway: string | null;
     hasAccess: boolean;
+    paymentMethods: CatalogCheckoutPaymentMethod[];
   }>({
     pixAvailable: false,
     pixGateway: null,
     hasAccess: true,
+    paymentMethods: normalizeCatalogPaymentMethods(null),
   });
   const [savedAddressLoaded, setSavedAddressLoaded] = useState(false);
   const [hasSavedAddress, setHasSavedAddress] = useState(false);
@@ -236,15 +251,8 @@ export default function PublicCart() {
         return;
       }
 
-      let query = publicSupabase.from('companies').select('*').eq('is_active', true);
-      if (slug) {
-        query = query.eq('slug', slug);
-      } else if (companyId) {
-        query = query.eq('id', companyId);
-      }
-
-      const { data, error } = await query.maybeSingle();
-      if (error || !data) {
+      const data = await loadPublicCatalogCompany({ slug, companyId });
+      if (!data) {
         setNotFound(true);
         setLoading(false);
         return;
@@ -263,6 +271,7 @@ export default function PublicCart() {
         pixAvailable: false,
         pixGateway: null,
         hasAccess: true,
+        paymentMethods: normalizeCatalogPaymentMethods(company?.accepted_payment_methods),
       });
       return;
     }
@@ -281,6 +290,7 @@ export default function PublicCart() {
           pixAvailable: false,
           pixGateway: null,
           hasAccess: true,
+          paymentMethods: normalizeCatalogPaymentMethods(company?.accepted_payment_methods),
         });
         return;
       }
@@ -289,12 +299,16 @@ export default function PublicCart() {
         pix_available?: boolean;
         pix_gateway?: string | null;
         has_access?: boolean;
+        payment_methods?: CatalogCheckoutPaymentMethod[] | null;
       };
 
       setPaymentOptions({
         pixAvailable: Boolean(options.pix_available),
         pixGateway: options.pix_gateway || null,
         hasAccess: options.has_access !== false,
+        paymentMethods: normalizeCatalogPaymentMethods(
+          options.payment_methods ?? company.accepted_payment_methods,
+        ),
       });
     };
 
@@ -303,7 +317,7 @@ export default function PublicCart() {
     return () => {
       active = false;
     };
-  }, [company?.id]);
+  }, [company?.accepted_payment_methods, company?.id]);
 
   useEffect(() => {
     if (!company?.id) {
@@ -405,9 +419,14 @@ export default function PublicCart() {
   const canEditCart = isCartStep && !orderResult;
 
   useEffect(() => {
+    if (!form.paymentMethod) return;
+    if (!paymentOptions.paymentMethods.includes(form.paymentMethod as CatalogCheckoutPaymentMethod)) {
+      setForm((prev) => ({ ...prev, paymentMethod: '' }));
+      return;
+    }
     if (form.paymentMethod !== 'pix' || paymentOptions.pixAvailable) return;
     setForm((prev) => ({ ...prev, paymentMethod: '' }));
-  }, [form.paymentMethod, paymentOptions.pixAvailable]);
+  }, [form.paymentMethod, paymentOptions.paymentMethods, paymentOptions.pixAvailable]);
 
   useEffect(() => {
     if (!orderResult && cartItems.length === 0 && currentStep > 0) {
@@ -432,7 +451,7 @@ export default function PublicCart() {
     const orderUrl = summary.publicToken ? `${window.location.origin}/pedido/${summary.publicToken}` : null;
 
     const lines: string[] = [
-      `Novo pedido no catalogo - ${orderLabel}`,
+      `Novo pedido no catálogo - ${orderLabel}`,
       '',
       `Cliente: ${summary.customerName}`,
       `Telefone: ${summary.customerPhone}`,
@@ -440,7 +459,7 @@ export default function PublicCart() {
       `E-mail: ${summary.customerEmail}`,
       `Recebimento: ${deliveryLabel}`,
       `Pagamento: ${paymentLabel}`,
-      ...(summary.orderNotes ? [`Observacoes: ${summary.orderNotes}`] : []),
+      ...(summary.orderNotes ? [`Observações: ${summary.orderNotes}`] : []),
       '',
       'Produtos:',
       ...summary.items.flatMap((item, index) => {
@@ -453,10 +472,10 @@ export default function PublicCart() {
       }),
       '',
       ...(summary.productionTimeDaysUsed !== null
-        ? [`Tempo de producao: ${summary.productionTimeDaysUsed} ${summary.productionTimeDaysUsed === 1 ? 'dia' : 'dias'}`]
+        ? [`Tempo de produção: ${summary.productionTimeDaysUsed} ${summary.productionTimeDaysUsed === 1 ? 'dia' : 'dias'}`]
         : []),
       ...(summary.estimatedDeliveryDate
-        ? [`Previsao de entrega: ${formatDatePtBr(summary.estimatedDeliveryDate)}`]
+        ? [`Previsão de entrega: ${formatDatePtBr(summary.estimatedDeliveryDate)}`]
         : []),
       `Total do pedido: ${asCurrency(summary.total)}`,
       `Data/Hora: ${new Date(summary.createdAt).toLocaleString('pt-BR')}`,
@@ -464,7 +483,7 @@ export default function PublicCart() {
 
     if (summary.deliveryMethod === 'entrega') {
       lines.push(
-        `Endereco: ${summary.customerAddress || '-'}, ${summary.customerCity || '-'} - ${summary.customerState || '-'}, CEP ${summary.customerZipCode || '-'}`,
+        `Endereço: ${summary.customerAddress || '-'}, ${summary.customerCity || '-'} - ${summary.customerState || '-'}, CEP ${summary.customerZipCode || '-'}`,
       );
     }
     if (orderUrl) lines.push(`Acompanhar pedido: ${orderUrl}`);
@@ -505,7 +524,7 @@ export default function PublicCart() {
 
     if (!shareUrl) {
       toast({
-        title: 'Contato da loja nao configurado',
+        title: 'Contato da loja não configurado',
         description: 'Configure o WhatsApp da loja para enviar os detalhes do pedido.',
         variant: 'destructive',
       });
@@ -523,7 +542,7 @@ export default function PublicCart() {
       window.setTimeout(() => setCopiedPixCode(false), 1800);
     } catch {
       toast({
-        title: 'Nao foi possivel copiar o codigo PIX',
+        title: 'Não foi possível copiar o código PIX',
         variant: 'destructive',
       });
     }
@@ -551,12 +570,12 @@ export default function PublicCart() {
       setPixResult(pixCharge);
       return pixCharge;
     } catch (pixError: unknown) {
-      const pixMessage = pixError instanceof Error ? pixError.message : 'Falha ao gerar cobranca PIX.';
+      const pixMessage = pixError instanceof Error ? pixError.message : 'Falha ao gerar cobrança PIX.';
       setPixResult(null);
       setPixErrorMessage(pixMessage);
       if (!silent) {
         toast({
-          title: 'Pedido criado, mas PIX nao foi gerado',
+          title: 'Pedido criado, mas o PIX não foi gerado',
           description: pixMessage,
           variant: 'destructive',
         });
@@ -594,7 +613,7 @@ export default function PublicCart() {
 
     if (!PERSONALIZED_REFERENCE_MIME_TYPES.has(file.type)) {
       toast({
-        title: 'Arquivo invalido',
+        title: 'Arquivo inválido',
         description: 'Envie somente JPG, PNG, WEBP ou PDF.',
         variant: 'destructive',
       });
@@ -617,8 +636,8 @@ export default function PublicCart() {
 
     if (uploadError) {
       toast({
-        title: 'Erro ao enviar referencia',
-        description: 'Nao foi possivel enviar o arquivo agora.',
+        title: 'Erro ao enviar referência',
+        description: 'Não foi possível enviar o arquivo agora.',
         variant: 'destructive',
       });
       return;
@@ -637,7 +656,7 @@ export default function PublicCart() {
 
     toast({
       title: 'Arquivo anexado',
-      description: `Referencia anexada para ${item.name}.`,
+      description: `Referência anexada para ${item.name}.`,
     });
   };
 
@@ -685,18 +704,18 @@ export default function PublicCart() {
     const nextErrors: FormErrors = {};
 
     if (checkoutBlocked) {
-      nextErrors.cart = 'Loja com acesso bloqueado no plano atual. Finalizacao indisponivel.';
+      nextErrors.cart = 'Loja com acesso bloqueado no plano atual. Finalização indisponível.';
     } else if (cartItems.length === 0) {
       nextErrors.cart = 'Seu carrinho esta vazio.';
     }
 
     if (minimumOrderValue > 0 && orderTotal < minimumOrderValue) {
-      nextErrors.minimum = `O valor minimo para pedidos e ${asCurrency(minimumOrderValue)}.`;
+      nextErrors.minimum = `O valor mínimo para pedidos é ${asCurrency(minimumOrderValue)}.`;
     }
 
     const invalidMinQuantity = cartItems.find((item) => item.quantity < Math.max(1, item.minOrderQuantity));
     if (invalidMinQuantity) {
-      nextErrors.cart = `O produto "${invalidMinQuantity.name}" exige no minimo ${invalidMinQuantity.minOrderQuantity} unidade(s).`;
+      nextErrors.cart = `O produto "${invalidMinQuantity.name}" exige no mínimo ${invalidMinQuantity.minOrderQuantity} unidade(s).`;
     }
 
     setFormErrors((prev) => ({
@@ -716,28 +735,28 @@ export default function PublicCart() {
 
     const documentDigits = normalizeDigits(form.document);
     if (documentDigits.length !== 11 || !validateCpf(form.document)) {
-      nextErrors.document = 'CPF invalido.';
+      nextErrors.document = 'CPF inválido.';
     }
 
     if (!isLoggedCustomer) {
-      if (!validatePhone(form.phone)) nextErrors.phone = 'Telefone invalido.';
+      if (!validatePhone(form.phone)) nextErrors.phone = 'Telefone inválido.';
       if (!form.email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
-        nextErrors.email = 'Informe um e-mail valido.';
+        nextErrors.email = 'Informe um e-mail válido.';
       }
     } else {
       if (!validatePhone(form.phone)) {
-        nextErrors.phone = 'Telefone nao encontrado na conta. Atualize seu perfil para continuar.';
+        nextErrors.phone = 'Telefone não encontrado na conta. Atualize seu perfil para continuar.';
       }
       if (!form.email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
-        nextErrors.email = 'E-mail nao encontrado na conta. Atualize seu perfil para continuar.';
+        nextErrors.email = 'E-mail não encontrado na conta. Atualize seu perfil para continuar.';
       }
     }
 
     if (requiresAddressInput) {
-      if (!form.address.trim()) nextErrors.address = 'Informe o endereco para entrega/contato.';
+      if (!form.address.trim()) nextErrors.address = 'Informe o endereço para entrega/contato.';
       if (!form.city.trim()) nextErrors.city = 'Informe a cidade.';
       if (!form.state.trim() || form.state.trim().length < 2) nextErrors.state = 'Informe o estado (UF).';
-      if (normalizeDigits(form.zipCode).length < 8) nextErrors.zipCode = 'Informe um CEP valido.';
+      if (normalizeDigits(form.zipCode).length < 8) nextErrors.zipCode = 'Informe um CEP válido.';
     }
 
     if (form.deliveryMethod === 'entrega' && deliveryMinimumToApply > 0 && orderTotal < deliveryMinimumToApply) {
@@ -764,8 +783,10 @@ export default function PublicCart() {
     let paymentError: string | undefined;
     if (!form.paymentMethod) {
       paymentError = 'Selecione a forma de pagamento.';
+    } else if (!paymentOptions.paymentMethods.includes(form.paymentMethod as CatalogCheckoutPaymentMethod)) {
+      paymentError = 'A forma de pagamento selecionada nao esta disponivel para esta loja.';
     } else if (form.paymentMethod === 'pix' && !paymentOptions.pixAvailable) {
-      paymentError = 'PIX indisponivel para esta loja.';
+      paymentError = 'PIX indisponível para esta loja.';
     }
 
     setFormErrors((prev) => ({
@@ -847,44 +868,41 @@ export default function PublicCart() {
       p_customer_state: customerState,
       p_customer_zip_code: customerZipCode,
       p_payment_method: form.paymentMethod as PaymentMethod,
-      p_items: cartItems.map((item, index) => {
-        const mergedNotes = [item.notes || null, index === 0 && orderNotes ? `Obs. do pedido: ${orderNotes}` : null]
-          .filter(Boolean)
-          .join('\n');
-        return {
+      p_order_notes: orderNotes || null,
+      p_items: cartItems.map((item) => ({
           product_id: item.productId,
           quantity: item.quantity,
-          notes: mergedNotes || null,
+          notes: item.notes || null,
           reference_file_path: item.referenceFilePath || null,
           reference_file_name: item.referenceFileName || null,
           reference_file_type: item.referenceFileType || null,
           is_personalized: item.isPersonalized === true,
-        };
-      }),
+        })),
     });
 
     if (error) {
+      const normalizedErrorMessage = normalizeSearchText(error.message);
       const isMinOrderError =
-        error.message.includes('Minimum order value') ||
-        error.message.includes('Valor minimo do pedido');
+        normalizedErrorMessage.includes('minimum order value') ||
+        normalizedErrorMessage.includes('valor minimo do pedido');
       const isMinQuantityError =
-        error.message.includes('Minimum quantity not reached') ||
-        error.message.includes('Quantidade minima nao atingida');
+        normalizedErrorMessage.includes('minimum quantity not reached') ||
+        normalizedErrorMessage.includes('quantidade minima nao atingida');
       const isPixUnavailable =
-        error.message.includes('PIX unavailable') ||
-        error.message.includes('PIX indisponivel');
+        normalizedErrorMessage.includes('pix unavailable') ||
+        normalizedErrorMessage.includes('pix indisponivel');
       const isInvalidReferenceType =
-        error.message.includes('Invalid reference file type') ||
-        error.message.includes('tipo de arquivo');
+        normalizedErrorMessage.includes('invalid reference file type') ||
+        normalizedErrorMessage.includes('tipo de arquivo');
 
       const errorMessage = isMinOrderError
-        ? `O valor minimo para pedidos e ${asCurrency(minimumOrderValue)}.`
+        ? `O valor mínimo para pedidos é ${asCurrency(minimumOrderValue)}.`
         : isMinQuantityError
-          ? 'Existe item abaixo da quantidade minima permitida.'
+          ? 'Existe item abaixo da quantidade mínima permitida.'
           : isPixUnavailable
-            ? 'PIX indisponivel para esta loja no momento.'
+            ? 'PIX indisponível para esta loja no momento.'
             : isInvalidReferenceType
-              ? 'Tipo de arquivo invalido. Use JPG, PNG, WEBP ou PDF para produtos personalizados.'
+              ? 'Tipo de arquivo inválido. Use JPG, PNG, WEBP ou PDF para produtos personalizados.'
               : error.message;
 
       if (isMinOrderError) setFormErrors((prev) => ({ ...prev, minimum: errorMessage }));
@@ -920,7 +938,7 @@ export default function PublicCart() {
       if (orderId && publicToken) {
         await generatePixCharge({ orderId, publicToken });
       } else {
-        setPixErrorMessage('Pedido criado, mas nao foi possivel iniciar o pagamento PIX.');
+        setPixErrorMessage('Pedido criado, mas não foi possível iniciar o pagamento PIX.');
       }
     }
 
@@ -978,10 +996,10 @@ export default function PublicCart() {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-slate-900 mb-2">Catalogo nao encontrado</h1>
-          <p className="text-slate-500 mb-4">Nao foi possivel carregar os dados da empresa.</p>
+          <h1 className="text-2xl font-bold text-slate-900 mb-2">Catálogo não encontrado</h1>
+          <p className="text-slate-500 mb-4">Não foi possível carregar os dados da empresa.</p>
           <Link to="/">
-            <Button>Voltar ao inicio</Button>
+            <Button>Voltar ao início</Button>
           </Link>
         </div>
       </div>
@@ -1001,16 +1019,54 @@ export default function PublicCart() {
   const reviewTotal = orderResult?.total ?? orderTotal;
   const reviewProductionTimeDays = orderResult?.productionTimeDaysUsed ?? productionTimeDaysUsed;
   const reviewEstimatedDeliveryDate = orderResult?.estimatedDeliveryDate || estimatedDeliveryInfo?.isoDate || null;
+  const availablePaymentMethods = paymentOptions.paymentMethods.filter(
+    (method) => method !== 'pix' || paymentOptions.pixAvailable,
+  );
   const selectedPaymentLabel = form.paymentMethod ? paymentMethodLabels[form.paymentMethod as PaymentMethod] || form.paymentMethod : '-';
   const personalizedItemsCount = cartItems.filter((item) => item.isPersonalized).length;
   const personalizedItemsWithReference = cartItems.filter((item) => item.isPersonalized && Boolean(item.referenceFilePath)).length;
   const personalizedItemsMissingReference = Math.max(0, personalizedItemsCount - personalizedItemsWithReference);
+  const catalogPrimary = normalizeHexColor(
+    company?.catalog_button_bg_color || company?.catalog_primary_color,
+    '#1a3a8f',
+  );
+  const catalogPrimaryText = normalizeHexColor(company?.catalog_button_text_color, '#ffffff');
+  const catalogOutline = normalizeHexColor(
+    company?.catalog_button_outline_color || company?.catalog_button_bg_color || company?.catalog_primary_color,
+    catalogPrimary,
+  );
+  const catalogFilterBg = normalizeHexColor(
+    company?.catalog_filter_bg_color || company?.catalog_button_bg_color || company?.catalog_primary_color,
+    catalogPrimary,
+  );
+  const catalogCardBg = normalizeHexColor(company?.catalog_card_bg_color, '#ffffff');
+  const catalogCardBorder = normalizeHexColor(company?.catalog_card_border_color, '#e2e7f5');
+  const catalogText = normalizeHexColor(company?.catalog_text_color, '#0f1b3d');
+  const catalogShellStyle = {
+    backgroundColor: `color-mix(in srgb, ${company?.catalog_header_bg_color || company?.catalog_secondary_color || '#0f1b3d'} 8%, #f4f6fb)`,
+    color: catalogText,
+  };
+  const catalogCardStyle = {
+    backgroundColor: catalogCardBg,
+    borderColor: catalogCardBorder,
+  };
+  const catalogPrimaryButtonStyle = {
+    backgroundColor: catalogPrimary,
+    color: catalogPrimaryText,
+    borderColor: catalogOutline,
+  };
+  const catalogActiveStepStyle = {
+    borderColor: catalogFilterBg,
+    backgroundColor: `color-mix(in srgb, ${catalogFilterBg} 14%, ${catalogCardBg})`,
+    color: catalogFilterBg,
+  };
+  const catalogLinkStyle = { color: catalogPrimary };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
+    <div className="min-h-screen" style={catalogShellStyle}>
       <CatalogTopNav
         company={company}
-        subtitle="Pedido do catalogo"
+        subtitle="Pedido do catálogo"
         showBack
         onBack={handleBack}
         cartCount={cartItemsCount}
@@ -1020,14 +1076,14 @@ export default function PublicCart() {
         showContact
       />
 
-      <main className="mx-auto w-[min(1160px,calc(100%-28px))] py-6">
+      <main className="mx-auto w-full max-w-[1400px] px-4 py-6 sm:px-6 lg:px-8">
         <div className="mb-6 flex items-center gap-2 text-xs text-slate-500">
-          <Link to={catalogHref} className="hover:text-slate-700">Catalogo</Link>
+          <Link to={catalogHref} className="hover:text-slate-700">Catálogo</Link>
           <span>/</span>
           <span className="font-semibold text-slate-700">Carrinho</span>
         </div>
 
-        <div className="mb-6 rounded-xl border border-slate-200 bg-white p-3 sm:p-4">
+        <div className="mb-6 rounded-xl border p-3 sm:p-4" style={catalogCardStyle}>
           <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
             {CHECKOUT_STEPS.map((step, index) => {
               const isActive = index === currentStep;
@@ -1040,11 +1096,12 @@ export default function PublicCart() {
                   type="button"
                   className={`rounded-lg border px-3 py-2 text-left transition ${
                     isActive
-                      ? 'border-[#1a3a8f] bg-[#eef3ff] text-[#1a3a8f]'
+                      ? ''
                       : isDone
                         ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
                         : 'border-slate-200 bg-slate-50 text-slate-500'
                   }`}
+                  style={isActive ? catalogActiveStepStyle : undefined}
                   disabled={isDisabled}
                   onClick={() => goToStep(index)}
                 >
@@ -1058,7 +1115,7 @@ export default function PublicCart() {
 
         <div className={isReviewStep ? 'mx-auto max-w-2xl' : 'grid gap-6 lg:grid-cols-[1.6fr_1fr]'}>
           {!isReviewStep && (
-            <Card className="border-slate-200">
+            <Card className="border-slate-200" style={catalogCardStyle}>
             <CardContent className="p-4 sm:p-6">
               <div className="mb-4 flex items-center justify-between">
                 <h1 className="text-xl font-bold">Produtos no carrinho</h1>
@@ -1072,7 +1129,8 @@ export default function PublicCart() {
                   <p>Seu carrinho esta vazio.</p>
                   <Button
                     type="button"
-                    className="bg-[#1a3a8f] hover:bg-[#16337e]"
+                    className="hover:opacity-90"
+                    style={catalogPrimaryButtonStyle}
                     onClick={() => navigate(catalogHref)}
                   >
                     Adicionar produtos
@@ -1101,7 +1159,7 @@ export default function PublicCart() {
                             {item.notes && <p className="mt-1 text-xs text-slate-500">Obs: {item.notes}</p>}
                             {typeof item.productionTimeDays === 'number' && item.productionTimeDays >= 0 && (
                               <p className="mt-1 text-xs text-sky-700">
-                                Tempo de producao: {item.productionTimeDays}{' '}
+                                Tempo de produção: {item.productionTimeDays}{' '}
                                 {item.productionTimeDays === 1 ? 'dia' : 'dias'}
                               </p>
                             )}
@@ -1109,7 +1167,7 @@ export default function PublicCart() {
                             {isCustomerStep && item.isPersonalized && (
                               <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 p-2">
                                 <p className="text-[11px] font-medium text-amber-800">
-                                  Produto personalizado: se desejar, anexe a arte/modelo de referencia.
+                                  Produto personalizado: se desejar, anexe a arte/modelo de referência.
                                 </p>
                                 <div className="mt-2 flex flex-wrap items-center gap-2">
                                   <label className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-amber-300 bg-white px-2 py-1 text-[11px] font-medium text-amber-900 hover:bg-amber-100">
@@ -1150,7 +1208,7 @@ export default function PublicCart() {
                                     className="mt-2 inline-flex items-center gap-1 text-[11px] font-medium text-amber-900 underline"
                                   >
                                     <ExternalLink className="h-3.5 w-3.5" />
-                                    {item.referenceFileName || 'Ver referencia anexada'}
+                                    {item.referenceFileName || 'Ver referência anexada'}
                                   </a>
                                 ) : (
                                   <p className="mt-2 text-[11px] text-amber-700">Nenhum arquivo anexado ainda.</p>
@@ -1221,7 +1279,7 @@ export default function PublicCart() {
             </Card>
           )}
 
-          <Card className="border-slate-200">
+          <Card className="border-slate-200" style={catalogCardStyle}>
             <CardContent className="space-y-4 p-4 sm:p-6">
               {isCartStep && (
                 <>
@@ -1241,7 +1299,7 @@ export default function PublicCart() {
                     </div>
                     {minimumOrderValue > 0 && (
                       <p className={`mt-2 text-xs ${orderTotal < minimumOrderValue ? 'text-destructive' : 'text-slate-500'}`}>
-                        Pedido minimo: {asCurrency(minimumOrderValue)}
+                        Pedido mínimo: {asCurrency(minimumOrderValue)}
                       </p>
                     )}
                     {deliveryMinimumToApply > 0 && (
@@ -1249,13 +1307,13 @@ export default function PublicCart() {
                     )}
                     {productionTimeDaysUsed !== null && (
                       <p className="mt-1 text-xs text-slate-500">
-                        Tempo de producao: {productionTimeDaysUsed}{' '}
+                        Tempo de produção: {productionTimeDaysUsed}{' '}
                         {productionTimeDaysUsed === 1 ? 'dia' : 'dias'}
                       </p>
                     )}
                     {estimatedDeliveryInfo?.isoDate && (
                       <p className="mt-1 text-xs text-slate-500">
-                        Previsao de entrega: {formatDatePtBr(estimatedDeliveryInfo.isoDate)}
+                        Previsão de entrega: {formatDatePtBr(estimatedDeliveryInfo.isoDate)}
                       </p>
                     )}
                     {checkoutBlocked && (
@@ -1268,7 +1326,8 @@ export default function PublicCart() {
 
                   <Button
                     type="button"
-                    className="w-full bg-[#1a3a8f] hover:bg-[#16337e]"
+                    className="w-full hover:opacity-90"
+                    style={catalogPrimaryButtonStyle}
                     disabled={cartItems.length === 0 || checkoutBlocked}
                     onClick={() => goToStep(1)}
                   >
@@ -1309,14 +1368,14 @@ export default function PublicCart() {
                     {user ? (
                       <span>
                         Conta conectada: <strong>{user.email}</strong>. Dados foram preenchidos automaticamente quando disponiveis.{' '}
-                        <Link to={customerProfilePath} className="font-semibold text-[#1a3a8f] hover:underline">
+                        <Link to={customerProfilePath} className="font-semibold hover:underline" style={catalogLinkStyle}>
                           Atualizar perfil
                         </Link>
                         .
                       </span>
                     ) : (
                       <span>
-                        <Link to={customerLoginHref} className="font-semibold text-[#1a3a8f] hover:underline">
+                        <Link to={customerLoginHref} className="font-semibold hover:underline" style={catalogLinkStyle}>
                           Entrar ou criar conta
                         </Link>{' '}
                         para preencher dados automaticamente.
@@ -1330,7 +1389,7 @@ export default function PublicCart() {
                         Produtos personalizados: {personalizedItemsCount}
                       </p>
                       <p className="mt-1">
-                        O anexo de arte/modelo e opcional. Voce pode enviar agora ou finalizar sem anexo.
+                        O anexo de arte/modelo é opcional. Você pode enviar agora ou finalizar sem anexo.
                       </p>
                       <p className="mt-1 text-amber-800">
                         Arquivos anexados: {personalizedItemsWithReference}/{personalizedItemsCount}
@@ -1358,7 +1417,7 @@ export default function PublicCart() {
 
                         <p className="text-[11px] text-slate-500">
                           Para alterar os dados da conta, acesse{' '}
-                          <Link to={customerProfilePath} className="font-semibold text-[#1a3a8f] hover:underline">
+                          <Link to={customerProfilePath} className="font-semibold hover:underline" style={catalogLinkStyle}>
                             meu perfil
                           </Link>
                           .
@@ -1414,13 +1473,13 @@ export default function PublicCart() {
                     )}
 
                     <div>
-                      <Label htmlFor="checkout-order-notes">Observacoes do pedido</Label>
+                      <Label htmlFor="checkout-order-notes">Observações do pedido</Label>
                       <Textarea
                         id="checkout-order-notes"
                         value={form.orderNotes}
                         onChange={(event) => handleFormFieldChange('orderNotes', event.target.value)}
                         rows={3}
-                        placeholder="Ex.: horario de retirada, referencia da entrega, detalhes gerais."
+                        placeholder="Ex.: horário de retirada, referência da entrega, detalhes gerais."
                       />
                     </div>
 
@@ -1446,28 +1505,29 @@ export default function PublicCart() {
 
                     {form.deliveryMethod === 'entrega' && user && !savedAddressLoaded && (
                       <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">
-                        Carregando endereco salvo...
+                        Carregando endereço salvo...
                       </div>
                     )}
 
                     {form.deliveryMethod === 'entrega' && user && hasSavedAddress && !editingSavedAddress ? (
                       <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
-                        <p className="text-xs font-medium text-slate-700">Endereco salvo para entrega</p>
+                        <p className="text-xs font-medium text-slate-700">Endereço salvo para entrega</p>
                         <p className="mt-1 text-xs text-slate-600">
                           {form.address}, {form.city} - {form.state}, CEP {form.zipCode}
                         </p>
                         <button
                           type="button"
-                          className="mt-2 text-xs font-semibold text-[#1a3a8f] hover:underline"
+                          className="mt-2 text-xs font-semibold hover:underline"
+                          style={catalogLinkStyle}
                           onClick={() => setEditingSavedAddress(true)}
                         >
-                          Alterar endereco
+                          Alterar endereço
                         </button>
                       </div>
                     ) : form.deliveryMethod === 'entrega' ? (
                       <>
                         <div>
-                          <Label htmlFor="checkout-address">Endereco *</Label>
+                          <Label htmlFor="checkout-address">Endereço *</Label>
                           <Input
                             id="checkout-address"
                             value={form.address}
@@ -1512,7 +1572,7 @@ export default function PublicCart() {
                       </>
                     ) : (
                       <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-                        Retirada selecionada. Endereco de entrega nao sera exigido.
+                        Retirada selecionada. O endereço de entrega não será exigido.
                       </p>
                     )}
                   </div>
@@ -1521,7 +1581,7 @@ export default function PublicCart() {
                     <Button type="button" variant="outline" onClick={() => goToStep(0)}>
                       Voltar
                     </Button>
-                    <Button type="button" className="bg-[#1a3a8f] hover:bg-[#16337e]" onClick={() => goToStep(2)}>
+                    <Button type="button" className="hover:opacity-90" style={catalogPrimaryButtonStyle} onClick={() => goToStep(2)}>
                       Continuar
                     </Button>
                   </div>
@@ -1545,22 +1605,22 @@ export default function PublicCart() {
                         <SelectValue placeholder="Selecione" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="dinheiro">Dinheiro</SelectItem>
-                        {paymentOptions.pixAvailable && <SelectItem value="pix">Pix</SelectItem>}
-                        <SelectItem value="cartao">Cartao</SelectItem>
-                        <SelectItem value="boleto">Boleto</SelectItem>
-                        <SelectItem value="outro">Outro</SelectItem>
+                        {availablePaymentMethods.map((method) => (
+                          <SelectItem key={method} value={method}>
+                            {catalogPaymentMethodLabels[method]}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
-                    {!paymentOptions.pixAvailable && (
-                      <p className="mt-1 text-xs text-slate-500">PIX indisponivel: configure o gateway completo na loja.</p>
+                    {!paymentOptions.pixAvailable && paymentOptions.paymentMethods.includes('pix') && (
+                      <p className="mt-1 text-xs text-slate-500">PIX indisponível: configure o gateway completo na loja.</p>
                     )}
                     {formErrors.paymentMethod && <p className="mt-1 text-xs text-destructive">{formErrors.paymentMethod}</p>}
                   </div>
 
                   {form.paymentMethod === 'pix' && (
                     <div className="rounded-md border border-sky-200 bg-sky-50 p-3 text-xs text-sky-900">
-                      O QR Code e o codigo copia e cola do PIX serao gerados apos confirmar o pedido na etapa final.
+                      O QR Code e o código copia e cola do PIX serão gerados após confirmar o pedido na etapa final.
                     </div>
                   )}
 
@@ -1568,7 +1628,7 @@ export default function PublicCart() {
                     <Button type="button" variant="outline" onClick={() => goToStep(1)}>
                       Voltar
                     </Button>
-                    <Button type="button" className="bg-[#1a3a8f] hover:bg-[#16337e]" onClick={() => goToStep(3)}>
+                    <Button type="button" className="hover:opacity-90" style={catalogPrimaryButtonStyle} onClick={() => goToStep(3)}>
                       Continuar
                     </Button>
                   </div>
@@ -1578,7 +1638,7 @@ export default function PublicCart() {
               {isReviewStep && (
                 <>
                   <div>
-                    <h2 className="text-lg font-semibold">Etapa 4: Finalizacao</h2>
+                    <h2 className="text-lg font-semibold">Etapa 4: Finalização</h2>
                     <p className="text-xs text-slate-500">Confira os dados e confirme o pedido.</p>
                   </div>
 
@@ -1593,17 +1653,17 @@ export default function PublicCart() {
                     </p>
                     <p><strong>Pagamento:</strong> {orderResult ? paymentMethodLabels[orderResult.paymentMethod] : selectedPaymentLabel}</p>
                     {(orderResult?.orderNotes || form.orderNotes.trim()) && (
-                      <p><strong>Observacoes:</strong> {orderResult?.orderNotes || form.orderNotes.trim()}</p>
+                      <p><strong>Observações:</strong> {orderResult?.orderNotes || form.orderNotes.trim()}</p>
                     )}
                     {reviewProductionTimeDays !== null && (
                       <p>
-                        <strong>Tempo de producao:</strong> {reviewProductionTimeDays}{' '}
+                        <strong>Tempo de produção:</strong> {reviewProductionTimeDays}{' '}
                         {reviewProductionTimeDays === 1 ? 'dia' : 'dias'}
                       </p>
                     )}
                     {reviewEstimatedDeliveryDate && (
                       <p>
-                        <strong>Previsao de entrega:</strong> {formatDatePtBr(reviewEstimatedDeliveryDate)}
+                        <strong>Previsão de entrega:</strong> {formatDatePtBr(reviewEstimatedDeliveryDate)}
                       </p>
                     )}
                     <p><strong>Subtotal:</strong> {asCurrency(reviewTotal)}</p>
@@ -1660,7 +1720,8 @@ export default function PublicCart() {
                         </Button>
                         <Button
                           type="submit"
-                          className="bg-[#1a3a8f] hover:bg-[#16337e]"
+                          className="hover:opacity-90"
+                          style={catalogPrimaryButtonStyle}
                           disabled={submitting || cartItems.length === 0 || checkoutBlocked}
                         >
                           {submitting ? 'Enviando...' : 'Confirmar pedido'}
@@ -1706,7 +1767,7 @@ export default function PublicCart() {
                         </div>
                         {orderResult.productionTimeDaysUsed !== null && (
                           <div className="rounded-md border border-emerald-200 bg-white p-2 text-xs">
-                            <p className="text-emerald-700">Tempo de producao</p>
+                            <p className="text-emerald-700">Tempo de produção</p>
                             <p className="font-semibold text-emerald-900">
                               {orderResult.productionTimeDaysUsed}{' '}
                               {orderResult.productionTimeDaysUsed === 1 ? 'dia' : 'dias'}
@@ -1715,7 +1776,7 @@ export default function PublicCart() {
                         )}
                         {orderResult.estimatedDeliveryDate && (
                           <div className="rounded-md border border-emerald-200 bg-white p-2 text-xs">
-                            <p className="text-emerald-700">Previsao de entrega</p>
+                            <p className="text-emerald-700">Previsão de entrega</p>
                             <p className="font-semibold text-emerald-900">
                               {formatDatePtBr(orderResult.estimatedDeliveryDate)}
                             </p>
@@ -1725,7 +1786,7 @@ export default function PublicCart() {
 
                       {orderResult.orderNotes && (
                         <p className="mt-3 rounded-md border border-emerald-200 bg-white p-2 text-xs text-emerald-900">
-                          <strong>Observacoes:</strong> {orderResult.orderNotes}
+                          <strong>Observações:</strong> {orderResult.orderNotes}
                         </p>
                       )}
 
@@ -1768,7 +1829,7 @@ export default function PublicCart() {
                     <div className="space-y-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
                       <p className="font-semibold">Pagamento PIX</p>
                       <p className="text-xs">
-                        {pixGenerating ? 'Gerando QR Code PIX...' : pixErrorMessage || 'Gerando cobranca PIX para este pedido.'}
+                        {pixGenerating ? 'Gerando QR Code PIX...' : pixErrorMessage || 'Gerando cobrança PIX para este pedido.'}
                       </p>
                       {orderResult.orderId && orderResult.publicToken && !pixGenerating && (
                         <Button
@@ -1802,7 +1863,7 @@ export default function PublicCart() {
                         </div>
                       )}
                       <div className="space-y-2">
-                        <Label className="text-xs">Codigo copia e cola</Label>
+                        <Label className="text-xs">Código copia e cola</Label>
                         <Input value={pixResult.payment_copy_paste} readOnly />
                         <Button
                           type="button"
@@ -1811,7 +1872,7 @@ export default function PublicCart() {
                           onClick={handleCopyPixCode}
                         >
                           <Copy className="h-4 w-4" />
-                          {copiedPixCode ? 'Codigo copiado' : 'Copiar codigo PIX'}
+                          {copiedPixCode ? 'Código copiado' : 'Copiar código PIX'}
                         </Button>
                       </div>
                     </div>

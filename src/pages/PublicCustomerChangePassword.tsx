@@ -8,17 +8,27 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { CatalogFooter, CatalogHero, CatalogTopNav } from '@/components/catalog/PublicCatalogChrome';
+import {
+  CatalogFooter,
+  CatalogHero,
+  CatalogTopNav,
+  type CatalogChromeCompany,
+} from '@/components/catalog/PublicCatalogChrome';
+import { loadPublicCatalogCompany } from '@/lib/publicCatalogCompany';
 
 const isCustomerAccount = (candidate: User | null | undefined) =>
   String(candidate?.user_metadata?.account_type || '').toLowerCase() === 'customer';
 
 type VerifyOtpPayload = Parameters<typeof customerSupabase.auth.verifyOtp>[0];
 
+const isUuid = (value: string) =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+
 export default function PublicCustomerChangePassword() {
   const navigate = useNavigate();
   const location = useLocation();
   const [user, setUser] = useState<User | null>(null);
+  const [catalogCompany, setCatalogCompany] = useState<CatalogChromeCompany | null>(null);
   const [loadingSession, setLoadingSession] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [password, setPassword] = useState('');
@@ -53,6 +63,44 @@ export default function PublicCustomerChangePassword() {
       })(),
     };
   }, [location.hash, location.search]);
+
+  const companyContext = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    const company = params.get('company');
+    if (company && isUuid(company)) return company;
+
+    const catalog = params.get('catalog');
+    if (!catalog) return null;
+    const byId = catalog.match(/^\/loja\/([^/?#]+)/i);
+    if (byId?.[1]) return byId[1];
+    const bySlug = catalog.match(/^\/catalogo\/([^/?#]+)/i);
+    return bySlug?.[1] || null;
+  }, [location.search]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadCatalogCompanyData = async () => {
+      if (!companyContext) {
+        setCatalogCompany(null);
+        return;
+      }
+
+      const data = await loadPublicCatalogCompany({
+        companyId: isUuid(companyContext) ? companyContext : undefined,
+        slug: isUuid(companyContext) ? undefined : companyContext,
+      });
+
+      if (!isMounted) return;
+      setCatalogCompany(data);
+    };
+
+    void loadCatalogCompanyData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [companyContext]);
 
   useEffect(() => {
     let mounted = true;
@@ -169,6 +217,7 @@ export default function PublicCustomerChangePassword() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <CatalogTopNav
+        company={catalogCompany}
         subtitle="Acesso do cliente"
         showBack
         onBack={() => navigate(recoveryContext.loginHref)}
@@ -177,6 +226,7 @@ export default function PublicCustomerChangePassword() {
       />
 
       <CatalogHero
+        company={catalogCompany}
         badge="Minha conta"
         title="Defina uma nova senha"
         description="Use o link recebido por e-mail para criar sua nova senha."
@@ -192,7 +242,7 @@ export default function PublicCustomerChangePassword() {
             {loadingSession ? (
               <div className="flex items-center justify-center py-8 text-sm text-slate-500">
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Validando link...
+                Válidando link...
               </div>
             ) : (
               <form onSubmit={handleSubmit} className="space-y-4">
@@ -256,7 +306,11 @@ export default function PublicCustomerChangePassword() {
         </Card>
       </main>
 
-      <CatalogFooter showAccount={Boolean(user)} accountHref={recoveryContext.nextPath} />
+      <CatalogFooter
+        company={catalogCompany}
+        showAccount={Boolean(user)}
+        accountHref={recoveryContext.nextPath}
+      />
     </div>
   );
 }

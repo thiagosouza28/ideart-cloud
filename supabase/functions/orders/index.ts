@@ -77,8 +77,50 @@ const statusTransitions: Record<string, string[]> = {
   cancelado: ["pendente"],
 };
 
+const deliveryAwareStatusLabels: Record<string, string> = {
+  orcamento: "Orçamento",
+  pendente: "Pendente",
+  produzindo_arte: "Produzindo arte",
+  arte_aprovada: "Arte aprovada",
+  em_producao: "Em produção",
+  finalizado: "Finalizado",
+  pronto: "Finalizado",
+  aguardando_retirada: "Aguardando retirada",
+  entregue: "Entregue",
+  cancelado: "Cancelado",
+};
+
+const deliveryAwareStatusTransitions: Record<string, string[]> = {
+  orcamento: ["pendente", "cancelado"],
+  pendente: ["produzindo_arte", "em_producao", "cancelado"],
+  produzindo_arte: ["arte_aprovada", "cancelado"],
+  arte_aprovada: ["em_producao", "cancelado"],
+  em_producao: ["finalizado", "cancelado"],
+  finalizado: ["aguardando_retirada", "entregue", "cancelado"],
+  pronto: ["aguardando_retirada", "entregue", "cancelado"],
+  aguardando_retirada: ["entregue", "cancelado"],
+  entregue: [],
+  cancelado: ["pendente"],
+};
+
+const PENDING_CUSTOMER_INFO_TAG = "[meta] pending_customer_info=true";
+const PENDING_CUSTOMER_INFO_LINES = new Set([
+  PENDING_CUSTOMER_INFO_TAG,
+  "Pendente - aguardando informacoes do cliente.",
+  "Pendente - aguardando informações do cliente.",
+]);
+
 const isStatusTransitionAllowed = (from: string, to: string) =>
-  from === to || statusTransitions[from]?.includes(to);
+  from === to || deliveryAwareStatusTransitions[from]?.includes(to);
+
+const stripPendingCustomerInfoNotes = (notes?: string | null) => {
+  const remainingLines = String(notes || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !PENDING_CUSTOMER_INFO_LINES.has(line));
+
+  return remainingLines.length > 0 ? remainingLines.join("\n") : null;
+};
 
 const formatStatusLabel = (value: string) => {
   const normalized = value.replace(/_/g, " ");
@@ -249,7 +291,7 @@ Deno.serve(async (req) => {
 
       const { data: order, error: orderError } = await supabase
         .from("orders")
-        .select("id, status, payment_status, deleted_at")
+        .select("id, status, payment_status, deleted_at, notes")
         .eq("id", orderId)
         .single();
 
@@ -279,6 +321,10 @@ Deno.serve(async (req) => {
           cancelled_at: new Date().toISOString(),
           cancelled_by: userId,
           updated_by: userId,
+          notes:
+            order.status === "pendente"
+              ? stripPendingCustomerInfoNotes(order.notes)
+              : undefined,
         })
         .eq("id", orderId)
         .select("*")
@@ -364,7 +410,7 @@ Deno.serve(async (req) => {
 
     const { data: order, error: orderError } = await supabase
       .from("orders")
-      .select("id, order_number, company_id, status, total, amount_paid, payment_status, payment_method, deleted_at")
+      .select("id, order_number, company_id, status, total, amount_paid, payment_status, payment_method, deleted_at, notes")
       .eq("id", orderId)
       .single();
 
@@ -389,18 +435,29 @@ Deno.serve(async (req) => {
       });
     }
 
-    const fromLabel = statusLabels[order.status] ?? formatStatusLabel(order.status);
-    const toLabel = statusLabels[status] ?? formatStatusLabel(status);
+    const fromLabel = deliveryAwareStatusLabels[order.status] ?? formatStatusLabel(order.status);
+    const toLabel = deliveryAwareStatusLabels[status] ?? formatStatusLabel(status);
     const transitionNote = `Status alterado de ${fromLabel} para ${toLabel}.`;
     const historyNotes = notes ? `${transitionNote} ${notes}` : transitionNote;
+    const deliveredAt = status === "entregue" ? new Date().toISOString() : null;
+    const updatePayload: Record<string, unknown> = {
+      status,
+      updated_by: userId,
+      cancel_reason: status === "cancelado" ? notes || null : null,
+    };
+
+    if (order.status === "pendente" && status !== "pendente") {
+      updatePayload.notes = stripPendingCustomerInfoNotes(order.notes);
+    }
+
+    if (status === "entregue") {
+      updatePayload.delivered_at = deliveredAt;
+      updatePayload.delivered_by = userId;
+    }
 
     const { data: updatedOrder, error: updateError } = await supabase
       .from("orders")
-      .update({
-        status,
-        updated_by: userId,
-        cancel_reason: status === "cancelado" ? notes || null : null,
-      })
+      .update(updatePayload)
       .eq("id", orderId)
       .select("*")
       .single();
@@ -427,7 +484,7 @@ Deno.serve(async (req) => {
     }
 
     if (order.company_id) {
-      const label = statusLabels[status] ?? formatStatusLabel(status);
+      const label = deliveryAwareStatusLabels[status] ?? formatStatusLabel(status);
       const { error: notifyError } = await supabase
         .from("order_notifications")
         .insert({

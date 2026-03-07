@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CurrencyInput } from '@/components/ui/currency-input';
+import { Textarea } from '@/components/ui/textarea';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
@@ -118,6 +119,7 @@ export default function OrderForm() {
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerEmail, setCustomerEmail] = useState('');
   const [notes, setNotes] = useState('');
+  const [showNotesOnPdf, setShowNotesOnPdf] = useState(true);
   const [deliveryDate, setDeliveryDate] = useState('');
   const [deliveryMethod, setDeliveryMethod] = useState('retirada');
   const [discount, setDiscount] = useState(0);
@@ -197,6 +199,7 @@ export default function OrderForm() {
       customerPhone,
       customerEmail,
       notes,
+      showNotesOnPdf,
       deliveryDate,
       deliveryMethod,
       discount,
@@ -214,6 +217,7 @@ export default function OrderForm() {
       customerPhone,
       customerEmail,
       notes,
+      showNotesOnPdf,
       deliveryDate,
       deliveryMethod,
       discount,
@@ -235,6 +239,7 @@ export default function OrderForm() {
       customerPhone.trim() ||
       customerEmail.trim() ||
       notes.trim() ||
+      !showNotesOnPdf ||
       discount > 0 ||
       freight > 0,
   );
@@ -331,6 +336,7 @@ export default function OrderForm() {
         customerPhone?: string;
         customerEmail?: string;
         notes?: string;
+        showNotesOnPdf?: boolean;
         deliveryDate?: string;
         deliveryMethod?: string;
         discount?: number;
@@ -355,6 +361,7 @@ export default function OrderForm() {
       if (parsed.customerPhone) setCustomerPhone(parsed.customerPhone);
       if (parsed.customerEmail) setCustomerEmail(parsed.customerEmail);
       if (parsed.notes) setNotes(parsed.notes);
+      if (typeof parsed.showNotesOnPdf === 'boolean') setShowNotesOnPdf(parsed.showNotesOnPdf);
       if (parsed.deliveryDate) setDeliveryDate(parsed.deliveryDate);
       if (parsed.deliveryMethod) setDeliveryMethod(parsed.deliveryMethod);
       if (typeof parsed.discount === 'number') setDiscount(parsed.discount);
@@ -406,6 +413,7 @@ export default function OrderForm() {
       customerPhone: customerPhone.trim() || undefined,
       customerEmail: customerEmail.trim() || undefined,
       notes: notes.trim() || undefined,
+      showNotesOnPdf,
       deliveryDate: deliveryDate || undefined,
       deliveryMethod: deliveryMethod || undefined,
       discount,
@@ -432,6 +440,7 @@ export default function OrderForm() {
           payload.customerPhone ||
           payload.customerEmail ||
           payload.notes ||
+          !payload.showNotesOnPdf ||
           payload.discount > 0 ||
           payload.freight > 0,
       );
@@ -455,6 +464,7 @@ export default function OrderForm() {
     freight,
     items,
     notes,
+    showNotesOnPdf,
     paymentCondition,
     paymentMethod,
     priority,
@@ -633,6 +643,7 @@ export default function OrderForm() {
       customerPhone: customerPhone.trim() || undefined,
       customerEmail: customerEmail.trim() || undefined,
       notes: notes.trim() || undefined,
+      showNotesOnPdf,
       deliveryDate: deliveryDate || undefined,
       deliveryMethod: deliveryMethod || undefined,
       discount,
@@ -754,6 +765,7 @@ export default function OrderForm() {
           payment_status: 'pendente',
           payment_method: paymentMethod,
           notes: buildOrderNotes(),
+          show_notes_on_pdf: showNotesOnPdf,
           production_time_days_used: productionInfo.productionTimeDaysUsed,
           estimated_delivery_date: productionInfo.estimatedDeliveryDate,
           created_by: user.id,
@@ -1175,13 +1187,29 @@ export default function OrderForm() {
                   </h2>
                 </div>
                 <div className="order-card-body">
-                  <textarea
+                  <Textarea
                     value={notes}
                     onChange={(event) => setNotes(event.target.value)}
                     placeholder="Observações internas, detalhes de arte, acabamento..."
-                    className="order-textarea"
-                    rows={6}
+                    className="order-textarea !min-h-0"
+                    rows={1}
                   />
+                  <label className="mt-4 flex items-start gap-3 rounded-xl border border-[var(--order-border)] bg-[var(--order-surface)] px-4 py-3">
+                    <input
+                      type="checkbox"
+                      className="mt-1 h-4 w-4"
+                      checked={showNotesOnPdf}
+                      onChange={(event) => setShowNotesOnPdf(event.target.checked)}
+                    />
+                    <span className="space-y-1">
+                      <span className="block text-sm font-semibold text-[#122046]">
+                        Mostrar observações no PDF
+                      </span>
+                      <span className="block text-xs text-[var(--order-muted)]">
+                        Desative para manter as observações visíveis apenas dentro do sistema.
+                      </span>
+                    </span>
+                  </label>
                 </div>
               </section>
 
@@ -1272,7 +1300,7 @@ export default function OrderForm() {
                   </div>
                   <div>
                     <p>Status: Pendente</p>
-                    <small>O pedido sera criado aguardando processamento.</small>
+                    <small>O pedido será criado aguardando processamento.</small>
                   </div>
                 </div>
               </div>

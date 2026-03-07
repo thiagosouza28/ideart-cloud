@@ -145,8 +145,8 @@ const renderLogo = (logo?: string | null, nome?: string | null) => {
 
 const renderSignature = (payload: PaymentReceiptPayload) => {
   const signatureImage = payload.loja.assinaturaImagem;
-  const responsavel = payload.loja.responsavel || payload.loja.nome || "Responsavel";
-  const cargo = payload.loja.cargo || "Responsavel";
+  const responsavel = payload.loja.responsavel || payload.loja.nome || "Responsável";
+  const cargo = payload.loja.cargo || "Responsável";
 
   if (signatureImage) {
     return `
@@ -228,7 +228,7 @@ export const buildPaymentReceiptHtml = (
       ? "Pedido"
       : referenceType === "pdv" || referenceType === "venda"
         ? "Venda PDV"
-        : "Referencia";
+        : "Referência";
   const referenceNumber = payload.referencia?.numero || "-";
   const referenceCode = payload.referencia?.codigo || "-";
 
@@ -483,11 +483,11 @@ export const buildPaymentReceiptHtml = (
             <h1>${escapeHtml(storeName)}</h1>
             <p>Tipo de pessoa: ${escapeHtml(personType || "-")}</p>
             <p>${escapeHtml(storeDocLabel)}: ${escapeHtml(storeDocValue)}</p>
-            <p>Endereco: ${escapeHtml(storeAddress)}</p>
+            <p>Endereço: ${escapeHtml(storeAddress)}</p>
           </div>
         </div>
         <div class="receipt-header-side">
-          <span>Numero do recibo</span>
+          <span>Número do recibo</span>
           <strong>${escapeHtml(receiptNumber)}</strong>
         </div>
       </div>
@@ -517,7 +517,7 @@ export const buildPaymentReceiptHtml = (
           <strong>${escapeHtml(paymentValue)}</strong>
         </div>
         <div class="receipt-field">
-          <span>Codigo interno</span>
+          <span>Código interno</span>
           <strong>${escapeHtml(referenceCode)}</strong>
         </div>
       </div>
@@ -529,19 +529,19 @@ export const buildPaymentReceiptHtml = (
       </div>
 
       <div class="receipt-section">
-        <h3>Descricao</h3>
+        <h3>Descrição</h3>
         <p>${escapeHtml(paymentDescription)}</p>
       </div>
 
       ${hasProductionInfo ? `
         <div class="receipt-section">
           <h3>Prazos do pedido</h3>
-          <p>Tempo de producao: <strong>${escapeHtml(
+          <p>Tempo de produção: <strong>${escapeHtml(
             productionTimeDays !== null
               ? `${productionTimeDays} ${productionTimeDays === 1 ? "dia" : "dias"}`
               : "-"
           )}</strong></p>
-          <p class="receipt-small">Previsao de entrega: ${escapeHtml(estimatedDeliveryLabel)}</p>
+          <p class="receipt-small">Previsão de entrega: ${escapeHtml(estimatedDeliveryLabel)}</p>
         </div>
       ` : ""}
 
@@ -552,7 +552,7 @@ export const buildPaymentReceiptHtml = (
         </div>
       </div>
 
-      <div class="receipt-footer">Documento nao fiscal</div>
+      <div class="receipt-footer">Documento não fiscal</div>
     </div>
   `;
 };

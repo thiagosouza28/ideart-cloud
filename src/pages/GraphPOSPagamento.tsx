@@ -39,16 +39,24 @@ const parseAmountInput = (rawValue: string) => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
+const graphPosAmountInputClass =
+  'mt-2 h-12 w-full rounded-2xl border border-border bg-card px-4 text-lg font-semibold text-foreground shadow-sm outline-none transition placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/15';
+
+const paymentOptions = [
+  { value: 'dinheiro', label: 'Dinheiro', icon: Banknote },
+  { value: 'credito', label: 'Credito', icon: CreditCard },
+  { value: 'debito', label: 'Debito', icon: CreditCard },
+  { value: 'pix', label: 'Pix', icon: Smartphone },
+  { value: 'outros', label: 'Outros', icon: Wallet },
+] as const;
+
 export default function GraphPOSPagamento() {
   const navigate = useNavigate();
   const { user, profile, company } = useAuth();
   const { toast } = useToast();
-  // Keep navigation flow aligned with the 3-screen demo.
   const checkout = useMemo(() => getGraphPOSCheckoutState(), []);
   const initialAmountPaid = checkout?.amountPaid || checkout?.total || 0;
-  const [paymentMethod, setPaymentMethod] = useState(
-    checkout?.paymentMethod || 'dinheiro',
-  );
+  const [paymentMethod, setPaymentMethod] = useState(checkout?.paymentMethod || 'dinheiro');
   const [amountPaid, setAmountPaid] = useState(initialAmountPaid);
   const [amountPaidInput, setAmountPaidInput] = useState(() => formatAmountInput(initialAmountPaid));
   const [saving, setSaving] = useState(false);
@@ -75,7 +83,7 @@ export default function GraphPOSPagamento() {
   };
 
   return (
-    <div className="w-full bg-transparent font-sans text-slate-900">
+    <div className="w-full bg-transparent font-sans text-foreground">
       <main className="mx-auto w-full px-auto pb-12 pt-auto">
         <GraphPOSBreadcrumb
           backLabel="Voltar para Vendas"
@@ -85,7 +93,7 @@ export default function GraphPOSPagamento() {
 
         <div className="mt-6">
           <h1 className="text-[32px] font-bold">Pagamento</h1>
-          <p className="text-sm text-slate-500">Selecione a forma de pagamento e confirme os dados da venda.</p>
+          <p className="text-sm text-muted-foreground">Selecione a forma de pagamento e confirme os dados da venda.</p>
         </div>
 
         <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
@@ -93,12 +101,12 @@ export default function GraphPOSPagamento() {
             <GraphPOSCard>
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="text-sm font-semibold text-slate-900">Dados do Cliente</p>
-                  <p className="text-xs text-slate-400">Nome</p>
-                  <p className="text-sm font-medium text-slate-700">{customer?.name || 'Consumidor Final'}</p>
+                  <p className="text-sm font-semibold text-foreground">Dados do Cliente</p>
+                  <p className="text-xs text-muted-foreground">Nome</p>
+                  <p className="text-sm font-medium text-foreground">{customer?.name || 'Consumidor Final'}</p>
                 </div>
                 <button
-                  className="text-sm font-semibold text-sky-600"
+                  className="text-sm font-semibold text-primary transition hover:text-primary/80"
                   onClick={() => {
                     if (checkout) {
                       setGraphPOSCheckoutState({
@@ -112,66 +120,50 @@ export default function GraphPOSPagamento() {
                   Alterar
                 </button>
               </div>
-              <div className="mt-4 grid gap-4 text-sm text-slate-600 sm:grid-cols-2">
+              <div className="mt-4 grid gap-4 text-sm text-muted-foreground sm:grid-cols-2">
                 <div>
-                  <p className="text-xs uppercase text-slate-400">CPF/CNPJ</p>
-                  <p className="font-medium text-slate-700">{customer?.document}</p>
+                  <p className="text-xs uppercase text-muted-foreground">CPF/CNPJ</p>
+                  <p className="font-medium text-foreground">{customer?.document}</p>
                 </div>
                 <div>
-                  <p className="text-xs uppercase text-slate-400">Telefone</p>
-                  <p className="font-medium text-slate-700">{customer?.phone}</p>
+                  <p className="text-xs uppercase text-muted-foreground">Telefone</p>
+                  <p className="font-medium text-foreground">{customer?.phone}</p>
                 </div>
                 <div>
-                  <p className="text-xs uppercase text-slate-400">E-mail</p>
-                  <p className="font-medium text-slate-700">{customer?.email}</p>
+                  <p className="text-xs uppercase text-muted-foreground">E-mail</p>
+                  <p className="font-medium text-foreground">{customer?.email}</p>
                 </div>
               </div>
             </GraphPOSCard>
 
             <GraphPOSCard>
-              <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-slate-900">
-                <Wallet className="h-4 w-4 text-sky-500" />
+              <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-foreground">
+                <Wallet className="h-4 w-4 text-primary" />
                 Forma de Pagamento
               </div>
               <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-5">
-                {[
-                  { label: 'Dinheiro', icon: Banknote },
-                  { label: 'Crédito', icon: CreditCard },
-                  { label: 'Débito', icon: CreditCard },
-                  { label: 'Pix', icon: Smartphone },
-                  { label: 'Outros', icon: Wallet },
-                ].map((option) => (
+                {paymentOptions.map((option) => (
                   <button
-                    key={option.label}
+                    key={option.value}
                     type="button"
-                    onClick={() => {
-                      const value = option.label.toLowerCase();
-                      const map: Record<string, typeof paymentMethod> = {
-                        dinheiro: 'dinheiro',
-                        credito: 'credito',
-                        debito: 'debito',
-                        pix: 'pix',
-                        outros: 'outros',
-                      };
-                      setPaymentMethod(map[value] || 'dinheiro');
-                    }}
-                    className={`flex h-20 flex-col items-center justify-center gap-2 rounded-2xl border bg-white text-sm shadow-sm hover:border-sky-300 ${
-                      paymentMethod === option.label.toLowerCase()
-                        ? 'border-sky-400 text-sky-600'
-                        : 'border-slate-200 text-slate-600'
+                    onClick={() => setPaymentMethod(option.value)}
+                    className={`flex h-20 flex-col items-center justify-center gap-2 rounded-2xl border bg-card text-sm shadow-sm transition ${
+                      paymentMethod === option.value
+                        ? 'border-primary bg-primary/10 text-primary'
+                        : 'border-border text-muted-foreground hover:border-primary/35 hover:bg-muted/40'
                     }`}
                   >
-                    <option.icon className="h-5 w-5 text-sky-500" />
-                    {option.label}
+                    <option.icon className={`h-5 w-5 ${paymentMethod === option.value ? 'text-primary' : 'text-muted-foreground'}`} />
+                    <span className="font-medium">{option.label}</span>
                   </button>
                 ))}
               </div>
 
               <div className="mt-6 grid gap-4 lg:grid-cols-[1fr_220px]">
                 <div>
-                  <p className="text-sm font-semibold text-slate-700">Valor Recebido (R$)</p>
+                  <p className="text-sm font-semibold text-foreground">Valor Recebido (R$)</p>
                   <input
-                    className="mt-2 h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-lg font-semibold text-slate-900"
+                    className={graphPosAmountInputClass}
                     value={amountPaidInput}
                     inputMode="decimal"
                     placeholder="0,00"
@@ -195,7 +187,7 @@ export default function GraphPOSPagamento() {
                     </BotaoSecundario>
                   </div>
                 </div>
-                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-emerald-700">
+                <div className="rounded-2xl border border-success/30 bg-success/10 p-5 text-success">
                   <p className="text-xs font-semibold uppercase">Troco a devolver</p>
                   <p className="mt-2 text-2xl font-bold">{formatCurrency(change)}</p>
                 </div>
@@ -205,7 +197,7 @@ export default function GraphPOSPagamento() {
 
           <div className="lg:sticky lg:top-8">
             <GraphPOSSidebarResumo title="Resumo do Pedido">
-              <p className="text-xs text-slate-500">{items.length} itens adicionados</p>
+              <p className="text-xs text-muted-foreground">{items.length} itens adicionados</p>
               <div className="mt-4 space-y-4">
                 {items.map((item, index) => {
                   const isM2 = item.unitLabel === 'm\u00B2' || Boolean(item.areaM2) || (item.widthCm && item.heightCm);
@@ -218,33 +210,33 @@ export default function GraphPOSPagamento() {
                   return (
                     <div key={`${item.id}-${index}`} className="flex items-start justify-between">
                       <div>
-                        <p className="text-sm font-semibold text-slate-800">{item.name}</p>
-                        <p className="text-xs text-slate-500">
+                        <p className="text-sm font-semibold text-foreground">{item.name}</p>
+                        <p className="text-xs text-muted-foreground">
                           {quantityLabel} x {formatCurrency(item.unitPrice)}{unitLabel}
                         </p>
                         {hasDimensions && (
-                          <p className="text-[11px] text-slate-400">
+                          <p className="text-[11px] text-muted-foreground">
                             {item.widthCm}cm x {item.heightCm}cm
                           </p>
                         )}
                       </div>
-                      <span className="text-sm font-semibold text-slate-800">
+                      <span className="text-sm font-semibold text-foreground">
                         {formatCurrency(item.unitPrice * item.quantity)}
                       </span>
                     </div>
                   );
                 })}
               </div>
-              <div className="mt-4 border-t border-slate-200 pt-4 text-sm text-slate-600">
+              <div className="mt-4 border-t border-border pt-4 text-sm text-muted-foreground">
                 <div className="flex items-center justify-between">
                   <span>Subtotal</span>
-                  <span className="font-semibold text-slate-800">{formatCurrency(subtotal)}</span>
+                  <span className="font-semibold text-foreground">{formatCurrency(subtotal)}</span>
                 </div>
-                <div className="flex items-center justify-between text-slate-500">
+                <div className="flex items-center justify-between text-muted-foreground">
                   <span>Desconto</span>
                   <span>- {formatCurrency(discount)}</span>
                 </div>
-                <div className="mt-3 flex items-center justify-between text-lg font-semibold text-slate-900">
+                <div className="mt-3 flex items-center justify-between text-lg font-semibold text-foreground">
                   <span>Total a Pagar</span>
                   <span>{formatCurrency(total)}</span>
                 </div>
@@ -258,11 +250,11 @@ export default function GraphPOSPagamento() {
                       return;
                     }
                     if (!user.id) {
-                      toast({ title: 'Sessão inválida. Faça login novamente.', variant: 'destructive' });
+                      toast({ title: 'Sessao invalida. Faca login novamente.', variant: 'destructive' });
                       return;
                     }
                     if (!companyId) {
-                      toast({ title: 'Empresa não encontrada na sessão. Faça login novamente.', variant: 'destructive' });
+                      toast({ title: 'Empresa nao encontrada na sessao. Faca login novamente.', variant: 'destructive' });
                       return;
                     }
 
@@ -408,7 +400,7 @@ export default function GraphPOSPagamento() {
                     <ChevronRight className="h-4 w-4" />
                   </span>
                 </BotaoPrimario>
-                <button className="w-full text-xs font-semibold text-red-500">Cancelar Venda</button>
+                <button className="w-full text-xs font-semibold text-destructive transition hover:text-destructive/80">Cancelar Venda</button>
               </div>
             </GraphPOSSidebarResumo>
           </div>
@@ -417,4 +409,3 @@ export default function GraphPOSPagamento() {
     </div>
   );
 }
-

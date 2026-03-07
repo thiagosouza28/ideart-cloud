@@ -542,7 +542,7 @@ export default function SuperAdminCompanies() {
           <DialogHeader>
             <DialogTitle>Adicionar dias de teste</DialogTitle>
             <DialogDescription>
-              Prorroga o periodo de teste da empresa selecionada.
+              Prorroga o período de teste da empresa selecionada.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">

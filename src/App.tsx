@@ -5,6 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Navigate, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { CompanyThemeProvider } from "@/contexts/CompanyThemeContext";
 import { CookieConsent } from "@/components/CookieConsent";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { ProtectedRoute } from "@/components/layout/ProtectedRoute";
@@ -95,8 +96,9 @@ const App = () => (
           <Sonner />
           <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
             <AuthProvider>
-              <CookieConsent />
-              <Routes>
+              <CompanyThemeProvider>
+                <CookieConsent />
+                <Routes>
               <Route path="/auth" element={withSuspense(<Auth />)} />
               <Route path="/alterar-senha" element={withSuspense(<ChangePassword />)} />
               <Route path="/recuperar-senha" element={withSuspense(<ForgotPassword />)} />
@@ -516,7 +518,8 @@ const App = () => (
               <Route path="/arquivo" element={withSuspense(<SystemStorageFile />)} />
 
               <Route path="*" element={withSuspense(<NotFound />)} />
-              </Routes>
+                </Routes>
+              </CompanyThemeProvider>
             </AuthProvider>
           </BrowserRouter>
         </ConfirmProvider>

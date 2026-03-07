@@ -270,7 +270,7 @@ export default function Supplies() {
           </div>
 
           <div className="flex-1 overflow-y-auto px-6 py-6">
-            <div className="grid gap-6 md:grid-cols-[240px_1fr] max-w-5xl mx-auto">
+            <div className="grid w-full min-w-0 gap-6 md:grid-cols-[240px_minmax(0,1fr)] xl:grid-cols-[280px_minmax(0,1fr)]">
               {/* Image Upload */}
               <div className="space-y-4 md:sticky md:top-4 self-start">
                 <div className="space-y-2">

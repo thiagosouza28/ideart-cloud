@@ -85,7 +85,7 @@ export default function Auth() {
     }
 
     if (searchParams.get('trial') === '3') {
-      setNotice((prev) => prev ?? 'Teste gratis de 3 dias liberado. Crie sua conta para comecar.');
+      setNotice((prev) => prev ?? 'Teste grátis de 3 dias liberado. Crie sua conta para começar.');
     }
   }, [searchParams]);
 
@@ -272,7 +272,7 @@ export default function Auth() {
                   </Link>
                 </div>
                 <p className="text-center text-xs text-slate-500">
-                  Experimente 3 dias gratis. Depois, escolha um plano.
+                  Experimente 3 dias grátis. Depois, escolha um plano.
                 </p>
               </form>
             </TabsContent>

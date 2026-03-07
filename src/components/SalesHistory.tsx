@@ -51,7 +51,7 @@ const paymentLabels: Record<PaymentMethod, string> = {
   cartao: 'Cartão',
   credito: 'Cartão crédito',
   debito: 'Cartão débito',
-  transferencia: 'Transferencia',
+  transferencia: 'Transferência',
   pix: 'PIX',
   boleto: 'Boleto',
   outro: 'Outro',

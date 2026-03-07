@@ -3,18 +3,23 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { CatalogFooter, CatalogHero, CatalogTopNav } from '@/components/catalog/PublicCatalogChrome';
+import {
+  CatalogFooter,
+  CatalogHero,
+  CatalogTopNav,
+  type CatalogChromeCompany,
+} from '@/components/catalog/PublicCatalogChrome';
 import { useCustomerAuth } from '@/hooks/use-customer-auth';
 import { customerSupabase } from '@/integrations/supabase/customer-client';
-import { publicSupabase } from '@/integrations/supabase/public-client';
+import { loadPublicCatalogCompany } from '@/lib/publicCatalogCompany';
 import type { Order, OrderStatus } from '@/types/database';
 
 const statusLabels: Record<OrderStatus, string> = {
-  orcamento: 'Orcamento',
+  orcamento: 'Orçamento',
   pendente: 'Pendente',
   produzindo_arte: 'Em arte',
   arte_aprovada: 'Arte aprovada',
-  em_producao: 'Em producao',
+  em_producao: 'Em produção',
   finalizado: 'Finalizado',
   pronto: 'Pronto',
   aguardando_retirada: 'Aguardando retirada',
@@ -37,18 +42,7 @@ export default function PublicCustomerOrders() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [catalogCompany, setCatalogCompany] = useState<{
-    id: string;
-    name: string;
-    slug: string | null;
-    city: string | null;
-    state: string | null;
-    phone: string | null;
-    email: string | null;
-    address: string | null;
-    whatsapp: string | null;
-    catalog_contact_url: string | null;
-  } | null>(null);
+  const [catalogCompany, setCatalogCompany] = useState<CatalogChromeCompany | null>(null);
 
   const catalogPath = useMemo(() => {
     const params = new URLSearchParams(location.search);
@@ -102,28 +96,15 @@ export default function PublicCustomerOrders() {
         return;
       }
 
-      let query = publicSupabase
-        .from('companies')
-        .select('id, name, slug, city, state, phone, email, address, whatsapp, catalog_contact_url, is_active')
-        .eq('is_active', true);
-      query = isUuid(companyContext) ? query.eq('id', companyContext) : query.eq('slug', companyContext);
-      const { data } = await query.maybeSingle();
+      const data = await loadPublicCatalogCompany({
+        companyId: isUuid(companyContext) ? companyContext : undefined,
+        slug: isUuid(companyContext) ? undefined : companyContext,
+      });
 
       if (!isMounted) return;
 
       if (data) {
-        setCatalogCompany({
-          id: data.id,
-          name: data.name,
-          slug: data.slug || null,
-          city: data.city || null,
-          state: data.state || null,
-          phone: data.phone || null,
-          email: data.email || null,
-          address: data.address || null,
-          whatsapp: data.whatsapp || null,
-          catalog_contact_url: data.catalog_contact_url || null,
-        });
+        setCatalogCompany(data);
       } else {
         setCatalogCompany(null);
       }
@@ -180,12 +161,13 @@ export default function PublicCustomerOrders() {
       />
 
       <CatalogHero
+        company={catalogCompany}
         badge="Minha conta"
         title="Meus pedidos"
         description="Acompanhe status, valores e detalhes de todos os pedidos da sua conta."
       />
 
-      <main className="mx-auto w-[min(980px,calc(100%-24px))] py-6">
+      <main className="mx-auto w-full max-w-[1400px] px-4 py-6 sm:px-6 lg:px-8">
         <div className="mb-4 flex flex-wrap justify-end gap-2">
           <Button
             type="button"

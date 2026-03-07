@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { formatOrderNumber } from '@/lib/utils';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -14,10 +15,11 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Order, OrderFinalPhoto, OrderArtFile, OrderItem, OrderStatusHistory, OrderStatus, OrderPayment, PaymentMethod, PaymentStatus, Product, Customer } from '@/types/database';
 import { ArrowLeft, Loader2, CheckCircle, Clock, Package, Truck, XCircle, User, FileText, Printer, MessageCircle, Link, Copy, CreditCard, PauseCircle, Trash2, Image as ImageIcon, Upload, Paintbrush, Sparkles } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import OrderReceipt from '@/components/OrderReceipt';
+import DeliveryReceipt, { type DeliveryReceiptPaymentInfo } from '@/components/DeliveryReceipt';
 import CustomerSearch from '@/components/CustomerSearch';
 import { buildPaymentReceiptHtml, type PaymentReceiptPayload } from '@/templates/paymentReceiptTemplate';
 import { generateAndUploadPaymentReceipt } from '@/services/paymentReceipts';
@@ -40,7 +42,12 @@ import { resolveProductPrice } from '@/lib/pricing';
 import { useUnsavedChanges } from '@/hooks/use-unsaved-changes';
 import { localizeOrderHistoryNote } from '@/lib/orderHistoryNotes';
 import { extractOrderIdFromParam } from '@/lib/orderRouting';
-import { isPendingCustomerInfoOrder, isPublicCatalogPersonalizedOrder } from '@/lib/orderMetadata';
+import {
+  isPendingCustomerInfoOrder,
+  isPublicCatalogPersonalizedOrder,
+  stripPendingCustomerInfoNotes,
+} from '@/lib/orderMetadata';
+import { extractVisibleOrderNotes, mergeOrderNotes } from '@/lib/orderNotes';
 
 const statusConfig: Record<OrderStatus, { label: string; icon: React.ComponentType<any>; color: string; next: OrderStatus[] }> = {
   orcamento: {
@@ -77,19 +84,19 @@ const statusConfig: Record<OrderStatus, { label: string; icon: React.ComponentTy
     label: 'Finalizado',
     icon: Package,
     color: 'bg-green-100 text-green-800',
-    next: ['aguardando_retirada', 'entregue', 'cancelado']
+    next: ['aguardando_retirada', 'cancelado']
   },
   pronto: {
     label: 'Finalizado',
     icon: Package,
     color: 'bg-green-100 text-green-800',
-    next: ['aguardando_retirada', 'entregue', 'cancelado']
+    next: ['aguardando_retirada', 'cancelado']
   },
   aguardando_retirada: {
     label: 'Aguardando retirada',
     icon: CheckCircle,
     color: 'bg-sky-100 text-sky-800',
-    next: ['entregue', 'cancelado']
+    next: ['cancelado']
   },
   entregue: {
     label: 'Entregue',
@@ -119,14 +126,14 @@ const statusLabels: Record<OrderStatus, string> = {
 };
 
 const defaultStatusCustomerMessages: Record<OrderStatus, string> = {
-  orcamento: 'Seu pedido esta em orcamento.',
-  pendente: 'Recebemos seu pedido e ele esta pendente.',
-  produzindo_arte: 'Sua arte esta sendo produzida.',
-  arte_aprovada: 'Sua arte foi aprovada e seguira para producao.',
-  em_producao: 'Seu pedido esta em producao.',
+  orcamento: 'Seu pedido está em orçamento.',
+  pendente: 'Recebemos seu pedido e ele está pendente.',
+  produzindo_arte: 'Sua arte está sendo produzida.',
+  arte_aprovada: 'Sua arte foi aprovada e seguirá para produção.',
+  em_producao: 'Seu pedido está em produção.',
   finalizado: 'Seu pedido foi finalizado.',
   pronto: 'Seu pedido foi finalizado.',
-  aguardando_retirada: 'Seu pedido esta pronto e aguardando retirada.',
+  aguardando_retirada: 'Seu pedido está pronto e aguardando retirada.',
   entregue: 'Seu pedido foi entregue.',
   cancelado: 'Seu pedido foi cancelado.',
 };
@@ -149,16 +156,6 @@ const resolveOrderStatusMessageTemplates = (
   });
 
   return resolved;
-};
-
-const extractVisibleNotes = (value?: string | null) => {
-  if (!value) return '';
-  return value
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0 && !line.startsWith('[meta]'))
-    .join('\n')
-    .trim();
 };
 
 export default function OrderDetails() {
@@ -186,6 +183,12 @@ export default function OrderDetails() {
   const [newStatus, setNewStatus] = useState<OrderStatus | ''>('');
   const [statusNotes, setStatusNotes] = useState('');
   const [saving, setSaving] = useState(false);
+  const [deliveryDialogOpen, setDeliveryDialogOpen] = useState(false);
+  const [deliverySaving, setDeliverySaving] = useState(false);
+  const [deliveryReceiptOrder, setDeliveryReceiptOrder] = useState<Order | null>(null);
+  const [deliveryReceiptPayment, setDeliveryReceiptPayment] = useState<DeliveryReceiptPaymentInfo | null>(null);
+  const [deliveryPaymentAmount, setDeliveryPaymentAmount] = useState(0);
+  const [deliveryPaymentMethod, setDeliveryPaymentMethod] = useState<PaymentMethod | ''>('');
   const [entryDialogOpen, setEntryDialogOpen] = useState(false);
   const [entryAmount, setEntryAmount] = useState(0);
   const [entryMethod, setEntryMethod] = useState<PaymentMethod | ''>('');
@@ -227,6 +230,9 @@ export default function OrderDetails() {
   const [customerSaving, setCustomerSaving] = useState(false);
   const [customerDraft, setCustomerDraft] = useState<Customer | null>(null);
   const [customerNameDraft, setCustomerNameDraft] = useState('');
+  const [notesDraft, setNotesDraft] = useState('');
+  const [showNotesOnPdf, setShowNotesOnPdf] = useState(true);
+  const [savingNotes, setSavingNotes] = useState(false);
 
   const formatCurrency = (v: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
@@ -240,7 +246,7 @@ export default function OrderDetails() {
     companyStatusMessages[status] ||
     (status === 'pronto' ? companyStatusMessages.finalizado : undefined) ||
     defaultStatusCustomerMessages[status] ||
-    `O status do seu pedido agora e ${statusLabels[status] ?? status}.`;
+    `O status do seu pedido agora é ${statusLabels[status] ?? status}.`;
 
   const getWhatsAppTemplateReplacements = (link: string): Record<string, string> => {
     if (!order) return {};
@@ -310,7 +316,17 @@ export default function OrderDetails() {
   };
 
   const isBudget = order?.status === 'orcamento' || order?.status === 'pendente';
-  const orderVisibleNotes = useMemo(() => extractVisibleNotes(order?.notes), [order?.notes]);
+  const notesSourceForDisplay = useMemo(
+    () =>
+      order?.status === 'pendente'
+        ? order?.notes
+        : stripPendingCustomerInfoNotes(order?.notes),
+    [order?.notes, order?.status],
+  );
+  const orderVisibleNotes = useMemo(
+    () => extractVisibleOrderNotes(notesSourceForDisplay),
+    [notesSourceForDisplay],
+  );
 
   const calculateItemTotal = (item: Pick<OrderItem, 'quantity' | 'unit_price' | 'discount'>) =>
     Math.max(0, Number(item.quantity) * Number(item.unit_price) - Number(item.discount || 0));
@@ -330,6 +346,50 @@ export default function OrderDetails() {
     pix: 'PIX',
     boleto: 'Boleto',
     outro: 'Outro',
+  };
+
+  const getPaymentMethodLabel = (method?: PaymentMethod | null) =>
+    method ? paymentReceiptMethodLabels[method] || String(method) : 'NÃ£o informado';
+
+  const buildDeliveryReceiptPaymentInfo = (
+    sourceOrder: Order,
+    payment?: OrderPayment | null,
+  ): DeliveryReceiptPaymentInfo | null => {
+    if (payment) {
+      return {
+        amount: Number(payment.amount || 0),
+        method: payment.method || null,
+        paidAt: payment.paid_at || payment.created_at || null,
+        totalPaid: Number(sourceOrder.amount_paid || payment.amount || 0),
+      };
+    }
+
+    if (Number(sourceOrder.amount_paid || 0) <= 0) {
+      return null;
+    }
+
+    return {
+      amount: Number(sourceOrder.amount_paid || 0),
+      method: sourceOrder.payment_method || null,
+      paidAt: sourceOrder.paid_at || null,
+      totalPaid: Number(sourceOrder.amount_paid || 0),
+    };
+  };
+
+  const getDeliveredHistoryTimestamp = (
+    sourceHistory: OrderStatusHistory[] = history,
+  ) => sourceHistory.find((entry) => entry.status === 'entregue')?.created_at || null;
+
+  const buildDeliveredOrderSnapshot = (
+    sourceOrder: Order,
+    explicitDeliveredAt?: string | null,
+  ): Order => {
+    const deliveredAt = explicitDeliveredAt || sourceOrder.delivered_at || getDeliveredHistoryTimestamp();
+    if (!deliveredAt || sourceOrder.delivered_at) return sourceOrder;
+    return {
+      ...sourceOrder,
+      delivered_at: deliveredAt,
+    };
   };
 
   const buildReceiptNumber = (orderNumber: number, paymentId: string) => {
@@ -819,10 +879,14 @@ const sendWhatsAppMessage = (message: string) => {
     handleSendWhatsAppUpdate();
   };
 
-  const printReceipt = (content: HTMLDivElement | null, title: string) => {
-    if (!content) return;
-
-    const printWindow = window.open('', '_blank');
+  const printMarkup = (
+    markup: string,
+    title: string,
+    targetWindow?: Window | null,
+  ) => {
+    const printWindow = targetWindow && !targetWindow.closed
+      ? targetWindow
+      : window.open('', '_blank');
     if (!printWindow) return;
 
     const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
@@ -849,8 +913,7 @@ const sendWhatsAppMessage = (message: string) => {
         .receipt-table thead { display: table-header-group; }
       </style>
     `;
-    const receiptMarkup = content.outerHTML;
-
+    printWindow.document.open();
     printWindow.document.write(`
       <!DOCTYPE html>
       <html>
@@ -860,12 +923,16 @@ const sendWhatsAppMessage = (message: string) => {
           ${printOverrides}
         </head>
         <body>
-          ${receiptMarkup}
+          ${markup}
         </body>
       </html>
     `);
     printWindow.document.close();
-    printWindow.onload = () => {
+    let handled = false;
+    const handlePrint = () => {
+      if (handled) return;
+      handled = true;
+
       const waitForReady = async () => {
         try {
           if (printWindow.document.fonts?.ready) {
@@ -897,10 +964,218 @@ const sendWhatsAppMessage = (message: string) => {
         printWindow.close();
       });
     };
+
+    printWindow.onload = handlePrint;
+    window.setTimeout(handlePrint, 300);
+  };
+
+  const printReceipt = (
+    content: HTMLDivElement | null,
+    title: string,
+    targetWindow?: Window | null,
+  ) => {
+    if (!content) return;
+    printMarkup(content.outerHTML, title, targetWindow);
   };
 
   const handlePrint = () => {
     printReceipt(receiptRef.current, `Recibo - Pedido #${formatOrderNumber(order?.order_number)}`);
+  };
+
+  const printDeliveryReceipt = (
+    deliveryOrder: Order,
+    paymentInfo?: DeliveryReceiptPaymentInfo | null,
+    targetWindow?: Window | null,
+  ) => {
+    const markup = renderToStaticMarkup(
+      <DeliveryReceipt
+        order={deliveryOrder}
+        items={items}
+        deliveredAt={deliveryOrder.delivered_at}
+        payment={paymentInfo || undefined}
+      />,
+    );
+
+    printMarkup(
+      markup,
+      `Comprovante de entrega - Pedido #${formatOrderNumber(deliveryOrder.order_number)}`,
+      targetWindow,
+    );
+  };
+
+  const preparePrintWindow = (title: string) => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return null;
+
+    printWindow.document.open();
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>${title}</title>
+          <style>
+            body {
+              margin: 0;
+              min-height: 100vh;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              font-family: Arial, sans-serif;
+              color: #334155;
+              background: #ffffff;
+            }
+          </style>
+        </head>
+        <body>Gerando comprovante...</body>
+      </html>
+    `);
+    printWindow.document.close();
+
+    return printWindow;
+  };
+
+  const handleOpenDeliveryDialog = () => {
+    const deliveredSnapshot =
+      order?.status === 'entregue' && order
+        ? buildDeliveredOrderSnapshot(order)
+        : null;
+
+    if (deliveredSnapshot?.status === 'entregue') {
+      setDeliveryReceiptOrder(deliveredSnapshot);
+      setDeliveryReceiptPayment(buildDeliveryReceiptPaymentInfo(deliveredSnapshot, latestPaidPayment));
+      setDeliveryPaymentAmount(0);
+      setDeliveryPaymentMethod(deliveredSnapshot.payment_method || '');
+    } else {
+      setDeliveryReceiptOrder(null);
+      setDeliveryReceiptPayment(null);
+      setDeliveryPaymentAmount(remainingAmount);
+      setDeliveryPaymentMethod(order?.payment_method || '');
+    }
+    setDeliveryDialogOpen(true);
+  };
+
+  const handlePrintDeliveryReceipt = () => {
+    const sourceOrder =
+      deliveryReceiptOrder ||
+      (order?.status === 'entregue' && order ? buildDeliveredOrderSnapshot(order) : null);
+    const printableOrder = sourceOrder ? buildDeliveredOrderSnapshot(sourceOrder) : null;
+    const sourcePayment =
+      deliveryReceiptPayment ||
+      (printableOrder ? buildDeliveryReceiptPaymentInfo(printableOrder, latestPaidPayment) : null);
+
+    if (!printableOrder || printableOrder.status !== 'entregue') {
+      toast({
+        title: 'Comprovante indisponível',
+        description: 'O comprovante de entrega so pode ser reimpresso apos o pedido ser entregue.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (!printableOrder.delivered_at) {
+      toast({
+        title: 'Data da entrega indisponÃ­vel',
+        description: 'Nao foi possivel localizar a data registrada da entrega para reimpressao.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    printDeliveryReceipt(printableOrder, sourcePayment);
+  };
+
+  const handleConfirmDelivery = async () => {
+    if (!order) return;
+    if (!['pronto', 'finalizado', 'aguardando_retirada'].includes(order.status)) {
+      toast({
+        title: 'Entrega indisponível',
+        description: 'O pedido precisa estar pronto para confirmar a entrega.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const printTitle = `Comprovante de entrega - Pedido #${formatOrderNumber(order.order_number)}`;
+    const printWindow = preparePrintWindow(printTitle);
+    const pendingAmount = Math.max(0, remainingAmount);
+    setDeliverySaving(true);
+
+    try {
+      let receiptPaymentInfo = buildDeliveryReceiptPaymentInfo(
+        order,
+        latestPaidPayment,
+      );
+
+      if (pendingAmount > 0) {
+        if (!deliveryPaymentMethod) {
+          throw new Error('Selecione a forma de pagamento para quitar o saldo antes da entrega.');
+        }
+
+        if (Math.abs(Number(deliveryPaymentAmount) - pendingAmount) > 0.009) {
+          throw new Error(`O pagamento precisa quitar o saldo pendente de ${formatCurrency(pendingAmount)}.`);
+        }
+
+        const paymentResult = await createOrderPayment({
+          orderId: order.id,
+          amount: Number(deliveryPaymentAmount),
+          method: deliveryPaymentMethod as PaymentMethod,
+          status: 'pago',
+          notes: 'Pagamento registrado na confirmaÃ§Ã£o da entrega.',
+          createdBy: user?.id ?? null,
+        });
+
+        receiptPaymentInfo = buildDeliveryReceiptPaymentInfo(
+          {
+            ...order,
+            amount_paid: paymentResult.summary.paidTotal,
+            payment_method: deliveryPaymentMethod as PaymentMethod,
+          } as Order,
+          paymentResult.payment,
+        );
+      }
+
+      const updatedOrder = await updateOrderStatus({
+        orderId: order.id,
+        status: 'entregue',
+        userId: user?.id ?? null,
+      });
+
+      if (!updatedOrder) {
+        throw new Error('O sistema não retornou o pedido atualizado.');
+      }
+
+      const mergedOrder = {
+        ...order,
+        ...updatedOrder,
+        customer: order.customer,
+        company: order.company,
+      } as Order;
+
+      setOrder(mergedOrder);
+      setDeliveryReceiptOrder(mergedOrder);
+      setDeliveryReceiptPayment(
+        receiptPaymentInfo || buildDeliveryReceiptPaymentInfo(mergedOrder, latestPaidPayment),
+      );
+      printDeliveryReceipt(
+        mergedOrder,
+        receiptPaymentInfo || buildDeliveryReceiptPaymentInfo(mergedOrder, latestPaidPayment),
+        printWindow,
+      );
+
+      toast({ title: 'Entrega confirmada com sucesso!' });
+      await fetchOrder(order.id);
+    } catch (error: any) {
+      if (printWindow && !printWindow.closed) {
+        printWindow.close();
+      }
+      toast({
+        title: 'Erro ao confirmar entrega',
+        description: error?.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setDeliverySaving(false);
+    }
   };
 
   const handlePrintPaymentReceipt = () => {
@@ -945,6 +1220,11 @@ const sendWhatsAppMessage = (message: string) => {
       setEditableItems([]);
     }
   }, [isBudget, isEditingItems]);
+
+  useEffect(() => {
+    setNotesDraft(orderVisibleNotes);
+    setShowNotesOnPdf(order?.show_notes_on_pdf !== false);
+  }, [order?.id, order?.show_notes_on_pdf, orderVisibleNotes]);
 
   const fetchOrder = async (targetOrderId: string | null = orderId) => {
     if (!targetOrderId) return;
@@ -1020,6 +1300,45 @@ const sendWhatsAppMessage = (message: string) => {
 
   const formatDate = (d: string) =>
     new Date(d).toLocaleString('pt-BR');
+
+  const handleSaveOrderNotes = async () => {
+    if (!order) return;
+
+    setSavingNotes(true);
+
+    const nextNotes = mergeOrderNotes({
+      existingValue: notesSourceForDisplay,
+      visibleNotes: notesDraft,
+    });
+
+    const { error } = await supabase
+      .from('orders')
+      .update({
+        notes: nextNotes,
+        show_notes_on_pdf: showNotesOnPdf,
+        updated_by: user?.id || null,
+      })
+      .eq('id', order.id);
+
+    if (error) {
+      toast({ title: 'Erro ao salvar observações', description: error.message, variant: 'destructive' });
+      setSavingNotes(false);
+      return;
+    }
+
+    setOrder((prev) =>
+      prev
+        ? {
+            ...prev,
+            notes: nextNotes,
+            show_notes_on_pdf: showNotesOnPdf,
+            updated_by: user?.id || prev.updated_by,
+          }
+        : prev,
+    );
+    toast({ title: 'Observações atualizadas' });
+    setSavingNotes(false);
+  };
 
   const handleOpenPhoto = (photo: { url: string; created_at: string }) => {
     setSelectedPhoto(photo);
@@ -1164,7 +1483,7 @@ const sendWhatsAppMessage = (message: string) => {
     }
 
     if (paymentAmount <= 0) {
-      toast({ title: 'Informe um valor valido', variant: 'destructive' });
+      toast({ title: 'Informe um valor válido', variant: 'destructive' });
       return;
     }
 
@@ -1488,10 +1807,31 @@ const sendWhatsAppMessage = (message: string) => {
   const paidTotal = Number(order.amount_paid);
   const remainingAmount = Math.max(0, orderTotal - paidTotal);
   const isOrderPaid = remainingAmount <= 0;
+  const latestPaidPayment = payments.find((payment) => payment.status !== 'pendente') || null;
 
   const config = statusConfig[order.status];
   const StatusIcon = config.icon;
-const canSendWhatsApp = Boolean(order?.customer?.phone);
+  const canSendWhatsApp = Boolean(order?.customer?.phone);
+  const canManageDelivery =
+    ['pronto', 'finalizado', 'aguardando_retirada', 'entregue'].includes(order.status) &&
+    hasPermission(['admin', 'atendente', 'caixa', 'producao']);
+  const deliveryReceiptSource =
+    order.status === 'entregue'
+      ? buildDeliveredOrderSnapshot(deliveryReceiptOrder || order)
+      : deliveryReceiptOrder;
+  const deliveryRecordedAt = deliveryReceiptSource?.delivered_at || null;
+  const deliveryCompleted = Boolean(deliveryReceiptSource?.status === 'entregue');
+  const deliveryCustomerName = order.customer?.name || order.customer_name || 'Cliente não informado';
+  const deliveryCustomerPhone = order.customer?.phone || '-';
+  const deliveryPendingAmount = deliveryCompleted ? 0 : remainingAmount;
+  const needsPaymentBeforeDelivery = !deliveryCompleted && deliveryPendingAmount > 0;
+  const deliveryPaymentInfo =
+    deliveryReceiptPayment ||
+    (deliveryReceiptSource ? buildDeliveryReceiptPaymentInfo(deliveryReceiptSource, latestPaidPayment) : null);
+  const deliveryConfirmDisabled =
+    deliverySaving ||
+    (needsPaymentBeforeDelivery &&
+      (!deliveryPaymentMethod || Math.abs(Number(deliveryPaymentAmount) - deliveryPendingAmount) > 0.009));
   const publicLinkLabel = linkLoading
     ? 'Gerando...'
     : publicLinkToken
@@ -1577,6 +1917,12 @@ const canSendWhatsApp = Boolean(order?.customer?.phone);
         </div>
 
         <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center">
+          {canManageDelivery && (
+            <Button onClick={handleOpenDeliveryDialog} className="w-full sm:w-auto">
+              <Truck className="mr-2 h-4 w-4" />
+              {order.status === 'entregue' ? 'Reimprimir Comprovante' : 'Confirmar Entrega'}
+            </Button>
+          )}
           {order.status !== 'cancelado' && (
             <Button
               variant="outline"
@@ -2098,17 +2444,43 @@ const canSendWhatsApp = Boolean(order?.customer?.phone);
             </Card>
           )}
 
-          {/* Notes */}
-          {orderVisibleNotes && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Observações</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground whitespace-pre-line">{orderVisibleNotes}</p>
-              </CardContent>
-            </Card>
-          )}
+          <Card>
+            <CardHeader>
+              <CardTitle>Observações</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Textarea
+                value={notesDraft}
+                onChange={(event) => setNotesDraft(event.target.value)}
+                rows={5}
+                placeholder="Adicione observações internas, detalhes de arte, acabamento ou instruções do pedido."
+              />
+              <label className="flex items-start gap-3 rounded-lg border border-border bg-muted/20 px-4 py-3">
+                <input
+                  type="checkbox"
+                  className="mt-1 h-4 w-4"
+                  checked={showNotesOnPdf}
+                  onChange={(event) => setShowNotesOnPdf(event.target.checked)}
+                />
+                <span className="space-y-1">
+                  <span className="block text-sm font-medium">Mostrar observações no PDF do pedido</span>
+                  <span className="block text-xs text-muted-foreground">
+                    Quando desativado, as observações continuam no sistema e deixam de aparecer no comprovante impresso.
+                  </span>
+                </span>
+              </label>
+              {orderVisibleNotes && (
+                <p className="rounded-lg bg-muted/30 px-4 py-3 text-sm text-muted-foreground whitespace-pre-line">
+                  {orderVisibleNotes}
+                </p>
+              )}
+              <div className="flex justify-end">
+                <Button type="button" onClick={handleSaveOrderNotes} disabled={savingNotes}>
+                  {savingNotes ? 'Salvando...' : 'Salvar observações'}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
         {/* Sidebar - Status Timeline */}
@@ -2289,7 +2661,7 @@ const canSendWhatsApp = Boolean(order?.customer?.phone);
               />
               {customerDraft && customerDraft.name !== customerNameDraft.trim() && (
                 <p className="text-xs text-muted-foreground">
-                  Este nome sera atualizado no cadastro do cliente.
+                  Este nome será atualizado no cadastro do cliente.
                 </p>
               )}
             </div>
@@ -2412,6 +2784,148 @@ const canSendWhatsApp = Boolean(order?.customer?.phone);
             <Button onClick={handlePrintPaymentReceipt} disabled={!receiptPayment || paymentReceiptLoading}>
               {paymentReceiptLoading ? 'Gerando...' : 'Abrir A5'}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={deliveryDialogOpen}
+        onOpenChange={(open) => {
+          if (deliverySaving) return;
+          setDeliveryDialogOpen(open);
+          if (!open && !deliveryCompleted) {
+            setDeliveryReceiptOrder(null);
+            setDeliveryReceiptPayment(null);
+            setDeliveryPaymentAmount(0);
+            setDeliveryPaymentMethod('');
+          }
+        }}
+      >
+        <DialogContent aria-describedby={undefined} className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{deliveryCompleted ? 'Comprovante de entrega' : 'Confirmar entrega'}</DialogTitle>
+            <DialogDescription>
+              {deliveryCompleted
+                ? 'A entrega ja foi registrada. Use esta tela para consultar ou reimprimir o comprovante.'
+                : 'Ao confirmar, o pedido sera marcado como entregue e o sistema registrara a data e a hora da entrega.'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="rounded-lg border bg-muted/30 p-4 text-sm">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-muted-foreground">Pedido</span>
+                <span className="font-medium">#{formatOrderNumber(order.order_number)}</span>
+              </div>
+              <div className="mt-2 flex items-center justify-between gap-3">
+                <span className="text-muted-foreground">Cliente</span>
+                <span className="font-medium text-right">{deliveryCustomerName}</span>
+              </div>
+              <div className="mt-2 flex items-center justify-between gap-3">
+                <span className="text-muted-foreground">Telefone</span>
+                <span className="font-medium text-right">{deliveryCustomerPhone}</span>
+              </div>
+              <div className="mt-2 flex items-center justify-between gap-3">
+                <span className="text-muted-foreground">Valor total</span>
+                <span className="font-medium text-right">{formatCurrency(Number(order.total || 0))}</span>
+              </div>
+            </div>
+
+            {deliveryCompleted ? (
+              <div className="space-y-3">
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
+                  <p className="font-medium">Entrega registrada com sucesso.</p>
+                  <p className="mt-1">
+                    Data e hora registradas: {deliveryRecordedAt ? formatDate(deliveryRecordedAt) : '-'}
+                  </p>
+                </div>
+                {deliveryPaymentInfo && (
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm">
+                    <p className="font-medium text-slate-900">Pagamento vinculado ao comprovante</p>
+                    <div className="mt-2 space-y-1 text-slate-700">
+                      <p>Valor pago: {formatCurrency(deliveryPaymentInfo.amount)}</p>
+                      <p>Forma de pagamento: {getPaymentMethodLabel(deliveryPaymentInfo.method)}</p>
+                      <p>Data e hora do pagamento: {deliveryPaymentInfo.paidAt ? formatDate(deliveryPaymentInfo.paidAt) : '-'}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {needsPaymentBeforeDelivery ? (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+                    <p className="font-medium">Pagamento pendente</p>
+                    <p className="mt-1">
+                      Há um saldo pendente de {formatCurrency(deliveryPendingAmount)}. Registre o pagamento antes de concluir a entrega.
+                    </p>
+                    <div className="mt-4 space-y-3">
+                      <div className="space-y-2">
+                        <Label>Valor pendente</Label>
+                        <CurrencyInput value={deliveryPaymentAmount} onChange={setDeliveryPaymentAmount} disabled />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Forma de pagamento</Label>
+                        <Select
+                          value={deliveryPaymentMethod}
+                          onValueChange={(value) => setDeliveryPaymentMethod(value as PaymentMethod)}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione a forma de pagamento" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="dinheiro">Dinheiro</SelectItem>
+                            <SelectItem value="cartao">Cartão</SelectItem>
+                            <SelectItem value="credito">Cartão crédito</SelectItem>
+                            <SelectItem value="debito">Cartão débito</SelectItem>
+                            <SelectItem value="transferencia">Transferência</SelectItem>
+                            <SelectItem value="pix">PIX</SelectItem>
+                            <SelectItem value="boleto">Boleto</SelectItem>
+                            <SelectItem value="outro">Outro</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                    O comprovante usará exatamente a mesma data e hora gravadas no sistema no momento da confirmação.
+                  </div>
+                )}
+              </div>
+            )}
+
+            {false && (deliveryCompleted ? (
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
+                <p className="font-medium">Entrega registrada com sucesso.</p>
+                <p className="mt-1">
+                  Data e hora registradas: {deliveryRecordedAt ? formatDate(deliveryRecordedAt) : '-'}
+                </p>
+              </div>
+            ) : (
+              <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                O comprovante usará exatamente a mesma data e hora gravadas no sistema no momento da confirmação.
+              </div>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDeliveryDialogOpen(false)}
+              disabled={deliverySaving}
+            >
+              {deliveryCompleted ? 'Fechar' : 'Cancelar'}
+            </Button>
+            {deliveryCompleted ? (
+              <Button onClick={handlePrintDeliveryReceipt}>
+                <Printer className="mr-2 h-4 w-4" />
+                Imprimir comprovante de entrega
+              </Button>
+            ) : (
+              <Button onClick={handleConfirmDelivery} disabled={deliveryConfirmDisabled}>
+                {deliverySaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                <Truck className="mr-2 h-4 w-4" />
+                {needsPaymentBeforeDelivery ? 'Registrar pagamento e confirmar entrega' : 'Confirmar Entrega'}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

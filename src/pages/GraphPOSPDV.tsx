@@ -54,6 +54,15 @@ const productMatchesSearch = (product: Product, rawTerm: string) => {
   return skuDigits.includes(termDigits) || barcodeDigits.includes(termDigits);
 };
 
+const graphPosSearchInputClass =
+  'h-11 w-full rounded-lg border border-border bg-card pl-11 text-sm text-foreground shadow-sm outline-none transition placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/15';
+
+const graphPosCompactInputClass =
+  'h-8 rounded-md border border-border bg-background px-2 text-xs text-foreground outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15';
+
+const graphPosInlineInputClass =
+  'h-9 w-24 rounded-lg border border-border bg-card px-2 text-right text-sm text-foreground shadow-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15';
+
 export default function GraphPOSPDV() {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -438,6 +447,10 @@ export default function GraphPOSPDV() {
   const subtotal = cart.reduce((acc, i) => acc + (i.unit_price * i.quantity - i.discount), 0);
   const total = Math.max(0, subtotal - discount);
   const hasUnsavedChanges = cart.length > 0 || discount > 0 || Boolean(selectedCustomer);
+  const dottedSurfaceStyle = {
+    backgroundImage: 'radial-gradient(circle, hsl(var(--border)) 0.8px, transparent 0.8px)',
+    backgroundSize: '20px 20px',
+  } as const;
 
   useUnsavedChanges(hasUnsavedChanges);
 
@@ -497,7 +510,7 @@ export default function GraphPOSPDV() {
         <div className="mb-4 flex items-center justify-between lg:shrink-0">
           <div>
             <h1 className="text-3xl font-semibold tracking-tight">PDV</h1>
-            <p className="text-sm text-slate-500">Ponto de venda</p>
+            <p className="text-sm text-muted-foreground">Ponto de venda</p>
           </div>
         </div>
 
@@ -505,18 +518,18 @@ export default function GraphPOSPDV() {
           <div className="flex min-h-0 flex-col gap-4">
             <div className="grid gap-4 md:grid-cols-2">
               <form className="relative" onSubmit={handleBarcodeSubmit}>
-                <Barcode className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <Barcode className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <input
-                  className="h-11 w-full rounded-lg border border-slate-200 bg-white pl-11 text-sm text-slate-700 shadow-[0_1px_2px_rgba(15,23,42,0.06)] outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+                  className={graphPosSearchInputClass}
                   placeholder="Leia o código de barras aqui..."
                   value={barcodeInput}
                   onChange={(e) => setBarcodeInput(e.target.value)}
                 />
               </form>
               <div className="relative">
-                <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <input
-                  className="h-11 w-full rounded-lg border border-slate-200 bg-white pl-11 text-sm text-slate-700 shadow-[0_1px_2px_rgba(15,23,42,0.06)] outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+                  className={graphPosSearchInputClass}
                   placeholder="Buscar por nome..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
@@ -525,25 +538,28 @@ export default function GraphPOSPDV() {
             </div>
 
             <GraphPOSCard className="flex min-h-0 flex-1 p-0">
-              <div className="h-[52vh] min-h-[320px] w-full flex-1 overflow-hidden rounded-xl border border-dashed border-slate-200 bg-white p-6 shadow-[0_6px_20px_rgba(15,23,42,0.06)] bg-[radial-gradient(circle,_#e2e8f0_0.8px,_transparent_0.8px)] [background-size:20px_20px] dark:bg-background dark:[background-image:none] lg:h-full lg:min-h-0">
+              <div
+                className="h-[52vh] min-h-[320px] w-full flex-1 overflow-hidden rounded-xl border border-dashed border-border bg-card/90 p-6 shadow-sm lg:h-full lg:min-h-0"
+                style={dottedSurfaceStyle}
+              >
                 {!search.trim() ? (
                   <div className="flex h-full items-center justify-center text-center">
-                    <div className="flex max-w-md flex-col items-center gap-4 text-slate-500">
-                      <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white shadow-[0_1px_2px_rgba(15,23,42,0.08)]">
-                        <ShoppingCart className="h-6 w-6 text-slate-400" />
+                    <div className="flex max-w-md flex-col items-center gap-4 text-muted-foreground">
+                      <div className="flex h-14 w-14 items-center justify-center rounded-full border border-border bg-card shadow-sm">
+                        <ShoppingCart className="h-6 w-6 text-muted-foreground" />
                       </div>
-                      <h2 className="text-base font-semibold text-slate-700">Aguardando produtos</h2>
+                      <h2 className="text-base font-semibold text-foreground">Aguardando produtos</h2>
                       <p className="text-sm">
                         Digite um nome ou leia um código de barras para buscar produtos e iniciar a venda.
                       </p>
                     </div>
                   </div>
                 ) : productsLoading ? (
-                  <div className="flex h-full items-center justify-center text-sm text-slate-500">
+                  <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
                     Buscando produtos...
                   </div>
                 ) : products.length === 0 ? (
-                  <div className="flex h-full items-center justify-center text-sm text-slate-500">
+                  <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
                     Nenhum produto encontrado.
                   </div>
                 ) : (
@@ -554,21 +570,21 @@ export default function GraphPOSPDV() {
                           key={product.id}
                           type="button"
                           onClick={() => addToCart(product)}
-                          className="rounded-lg border border-slate-200 bg-white p-3 text-left shadow-[0_1px_2px_rgba(15,23,42,0.06)] transition hover:border-sky-300 hover:shadow-[0_8px_18px_rgba(15,23,42,0.08)]"
+                          className="rounded-lg border border-border bg-card p-3 text-left shadow-sm transition hover:border-primary/45 hover:shadow-md"
                         >
-                          <div className="mb-3 flex aspect-square items-center justify-center overflow-hidden rounded-lg border border-slate-100 bg-white">
+                          <div className="mb-3 flex aspect-square items-center justify-center overflow-hidden rounded-lg border border-border bg-muted/40">
                             {product.image_url ? (
                               <img src={product.image_url} alt={product.name} className="h-full w-full object-cover" />
                             ) : (
-                              <ShoppingCart className="h-8 w-8 text-slate-300" />
+                              <ShoppingCart className="h-8 w-8 text-muted-foreground" />
                             )}
                           </div>
-                          <p className="text-sm font-semibold text-slate-800">{product.name}</p>
-                          <p className="text-sm font-semibold text-sky-600">
+                          <p className="text-sm font-semibold text-foreground">{product.name}</p>
+                          <p className="text-sm font-semibold text-primary">
                             {formatCurrency(getUnitPrice(product, 1))}
                             {isM2Product(product) ? ' / m\u00B2' : ''}
                           </p>
-                          <p className="text-xs text-slate-400">
+                          <p className="text-xs text-muted-foreground">
                             {product.track_stock ? `Estoque: ${product.stock_quantity}` : 'Sem controle de estoque'}
                           </p>
                         </button>
@@ -583,16 +599,16 @@ export default function GraphPOSPDV() {
           <div className="h-[52vh] min-h-[320px] lg:h-full lg:min-h-0">
             <GraphPOSSidebarResumo
               title="Carrinho"
-              className="flex h-full min-h-0 flex-col rounded-xl shadow-[0_8px_24px_rgba(15,23,42,0.08)]"
+              className="flex h-full min-h-0 flex-col rounded-xl shadow-md"
             >
               <div className="flex min-h-0 flex-1 flex-col gap-5">
                 <div className="relative" ref={customerRef}>
                   {selectedCustomer ? (
-                    <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 shadow-[0_1px_2px_rgba(15,23,42,0.06)]">
-                      <User className="h-4 w-4 text-slate-400" />
+                    <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground shadow-sm">
+                      <User className="h-4 w-4 text-muted-foreground" />
                       <div className="flex-1">
-                        <p className="text-sm font-semibold text-slate-800">{selectedCustomer.name}</p>
-                        <p className="text-xs text-slate-500">
+                        <p className="text-sm font-semibold text-foreground">{selectedCustomer.name}</p>
+                        <p className="text-xs text-muted-foreground">
                           {[selectedCustomer.document, selectedCustomer.phone, selectedCustomer.email]
                             .filter(Boolean)
                             .join(' | ') || 'Sem contato'}
@@ -600,7 +616,7 @@ export default function GraphPOSPDV() {
                       </div>
                       <button
                         type="button"
-                        className="text-xs font-semibold text-red-500 hover:text-red-600"
+                        className="text-xs font-semibold text-destructive transition hover:text-destructive/80"
                         onClick={() => {
                           setSelectedCustomer(null);
                           setCustomerSearch('');
@@ -619,9 +635,9 @@ export default function GraphPOSPDV() {
                     </div>
                   ) : (
                     <>
-                      <User className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                      <User className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                       <input
-                        className="h-11 w-full rounded-lg border border-slate-200 bg-white pl-11 text-sm text-slate-700 shadow-[0_1px_2px_rgba(15,23,42,0.06)] outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+                        className={graphPosSearchInputClass}
                         placeholder="Buscar cliente (nome, CPF, telefone)..."
                         value={customerSearch}
                         onChange={(e) => {
@@ -634,11 +650,11 @@ export default function GraphPOSPDV() {
                   )}
 
                   {showCustomerDropdown && !selectedCustomer && customerSearch.length >= 2 && (
-                    <div className="absolute z-20 mt-2 w-full rounded-xl border border-slate-200 bg-white py-2 text-sm shadow-lg">
+                    <div className="absolute z-20 mt-2 w-full rounded-xl border border-border bg-popover py-2 text-sm text-popover-foreground shadow-lg">
                       {customerLoading ? (
-                        <div className="px-4 py-2 text-slate-500">Buscando...</div>
+                        <div className="px-4 py-2 text-muted-foreground">Buscando...</div>
                       ) : customerOptions.length === 0 ? (
-                        <div className="px-4 py-2 text-slate-500">Nenhum cliente encontrado</div>
+                        <div className="px-4 py-2 text-muted-foreground">Nenhum cliente encontrado</div>
                       ) : (
                         customerOptions.map((customer) => (
                           <button
@@ -649,12 +665,12 @@ export default function GraphPOSPDV() {
                               setCustomerSearch('');
                               setShowCustomerDropdown(false);
                             }}
-                            className="flex w-full items-center gap-3 px-4 py-2 text-left hover:bg-slate-50"
+                            className="flex w-full items-center gap-3 px-4 py-2 text-left transition hover:bg-muted/70"
                           >
-                            <User className="h-4 w-4 text-slate-400" />
+                            <User className="h-4 w-4 text-muted-foreground" />
                             <div>
-                              <p className="text-sm font-semibold text-slate-800">{customer.name}</p>
-                              <p className="text-xs text-slate-500">
+                              <p className="text-sm font-semibold text-foreground">{customer.name}</p>
+                              <p className="text-xs text-muted-foreground">
                                 {[customer.document, customer.phone, customer.email].filter(Boolean).join(' | ') || 'Sem contato'}
                               </p>
                             </div>
@@ -667,8 +683,8 @@ export default function GraphPOSPDV() {
 
                 <div className="min-h-0 flex-1 overflow-y-auto pr-1">
                   {cart.length === 0 ? (
-                    <div className="flex min-h-[220px] h-full flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-slate-200 bg-slate-50 text-sm text-slate-400 dark:bg-transparent">
-                      <ShoppingCart className="h-8 w-8 text-slate-300" />
+                    <div className="flex h-full min-h-[220px] flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border bg-muted/45 text-sm text-muted-foreground">
+                      <ShoppingCart className="h-8 w-8 text-muted-foreground" />
                       Carrinho vazio
                     </div>
                   ) : (
@@ -692,28 +708,28 @@ export default function GraphPOSPDV() {
                           : '';
 
                         return (
-                          <div key={item.id} className="rounded-lg border border-slate-200 bg-white p-3 shadow-[0_1px_2px_rgba(15,23,42,0.06)]">
+                          <div key={item.id} className="rounded-lg border border-border bg-card p-3 shadow-sm">
                             <div className="flex items-center gap-3">
-                              <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-xl bg-slate-100">
+                              <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-xl border border-border bg-muted/40">
                                 {item.product.image_url ? (
                                   <img src={item.product.image_url} alt={item.product.name} className="h-full w-full object-cover" />
                                 ) : (
-                                  <ShoppingCart className="h-5 w-5 text-slate-400" />
+                                  <ShoppingCart className="h-5 w-5 text-muted-foreground" />
                                 )}
                               </div>
                               <div className="flex-1">
-                                <p className="text-sm font-semibold text-slate-800">{item.product.name}</p>
-                                <p className="text-xs text-slate-500">
+                                <p className="text-sm font-semibold text-foreground">{item.product.name}</p>
+                                <p className="text-xs text-muted-foreground">
                                   {formatCurrency(item.unit_price)}
                                   {isM2 ? ' / m\u00B2' : ''}{' '}
                                   {isM2 ? areaLabel : `x ${item.quantity}`}
                                 </p>
                                 {isM2 && hasValidDimensions && (
-                                  <p className="text-[11px] text-slate-400">
+                                  <p className="text-[11px] text-muted-foreground">
                                     {dimensionLabel}
                                   </p>
                                 )}
-                                <p className="text-xs font-semibold text-slate-700">
+                                <p className="text-xs font-semibold text-foreground">
                                   {formatCurrency(item.unit_price * item.quantity - item.discount)}
                                 </p>
                               </div>
@@ -721,14 +737,14 @@ export default function GraphPOSPDV() {
                                 {!isM2 && (
                                   <>
                                     <button
-                                      className="flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 text-slate-500"
+                                      className="flex h-7 w-7 items-center justify-center rounded-full border border-border text-muted-foreground transition hover:border-primary/45 hover:text-foreground"
                                       onClick={() => updateQuantity(item.id, -1)}
                                     >
                                       <Minus className="h-3 w-3" />
                                     </button>
-                                    <span className="w-5 text-center text-xs text-slate-600">{item.quantity}</span>
+                                    <span className="w-5 text-center text-xs text-muted-foreground">{item.quantity}</span>
                                     <button
-                                      className="flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 text-slate-500"
+                                      className="flex h-7 w-7 items-center justify-center rounded-full border border-border text-muted-foreground transition hover:border-primary/45 hover:text-foreground"
                                       onClick={() => updateQuantity(item.id, 1)}
                                     >
                                       <Plus className="h-3 w-3" />
@@ -736,7 +752,7 @@ export default function GraphPOSPDV() {
                                   </>
                                 )}
                                 <button
-                                  className="flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 text-red-500"
+                                  className="flex h-7 w-7 items-center justify-center rounded-full border border-border text-destructive transition hover:border-destructive/40 hover:bg-destructive/10"
                                   onClick={() => removeFromCart(item.id)}
                                 >
                                   <Trash2 className="h-3 w-3" />
@@ -744,26 +760,26 @@ export default function GraphPOSPDV() {
                               </div>
                             </div>
                             {isM2 && (
-                              <div className="mt-3 grid gap-2 text-xs text-slate-600 sm:grid-cols-2">
+                              <div className="mt-3 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2">
                                 <label className="flex flex-col gap-1">
-                                  <span className="text-[10px] uppercase tracking-wide text-slate-400">Largura (cm)</span>
+                                  <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Largura (cm)</span>
                                   <input
-                                    className="h-8 rounded-md border border-slate-200 px-2 text-xs"
+                                    className={graphPosCompactInputClass}
                                     inputMode="decimal"
                                     value={widthRaw}
                                     onChange={(e) => updateM2Value(item.id, M2_ATTRIBUTE_KEYS.widthCm, e.target.value)}
                                   />
                                 </label>
                                 <label className="flex flex-col gap-1">
-                                  <span className="text-[10px] uppercase tracking-wide text-slate-400">Altura (cm)</span>
+                                  <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Altura (cm)</span>
                                   <input
-                                    className="h-8 rounded-md border border-slate-200 px-2 text-xs"
+                                    className={graphPosCompactInputClass}
                                     inputMode="decimal"
                                     value={heightRaw}
                                     onChange={(e) => updateM2Value(item.id, M2_ATTRIBUTE_KEYS.heightCm, e.target.value)}
                                   />
                                 </label>
-                                <div className={`col-span-1 text-[11px] ${hasValidDimensions ? 'text-slate-500' : 'text-red-500'} sm:col-span-2`}>
+                                <div className={`col-span-1 text-[11px] ${hasValidDimensions ? 'text-muted-foreground' : 'text-destructive'} sm:col-span-2`}>
                                   Área: {hasValidDimensions ? `${formatAreaM2(item.quantity)} m\u00B2` : 'Preencha largura e altura válidas'}
                                 </div>
                               </div>
@@ -775,16 +791,16 @@ export default function GraphPOSPDV() {
                   )}
                 </div>
 
-                <div className="mt-auto shrink-0 border-t border-slate-200 pt-3">
-                  <div className="space-y-3 text-sm text-slate-600">
+                <div className="mt-auto shrink-0 border-t border-border pt-3">
+                  <div className="space-y-3 text-sm text-muted-foreground">
                     <div className="flex items-center justify-between">
                       <span>Subtotal</span>
-                      <span className="font-medium text-slate-900">{formatCurrency(subtotal)}</span>
+                      <span className="font-medium text-foreground">{formatCurrency(subtotal)}</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span>Desconto</span>
                       <input
-                        className="h-9 w-24 rounded-lg border border-slate-200 bg-white px-2 text-right text-sm text-slate-600 shadow-[0_1px_2px_rgba(15,23,42,0.06)]"
+                        className={graphPosInlineInputClass}
                         value={discount.toFixed(2).replace('.', ',')}
                         onChange={(e) => {
                           const value = Number(e.target.value.replace(',', '.'));
@@ -792,15 +808,15 @@ export default function GraphPOSPDV() {
                         }}
                       />
                     </div>
-                    <div className="h-px w-full bg-slate-200" />
-                    <div className="flex items-center justify-between text-lg font-semibold text-slate-900">
+                    <div className="h-px w-full bg-border" />
+                    <div className="flex items-center justify-between text-lg font-semibold text-foreground">
                       <span>Total</span>
                       <span>{formatCurrency(total)}</span>
                     </div>
                   </div>
                   <BotaoPrimario
                     onClick={handleFinalize}
-                    className="mt-4 h-[46px] w-full rounded-[10px] bg-sky-500 shadow-[0_8px_20px_rgba(14,165,233,0.25)] hover:bg-sky-600"
+                    className="mt-4 h-[46px] w-full rounded-[10px]"
                   >
                     Finalizar Venda
                   </BotaoPrimario>

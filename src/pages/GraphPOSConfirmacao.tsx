@@ -14,6 +14,9 @@ import { useAuth } from '@/contexts/AuthContext';
 const formatCurrency = (v: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
 
+const graphPosReceiptInputClass =
+  'h-10 rounded-xl border border-border bg-card px-3 text-sm text-foreground shadow-sm outline-none transition placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/15';
+
 export default function GraphPOSConfirmacao() {
   const navigate = useNavigate();
   const { company } = useAuth();
@@ -44,8 +47,8 @@ export default function GraphPOSConfirmacao() {
 
   const paymentLabelMap: Record<string, string> = {
     dinheiro: 'Dinheiro',
-    credito: 'Crédito',
-    debito: 'Débito',
+    credito: 'Credito',
+    debito: 'Debito',
     pix: 'Pix',
     outros: 'Outros',
   };
@@ -86,12 +89,10 @@ export default function GraphPOSConfirmacao() {
     ref: RefObject<HTMLDivElement>;
     title: string;
     pageStyle: string;
-    windowFeatures: string;
   }> = {
     a4: {
       ref: receiptA4Ref,
       title: 'Recibo A4',
-      windowFeatures: 'width=1000,height=900',
       pageStyle: `
         @page { size: A4 portrait; margin: 12mm; }
         html, body { margin: 0; padding: 0; background: #fff; }
@@ -100,8 +101,7 @@ export default function GraphPOSConfirmacao() {
     },
     thermal80: {
       ref: receipt80Ref,
-      title: 'Cupom Não Fiscal 80mm',
-      windowFeatures: 'width=520,height=900',
+      title: 'Cupom Nao Fiscal 80mm',
       pageStyle: `
         @page { size: 80mm auto; margin: 0; }
         html, body { margin: 0; padding: 0; background: #fff; }
@@ -110,8 +110,7 @@ export default function GraphPOSConfirmacao() {
     },
     thermal58: {
       ref: receipt58Ref,
-      title: 'Cupom Não Fiscal 58mm',
-      windowFeatures: 'width=420,height=900',
+      title: 'Cupom Nao Fiscal 58mm',
       pageStyle: `
         @page { size: 58mm auto; margin: 0; }
         html, body { margin: 0; padding: 0; background: #fff; }
@@ -125,8 +124,11 @@ export default function GraphPOSConfirmacao() {
     const receiptNode = config.ref.current;
     if (!receiptNode) return;
 
+    const screenWidth = window.screen.availWidth || 1440;
+    const screenHeight = window.screen.availHeight || 900;
     const printContent = receiptNode.outerHTML;
-    const printWindow = window.open('', '', config.windowFeatures);
+    const features = `popup=yes,noopener=yes,noreferrer=yes,resizable=yes,scrollbars=yes,left=0,top=0,width=${screenWidth},height=${screenHeight}`;
+    const printWindow = window.open('', '_blank', features);
     if (!printWindow) return;
 
     const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
@@ -145,6 +147,12 @@ export default function GraphPOSConfirmacao() {
     `);
     printWindow.document.close();
     printWindow.onload = () => {
+      try {
+        printWindow.moveTo(0, 0);
+        printWindow.resizeTo(screenWidth, screenHeight);
+      } catch {
+        // Browsers may block move/resize on some environments.
+      }
       printWindow.focus();
       printWindow.print();
       printWindow.close();
@@ -152,22 +160,22 @@ export default function GraphPOSConfirmacao() {
   };
 
   return (
-    <div className="w-full bg-transparent font-sans text-slate-900">
+    <div className="w-full bg-transparent font-sans text-foreground">
       <main className="mx-auto w-full px-auto pb-12 pt-auto">
         <GraphPOSBreadcrumb
           backLabel="Voltar para Vendas"
           backTo="/pdv"
-          currentLabel="Confirmação de Pedido"
+          currentLabel="Confirmacao de Pedido"
         />
 
         <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
           <div className="space-y-6">
             <GraphPOSCard className="text-center">
-              <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-emerald-100">
-                <CheckCircle2 className="h-10 w-10 text-emerald-500" />
+              <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-success/15">
+                <CheckCircle2 className="h-10 w-10 text-success" />
               </div>
               <h1 className="mt-5 text-[32px] font-bold">Venda Confirmada!</h1>
-              <p className="mt-2 text-sm text-slate-500">
+              <p className="mt-2 text-sm text-muted-foreground">
                 O pedido #{saleId.slice(0, 8).toUpperCase()} foi processado e registrado com sucesso.
               </p>
               <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
@@ -194,14 +202,14 @@ export default function GraphPOSConfirmacao() {
 
             <div className="grid gap-6 lg:grid-cols-2">
               <GraphPOSCard>
-                <p className="text-xs font-semibold uppercase text-slate-400">Cliente no recibo</p>
+                <p className="text-xs font-semibold uppercase text-muted-foreground">Cliente no recibo</p>
 
                 {hasCheckoutCustomer ? (
                   <>
-                    <label className="mt-4 flex items-center gap-2 text-sm text-slate-700">
+                    <label className="mt-4 flex items-center gap-2 text-sm text-foreground">
                       <input
                         type="checkbox"
-                        className="h-4 w-4 rounded border-slate-300"
+                        className="h-4 w-4 rounded border-border bg-background text-primary focus:ring-2 focus:ring-primary/20"
                         checked={useRealCustomer}
                         onChange={(e) => setUseRealCustomer(e.target.checked)}
                       />
@@ -210,37 +218,37 @@ export default function GraphPOSConfirmacao() {
 
                     {useRealCustomer ? (
                       <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                        <label className="flex flex-col gap-1 text-xs text-slate-500">
+                        <label className="flex flex-col gap-1 text-xs text-muted-foreground">
                           Nome
                           <input
-                            className="h-10 rounded-xl border border-slate-200 px-3 text-sm text-slate-800"
+                            className={graphPosReceiptInputClass}
                             value={customerForm.name}
                             onChange={(e) => handleCustomerField('name', e.target.value)}
                             placeholder="Nome do cliente"
                           />
                         </label>
-                        <label className="flex flex-col gap-1 text-xs text-slate-500">
+                        <label className="flex flex-col gap-1 text-xs text-muted-foreground">
                           CPF/CNPJ
                           <input
-                            className="h-10 rounded-xl border border-slate-200 px-3 text-sm text-slate-800"
+                            className={graphPosReceiptInputClass}
                             value={customerForm.document}
                             onChange={(e) => handleCustomerField('document', e.target.value)}
                             placeholder="Documento"
                           />
                         </label>
-                        <label className="flex flex-col gap-1 text-xs text-slate-500">
+                        <label className="flex flex-col gap-1 text-xs text-muted-foreground">
                           Telefone
                           <input
-                            className="h-10 rounded-xl border border-slate-200 px-3 text-sm text-slate-800"
+                            className={graphPosReceiptInputClass}
                             value={customerForm.phone}
                             onChange={(e) => handleCustomerField('phone', e.target.value)}
                             placeholder="Telefone"
                           />
                         </label>
-                        <label className="flex flex-col gap-1 text-xs text-slate-500">
+                        <label className="flex flex-col gap-1 text-xs text-muted-foreground">
                           E-mail
                           <input
-                            className="h-10 rounded-xl border border-slate-200 px-3 text-sm text-slate-800"
+                            className={graphPosReceiptInputClass}
                             value={customerForm.email}
                             onChange={(e) => handleCustomerField('email', e.target.value)}
                             placeholder="E-mail"
@@ -248,40 +256,40 @@ export default function GraphPOSConfirmacao() {
                         </label>
                       </div>
                     ) : (
-                      <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
-                        O recibo sera emitido como <span className="font-semibold">Consumidor final</span>.
+                      <div className="mt-4 rounded-xl border border-border bg-muted/60 p-3 text-sm text-muted-foreground">
+                        O recibo sera emitido como <span className="font-semibold text-foreground">Consumidor final</span>.
                       </div>
                     )}
                   </>
                 ) : (
-                  <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
-                    Nenhum cliente selecionado na venda. O recibo sera emitido como <span className="font-semibold">Consumidor final</span>.
+                  <div className="mt-4 rounded-xl border border-border bg-muted/60 p-3 text-sm text-muted-foreground">
+                    Nenhum cliente selecionado na venda. O recibo sera emitido como <span className="font-semibold text-foreground">Consumidor final</span>.
                   </div>
                 )}
               </GraphPOSCard>
 
               <GraphPOSCard>
-                <p className="text-xs font-semibold uppercase text-slate-400">Detalhes do pagamento</p>
-                <div className="mt-4 space-y-3 text-sm text-slate-600">
+                <p className="text-xs font-semibold uppercase text-muted-foreground">Detalhes do pagamento</p>
+                <div className="mt-4 space-y-3 text-sm text-muted-foreground">
                   <div className="flex items-center gap-2">
-                    <User className="h-4 w-4 text-slate-400" />
-                    <span className="font-semibold text-slate-800">{receiptCustomer.name}</span>
+                    <User className="h-4 w-4 text-muted-foreground" />
+                    <span className="font-semibold text-foreground">{receiptCustomer.name}</span>
                   </div>
                   {receiptCustomer.phone && (
                     <div className="flex items-center gap-2">
-                      <Phone className="h-4 w-4 text-slate-400" />
+                      <Phone className="h-4 w-4 text-muted-foreground" />
                       <span>{receiptCustomer.phone}</span>
                     </div>
                   )}
                   <div className="flex items-center gap-2">
-                    <CreditCard className="h-4 w-4 text-slate-400" />
-                    <span className="font-semibold text-slate-800">{paymentLabelMap[paymentLabel] || 'Dinheiro'}</span>
+                    <CreditCard className="h-4 w-4 text-muted-foreground" />
+                    <span className="font-semibold text-foreground">{paymentLabelMap[paymentLabel] || 'Dinheiro'}</span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span>Valor Recebido</span>
-                    <span className="font-semibold text-slate-800">{formatCurrency(amountPaid)}</span>
+                    <span className="font-semibold text-foreground">{formatCurrency(amountPaid)}</span>
                   </div>
-                  <div className="flex items-center justify-between text-emerald-600">
+                  <div className="flex items-center justify-between text-success">
                     <span>Troco</span>
                     <span className="font-semibold">{formatCurrency(Math.max(0, amountPaid - total))}</span>
                   </div>
@@ -307,7 +315,7 @@ export default function GraphPOSConfirmacao() {
 
           <div className="lg:sticky lg:top-8">
             <GraphPOSSidebarResumo title="Resumo do Pedido" badge="PAGO">
-              <p className="text-xs text-slate-500">{items.length} itens confirmados</p>
+              <p className="text-xs text-muted-foreground">{items.length} itens confirmados</p>
               <div className="mt-4 space-y-4">
                 {items.map((item, index) => {
                   const isM2 = item.unitLabel === 'm\u00B2' || Boolean(item.areaM2) || (item.widthCm && item.heightCm);
@@ -320,33 +328,33 @@ export default function GraphPOSConfirmacao() {
                   return (
                     <div key={`${item.id}-${index}`} className="flex items-start justify-between">
                       <div>
-                        <p className="text-sm font-semibold text-slate-800">{item.name}</p>
-                        <p className="text-xs text-slate-500">
+                        <p className="text-sm font-semibold text-foreground">{item.name}</p>
+                        <p className="text-xs text-muted-foreground">
                           {quantityLabel} x {formatCurrency(item.unitPrice)}{unitLabel}
                         </p>
                         {hasDimensions && (
-                          <p className="text-[11px] text-slate-400">
+                          <p className="text-[11px] text-muted-foreground">
                             {item.widthCm}cm x {item.heightCm}cm
                           </p>
                         )}
                       </div>
-                      <span className="text-sm font-semibold text-slate-800">
+                      <span className="text-sm font-semibold text-foreground">
                         {formatCurrency(item.unitPrice * item.quantity)}
                       </span>
                     </div>
                   );
                 })}
               </div>
-              <div className="mt-4 border-t border-slate-200 pt-4 text-sm text-slate-600">
+              <div className="mt-4 border-t border-border pt-4 text-sm text-muted-foreground">
                 <div className="flex items-center justify-between">
                   <span>Subtotal</span>
-                  <span className="font-semibold text-slate-800">{formatCurrency(subtotal)}</span>
+                  <span className="font-semibold text-foreground">{formatCurrency(subtotal)}</span>
                 </div>
-                <div className="flex items-center justify-between text-slate-500">
+                <div className="flex items-center justify-between text-muted-foreground">
                   <span>Desconto</span>
                   <span>- {formatCurrency(discount)}</span>
                 </div>
-                <div className="mt-3 flex items-center justify-between text-lg font-semibold text-slate-900">
+                <div className="mt-3 flex items-center justify-between text-lg font-semibold text-foreground">
                   <span>Total Pago</span>
                   <span>{formatCurrency(total)}</span>
                 </div>

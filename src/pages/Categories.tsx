@@ -193,7 +193,7 @@ export default function Categories() {
 
   const handleSave = async () => {
     if (!formData.name.trim()) {
-      toast.error('Nome e obrigatorio');
+      toast.error('Nome é obrigatório');
       return;
     }
 

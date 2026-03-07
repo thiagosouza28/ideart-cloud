@@ -3,13 +3,21 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 
 const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(({ className, ...props }, ref) => (
-  <div ref={ref} className={cn("rounded-2xl border bg-card text-card-foreground shadow-sm", className)} {...props} />
+  <div
+    ref={ref}
+    className={cn("rounded-[var(--app-card-radius)] border bg-card text-card-foreground shadow-sm", className)}
+    {...props}
+  />
 ));
 Card.displayName = "Card";
 
 const CardHeader = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => (
-    <div ref={ref} className={cn("flex flex-col space-y-1.5 p-6", className)} {...props} />
+    <div
+      ref={ref}
+      className={cn("flex flex-col space-y-1.5 p-[var(--app-card-padding)]", className)}
+      {...props}
+    />
   ),
 );
 CardHeader.displayName = "CardHeader";
@@ -29,13 +37,23 @@ const CardDescription = React.forwardRef<HTMLParagraphElement, React.HTMLAttribu
 CardDescription.displayName = "CardDescription";
 
 const CardContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
-  ({ className, ...props }, ref) => <div ref={ref} className={cn("p-6 pt-0", className)} {...props} />,
+  ({ className, ...props }, ref) => (
+    <div
+      ref={ref}
+      className={cn("px-[var(--app-card-padding)] pb-[var(--app-card-padding)] pt-0", className)}
+      {...props}
+    />
+  ),
 );
 CardContent.displayName = "CardContent";
 
 const CardFooter = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => (
-    <div ref={ref} className={cn("flex items-center p-6 pt-0", className)} {...props} />
+    <div
+      ref={ref}
+      className={cn("flex items-center px-[var(--app-card-padding)] pb-[var(--app-card-padding)] pt-0", className)}
+      {...props}
+    />
   ),
 );
 CardFooter.displayName = "CardFooter";

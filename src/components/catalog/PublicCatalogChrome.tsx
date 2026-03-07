@@ -1,4 +1,5 @@
-﻿import { Link } from 'react-router-dom';
+import type { CSSProperties } from 'react';
+import { Link } from 'react-router-dom';
 import { ArrowLeft, Mail, MapPin, MessageCircle, Phone, ShoppingCart } from 'lucide-react';
 import { ensurePublicStorageUrl } from '@/lib/storage';
 
@@ -14,15 +15,40 @@ export interface CatalogChromeCompany {
   address?: string | null;
   whatsapp?: string | null;
   catalog_contact_url?: string | null;
+  catalog_primary_color?: string | null;
+  catalog_secondary_color?: string | null;
+  catalog_accent_color?: string | null;
+  catalog_text_color?: string | null;
+  catalog_header_bg_color?: string | null;
+  catalog_header_text_color?: string | null;
+  catalog_footer_bg_color?: string | null;
+  catalog_footer_text_color?: string | null;
+  catalog_badge_bg_color?: string | null;
+  catalog_badge_text_color?: string | null;
+  catalog_button_bg_color?: string | null;
+  catalog_button_text_color?: string | null;
+  catalog_button_outline_color?: string | null;
 }
 
 const getInitials = (value?: string | null) => {
-  const safe = (value || 'Catálogo').trim();
+  const safe = (value || 'Catalogo').trim();
   if (!safe) return 'C';
   const parts = safe.split(/\s+/).filter(Boolean);
   if (parts.length === 1) return parts[0].slice(0, 1).toUpperCase();
   return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
 };
+
+const normalizeHexColor = (value?: string | null, fallback = '#1a3a8f') => {
+  const safe = String(value || '').trim();
+  if (/^#[0-9a-f]{6}$/i.test(safe)) return safe;
+  if (/^#[0-9a-f]{3}$/i.test(safe)) {
+    return `#${safe[1]}${safe[1]}${safe[2]}${safe[2]}${safe[3]}${safe[3]}`;
+  }
+  return fallback;
+};
+
+const withAlpha = (value?: string | null, alpha = 'ff', fallback = '#1a3a8f') =>
+  `${normalizeHexColor(value, fallback)}${alpha}`;
 
 const resolveCatalogPath = (company?: CatalogChromeCompany | null) => {
   if (company?.slug) return `/catalogo/${company.slug}`;
@@ -32,6 +58,57 @@ const resolveCatalogPath = (company?: CatalogChromeCompany | null) => {
 
 const resolveLogoUrl = (logoUrl?: string | null) =>
   ensurePublicStorageUrl('product-images', logoUrl) || null;
+
+const resolveCatalogTheme = (company?: CatalogChromeCompany | null) => {
+  const buttonBg = normalizeHexColor(
+    company?.catalog_button_bg_color || company?.catalog_primary_color,
+    '#1a3a8f',
+  );
+  const buttonText = normalizeHexColor(company?.catalog_button_text_color, '#ffffff');
+  const buttonOutline = normalizeHexColor(
+    company?.catalog_button_outline_color || company?.catalog_button_bg_color || company?.catalog_primary_color,
+    buttonBg,
+  );
+  const headerBg = normalizeHexColor(
+    company?.catalog_header_bg_color || company?.catalog_secondary_color,
+    '#0f1b3d',
+  );
+  const headerText = normalizeHexColor(company?.catalog_header_text_color, '#ffffff');
+  const footerBg = normalizeHexColor(
+    company?.catalog_footer_bg_color || company?.catalog_secondary_color,
+    headerBg,
+  );
+  const footerText = normalizeHexColor(
+    company?.catalog_footer_text_color || company?.catalog_header_text_color,
+    '#ffffff',
+  );
+  const badgeBg = normalizeHexColor(
+    company?.catalog_badge_bg_color || company?.catalog_accent_color,
+    '#c9a84c',
+  );
+  const badgeText = normalizeHexColor(company?.catalog_badge_text_color, '#2f2406');
+
+  return {
+    buttonBg,
+    buttonText,
+    buttonOutline,
+    headerBg,
+    headerText,
+    headerBorder: withAlpha(company?.catalog_header_text_color, '33', '#ffffff'),
+    headerSurface: withAlpha(company?.catalog_header_text_color, '14', '#ffffff'),
+    headerSubtle: withAlpha(company?.catalog_header_text_color, 'bf', '#ffffff'),
+    footerBg,
+    footerText,
+    footerBorder: withAlpha(company?.catalog_footer_text_color, '33', '#ffffff'),
+    footerSurface: withAlpha(company?.catalog_footer_text_color, '14', '#ffffff'),
+    footerSubtle: withAlpha(company?.catalog_footer_text_color, 'bf', '#ffffff'),
+    badgeBg,
+    badgeText,
+    heroBackground: `linear-gradient(135deg, ${headerBg} 0%, ${buttonBg} 100%)`,
+    heroText: headerText,
+    heroSubtle: withAlpha(company?.catalog_header_text_color, 'df', '#ffffff'),
+  };
+};
 
 const openCatalogContact = (company?: CatalogChromeCompany | null) => {
   if (!company) return;
@@ -73,14 +150,32 @@ export function CatalogTopNav({
   accountLabel = 'Minha conta',
   showContact = false,
 }: CatalogTopNavProps) {
-  const brandName = company?.name || 'Catálogo';
+  const brandName = company?.name || 'Catalogo';
   const brandLogoUrl = resolveLogoUrl(company?.logo_url);
-  const brandSub = subtitle || [company?.city, company?.state].filter(Boolean).join(', ') || 'Catálogo público';
+  const brandSub = subtitle || [company?.city, company?.state].filter(Boolean).join(', ') || 'Catalogo publico';
   const hasContact = Boolean(company?.catalog_contact_url || company?.whatsapp);
+  const theme = resolveCatalogTheme(company);
+  const headerStyle: CSSProperties = {
+    backgroundColor: theme.headerBg,
+    color: theme.headerText,
+    borderBottomColor: theme.headerBorder,
+  };
+  const headerOutlineStyle: CSSProperties = {
+    borderColor: theme.headerBorder,
+    backgroundColor: theme.headerSurface,
+    color: theme.headerText,
+  };
+  const primaryStyle: CSSProperties = {
+    backgroundColor: theme.buttonBg,
+    color: theme.buttonText,
+  };
 
   return (
-    <header className={`${sticky ? 'sticky top-0' : ''} z-40 h-[68px] border-b border-white/20 bg-[#0f1b3d] text-white`}>
-      <div className="mx-auto flex h-full w-[min(1220px,calc(100%-40px))] items-center justify-between gap-4">
+    <header
+      className={`${sticky ? 'sticky top-0' : ''} z-40 h-[68px] border-b`}
+      style={headerStyle}
+    >
+      <div className="mx-auto flex h-full w-full max-w-[1400px] items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
         <div className="flex min-w-0 items-center gap-3">
           {showBack && (
             <button
@@ -100,22 +195,26 @@ export function CatalogTopNav({
                 className="h-8 w-8 shrink-0 rounded-full object-cover"
               />
             ) : (
-              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#3d8bef] text-xs font-bold">
+              <span
+                className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-bold"
+                style={primaryStyle}
+              >
                 {getInitials(brandName)}
               </span>
             )}
             <div className="min-w-0">
               <p className="truncate text-sm font-bold">{brandName}</p>
-              <p className="truncate text-xs text-white/75">{brandSub}</p>
+              <p className="truncate text-xs" style={{ color: theme.headerSubtle }}>{brandSub}</p>
             </div>
           </div>
         </div>
 
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
           {typeof cartCount === 'number' && onCartClick && (
             <button
               type="button"
-              className="inline-flex h-9 items-center gap-2 rounded-full border border-white/40 bg-white/10 px-4 text-sm font-medium"
+              className="inline-flex h-9 items-center gap-2 rounded-full border px-4 text-sm font-medium"
+              style={headerOutlineStyle}
               onClick={onCartClick}
             >
               <ShoppingCart size={14} />
@@ -126,7 +225,8 @@ export function CatalogTopNav({
           {showAccount && (
             <Link
               to={accountHref}
-              className="inline-flex h-9 items-center rounded-xl border border-white/45 px-4 text-sm font-semibold text-white hover:bg-white/10"
+              className="inline-flex h-9 items-center rounded-xl border px-4 text-sm font-semibold hover:opacity-90"
+              style={headerOutlineStyle}
             >
               {accountLabel}
             </Link>
@@ -135,7 +235,8 @@ export function CatalogTopNav({
           {showContact && hasContact && (
             <button
               type="button"
-              className="inline-flex h-9 items-center gap-2 rounded-xl bg-[#1a3a8f] px-4 text-sm font-semibold text-white hover:opacity-90"
+              className="inline-flex h-9 items-center gap-2 rounded-xl px-4 text-sm font-semibold hover:opacity-90"
+              style={primaryStyle}
               onClick={() => openCatalogContact(company)}
             >
               <MessageCircle size={14} />
@@ -149,6 +250,7 @@ export function CatalogTopNav({
 }
 
 type CatalogHeroProps = {
+  company?: CatalogChromeCompany | null;
   badge?: string;
   title: string;
   description?: string;
@@ -158,23 +260,34 @@ type CatalogHeroProps = {
   }>;
 };
 
-export function CatalogHero({ badge, title, description, metaItems = [] }: CatalogHeroProps) {
+export function CatalogHero({ company, badge, title, description, metaItems = [] }: CatalogHeroProps) {
+  const theme = resolveCatalogTheme(company);
+
   return (
-    <section className="relative overflow-hidden bg-[#1a3a8f] text-white">
+    <section
+      className="relative overflow-hidden"
+      style={{ background: theme.heroBackground, color: theme.heroText }}
+    >
       <div
         className="absolute inset-0 opacity-35"
-        style={{ backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.24) 1px, transparent 1px)', backgroundSize: '16px 16px' }}
+        style={{
+          backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.24) 1px, transparent 1px)',
+          backgroundSize: '16px 16px',
+        }}
       />
-      <div className="relative mx-auto w-[min(1220px,calc(100%-40px))] py-8">
+      <div className="relative mx-auto w-full max-w-[1400px] px-4 py-8 sm:px-6 lg:px-8">
         {badge && (
-          <p className="mb-3 inline-flex rounded-full bg-[#c9a84c] px-3 py-1 text-xs font-semibold text-[#2f2406]">
+          <p
+            className="mb-3 inline-flex rounded-full px-3 py-1 text-xs font-semibold"
+            style={{ backgroundColor: theme.badgeBg, color: theme.badgeText }}
+          >
             {badge}
           </p>
         )}
         <h1 className="text-[clamp(1.9rem,4vw,3rem)] font-extrabold leading-tight">{title}</h1>
-        {description && <p className="mt-2 text-sm text-white/85">{description}</p>}
+        {description && <p className="mt-2 max-w-3xl text-sm" style={{ color: theme.heroSubtle }}>{description}</p>}
         {metaItems.length > 0 && (
-          <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-sm text-white/90">
+          <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-sm" style={{ color: theme.heroSubtle }}>
             {metaItems.map((item) => {
               const Icon = item.icon === 'phone' ? Phone : item.icon === 'mail' ? Mail : MapPin;
               return (
@@ -204,15 +317,29 @@ export function CatalogFooter({
   accountHref = '/minha-conta/pedidos',
   accountLabel = 'Minha conta',
 }: CatalogFooterProps) {
-  const brandName = company?.name || 'Catálogo';
+  const brandName = company?.name || 'Catalogo';
   const brandLogoUrl = resolveLogoUrl(company?.logo_url);
-  const brandSub = [company?.city, company?.state].filter(Boolean).join(', ') || 'Catálogo público';
+  const brandSub = [company?.city, company?.state].filter(Boolean).join(', ') || 'Catalogo publico';
   const hasContact = Boolean(company?.catalog_contact_url || company?.whatsapp);
   const catalogPath = resolveCatalogPath(company);
+  const theme = resolveCatalogTheme(company);
+  const footerStyle: CSSProperties = {
+    backgroundColor: theme.footerBg,
+    color: theme.footerText,
+  };
+  const footerOutlineStyle: CSSProperties = {
+    borderColor: theme.footerBorder,
+    backgroundColor: theme.footerSurface,
+    color: theme.footerText,
+  };
+  const primaryStyle: CSSProperties = {
+    backgroundColor: theme.buttonBg,
+    color: theme.buttonText,
+  };
 
   return (
-    <footer className="mt-12 bg-[#0f1b3d] text-white">
-      <div className="mx-auto flex w-[min(1220px,calc(100%-40px))] flex-wrap items-center justify-between gap-4 py-6">
+    <footer className="mt-12" style={footerStyle}>
+      <div className="mx-auto flex w-full max-w-[1400px] flex-wrap items-center justify-between gap-4 px-4 py-6 sm:px-6 lg:px-8">
         <div className="flex min-w-0 items-center gap-3">
           {brandLogoUrl ? (
             <img
@@ -221,13 +348,16 @@ export function CatalogFooter({
               className="h-8 w-8 shrink-0 rounded-full object-cover"
             />
           ) : (
-            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#3d8bef] text-xs font-bold">
+            <span
+              className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-bold"
+              style={primaryStyle}
+            >
               {getInitials(brandName)}
             </span>
           )}
           <div className="min-w-0">
             <p className="truncate text-sm font-bold">{brandName}</p>
-            <p className="truncate text-xs text-white/75">{brandSub}</p>
+            <p className="truncate text-xs" style={{ color: theme.footerSubtle }}>{brandSub}</p>
           </div>
         </div>
 
@@ -235,7 +365,8 @@ export function CatalogFooter({
           {company?.phone && (
             <a
               href={`tel:${company.phone}`}
-              className="inline-flex h-10 items-center gap-2 rounded-xl border border-white/45 px-4 text-sm font-semibold text-white hover:bg-white/10"
+              className="inline-flex h-10 items-center gap-2 rounded-xl border px-4 text-sm font-semibold hover:opacity-90"
+              style={footerOutlineStyle}
             >
               <Phone size={14} />
               Ligar
@@ -244,7 +375,8 @@ export function CatalogFooter({
           {company?.email && (
             <a
               href={`mailto:${company.email}`}
-              className="inline-flex h-10 items-center gap-2 rounded-xl border border-white/45 px-4 text-sm font-semibold text-white hover:bg-white/10"
+              className="inline-flex h-10 items-center gap-2 rounded-xl border px-4 text-sm font-semibold hover:opacity-90"
+              style={footerOutlineStyle}
             >
               <Mail size={14} />
               E-mail
@@ -253,7 +385,8 @@ export function CatalogFooter({
           {hasContact && (
             <button
               type="button"
-              className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#3d8bef] px-4 text-sm font-semibold text-white hover:opacity-90"
+              className="inline-flex h-10 items-center gap-2 rounded-xl px-4 text-sm font-semibold hover:opacity-90"
+              style={primaryStyle}
               onClick={() => openCatalogContact(company)}
             >
               <MessageCircle size={14} />
@@ -263,7 +396,8 @@ export function CatalogFooter({
           {showAccount && (
             <Link
               to={accountHref}
-              className="inline-flex h-10 items-center rounded-xl border border-white/45 px-4 text-sm font-semibold text-white hover:bg-white/10"
+              className="inline-flex h-10 items-center rounded-xl border px-4 text-sm font-semibold hover:opacity-90"
+              style={footerOutlineStyle}
             >
               {accountLabel}
             </Link>
@@ -271,7 +405,8 @@ export function CatalogFooter({
           {!showAccount && (
             <Link
               to={catalogPath}
-              className="inline-flex h-10 items-center rounded-xl border border-white/45 px-4 text-sm font-semibold text-white hover:bg-white/10"
+              className="inline-flex h-10 items-center rounded-xl border px-4 text-sm font-semibold hover:opacity-90"
+              style={footerOutlineStyle}
             >
               Ver catálogo
             </Link>

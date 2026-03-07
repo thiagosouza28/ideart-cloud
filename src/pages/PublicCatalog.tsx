@@ -16,6 +16,7 @@ import {
 import { publicSupabase as supabase } from '@/integrations/supabase/public-client';
 import { useCustomerAuth } from '@/hooks/use-customer-auth';
 import { PUBLIC_CART_UPDATED_EVENT, getPublicCartItemsCount } from '@/lib/public-cart';
+import { loadPublicCatalogCompany } from '@/lib/publicCatalogCompany';
 import { ensurePublicStorageUrl } from '@/lib/storage';
 import { normalizeProductionTimeDays } from '@/lib/productionTime';
 import { isPromotionActive, resolveProductBasePrice, resolveProductPrice } from '@/lib/pricing';
@@ -30,6 +31,9 @@ interface Company extends Omit<DatabaseCompany, 'catalog_contact_url' | 'whatsap
   catalog_button_text?: string | null;
   catalog_show_prices?: boolean | null;
   catalog_show_contact?: boolean | null;
+  catalog_primary_color?: string | null;
+  catalog_secondary_color?: string | null;
+  catalog_text_color?: string | null;
   catalog_contact_url?: string;
   whatsapp?: string;
 }
@@ -47,19 +51,37 @@ const pageStyles = `
   --pc-blue: #1a3a8f;
   --pc-accent: #3d8bef;
   --pc-gold: #c9a84c;
+  --pc-header-bg: #0f1b3d;
+  --pc-header-text: #ffffff;
+  --pc-footer-bg: #0f1b3d;
+  --pc-footer-text: #ffffff;
+  --pc-button-bg: #1a3a8f;
+  --pc-button-text: #ffffff;
+  --pc-button-outline: #1a3a8f;
+  --pc-badge-bg: #c9a84c;
+  --pc-badge-text: #2f2406;
+  --pc-card-bg: #ffffff;
+  --pc-card-border: #e2e7f5;
+  --pc-filter-bg: #1a3a8f;
+  --pc-filter-text: #ffffff;
+  --pc-price: #1a3a8f;
   --pc-light: #f4f6fb;
   --pc-white: #ffffff;
   --pc-muted: #7a8299;
   --pc-border: #e2e7f5;
+  --pc-text: #0f1b3d;
   min-height: 100vh;
   background: var(--pc-light);
-  color: var(--pc-navy);
+  color: var(--pc-text);
   font-family: inherit;
 }
 
 .pc-container {
-  width: min(1220px, calc(100% - 40px));
+  width: 100%;
+  max-width: 1400px;
   margin: 0 auto;
+  padding-left: 24px;
+  padding-right: 24px;
 }
 
 .pc-nav {
@@ -67,9 +89,9 @@ const pageStyles = `
   top: 0;
   z-index: 60;
   height: 68px;
-  background: var(--pc-navy);
-  color: var(--pc-white);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+  background: var(--pc-header-bg);
+  color: var(--pc-header-text);
+  border-bottom: 1px solid color-mix(in srgb, var(--pc-header-text) 18%, transparent);
   animation: pc-fade-down 0.55s ease both;
 }
 
@@ -91,7 +113,7 @@ const pageStyles = `
 .pc-back-btn {
   border: 0;
   background: transparent;
-  color: var(--pc-white);
+  color: var(--pc-header-text);
   font-family: inherit;
   font-size: 15px;
   font-weight: 500;
@@ -118,8 +140,8 @@ const pageStyles = `
   width: 34px;
   height: 34px;
   border-radius: 999px;
-  background: var(--pc-accent);
-  color: var(--pc-white);
+  background: var(--pc-button-bg);
+  color: var(--pc-button-text);
   display: grid;
   place-items: center;
   font-size: 14px;
@@ -147,7 +169,7 @@ const pageStyles = `
 
 .pc-brand-sub {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.75);
+  color: color-mix(in srgb, var(--pc-header-text) 74%, transparent);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -163,9 +185,9 @@ const pageStyles = `
 .pc-cart-chip {
   height: 36px;
   border-radius: 50px;
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--pc-white);
+  border: 1px solid color-mix(in srgb, var(--pc-header-text) 36%, transparent);
+  background: color-mix(in srgb, var(--pc-header-text) 10%, transparent);
+  color: var(--pc-header-text);
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -180,8 +202,8 @@ const pageStyles = `
   height: 36px;
   border: 0;
   border-radius: 12px;
-  background: var(--pc-blue);
-  color: var(--pc-white);
+  background: var(--pc-button-bg);
+  color: var(--pc-button-text);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -197,10 +219,10 @@ const pageStyles = `
 
 .pc-account-btn {
   height: 36px;
-  border: 1px solid rgba(255, 255, 255, 0.45);
+  border: 1px solid color-mix(in srgb, var(--pc-header-text) 40%, transparent);
   border-radius: 12px;
-  background: transparent;
-  color: var(--pc-white);
+  background: color-mix(in srgb, var(--pc-header-text) 8%, transparent);
+  color: var(--pc-header-text);
   font-family: inherit;
   font-size: 14px;
   font-weight: 600;
@@ -220,8 +242,8 @@ const pageStyles = `
 .pc-hero {
   position: relative;
   overflow: hidden;
-  background: var(--pc-blue);
-  color: var(--pc-white);
+  background: linear-gradient(135deg, var(--pc-header-bg) 0%, var(--pc-blue) 100%);
+  color: var(--pc-header-text);
   animation: pc-fade-down 0.72s ease both;
 }
 
@@ -258,8 +280,8 @@ const pageStyles = `
   align-items: center;
   height: 28px;
   border-radius: 50px;
-  background: var(--pc-gold);
-  color: #2f2406;
+  background: var(--pc-badge-bg);
+  color: var(--pc-badge-text);
   font-size: 12px;
   font-weight: 500;
   padding: 0 12px;
@@ -278,7 +300,7 @@ const pageStyles = `
   max-width: 820px;
   font-size: 15px;
   font-weight: 300;
-  color: rgba(255, 255, 255, 0.88);
+  color: color-mix(in srgb, var(--pc-header-text) 88%, transparent);
   margin-bottom: 14px;
 }
 
@@ -293,14 +315,14 @@ const pageStyles = `
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  color: rgba(255, 255, 255, 0.95);
+  color: color-mix(in srgb, var(--pc-header-text) 94%, transparent);
 }
 
 .pc-toolbar-wrap {
   position: sticky;
   top: 68px;
   z-index: 45;
-  background: var(--pc-white);
+  background: var(--pc-card-bg);
   border-bottom: 1px solid var(--pc-border);
   animation: pc-fade-down 0.8s ease both;
 }
@@ -323,9 +345,9 @@ const pageStyles = `
 .pc-tab {
   height: 38px;
   border-radius: 50px;
-  border: 1px solid var(--pc-border);
-  background: var(--pc-white);
-  color: var(--pc-blue);
+  border: 1px solid var(--pc-card-border);
+  background: var(--pc-card-bg);
+  color: var(--pc-text);
   font-family: inherit;
   font-size: 14px;
   font-weight: 500;
@@ -339,9 +361,9 @@ const pageStyles = `
 }
 
 .pc-tab.active {
-  background: var(--pc-blue);
-  border-color: var(--pc-blue);
-  color: var(--pc-white);
+  background: var(--pc-filter-bg);
+  border-color: var(--pc-filter-bg);
+  color: var(--pc-filter-text);
 }
 
 .pc-toolbar-actions {
@@ -356,17 +378,17 @@ const pageStyles = `
   gap: 8px;
   height: 40px;
   border-radius: 10px;
-  border: 1px solid var(--pc-border);
-  background: var(--pc-white);
+  border: 1px solid var(--pc-card-border);
+  background: var(--pc-card-bg);
   padding: 0 10px;
-  color: var(--pc-blue);
+  color: var(--pc-text);
 }
 
 .pc-sort-select {
   border: 0;
   outline: none;
   background: transparent;
-  color: var(--pc-blue);
+  color: var(--pc-text);
   font-family: inherit;
   font-size: 14px;
   font-weight: 500;
@@ -376,17 +398,17 @@ const pageStyles = `
 
 .pc-view-toggle {
   display: inline-flex;
-  border: 1px solid var(--pc-border);
+  border: 1px solid var(--pc-card-border);
   border-radius: 12px;
   overflow: hidden;
-  background: var(--pc-white);
+  background: var(--pc-card-bg);
 }
 
 .pc-view-btn {
   width: 40px;
   height: 40px;
   border: 0;
-  border-left: 1px solid var(--pc-border);
+  border-left: 1px solid var(--pc-card-border);
   background: transparent;
   color: var(--pc-muted);
   display: inline-flex;
@@ -405,8 +427,8 @@ const pageStyles = `
 }
 
 .pc-view-btn.active {
-  background: var(--pc-blue);
-  color: var(--pc-white);
+  background: var(--pc-filter-bg);
+  color: var(--pc-filter-text);
 }
 
 .pc-main {
@@ -418,7 +440,7 @@ const pageStyles = `
   min-height: 320px;
   border: 1px dashed var(--pc-border);
   border-radius: 14px;
-  background: var(--pc-white);
+  background: var(--pc-card-bg);
   display: grid;
   place-items: center;
   text-align: center;
@@ -429,8 +451,8 @@ const pageStyles = `
   width: 68px;
   height: 68px;
   border-radius: 14px;
-  background: var(--pc-blue);
-  color: var(--pc-white);
+  background: var(--pc-button-bg);
+  color: var(--pc-button-text);
   display: grid;
   place-items: center;
   margin: 0 auto 14px;
@@ -453,8 +475,8 @@ const pageStyles = `
   height: 40px;
   border-radius: 12px;
   border: 0;
-  background: var(--pc-blue);
-  color: var(--pc-white);
+  background: var(--pc-button-bg);
+  color: var(--pc-button-text);
   font-family: inherit;
   font-size: 14px;
   font-weight: 500;
@@ -469,8 +491,9 @@ const pageStyles = `
 
 .pc-products {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
   gap: 16px;
+  align-items: start;
 }
 
 .pc-products.pc-list {
@@ -483,16 +506,22 @@ const pageStyles = `
   color: inherit;
   display: flex;
   flex-direction: column;
-  background: var(--pc-white);
-  border: 1px solid var(--pc-border);
+  background: var(--pc-card-bg);
+  border: 1px solid var(--pc-card-border);
   border-radius: 14px;
   overflow: hidden;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
+  min-width: 0;
 }
 
 .pc-product-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 10px 22px rgba(15, 27, 61, 0.08);
+}
+
+.pc-products:not(.pc-list) .pc-product-card {
+  width: 100%;
+  max-width: 360px;
 }
 
 .pc-products.pc-list .pc-product-card {
@@ -502,9 +531,9 @@ const pageStyles = `
 .pc-image {
   position: relative;
   width: 100%;
-  aspect-ratio: 4 / 3;
+  height: clamp(220px, 24vw, 260px);
   background: #ecf2ff;
-  border-bottom: 1px solid var(--pc-border);
+  border-bottom: 1px solid var(--pc-card-border);
   display: grid;
   place-items: center;
   overflow: hidden;
@@ -516,13 +545,19 @@ const pageStyles = `
   height: 120px;
   aspect-ratio: auto;
   border-bottom: 0;
-  border-right: 1px solid var(--pc-border);
+  border-right: 1px solid var(--pc-card-border);
 }
 
 .pc-image img {
   width: 100%;
   height: 100%;
+  object-fit: contain;
+  padding: 16px;
+}
+
+.pc-products.pc-list .pc-image img {
   object-fit: cover;
+  padding: 0;
 }
 
 .pc-image-fallback {
@@ -534,8 +569,8 @@ const pageStyles = `
   left: 10px;
   top: 10px;
   border-radius: 50px;
-  background: var(--pc-gold);
-  color: #2f2406;
+  background: var(--pc-badge-bg);
+  color: var(--pc-badge-text);
   font-size: 11px;
   font-weight: 700;
   display: inline-flex;
@@ -573,9 +608,9 @@ const pageStyles = `
   height: 20px;
   border-radius: 999px;
   padding: 0 8px;
-  background: rgba(201, 168, 76, 0.18);
-  border: 1px solid rgba(201, 168, 76, 0.5);
-  color: #775f1f;
+  background: color-mix(in srgb, var(--pc-badge-bg) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--pc-badge-bg) 48%, transparent);
+  color: var(--pc-badge-bg);
   font-size: 11px;
   font-weight: 700;
 }
@@ -615,7 +650,7 @@ const pageStyles = `
 }
 
 .pc-price-main {
-  color: var(--pc-blue);
+  color: var(--pc-price);
   font-size: 1rem;
   font-weight: 700;
 }
@@ -623,8 +658,8 @@ const pageStyles = `
 .pc-buy-pill {
   height: 36px;
   border-radius: 12px;
-  background: var(--pc-blue);
-  color: var(--pc-white);
+  background: var(--pc-button-bg);
+  color: var(--pc-button-text);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -635,8 +670,8 @@ const pageStyles = `
 }
 
 .pc-footer {
-  background: var(--pc-navy);
-  color: var(--pc-white);
+  background: var(--pc-footer-bg);
+  color: var(--pc-footer-text);
   padding-top: 24px;
 }
 
@@ -646,7 +681,7 @@ const pageStyles = `
   justify-content: space-between;
   gap: 16px;
   padding-bottom: 20px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.18);
+  border-bottom: 1px solid color-mix(in srgb, var(--pc-footer-text) 18%, transparent);
 }
 
 .pc-footer-actions {
@@ -677,20 +712,20 @@ const pageStyles = `
 }
 
 .pc-footer-btn-outline {
-  border: 1px solid rgba(255, 255, 255, 0.58);
-  color: var(--pc-white);
-  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--pc-footer-text) 38%, transparent);
+  color: var(--pc-footer-text);
+  background: color-mix(in srgb, var(--pc-footer-text) 8%, transparent);
 }
 
 .pc-footer-btn-primary {
   border: 0;
-  color: var(--pc-white);
-  background: var(--pc-accent);
+  color: var(--pc-button-text);
+  background: var(--pc-button-bg);
 }
 
 .pc-footer-copy {
   text-align: center;
-  color: rgba(255, 255, 255, 0.68);
+  color: color-mix(in srgb, var(--pc-footer-text) 66%, transparent);
   font-size: 13px;
   padding: 15px 0 18px;
 }
@@ -710,8 +745,8 @@ const pageStyles = `
 
 .pc-not-found-card {
   width: min(560px, calc(100% - 24px));
-  background: var(--pc-white);
-  border: 1px solid var(--pc-border);
+  background: var(--pc-card-bg);
+  border: 1px solid var(--pc-card-border);
   border-radius: 14px;
   padding: 22px;
   text-align: center;
@@ -733,8 +768,8 @@ const pageStyles = `
   height: 40px;
   border-radius: 12px;
   border: 0;
-  background: var(--pc-blue);
-  color: var(--pc-white);
+  background: var(--pc-button-bg);
+  color: var(--pc-button-text);
   font-family: inherit;
   font-size: 14px;
   font-weight: 500;
@@ -758,10 +793,6 @@ const pageStyles = `
 }
 
 @media (max-width: 980px) {
-  .pc-container {
-    width: min(1220px, calc(100% - 24px));
-  }
-
   .pc-toolbar {
     flex-direction: column;
     align-items: stretch;
@@ -783,7 +814,8 @@ const pageStyles = `
 
 @media (max-width: 720px) {
   .pc-container {
-    width: calc(100% - 16px);
+    padding-left: 16px;
+    padding-right: 16px;
   }
 
   .pc-brand-sub {
@@ -871,86 +903,19 @@ export default function PublicCatalog() {
       setLoading(true);
       setNotFound(false);
 
-      let companyQuery = supabase.from('companies').select('*').eq('is_active', true);
-      if (resolvedCompanyId) {
-        companyQuery = companyQuery.eq('id', resolvedCompanyId);
-      } else if (resolvedSlug) {
-        companyQuery = companyQuery.eq('slug', resolvedSlug);
-      }
+      const companyData = await loadPublicCatalogCompany({
+        slug: resolvedSlug,
+        companyId: resolvedCompanyId,
+      });
 
-      const { data: companyData, error: companyError } = await companyQuery.maybeSingle();
-
-      if (
-        (!companyData || companyError) &&
-        !resolvedCompanyId &&
-        resolvedSlug &&
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(resolvedSlug)
-      ) {
-        const fallbackResult = await supabase
-          .from('companies')
-          .select('*')
-          .eq('id', resolvedSlug)
-          .eq('is_active', true)
-          .maybeSingle();
-
-        if (!fallbackResult.error && fallbackResult.data) {
-          const normalizedCompany: Company = {
-            ...(fallbackResult.data as Company),
-            logo_url: ensurePublicStorageUrl('product-images', fallbackResult.data.logo_url),
-          };
-
-          setCompany(normalizedCompany);
-          setViewMode(normalizedCompany.catalog_layout === 'list' ? 'list' : 'grid');
-
-          const { data: productsData } = await supabase
-            .from('products')
-            .select('*, category:categories(name)')
-            .eq('company_id', fallbackResult.data.id)
-            .or('catalog_enabled.is.true,show_in_catalog.is.true')
-            .eq('is_active', true)
-            .order('catalog_sort_order', { ascending: true })
-            .order('name', { ascending: true });
-
-          const mappedProducts = ((productsData || []) as unknown as ProductWithCategory[]).map((product) => ({
-            ...product,
-            image_url: ensurePublicStorageUrl('product-images', product.image_url),
-          }));
-
-          setProducts(mappedProducts);
-
-          const uniqueCategoryIds = [
-            ...new Set(mappedProducts.map((item) => item.category_id).filter(Boolean)),
-          ] as string[];
-          if (uniqueCategoryIds.length > 0) {
-            const { data: categoriesData } = await supabase
-              .from('categories')
-              .select('*')
-              .in('id', uniqueCategoryIds)
-              .order('name', { ascending: true });
-
-            setCategories((categoriesData || []) as Category[]);
-          } else {
-            setCategories([]);
-          }
-
-          setLoading(false);
-          return;
-        }
-      }
-
-      if (companyError || !companyData) {
+      if (!companyData) {
         setNotFound(true);
         setLoading(false);
         return;
       }
 
-      const normalizedCompany: Company = {
-        ...(companyData as Company),
-        logo_url: ensurePublicStorageUrl('product-images', companyData.logo_url),
-      };
-
-      setCompany(normalizedCompany);
-      setViewMode(normalizedCompany.catalog_layout === 'list' ? 'list' : 'grid');
+      setCompany(companyData as Company);
+      setViewMode(companyData.catalog_layout === 'list' ? 'list' : 'grid');
 
       const { data: productsData } = await supabase
         .from('products')
@@ -1078,6 +1043,30 @@ export default function PublicCatalog() {
   const showPrices = company?.catalog_show_prices ?? true;
   const showContact = company?.catalog_show_contact ?? true;
   const buttonText = company?.catalog_button_text || 'Fazer Pedido';
+  const catalogThemeStyle = {
+    ['--pc-light' as const]: `color-mix(in srgb, ${company?.catalog_header_bg_color || company?.catalog_secondary_color || '#0f1b3d'} 10%, #f4f6fb)`,
+    ['--pc-muted' as const]: `color-mix(in srgb, ${company?.catalog_text_color || '#0f1b3d'} 54%, #94a3b8)`,
+    ['--pc-blue' as const]: company?.catalog_primary_color || company?.catalog_button_bg_color || '#1a3a8f',
+    ['--pc-accent' as const]: company?.catalog_accent_color || company?.catalog_badge_bg_color || '#3d8bef',
+    ['--pc-navy' as const]: company?.catalog_secondary_color || company?.catalog_header_bg_color || '#0f1b3d',
+    ['--pc-text' as const]: company?.catalog_text_color || '#0f1b3d',
+    ['--pc-header-bg' as const]: company?.catalog_header_bg_color || company?.catalog_secondary_color || '#0f1b3d',
+    ['--pc-header-text' as const]: company?.catalog_header_text_color || '#ffffff',
+    ['--pc-footer-bg' as const]: company?.catalog_footer_bg_color || company?.catalog_secondary_color || '#0f1b3d',
+    ['--pc-footer-text' as const]: company?.catalog_footer_text_color || '#ffffff',
+    ['--pc-button-bg' as const]: company?.catalog_button_bg_color || company?.catalog_primary_color || '#1a3a8f',
+    ['--pc-button-text' as const]: company?.catalog_button_text_color || '#ffffff',
+    ['--pc-button-outline' as const]:
+      company?.catalog_button_outline_color || company?.catalog_button_bg_color || company?.catalog_primary_color || '#1a3a8f',
+    ['--pc-badge-bg' as const]: company?.catalog_badge_bg_color || company?.catalog_accent_color || '#c9a84c',
+    ['--pc-badge-text' as const]: company?.catalog_badge_text_color || '#2f2406',
+    ['--pc-card-bg' as const]: company?.catalog_card_bg_color || '#ffffff',
+    ['--pc-card-border' as const]: company?.catalog_card_border_color || '#e2e7f5',
+    ['--pc-filter-bg' as const]: company?.catalog_filter_bg_color || company?.catalog_button_bg_color || company?.catalog_primary_color || '#1a3a8f',
+    ['--pc-filter-text' as const]: company?.catalog_filter_text_color || '#ffffff',
+    ['--pc-price' as const]: company?.catalog_price_color || company?.catalog_accent_color || company?.catalog_primary_color || '#1a3a8f',
+    ['--pc-border' as const]: company?.catalog_card_border_color || '#e2e7f5',
+  } as any;
   const resetCategory = () => setSelectedCategory(null);
   const openHome = () => navigate('/catalogo');
   const catalogPath = company
@@ -1110,7 +1099,7 @@ export default function PublicCatalog() {
 
   if (loading) {
     return (
-      <div className="pc-page">
+      <div className="pc-page" style={catalogThemeStyle}>
         <style>{pageStyles}</style>
         <div className="pc-loading">
           <p className="pc-loading-text">Carregando catálogo...</p>
@@ -1121,7 +1110,7 @@ export default function PublicCatalog() {
 
   if (notFound) {
     return (
-      <div className="pc-page">
+      <div className="pc-page" style={catalogThemeStyle}>
         <style>{pageStyles}</style>
         <div className="pc-not-found">
           <div className="pc-not-found-card">
@@ -1132,7 +1121,7 @@ export default function PublicCatalog() {
               className="pc-not-found-btn"
               onClick={openHome}
             >
-              Voltar ao inicio
+              Voltar ao início
             </button>
           </div>
         </div>
@@ -1141,7 +1130,7 @@ export default function PublicCatalog() {
   }
 
   return (
-    <div className="pc-page">
+    <div className="pc-page" style={catalogThemeStyle}>
       <style>{pageStyles}</style>
 
       <nav className="pc-nav">
@@ -1347,7 +1336,7 @@ export default function PublicCatalog() {
                       </p>
                       {productionTimeDays !== null && (
                         <p className="mt-1 text-xs text-slate-500">
-                          Tempo de producao: {productionTimeDays}{' '}
+                          Tempo de produção: {productionTimeDays}{' '}
                           {productionTimeDays === 1 ? 'dia' : 'dias'}
                         </p>
                       )}

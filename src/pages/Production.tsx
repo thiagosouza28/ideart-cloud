@@ -8,12 +8,14 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Label } from '@/components/ui/label';
 import { supabase } from '@/integrations/supabase/client';
 import { Order } from '@/types/database';
-import { updateOrderStatus } from '@/services/orders';
+import { updateOrderStatus, uploadOrderFinalPhoto } from '@/services/orders';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import { CheckCircle, Clock, Eye, Package, Search, Upload, X } from 'lucide-react';
 import { buildOrderDetailsPath } from '@/lib/orderRouting';
+import { stripPendingCustomerInfoNotes } from '@/lib/orderMetadata';
+import { extractVisibleOrderNotes } from '@/lib/orderNotes';
 
 export default function Production() {
   const [orders, setOrders] = useState<Order[]>([]);
@@ -28,6 +30,11 @@ export default function Production() {
   const { user } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
+
+  const getDisplayNotes = (order: Order) =>
+    extractVisibleOrderNotes(
+      order.status === 'pendente' ? order.notes : stripPendingCustomerInfoNotes(order.notes),
+    );
 
   useEffect(() => {
     fetchOrders();
@@ -115,38 +122,21 @@ export default function Production() {
     if (files.length === 0) return [];
 
     const uploadedPaths: string[] = [];
-    const bucket = 'order-final-photos';
-
-    for (const file of files) {
-      const extension = file.name.split('.').pop() || 'jpg';
-      const token = typeof crypto !== 'undefined' && 'randomUUID' in crypto
-        ? crypto.randomUUID()
-        : `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      const path = `orders/${orderId}/${token}.${extension}`;
-
-      const { error } = await supabase.storage
-        .from(bucket)
-        .upload(path, file, { upsert: true, contentType: file.type });
-
-      if (error) {
-        await supabase.storage.from(bucket).remove(uploadedPaths);
-        throw error;
+    try {
+      for (const file of files) {
+        const photo = await uploadOrderFinalPhoto(orderId, file, user?.id || null);
+        uploadedPaths.push(photo.storage_path);
       }
-
-      uploadedPaths.push(path);
-    }
-
-    const { error: insertError } = await supabase.from('order_final_photos' as any).insert(
-      uploadedPaths.map((path) => ({
-        order_id: orderId,
-        storage_path: path,
-        created_by: user.id || null,
-      })),
-    );
-
-    if (insertError) {
-      await supabase.storage.from(bucket).remove(uploadedPaths);
-      throw insertError;
+    } catch (error) {
+      if (uploadedPaths.length > 0) {
+        await supabase
+          .from('order_final_photos' as any)
+          .delete()
+          .eq('order_id', orderId)
+          .in('storage_path', uploadedPaths);
+        await supabase.storage.from('order-final-photos').remove(uploadedPaths);
+      }
+      throw error;
     }
 
     return uploadedPaths;
@@ -284,9 +274,9 @@ export default function Production() {
                         <span className="text-muted-foreground">Total:</span>{' '}
                         <span className="font-medium">{formatCurrency(Number(order.total))}</span>
                       </div>
-                      {order.notes && (
+                      {getDisplayNotes(order) && (
                         <div className="text-sm bg-muted p-2 rounded">
-                          <span className="text-muted-foreground">Obs:</span> {order.notes}
+                          <span className="text-muted-foreground">Obs:</span> {getDisplayNotes(order)}
                         </div>
                       )}
                       <div className="grid gap-2">
@@ -332,9 +322,9 @@ export default function Production() {
                         <span className="text-muted-foreground">Total:</span>{' '}
                         <span className="font-medium">{formatCurrency(Number(order.total))}</span>
                       </div>
-                      {order.notes && (
+                      {getDisplayNotes(order) && (
                         <div className="text-sm bg-muted p-2 rounded">
-                          <span className="text-muted-foreground">Obs:</span> {order.notes}
+                          <span className="text-muted-foreground">Obs:</span> {getDisplayNotes(order)}
                         </div>
                       )}
                       <div className="grid gap-2">
@@ -384,9 +374,9 @@ export default function Production() {
                         <span className="text-muted-foreground">Total:</span>{' '}
                         <span className="font-medium">{formatCurrency(Number(order.total))}</span>
                       </div>
-                      {order.notes && (
+                      {getDisplayNotes(order) && (
                         <div className="text-sm bg-muted p-2 rounded">
-                          <span className="text-muted-foreground">Obs:</span> {order.notes}
+                          <span className="text-muted-foreground">Obs:</span> {getDisplayNotes(order)}
                         </div>
                       )}
                       <div className="grid gap-2">
@@ -436,9 +426,9 @@ export default function Production() {
                         <span className="text-muted-foreground">Total:</span>{' '}
                         <span className="font-medium">{formatCurrency(Number(order.total))}</span>
                       </div>
-                      {order.notes && (
+                      {getDisplayNotes(order) && (
                         <div className="text-sm bg-muted p-2 rounded">
-                          <span className="text-muted-foreground">Obs:</span> {order.notes}
+                          <span className="text-muted-foreground">Obs:</span> {getDisplayNotes(order)}
                         </div>
                       )}
                       <div className="grid gap-2">

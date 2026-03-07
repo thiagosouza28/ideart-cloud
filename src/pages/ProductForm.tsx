@@ -2082,7 +2082,7 @@ export default function ProductForm() {
                     <p className="text-xs text-destructive">{errors.production_time_days}</p>
                   ) : (
                     <p className="text-xs text-muted-foreground">
-                      Defina em dias corridos. Esse prazo sera exibido no catalogo e no pedido.
+                      Defina em dias corridos. Esse prazo será exibido no catálogo e no pedido.
                     </p>
                   )}
                 </div>

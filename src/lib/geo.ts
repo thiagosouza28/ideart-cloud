@@ -24,8 +24,7 @@ export const isValidCoordinate = (value: unknown) =>
   typeof value === 'number' && Number.isFinite(value);
 
 export const formatKmDistance = (value?: number | null) => {
-  if (typeof value !== 'number' || Number.isNaN(value)) return 'Distancia indisponivel';
+  if (typeof value !== 'number' || Number.isNaN(value)) return 'Distância indisponível';
   if (value < 1) return `${Math.round(value * 1000)} m`;
   return `${value.toFixed(1)} km`;
 };
-

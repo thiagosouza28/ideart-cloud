@@ -116,7 +116,7 @@ Deno.serve(async (req) => {
   }
 
   if (req.method !== "GET" && req.method !== "PATCH") {
-    return jsonResponse(corsHeaders, 405, { error: "Metodo invalido" });
+    return jsonResponse(corsHeaders, 405, { error: "Método inválido" });
   }
 
   try {
@@ -130,7 +130,7 @@ Deno.serve(async (req) => {
     const { data: authData, error: authError } = await supabase.auth.getUser(token);
 
     if (authError || !authData.user) {
-      return jsonResponse(corsHeaders, 401, { error: "Sessao invalida" });
+      return jsonResponse(corsHeaders, 401, { error: "Sessão inválida" });
     }
 
     const userId = authData.user.id;
@@ -162,7 +162,7 @@ Deno.serve(async (req) => {
 
     const companyId = profileData?.company_id ?? null;
     if (!companyId) {
-      return jsonResponse(corsHeaders, 400, { error: "Empresa nao encontrada" });
+      return jsonResponse(corsHeaders, 400, { error: "Empresa não encontrada" });
     }
 
     if (req.method === "GET") {
@@ -187,7 +187,7 @@ Deno.serve(async (req) => {
 
       const company = companyResult.data;
       if (!company) {
-        return jsonResponse(corsHeaders, 404, { error: "Empresa nao encontrada" });
+        return jsonResponse(corsHeaders, 404, { error: "Empresa não encontrada" });
       }
 
       const mpToken = normalizeNullableText(tokensResult.data?.mp_access_token);
@@ -211,7 +211,7 @@ Deno.serve(async (req) => {
     const body = (await req.json().catch(() => ({}))) as PaymentSettingsPayload;
 
     if (body.pix_gateway !== undefined && body.pix_gateway !== null && !PIX_GATEWAYS.has(body.pix_gateway)) {
-      return jsonResponse(corsHeaders, 400, { error: "Gateway PIX invalido" });
+      return jsonResponse(corsHeaders, 400, { error: "Gateway PIX inválido" });
     }
 
     if (
@@ -219,7 +219,7 @@ Deno.serve(async (req) => {
       body.pix_key_type !== null &&
       !PIX_KEY_TYPES.has(body.pix_key_type)
     ) {
-      return jsonResponse(corsHeaders, 400, { error: "Tipo de chave PIX invalido" });
+      return jsonResponse(corsHeaders, 400, { error: "Tipo de chave PIX inválido" });
     }
 
     const tokenChangeRequested =
@@ -345,7 +345,7 @@ Deno.serve(async (req) => {
 
     if (companyResult.error || !companyResult.data) {
       return jsonResponse(corsHeaders, 400, {
-        error: companyResult.error?.message || "Falha ao carregar configuracao",
+        error: companyResult.error?.message || "Falha ao carregar configuração",
       });
     }
 

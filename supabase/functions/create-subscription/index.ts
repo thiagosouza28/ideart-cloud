@@ -110,7 +110,7 @@ serve(async (req) => {
       .eq('is_active', true)
       .maybeSingle();
     if (!plan || !plan.cakto_plan_id) {
-      return jsonResponse(corsHeaders, 400, { error: 'Plano inativo, excluido ou nao vinculado ao CAKTO' });
+      return jsonResponse(corsHeaders, 400, { error: 'Plano inativo, excluído ou não vinculado ao CAKTO' });
     }
 
     const checkoutUrl = buildCheckoutUrl(plan.cakto_plan_id);

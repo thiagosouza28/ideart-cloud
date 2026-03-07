@@ -121,7 +121,7 @@ serve(async (req) => {
     if (isSuperAdmin) {
       targetCompanyId = requestedCompanyId ?? requesterCompanyId;
       if (!targetCompanyId) {
-        return jsonResponse(corsHeaders, 400, { error: "company_id e obrigatorio para super admin" });
+        return jsonResponse(corsHeaders, 400, { error: "company_id é obrigatório para super admin" });
       }
     } else {
       if (!requesterCompanyId) {

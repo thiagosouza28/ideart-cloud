@@ -103,7 +103,7 @@ serve(async (req) => {
       .maybeSingle();
 
     if (!plan?.cakto_plan_id) {
-      return jsonResponse(corsHeaders, 400, { error: "Plano inativo, excluido ou indisponivel para CAKTO" });
+      return jsonResponse(corsHeaders, 400, { error: "Plano inativo, excluído ou indisponível para CAKTO" });
     }
 
     const { data: existingCheckout } = await supabase

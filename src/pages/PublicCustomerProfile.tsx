@@ -4,11 +4,16 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { CatalogFooter, CatalogHero, CatalogTopNav } from '@/components/catalog/PublicCatalogChrome';
+import {
+  CatalogFooter,
+  CatalogHero,
+  CatalogTopNav,
+  type CatalogChromeCompany,
+} from '@/components/catalog/PublicCatalogChrome';
 import { CpfCnpjInput, PhoneInput, normalizeDigits, validateCpf, validatePhone } from '@/components/ui/masked-input';
 import { useCustomerAuth } from '@/hooks/use-customer-auth';
 import { customerSupabase } from '@/integrations/supabase/customer-client';
-import { publicSupabase } from '@/integrations/supabase/public-client';
+import { loadPublicCatalogCompany } from '@/lib/publicCatalogCompany';
 
 type ProfileForm = {
   name: string;
@@ -44,18 +49,7 @@ export default function PublicCustomerProfile() {
   const userId = user?.id ?? null;
   const userEmail = user?.email ?? null;
 
-  const [catalogCompany, setCatalogCompany] = useState<{
-    id: string;
-    name: string;
-    slug: string | null;
-    city: string | null;
-    state: string | null;
-    phone: string | null;
-    email: string | null;
-    address: string | null;
-    whatsapp: string | null;
-    catalog_contact_url: string | null;
-  } | null>(null);
+  const [catalogCompany, setCatalogCompany] = useState<CatalogChromeCompany | null>(null);
   const [fallbackCompanyId, setFallbackCompanyId] = useState<string | null>(null);
   const [profileForm, setProfileForm] = useState<ProfileForm>(emptyProfileForm);
   const [profileLoaded, setProfileLoaded] = useState(false);
@@ -116,28 +110,15 @@ export default function PublicCustomerProfile() {
         return;
       }
 
-      let query = publicSupabase
-        .from('companies')
-        .select('id, name, slug, city, state, phone, email, address, whatsapp, catalog_contact_url, is_active')
-        .eq('is_active', true);
-      query = isUuid(companyContext) ? query.eq('id', companyContext) : query.eq('slug', companyContext);
-      const { data } = await query.maybeSingle();
+      const data = await loadPublicCatalogCompany({
+        companyId: isUuid(companyContext) ? companyContext : undefined,
+        slug: isUuid(companyContext) ? undefined : companyContext,
+      });
 
       if (!isMounted) return;
 
       if (data) {
-        setCatalogCompany({
-          id: data.id,
-          name: data.name,
-          slug: data.slug || null,
-          city: data.city || null,
-          state: data.state || null,
-          phone: data.phone || null,
-          email: data.email || null,
-          address: data.address || null,
-          whatsapp: data.whatsapp || null,
-          catalog_contact_url: data.catalog_contact_url || null,
-        });
+        setCatalogCompany(data);
       } else {
         setCatalogCompany(null);
       }
@@ -242,7 +223,7 @@ export default function PublicCustomerProfile() {
       nextErrors.document = 'CPF inválido.';
     }
     if (!isValidEmail(profileForm.email)) {
-      nextErrors.email = 'Informe um e-mail valido.';
+      nextErrors.email = 'Informe um e-mail válido.';
     }
     if (!profileForm.address.trim()) {
       nextErrors.address = 'Informe o endereço.';
@@ -254,7 +235,7 @@ export default function PublicCustomerProfile() {
       nextErrors.state = 'Informe o estado (UF).';
     }
     if (normalizeDigits(profileForm.zipCode).length < 8) {
-      nextErrors.zipCode = 'Informe um CEP valido.';
+      nextErrors.zipCode = 'Informe um CEP válido.';
     }
 
     setProfileErrors(nextErrors);
@@ -313,12 +294,13 @@ export default function PublicCustomerProfile() {
       />
 
       <CatalogHero
+        company={catalogCompany}
         badge="Minha conta"
         title="Meu perfil"
         description="Mantenha seus dados atualizados para finalizar pedidos com rapidez."
       />
 
-      <main className="mx-auto w-[min(980px,calc(100%-24px))] py-6 space-y-6">
+      <main className="mx-auto w-full max-w-[1400px] space-y-6 px-4 py-6 sm:px-6 lg:px-8">
         <div className="flex flex-wrap justify-end gap-2">
           <Button
             type="button"

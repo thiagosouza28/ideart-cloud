@@ -96,7 +96,7 @@ const paymentMethodLabels: Record<PaymentMethod, string> = {
   cartao: 'Cartão',
   credito: 'Cartão crédito',
   debito: 'Cartão débito',
-  transferencia: 'Transferencia',
+  transferencia: 'Transferência',
   pix: 'Pix',
   boleto: 'Boleto',
   outro: 'Outro',
@@ -360,8 +360,8 @@ export default function Receipts() {
           assinaturaImagem: companyData?.signature_image_url
             ? ensurePublicStorageUrl('product-images', companyData.signature_image_url)
             : null,
-          responsavel: companyData?.signature_responsible || companyData?.name || 'Responsavel',
-          cargo: companyData?.signature_role || 'Responsavel',
+          responsavel: companyData?.signature_responsible || companyData?.name || 'Responsável',
+          cargo: companyData?.signature_role || 'Responsável',
         },
         numeroRecibo: receiptNumber,
         referencia: {
@@ -436,8 +436,8 @@ export default function Receipts() {
           assinaturaImagem: companyData?.signature_image_url
             ? ensurePublicStorageUrl('product-images', companyData.signature_image_url)
             : null,
-          responsavel: companyData?.signature_responsible || companyData?.name || 'Responsavel',
-          cargo: companyData?.signature_role || 'Responsavel',
+          responsavel: companyData?.signature_responsible || companyData?.name || 'Responsável',
+          cargo: companyData?.signature_role || 'Responsável',
         },
         numeroRecibo: receiptNumber,
         referencia: {
@@ -596,7 +596,7 @@ export default function Receipts() {
                     ) : (
                       <TableRow>
                         <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
-                          Nenhum comprovante de pedido encontrado no periodo.
+                          Nenhum comprovante de pedido encontrado no período.
                         </TableCell>
                       </TableRow>
                     )}
@@ -655,7 +655,7 @@ export default function Receipts() {
                     ) : (
                       <TableRow>
                         <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
-                          Nenhum recibo de PDV encontrado no periodo.
+                          Nenhum recibo de PDV encontrado no período.
                         </TableCell>
                       </TableRow>
                     )}

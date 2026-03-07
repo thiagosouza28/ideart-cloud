@@ -45,11 +45,83 @@ export type FinancialEntryOrigin =
   | 'outros';
 export type SubscriptionStatus = 'trial' | 'active' | 'cancelled' | 'expired' | 'canceled' | 'past_due' | 'unpaid' | 'incomplete';
 export type BillingPeriod = 'monthly' | 'yearly';
+export type CompanyThemeMode = 'light' | 'dark' | 'system';
+export type CompanyThemeButtonStyle = 'soft' | 'modern' | 'solid' | 'outline';
+export type CompanyThemeBorderRadius = 'small' | 'medium' | 'large';
+export type CompanyThemeLayoutDensity = 'compact' | 'normal' | 'spacious';
+export type CompanyThemeFontFamily = 'Inter' | 'Roboto' | 'Poppins' | 'Open Sans';
+export type CompanyThemePaletteMode = 'light' | 'dark';
+
+export interface CompanyThemePalette {
+  primary_color: string;
+  secondary_color: string;
+  background_color: string;
+  text_color: string;
+  button_color: string;
+  button_hover_color: string;
+  menu_hover_color: string;
+}
 
 export interface ProductColor {
   name: string;
   hex: string;
   active: boolean;
+}
+
+export interface CatalogSettings {
+  id?: string;
+  store_id: string;
+  catalog_title: string;
+  catalog_description: string;
+  primary_color: string;
+  secondary_color: string;
+  text_color: string;
+  accent_color: string;
+  header_bg_color: string;
+  header_text_color: string;
+  footer_bg_color: string;
+  footer_text_color: string;
+  price_color: string;
+  badge_bg_color: string;
+  badge_text_color: string;
+  button_bg_color: string;
+  button_text_color: string;
+  button_outline_color: string;
+  card_bg_color: string;
+  card_border_color: string;
+  filter_bg_color: string;
+  filter_text_color: string;
+  button_text: string;
+  contact_link: string | null;
+  show_prices: boolean;
+  show_contact: boolean;
+  catalog_layout: 'grid' | 'list';
+  accepted_payment_methods: Array<
+    Extract<PaymentMethod, 'pix' | 'dinheiro' | 'credito' | 'debito' | 'transferencia' | 'outro'>
+  >;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface CompanyTheme {
+  id?: string;
+  store_id: string;
+  theme_mode: CompanyThemeMode;
+  light_palette?: CompanyThemePalette | null;
+  dark_palette?: CompanyThemePalette | null;
+  primary_color: string;
+  secondary_color: string;
+  background_color: string;
+  text_color: string;
+  button_color: string;
+  button_hover_color: string;
+  menu_hover_color: string;
+  border_radius: CompanyThemeBorderRadius;
+  button_style: CompanyThemeButtonStyle;
+  layout_density: CompanyThemeLayoutDensity;
+  font_family: CompanyThemeFontFamily;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface Company {
@@ -116,6 +188,7 @@ export interface Company {
   catalog_columns_mobile?: number | null;
   catalog_columns_desktop?: number | null;
   catalog_layout?: "grid" | "list" | null;
+  accepted_payment_methods?: PaymentMethod[] | null;
   plan_id: string | null;
   subscription_status: SubscriptionStatus | string | null;
   subscription_start_date: string | null;
@@ -388,9 +461,12 @@ export interface Order {
   paid_at?: string | null;
   amount_paid: number;
   notes: string | null;
+  show_notes_on_pdf?: boolean;
   cancel_reason: string | null;
   cancelled_at?: string | null;
   cancelled_by?: string | null;
+  delivered_at?: string | null;
+  delivered_by?: string | null;
   deleted_at?: string | null;
   deleted_by?: string | null;
   created_by: string | null;

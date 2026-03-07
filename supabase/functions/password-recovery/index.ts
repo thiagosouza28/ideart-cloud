@@ -212,23 +212,23 @@ const buildRecoveryMessage = (
   const buttonLabel = accountType === 'customer' ? 'Criar nova senha da conta' : 'Criar nova senha da loja';
   const subject =
     accountType === 'customer'
-      ? 'Recuperacao de senha - Conta do cliente'
-      : 'Recuperacao de senha - Loja';
+      ? 'Recuperação de senha - Conta do cliente'
+      : 'Recuperação de senha - Loja';
 
   const text = [
-    'Solicitacao de recuperacao de senha',
+    'Solicitação de recuperação de senha',
     '',
     greeting,
     '',
     `Recebemos um pedido para redefinir a senha da sua ${accountLabel}.`,
     `Clique no link para criar uma nova senha: ${recoveryLink}`,
     '',
-    'Se voce nao solicitou, ignore este e-mail.',
+    'Se você não solicitou, ignore este e-mail.',
   ].join('\n');
 
   const html = `
     <div style="font-family:Arial, sans-serif;color:#0f172a;">
-      <h2>Recuperacao de senha</h2>
+      <h2>Recuperação de senha</h2>
       <p>${greeting}</p>
       <p>Recebemos um pedido para redefinir a senha da sua ${accountLabel}.</p>
       <p>
@@ -236,7 +236,7 @@ const buildRecoveryMessage = (
           ${buttonLabel}
         </a>
       </p>
-      <p style="font-size:12px;color:#64748b;">Se voce nao solicitou, ignore este e-mail.</p>
+      <p style="font-size:12px;color:#64748b;">Se você não solicitou, ignore este e-mail.</p>
     </div>
   `;
 
@@ -246,7 +246,7 @@ const buildRecoveryMessage = (
 serve(async (req) => {
   const corsHeaders = getCorsHeaders(req);
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders, status: 204 });
-  if (req.method !== 'POST') return jsonResponse(corsHeaders, 405, { error: 'Metodo invalido' });
+  if (req.method !== 'POST') return jsonResponse(corsHeaders, 405, { error: 'Método inválido' });
 
   try {
     const body = (await req.json().catch(() => ({}))) as {
@@ -259,7 +259,7 @@ serve(async (req) => {
     const requestedAccountType: AccountType =
       body.accountType?.trim().toLowerCase() === 'customer' ? 'customer' : 'store';
     if (!email) {
-      return jsonResponse(corsHeaders, 400, { error: 'E-mail obrigatorio' });
+      return jsonResponse(corsHeaders, 400, { error: 'E-mail obrigatório' });
     }
 
     const supabase = getSupabaseClient();
@@ -267,7 +267,7 @@ serve(async (req) => {
 
     if (lookupError) {
       console.error('[password-recovery] user lookup error', lookupError);
-      return jsonResponse(corsHeaders, 500, { error: 'Falha ao processar a recuperacao de senha.' });
+      return jsonResponse(corsHeaders, 500, { error: 'Falha ao processar a recuperação de senha.' });
     }
 
     if (!user) {
@@ -288,13 +288,13 @@ serve(async (req) => {
 
     if (error) {
       console.warn('[password-recovery] generateLink error', error.message);
-      return jsonResponse(corsHeaders, 500, { error: 'Falha ao gerar o link de recuperacao.' });
+      return jsonResponse(corsHeaders, 500, { error: 'Falha ao gerar o link de recuperação.' });
     }
 
     const recoveryLink = buildPublicRecoveryLink(redirectTo, data);
     if (!recoveryLink) {
       console.warn('[password-recovery] action link missing');
-      return jsonResponse(corsHeaders, 500, { error: 'Falha ao gerar o link de recuperacao.' });
+      return jsonResponse(corsHeaders, 500, { error: 'Falha ao gerar o link de recuperação.' });
     }
 
     const { subject, text, html } = buildRecoveryMessage(
@@ -311,7 +311,7 @@ serve(async (req) => {
     });
 
     if (!sent) {
-      return jsonResponse(corsHeaders, 500, { error: 'Falha ao enviar o e-mail de recuperacao.' });
+      return jsonResponse(corsHeaders, 500, { error: 'Falha ao enviar o e-mail de recuperação.' });
     }
 
     return jsonResponse(corsHeaders, 200, { ok: true, status: 'sent' });

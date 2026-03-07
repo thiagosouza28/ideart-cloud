@@ -373,7 +373,7 @@ export default function Subscription() {
   if (loading) {
     return (
       <div className="min-h-screen bg-background px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
-        <div className="mx-auto flex min-h-[65vh] w-full max-w-6xl items-center justify-center rounded-2xl border bg-card shadow-sm">
+        <div className="flex min-h-[65vh] w-full items-center justify-center rounded-2xl border bg-card shadow-sm">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
       </div>
@@ -382,7 +382,7 @@ export default function Subscription() {
 
   return (
     <div className="min-h-screen bg-background px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
-      <div className="mx-auto w-full max-w-6xl space-y-6">
+      <div className="w-full space-y-6">
       <div className="rounded-2xl border bg-card p-5 shadow-sm sm:p-6">
         <div>
           <h1 className="page-title">Assinatura e Catálogo</h1>

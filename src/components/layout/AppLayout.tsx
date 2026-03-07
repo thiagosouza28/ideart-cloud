@@ -1,5 +1,5 @@
 ﻿import { useEffect, useState } from 'react';
-import { Bell, Loader2, Menu, Moon, Sun } from 'lucide-react';
+import { Bell, CheckCheck, Loader2, Menu, Moon, Sun, Trash2 } from 'lucide-react';
 import { SidebarProvider, SidebarTrigger, SidebarInset } from '@/components/ui/sidebar';
 import { AppSidebar } from './AppSidebar';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -12,6 +12,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { AppRole } from '@/types/database';
 import { ensurePublicStorageUrl } from '@/lib/storage';
 import { useTheme } from 'next-themes';
+import { useCompanyTheme } from '@/contexts/CompanyThemeContext';
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -39,6 +40,12 @@ export function AppLayout({ children }: AppLayoutProps) {
     stopImpersonation,
   } = useAuth();
   const { resolvedTheme, setTheme } = useTheme();
+  const {
+    companyTheme,
+    resolvedCompanyThemeMode,
+    savingCompanyThemeMode,
+    setCompanyThemeMode,
+  } = useCompanyTheme();
   const [isBannerHidden, setIsBannerHidden] = useState(
     () => localStorage.getItem('subscriptionBannerHidden') === 'true',
   );
@@ -46,6 +53,12 @@ export function AppLayout({ children }: AppLayoutProps) {
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
 
   const company = getLoggedCompany();
+  const canPersistThemeMode = role === 'admin' || role === 'super_admin';
+  const currentThemeMode = companyTheme
+    ? resolvedCompanyThemeMode
+    : resolvedTheme === 'dark'
+      ? 'dark'
+      : 'light';
   const logoFromCompany = ensurePublicStorageUrl('product-images', company?.logo_url);
   const logoFromUser = user.user_metadata?.company_logo as string | undefined;
   const logoUrl = logoFromCompany || logoFromUser || null;
@@ -62,8 +75,12 @@ export function AppLayout({ children }: AppLayoutProps) {
     unreadOrdersCount,
     notifications,
     isLoadingNotifications,
+    isUpdatingNotifications,
+    isClearingNotifications,
     refreshNotifications,
+    markNotificationAsRead,
     markUnreadOrdersAsRead,
+    clearNotifications,
   } = useOrderNotifications();
 
   useEffect(() => {
@@ -92,9 +109,17 @@ export function AppLayout({ children }: AppLayoutProps) {
     setIsNotificationsOpen(open);
     if (!open) return;
     void refreshNotifications();
-    if (unreadOrdersCount > 0) {
-      void markUnreadOrdersAsRead();
+  };
+
+  const handleThemeToggle = async () => {
+    const nextMode = currentThemeMode === 'dark' ? 'light' : 'dark';
+
+    if (!companyTheme) {
+      setTheme(nextMode);
+      return;
     }
+
+    await setCompanyThemeMode(nextMode, { persist: canPersistThemeMode });
   };
 
   const subscriptionBanner = (() => {
@@ -208,7 +233,7 @@ export function AppLayout({ children }: AppLayoutProps) {
             </div>
             <div className="ml-auto flex items-center gap-4">
               <div className="hidden items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-semibold text-muted-foreground sm:flex">
-                <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                <span className="h-2 w-2 rounded-full bg-success" />
                 Plano ativo
               </div>
               {isBannerHidden && subscription && role !== 'super_admin' && (
@@ -226,11 +251,25 @@ export function AppLayout({ children }: AppLayoutProps) {
               )}
               <button
                 type="button"
-                onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
+                onClick={() => void handleThemeToggle()}
+                disabled={savingCompanyThemeMode}
                 className="hidden h-9 w-9 items-center justify-center rounded-full border border-border bg-card text-muted-foreground transition-colors hover:text-foreground sm:flex"
-                aria-label={resolvedTheme === 'dark' ? 'Ativar modo claro' : 'Ativar modo escuro'}
+                aria-label={currentThemeMode === 'dark' ? 'Ativar modo claro' : 'Ativar modo escuro'}
+                title={
+                  companyTheme?.theme_mode === 'system'
+                    ? 'Modo automático ativo. Clique para alternar manualmente.'
+                    : currentThemeMode === 'dark'
+                      ? 'Ativar modo claro'
+                      : 'Ativar modo escuro'
+                }
               >
-                {resolvedTheme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                {savingCompanyThemeMode ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : currentThemeMode === 'dark' ? (
+                  <Sun className="h-4 w-4" />
+                ) : (
+                  <Moon className="h-4 w-4" />
+                )}
               </button>
               <Popover open={isNotificationsOpen} onOpenChange={handleNotificationsOpenChange}>
                 <PopoverTrigger asChild>
@@ -256,59 +295,100 @@ export function AppLayout({ children }: AppLayoutProps) {
                     )}
                   </button>
                 </PopoverTrigger>
-                <PopoverContent align="end" className="w-[360px] p-0">
-                  <div className="border-b border-border px-4 py-3">
-                    <p className="text-sm font-semibold text-foreground">Notificações de pedidos</p>
-                    <p className="text-xs text-muted-foreground">Clique em uma notificação para abrir o pedido.</p>
-                  </div>
-                  <ScrollArea className="max-h-96">
-                    {isLoadingNotifications ? (
-                      <div className="flex items-center gap-2 px-4 py-6 text-sm text-muted-foreground">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Carregando notificações...
+                <PopoverContent align="end" className="w-[min(92vw,420px)] p-0">
+                  <div className="flex max-h-[min(78vh,34rem)] flex-col">
+                    <div className="border-b border-border px-4 py-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-foreground">Notificações de pedidos</p>
+                          <p className="text-xs text-muted-foreground">Clique em uma notificação para abrir o pedido.</p>
+                        </div>
+                        <span className="rounded-full border border-border bg-muted/50 px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
+                          {notifications.length}
+                        </span>
                       </div>
-                    ) : notifications.length === 0 ? (
-                      <div className="px-4 py-6 text-sm text-muted-foreground">
-                        Nenhuma notificação de pedido.
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={unreadOrdersCount === 0 || isUpdatingNotifications}
+                          onClick={() => void markUnreadOrdersAsRead()}
+                        >
+                          {isUpdatingNotifications ? (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          ) : (
+                            <CheckCheck className="mr-2 h-4 w-4" />
+                          )}
+                          Marcar todas como lidas
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          disabled={notifications.length === 0 || isClearingNotifications}
+                          onClick={() => void clearNotifications()}
+                          className="text-muted-foreground hover:text-foreground"
+                        >
+                          {isClearingNotifications ? (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="mr-2 h-4 w-4" />
+                          )}
+                          Limpar
+                        </Button>
                       </div>
-                    ) : (
-                      <div className="divide-y divide-border">
-                        {notifications.map((notification) => (
-                          <button
-                            key={notification.id}
-                            type="button"
-                            onClick={() => {
-                              if (!notification.order_id) return;
-                              setIsNotificationsOpen(false);
-                              navigate(`/pedidos/${notification.order_id}`);
-                            }}
-                            className={`w-full px-4 py-3 text-left transition-colors ${
-                              notification.order_id ? 'hover:bg-muted/50' : ''
-                            }`}
-                          >
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="min-w-0">
-                                <p className="text-sm font-medium text-foreground">
-                                  {notification.title}
-                                </p>
-                                {notification.body && (
-                                  <p className="mt-1 text-xs text-muted-foreground">
-                                    {notification.body}
+                    </div>
+                    <ScrollArea className="min-h-0 flex-1">
+                      {isLoadingNotifications ? (
+                        <div className="flex items-center gap-2 px-4 py-6 text-sm text-muted-foreground">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Carregando notificações...
+                        </div>
+                      ) : notifications.length === 0 ? (
+                        <div className="px-4 py-6 text-sm text-muted-foreground">
+                          Nenhuma notificação de pedido.
+                        </div>
+                      ) : (
+                        <div className="divide-y divide-border">
+                          {notifications.map((notification) => (
+                            <button
+                              key={notification.id}
+                              type="button"
+                              onClick={() => {
+                                if (!notification.order_id) return;
+                                void markNotificationAsRead(notification.id);
+                                setIsNotificationsOpen(false);
+                                navigate(`/pedidos/${notification.order_id}`);
+                              }}
+                              className={`w-full px-4 py-3 text-left transition-colors ${
+                                notification.order_id ? 'hover:bg-muted/50' : ''
+                              }`}
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                  <p className="text-sm font-medium text-foreground">
+                                    {notification.title}
                                   </p>
+                                  {notification.body && (
+                                    <p className="mt-1 text-xs text-muted-foreground">
+                                      {notification.body}
+                                    </p>
+                                  )}
+                                  <p className="mt-2 text-[11px] text-muted-foreground">
+                                    {formatNotificationDateTime(notification.created_at)}
+                                  </p>
+                                </div>
+                                {!notification.read_at && (
+                                  <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-primary" />
                                 )}
-                                <p className="mt-2 text-[11px] text-muted-foreground">
-                                  {formatNotificationDateTime(notification.created_at)}
-                                </p>
                               </div>
-                              {!notification.read_at && (
-                                <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-primary" />
-                              )}
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </ScrollArea>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </ScrollArea>
+                  </div>
                 </PopoverContent>
               </Popover>
               <div className="hidden flex-col items-end leading-tight sm:flex">

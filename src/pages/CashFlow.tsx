@@ -340,7 +340,7 @@ export default function CashFlow() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-3xl font-bold text-slate-900">Fluxo de Caixa</h1>
-          <p className="text-sm text-slate-500">Entradas, saidas, saldos e relatorios com filtros avancados.</p>
+          <p className="text-sm text-slate-500">Entradas, saídas, saldos e relatórios com filtros avançados.</p>
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" onClick={() => loadCash(filters)} disabled={reportLoading}>

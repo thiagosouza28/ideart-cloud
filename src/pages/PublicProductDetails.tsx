@@ -22,6 +22,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
+import { Textarea } from '@/components/ui/textarea';
 import { useCustomerAuth } from '@/hooks/use-customer-auth';
 import { customerSupabase } from '@/integrations/supabase/customer-client';
 import { publicSupabase } from '@/integrations/supabase/public-client';
@@ -39,6 +40,7 @@ import {
 } from '@/lib/productionTime';
 import { isPromotionActive, resolveProductBasePrice, resolveProductPrice } from '@/lib/pricing';
 import { useToast } from '@/hooks/use-toast';
+import { loadPublicCatalogCompany } from '@/lib/publicCatalogCompany';
 import { Company, Product, ProductColor, ProductReview } from '@/types/database';
 
 interface CompanyWithColors extends Company {
@@ -147,13 +149,7 @@ export default function PublicProductDetails() {
 
       let companyData: Company | null = null;
       if (slug) {
-        const { data, error } = await publicSupabase
-          .from('companies')
-          .select('*')
-          .eq('slug', slug)
-          .eq('is_active', true)
-          .single();
-        if (!error) companyData = data as Company;
+        companyData = (await loadPublicCatalogCompany({ slug })) as Company | null;
       }
 
       if (!companyData && !slug) {
@@ -167,13 +163,9 @@ export default function PublicProductDetails() {
         }
         const { data: productLookup } = await productLookupQuery.maybeSingle();
         if (productLookup?.company_id) {
-          const companyResult = await publicSupabase
-            .from('companies')
-            .select('*')
-            .eq('id', productLookup.company_id)
-            .eq('is_active', true)
-            .maybeSingle();
-          companyData = companyResult.data as Company | null;
+          companyData = (await loadPublicCatalogCompany({
+            companyId: productLookup.company_id,
+          })) as Company | null;
         }
       }
 
@@ -183,11 +175,7 @@ export default function PublicProductDetails() {
         return;
       }
 
-      const normalizedCompany = {
-        ...(companyData as CompanyWithColors),
-        logo_url: ensurePublicStorageUrl('product-images', companyData.logo_url),
-      };
-      setCompany(normalizedCompany);
+      setCompany(companyData as CompanyWithColors);
 
       let productQuery = publicSupabase
         .from('products')
@@ -546,7 +534,7 @@ export default function PublicProductDetails() {
     const comment = reviewForm.comment.trim();
 
     if (reviewerName.length < 2) {
-      setReviewError('Informe seu nome para publicar a avaliacao.');
+      setReviewError('Informe seu nome para publicar a avaliação.');
       return;
     }
 
@@ -610,7 +598,7 @@ export default function PublicProductDetails() {
       setReviewSubmitting(false);
       setReviewError('Não foi possível enviar sua avaliação agora. Tente novamente.');
       toast({
-        title: 'Erro ao enviar avaliacao',
+        title: 'Erro ao enviar avaliação',
         description: 'Não foi possível enviar sua avaliação agora.',
         variant: 'destructive',
       });
@@ -622,13 +610,32 @@ export default function PublicProductDetails() {
     resetReviewImages();
     setReviewSubmitting(false);
     toast({
-      title: 'Avaliacao enviada',
+      title: 'Avaliação enviada',
       description: 'Obrigado por avaliar este produto.',
     });
   };
 
   const showPrices = company?.catalog_show_prices ?? true;
   const showContact = company?.catalog_show_contact ?? true;
+  const catalogThemeStyle = {
+    ['--cd-light' as const]: `color-mix(in srgb, ${company?.catalog_header_bg_color || company?.catalog_secondary_color || '#0f1b3d'} 10%, #f4f6fb)`,
+    ['--cd-muted' as const]: `color-mix(in srgb, ${company?.catalog_text_color || '#0f1b3d'} 54%, #94a3b8)`,
+    ['--cd-text' as const]: company?.catalog_text_color || '#0f1b3d',
+    ['--cd-primary' as const]: company?.catalog_button_bg_color || company?.catalog_primary_color || '#1a3a8f',
+    ['--cd-primary-text' as const]: company?.catalog_button_text_color || '#ffffff',
+    ['--cd-outline' as const]:
+      company?.catalog_button_outline_color || company?.catalog_button_bg_color || company?.catalog_primary_color || '#1a3a8f',
+    ['--cd-price' as const]: company?.catalog_price_color || company?.catalog_accent_color || company?.catalog_primary_color || '#1a3a8f',
+    ['--cd-header-bg' as const]: company?.catalog_header_bg_color || company?.catalog_secondary_color || '#0f1b3d',
+    ['--cd-header-text' as const]: company?.catalog_header_text_color || '#ffffff',
+    ['--cd-footer-bg' as const]: company?.catalog_footer_bg_color || company?.catalog_secondary_color || '#0f1b3d',
+    ['--cd-footer-text' as const]: company?.catalog_footer_text_color || '#ffffff',
+    ['--cd-badge-bg' as const]: company?.catalog_badge_bg_color || company?.catalog_accent_color || '#c9a84c',
+    ['--cd-badge-text' as const]: company?.catalog_badge_text_color || '#2f2406',
+    ['--cd-card-bg' as const]: company?.catalog_card_bg_color || '#ffffff',
+    ['--cd-card-border' as const]: company?.catalog_card_border_color || '#e2e7f5',
+    ['--cd-border' as const]: company?.catalog_card_border_color || '#e2e7f5',
+  } as any;
   const catalogHref = company?.slug
     ? `/catalogo/${company.slug}`
     : company?.id
@@ -668,7 +675,7 @@ export default function PublicProductDetails() {
   }
 
   return (
-    <div className="catalog-detail-root min-h-screen bg-slate-50 text-slate-900">
+    <div className="catalog-detail-root min-h-screen bg-slate-50 text-slate-900" style={catalogThemeStyle}>
       <style>{`
         .catalog-detail-root {
           --cd-light: #f4f6fb;
@@ -695,14 +702,17 @@ export default function PublicProductDetails() {
         .catalog-detail-header {
           backdrop-filter: blur(10px);
           background: var(--cd-header-bg);
-          border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+          border-bottom: 1px solid color-mix(in srgb, var(--cd-header-text) 18%, transparent);
           color: var(--cd-header-text);
           height: 68px;
         }
 
         .pc-container {
-          width: min(1220px, calc(100% - 40px));
+          width: 100%;
+          max-width: 1400px;
           margin: 0 auto;
+          padding-left: 24px;
+          padding-right: 24px;
         }
 
         .pc-nav-inner {
@@ -750,7 +760,7 @@ export default function PublicProductDetails() {
           width: 34px;
           height: 34px;
           border-radius: 999px;
-          background: #3d8bef;
+          background: var(--cd-primary);
           color: var(--cd-primary-text);
           display: grid;
           place-items: center;
@@ -771,7 +781,7 @@ export default function PublicProductDetails() {
 
         .pc-brand-sub {
           font-size: 12px;
-          color: rgba(255, 255, 255, 0.75);
+          color: color-mix(in srgb, var(--cd-header-text) 74%, transparent);
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
@@ -787,9 +797,9 @@ export default function PublicProductDetails() {
         .pc-cart-chip {
           height: 36px;
           border-radius: 50px;
-          border: 1px solid rgba(255, 255, 255, 0.4);
-          background: rgba(255, 255, 255, 0.08);
-          color: var(--cd-primary-text);
+          border: 1px solid color-mix(in srgb, var(--cd-header-text) 36%, transparent);
+          background: color-mix(in srgb, var(--cd-header-text) 10%, transparent);
+          color: var(--cd-header-text);
           display: inline-flex;
           align-items: center;
           gap: 8px;
@@ -824,8 +834,8 @@ export default function PublicProductDetails() {
         .pc-hero {
           position: relative;
           overflow: hidden;
-          background: var(--cd-primary);
-          color: var(--cd-primary-text);
+          background: linear-gradient(135deg, var(--cd-header-bg) 0%, var(--cd-primary) 100%);
+          color: var(--cd-header-text);
         }
 
         .pc-hero::before {
@@ -849,8 +859,8 @@ export default function PublicProductDetails() {
           align-items: center;
           height: 28px;
           border-radius: 50px;
-          background: #c9a84c;
-          color: #2f2406;
+          background: var(--cd-badge-bg);
+          color: var(--cd-badge-text);
           font-size: 12px;
           font-weight: 500;
           padding: 0 12px;
@@ -866,10 +876,10 @@ export default function PublicProductDetails() {
         }
 
         .pc-subtitle {
-          max-width: 820px;
+          max-width: 960px;
           font-size: 15px;
           font-weight: 300;
-          color: rgba(255, 255, 255, 0.88);
+          color: color-mix(in srgb, var(--cd-header-text) 88%, transparent);
           margin-bottom: 14px;
         }
 
@@ -884,12 +894,15 @@ export default function PublicProductDetails() {
           display: inline-flex;
           align-items: center;
           gap: 8px;
-          color: rgba(255, 255, 255, 0.95);
+          color: color-mix(in srgb, var(--cd-header-text) 94%, transparent);
         }
 
         .catalog-detail-main {
-          width: min(1160px, calc(100% - 28px));
+          width: 100%;
+          max-width: 1400px;
           margin: 0 auto;
+          padding-left: 24px;
+          padding-right: 24px;
         }
 
         .catalog-detail-hero {
@@ -909,7 +922,7 @@ export default function PublicProductDetails() {
           display: flex;
           align-items: center;
           justify-content: center;
-          background: #f8fafc;
+          background: var(--cd-card-bg);
         }
 
         .catalog-detail-media-image {
@@ -917,20 +930,20 @@ export default function PublicProductDetails() {
           height: 100%;
           object-fit: contain;
           object-position: center;
-          background: #f8fafc;
+          background: var(--cd-card-bg);
         }
 
         .catalog-detail-hero > div:first-child {
           border: 1px solid var(--cd-border);
           border-radius: 1rem;
           padding: 0.85rem;
-          background: var(--cd-white);
+          background: var(--cd-card-bg);
         }
 
         .catalog-detail-hero > div:last-child {
           border: 1px solid var(--cd-border);
           border-radius: 1rem;
-          background: var(--cd-white);
+          background: var(--cd-card-bg);
           padding: 1.1rem;
         }
 
@@ -943,7 +956,7 @@ export default function PublicProductDetails() {
           margin-top: auto;
           border: 1px solid var(--cd-border);
           border-radius: 0.9rem;
-          background: #fbfcff;
+          background: var(--cd-card-bg);
           padding: 1rem;
         }
 
@@ -955,7 +968,7 @@ export default function PublicProductDetails() {
         }
 
         .catalog-detail-tabs > div:first-child {
-          background: #fbfcff;
+          background: var(--cd-card-bg);
           border-color: var(--cd-border) !important;
           padding: 0.65rem;
           gap: 0.45rem;
@@ -1008,7 +1021,7 @@ export default function PublicProductDetails() {
           justify-content: space-between;
           gap: 16px;
           padding-bottom: 20px;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.18);
+          border-bottom: 1px solid color-mix(in srgb, var(--cd-footer-text) 18%, transparent);
         }
 
         .pc-footer-actions {
@@ -1040,20 +1053,20 @@ export default function PublicProductDetails() {
         }
 
         .pc-footer-btn-outline {
-          border: 1px solid rgba(255, 255, 255, 0.58);
+          border: 1px solid color-mix(in srgb, var(--cd-footer-text) 38%, transparent);
           color: var(--cd-footer-text);
-          background: transparent;
+          background: color-mix(in srgb, var(--cd-footer-text) 8%, transparent);
         }
 
         .pc-footer-btn-primary {
           border: 0;
           color: var(--cd-primary-text);
-          background: #3d8bef;
+          background: var(--cd-primary);
         }
 
         .pc-footer-copy {
           text-align: center;
-          color: rgba(255, 255, 255, 0.68);
+          color: color-mix(in srgb, var(--cd-footer-text) 66%, transparent);
           font-size: 13px;
           padding: 15px 0 18px;
         }
@@ -1109,14 +1122,6 @@ export default function PublicProductDetails() {
         }
 
         @media (max-width: 1023px) {
-          .pc-container {
-            width: min(1220px, calc(100% - 24px));
-          }
-
-          .catalog-detail-main {
-            width: calc(100% - 18px);
-          }
-
           .pc-footer-top {
             flex-direction: column;
             align-items: flex-start;
@@ -1133,13 +1138,11 @@ export default function PublicProductDetails() {
           }
 
           .catalog-detail-media-frame {
-            min-height: 460px;
-            height: 460px;
-            max-height: 460px;
+            min-height: clamp(320px, 40vw, 460px);
           }
 
           .catalog-detail-info {
-            min-height: 460px;
+            min-height: clamp(320px, 40vw, 460px);
           }
 
           .catalog-detail-buybox {
@@ -1150,7 +1153,13 @@ export default function PublicProductDetails() {
 
         @media (max-width: 720px) {
           .pc-container {
-            width: calc(100% - 16px);
+            padding-left: 16px;
+            padding-right: 16px;
+          }
+
+          .catalog-detail-main {
+            padding-left: 16px;
+            padding-right: 16px;
           }
 
           .pc-brand-sub {
@@ -1210,7 +1219,7 @@ export default function PublicProductDetails() {
           <span className="pc-hero-tag">Detalhes do produto</span>
           <h1 className="pc-title">{product.name}</h1>
           <p className="pc-subtitle">
-            {product.catalog_short_description || product.description || 'Descricao detalhada do produto.'}
+            {product.catalog_short_description || product.description || 'Descrição detalhada do produto.'}
           </p>
           <div className="pc-contact-row">
             {company?.phone && (
@@ -1290,7 +1299,7 @@ export default function PublicProductDetails() {
                   ))}
                 </div>
                 {reviewCount > 0 ? (
-                  <span>{averageRating.toFixed(1)} ({reviewCount} {reviewCount === 1 ? 'avaliacao' : 'avaliacoes'})</span>
+                  <span>{averageRating.toFixed(1)} ({reviewCount} {reviewCount === 1 ? 'avaliação' : 'avaliações'})</span>
                 ) : (
                   <span>Sem avaliacoes</span>
                 )}
@@ -1323,11 +1332,11 @@ export default function PublicProductDetails() {
               {estimatedDeliveryInfo && (
                 <div className="rounded-md border border-sky-200 bg-sky-50 p-3 text-xs text-sky-900">
                   <p>
-                    <strong>Tempo de producao:</strong> {estimatedDeliveryInfo.productionTimeDays}{' '}
+                    <strong>Tempo de produção:</strong> {estimatedDeliveryInfo.productionTimeDays}{' '}
                     {estimatedDeliveryInfo.productionTimeDays === 1 ? 'dia' : 'dias'}
                   </p>
                   <p className="mt-1">
-                    <strong>Previsao de entrega:</strong>{' '}
+                    <strong>Previsão de entrega:</strong>{' '}
                     {formatDatePtBr(estimatedDeliveryInfo.isoDate)}
                   </p>
                 </div>
@@ -1415,7 +1424,7 @@ export default function PublicProductDetails() {
               </div>
               <div className="flex flex-wrap gap-4 text-xs text-slate-500">
                 <span className="flex items-center gap-1"><Check className="h-3 w-3 text-primary" />Compra segura</span>
-                <span className="flex items-center gap-1"><Check className="h-3 w-3 text-primary" />Frete gratis acima de R$199</span>
+                <span className="flex items-center gap-1"><Check className="h-3 w-3 text-primary" />Frete grátis acima de R$199</span>
                 <span className="flex items-center gap-1"><Check className="h-3 w-3 text-primary" />Garantia de qualidade</span>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -1437,7 +1446,7 @@ export default function PublicProductDetails() {
         <div className="catalog-detail-tabs mt-12 rounded-xl border border-slate-200 bg-white overflow-hidden">
           <div className="flex flex-wrap border-b border-slate-200 text-sm">
             {[
-              { id: 'descricao', label: 'Descricao detalhada' },
+              { id: 'descricao', label: 'Descrição detalhada' },
               { id: 'especificacoes', label: 'Especificacoes tecnicas' },
               { id: 'envio', label: 'Envio e prazos' },
               { id: 'avaliacoes', label: `Avaliacoes (${reviewCount})` },
@@ -1455,7 +1464,7 @@ export default function PublicProductDetails() {
             {activeTab === 'descricao' && (
               <div className="space-y-4 text-sm text-slate-600">
                 <p>
-                  {product.catalog_long_description || product.description || 'Descricao detalhada do produto para apresentar beneficios e diferenciais.'}
+                  {product.catalog_long_description || product.description || 'Descrição detalhada do produto para apresentar benefícios e diferenciais.'}
                 </p>
                 <div className="grid md:grid-cols-2 gap-4">
                   <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
@@ -1482,24 +1491,24 @@ export default function PublicProductDetails() {
                 {estimatedDeliveryInfo ? (
                   <>
                     <p>
-                      Tempo de producao: <strong>{estimatedDeliveryInfo.productionTimeDays}</strong>{' '}
+                      Tempo de produção: <strong>{estimatedDeliveryInfo.productionTimeDays}</strong>{' '}
                       {estimatedDeliveryInfo.productionTimeDays === 1 ? 'dia' : 'dias'}.
                     </p>
                     <p>
-                      Previsao de entrega: <strong>{formatDatePtBr(estimatedDeliveryInfo.isoDate)}</strong>.
+                      Previsão de entrega: <strong>{formatDatePtBr(estimatedDeliveryInfo.isoDate)}</strong>.
                     </p>
                   </>
                 ) : (
                   <p>Consulte prazos e modalidades de entrega com a equipe.</p>
                 )}
-                <p>Pedidos acima de R$199 possuem frete gratis.</p>
+                <p>Pedidos acima de R$199 possuem frete grátis.</p>
               </div>
             )}
             {activeTab === 'avaliacoes' && (
               <div className="space-y-5">
                 <form onSubmit={handleReviewSubmit} className="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-3">
                   <div>
-                    <h4 className="font-semibold text-slate-800">Deixe sua avaliacao</h4>
+                    <h4 className="font-semibold text-slate-800">Deixe sua avaliação</h4>
                     <p className="text-xs text-slate-500 mt-1">Compartilhe sua experiencia com este produto.</p>
                   </div>
 
@@ -1530,12 +1539,12 @@ export default function PublicProductDetails() {
 
                     {user && (
                       <div className="sm:col-span-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
-                        Avaliacao vinculada a sua conta como <strong>{loggedReviewerName}</strong>.
+                        Avaliação vinculada à sua conta como <strong>{loggedReviewerName}</strong>.
                       </div>
                     )}
 
                     <div className="sm:col-span-2">
-                      <Label>Avaliacao *</Label>
+                      <Label>Avaliação *</Label>
                       <div className="mt-2 flex items-center gap-1">
                         {[1, 2, 3, 4, 5].map((rating) => (
                           <button
@@ -1556,11 +1565,12 @@ export default function PublicProductDetails() {
 
                     <div className="sm:col-span-2">
                       <Label htmlFor="review-comment">Comentario (opcional)</Label>
-                      <textarea
+                      <Textarea
                         id="review-comment"
-                        className="mt-2 min-h-[86px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                        className="mt-2 !min-h-0"
                         value={reviewForm.comment}
                         maxLength={600}
+                        rows={1}
                         onChange={(event) => handleReviewFieldChange('comment', event.target.value)}
                         placeholder="Conte o que você achou do produto..."
                       />
@@ -1605,7 +1615,7 @@ export default function PublicProductDetails() {
 
                   <div className="flex justify-end">
                     <Button type="submit" className="catalog-btn" disabled={reviewSubmitting}>
-                      {reviewSubmitting ? 'Enviando...' : 'Enviar avaliacao'}
+                      {reviewSubmitting ? 'Enviando...' : 'Enviar avaliação'}
                     </Button>
                   </div>
                 </form>
@@ -1643,11 +1653,11 @@ export default function PublicProductDetails() {
                                 type="button"
                                 onClick={() => openReviewImage(imageUrl)}
                                 className="block overflow-hidden rounded-md border border-slate-200 bg-slate-50 transition hover:border-primary/40"
-                                aria-label={`Abrir imagem ${imageIndex + 1} da avaliacao`}
+                                aria-label={`Abrir imagem ${imageIndex + 1} da avaliação`}
                               >
                                 <img
                                   src={imageUrl}
-                                  alt={`Imagem da avaliacao ${imageIndex + 1}`}
+                                  alt={`Imagem da avaliação ${imageIndex + 1}`}
                                   className="h-24 w-full object-contain bg-white p-1"
                                   loading="lazy"
                                 />
@@ -1830,7 +1840,7 @@ export default function PublicProductDetails() {
           onClick={closeReviewImage}
           role="dialog"
           aria-modal="true"
-          aria-label="Visualizacao de imagem da avaliacao"
+          aria-label="Visualização de imagem da avaliação"
         >
           <div
             className="relative flex max-h-[92vh] w-full max-w-5xl items-center justify-center rounded-lg bg-slate-900 p-3"
@@ -1845,7 +1855,7 @@ export default function PublicProductDetails() {
             </button>
             <img
               src={selectedReviewImage}
-              alt="Imagem ampliada da avaliacao"
+              alt="Imagem ampliada da avaliação"
               className="max-h-[86vh] w-full object-contain"
             />
           </div>

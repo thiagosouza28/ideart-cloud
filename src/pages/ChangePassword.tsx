@@ -105,7 +105,7 @@ export default function ChangePassword() {
 
         if (nextUser && isCustomerAccount(nextUser)) {
           setRecoveryUser(null);
-          setError('Este link pertence a area do cliente. Use a recuperacao em /minha-conta/login.');
+          setError('Este link pertence à área do cliente. Use a recuperação em /minha-conta/login.');
           void supabase.auth.signOut({ scope: 'local' });
           return;
         }
@@ -124,7 +124,7 @@ export default function ChangePassword() {
 
       if (nextUser && isCustomerAccount(nextUser)) {
         setRecoveryUser(null);
-        setError('Este link pertence a area do cliente. Use a recuperacao em /minha-conta/login.');
+        setError('Este link pertence à área do cliente. Use a recuperação em /minha-conta/login.');
         void supabase.auth.signOut({ scope: 'local' });
         return;
       }
@@ -146,17 +146,17 @@ export default function ChangePassword() {
     setNotice(null);
 
     if (!activeUser) {
-      setError('Sessao de recuperacao expirada. Solicite um novo link.');
+      setError('Sessão de recuperação expirada. Solicite um novo link.');
       return;
     }
 
     if (password.length < 8) {
-      setError('A nova senha deve ter no minimo 8 caracteres.');
+      setError('A nova senha deve ter no mínimo 8 caracteres.');
       return;
     }
 
     if (password !== confirmPassword) {
-      setError('As senhas nao conferem.');
+      setError('As senhas não conferem.');
       return;
     }
 
@@ -189,7 +189,7 @@ export default function ChangePassword() {
       setNotice('Senha atualizada com sucesso.');
       navigate('/dashboard', { replace: true });
     } catch {
-      setError('Nao foi possivel atualizar a senha. Tente novamente.');
+      setError('Não foi possível atualizar a senha. Tente novamente.');
     } finally {
       setLoading(false);
     }
@@ -207,7 +207,7 @@ export default function ChangePassword() {
         <CardContent>
           {!shouldShowForm && (
             <div className="space-y-4 text-sm text-slate-600">
-              <p>Para trocar a senha, abra o link de recuperacao enviado por e-mail.</p>
+              <p>Para trocar a senha, abra o link de recuperação enviado por e-mail.</p>
               <div className="text-center">
                 <Link to={recoveryContext.loginHref} className="underline underline-offset-4">
                   Voltar ao login
@@ -221,7 +221,7 @@ export default function ChangePassword() {
               {loadingSession ? (
                 <div className="flex items-center justify-center py-8 text-sm text-slate-500">
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Validando link...
+                  Válidando link...
                 </div>
               ) : (
                 <form onSubmit={handleSubmit} className="space-y-4">
@@ -229,8 +229,8 @@ export default function ChangePassword() {
                     <Alert>
                       <AlertDescription>
                         {recoveryContext.hasRecoverySignal || passwordRecovery
-                          ? 'Sessao de recuperacao expirada. Solicite um novo link.'
-                          : 'Abra o link de recuperacao enviado por e-mail para redefinir sua senha.'}
+                          ? 'Sessão de recuperação expirada. Solicite um novo link.'
+                          : 'Abra o link de recuperação enviado por e-mail para redefinir sua senha.'}
                       </AlertDescription>
                     </Alert>
                   )}

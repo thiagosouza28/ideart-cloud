@@ -101,7 +101,7 @@ Deno.serve(async (req) => {
   }
 
   if (req.method !== "POST") {
-    return jsonResponse(corsHeaders, 405, { error: "Metodo invalido" });
+    return jsonResponse(corsHeaders, 405, { error: "Método inválido" });
   }
 
   const supabase = getSupabaseClient();
@@ -156,7 +156,7 @@ Deno.serve(async (req) => {
     return jsonResponse(corsHeaders, 202, {
       ok: true,
       ignored: true,
-      reason: "pedido nao localizado",
+      reason: "pedido não localizado",
     });
   }
 

@@ -5,11 +5,16 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { CatalogFooter, CatalogHero, CatalogTopNav } from '@/components/catalog/PublicCatalogChrome';
+import {
+  CatalogFooter,
+  CatalogHero,
+  CatalogTopNav,
+  type CatalogChromeCompany,
+} from '@/components/catalog/PublicCatalogChrome';
 import { useCustomerAuth } from '@/hooks/use-customer-auth';
 import { CpfCnpjInput, PhoneInput, normalizeDigits, validateCpf, validatePhone } from '@/components/ui/masked-input';
 import { customerSupabase } from '@/integrations/supabase/customer-client';
-import { publicSupabase } from '@/integrations/supabase/public-client';
+import { loadPublicCatalogCompany } from '@/lib/publicCatalogCompany';
 import { invokePublicFunction } from '@/services/publicFunctions';
 
 export default function PublicCustomerLogin() {
@@ -29,18 +34,7 @@ export default function PublicCustomerLogin() {
   const [recoveringPassword, setRecoveringPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [catalogCompany, setCatalogCompany] = useState<{
-    id: string;
-    name: string;
-    slug: string | null;
-    city: string | null;
-    state: string | null;
-    phone: string | null;
-    email: string | null;
-    address: string | null;
-    whatsapp: string | null;
-    catalog_contact_url: string | null;
-  } | null>(null);
+  const [catalogCompany, setCatalogCompany] = useState<CatalogChromeCompany | null>(null);
 
   const isUuid = (value: string) =>
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
@@ -102,28 +96,15 @@ export default function PublicCustomerLogin() {
         return;
       }
 
-      let query = publicSupabase
-        .from('companies')
-        .select('id, name, slug, city, state, phone, email, address, whatsapp, catalog_contact_url, is_active')
-        .eq('is_active', true);
-      query = isUuid(companyContext) ? query.eq('id', companyContext) : query.eq('slug', companyContext);
-      const { data } = await query.maybeSingle();
+      const data = await loadPublicCatalogCompany({
+        companyId: isUuid(companyContext) ? companyContext : undefined,
+        slug: isUuid(companyContext) ? undefined : companyContext,
+      });
 
       if (!isMounted) return;
 
       if (data) {
-        setCatalogCompany({
-          id: data.id,
-          name: data.name,
-          slug: data.slug || null,
-          city: data.city || null,
-          state: data.state || null,
-          phone: data.phone || null,
-          email: data.email || null,
-          address: data.address || null,
-          whatsapp: data.whatsapp || null,
-          catalog_contact_url: data.catalog_contact_url || null,
-        });
+        setCatalogCompany(data);
         return;
       }
 
@@ -275,12 +256,13 @@ export default function PublicCustomerLogin() {
       />
 
       <CatalogHero
+        company={catalogCompany}
         badge="Minha conta"
         title="Acesse ou crie sua conta"
         description="Use sua conta para acompanhar pedidos e manter seus dados de compra."
       />
 
-      <main className="mx-auto flex w-[min(620px,calc(100%-24px))] items-center py-10">
+      <main className="mx-auto flex w-full max-w-[1400px] items-center px-4 py-10 sm:px-6 lg:px-8">
         <Card className="w-full border-slate-200">
           <CardHeader>
             <div className="mb-1 flex items-center gap-2">

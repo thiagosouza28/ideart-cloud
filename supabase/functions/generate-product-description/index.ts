@@ -128,7 +128,7 @@ const buildFallbackDescriptions = (body: DescriptionRequest) => {
     ? " Aceita personalizacao para atender melhor o cliente."
     : "";
   const existing = body.existingDescription?.trim()
-    ? ` Referencia: ${truncateText(body.existingDescription.trim(), 180)}`
+    ? ` Referência: ${truncateText(body.existingDescription.trim(), 180)}`
     : "";
 
   const description = truncateText(
@@ -144,7 +144,7 @@ const buildFallbackDescriptions = (body: DescriptionRequest) => {
   const longDescription = [
     `${name}${category} foi pensado para quem busca qualidade, durabilidade e bom acabamento.`,
     `Ideal para uso no dia a dia, com foco em praticidade e apresentacao profissional.${personalization}`,
-    `${unit}Produto pronto para venda e divulgacao no catalogo.`,
+    `${unit}Produto pronto para venda e divulgação no catálogo.`,
   ].join("\n\n");
 
   return { description, shortDescription, longDescription };
@@ -158,7 +158,7 @@ serve(async (req) => {
   }
 
   if (req.method !== "POST") {
-    return jsonResponse(corsHeaders, 405, { error: "Metodo invalido" });
+    return jsonResponse(corsHeaders, 405, { error: "Método inválido" });
   }
 
   try {
@@ -169,7 +169,7 @@ serve(async (req) => {
       Deno.env.get("SB_ANON_KEY") ?? "";
     if (!supabaseUrl || !supabaseAnonKey) {
       console.error("[AI] Missing Supabase config");
-      return jsonResponse(corsHeaders, 500, { error: "Configuracao do Supabase ausente" });
+      return jsonResponse(corsHeaders, 500, { error: "Configuração do Supabase ausente" });
     }
 
     const token = getAuthToken(req);
@@ -183,7 +183,7 @@ serve(async (req) => {
     if (!isLikelyJwt(token)) {
       return jsonResponse(corsHeaders, 401, {
         error: "Invalid authorization token",
-        hint: "Token recebido nao e JWT de usuario.",
+        hint: "O token recebido não é um JWT de usuário.",
       });
     }
 
@@ -193,8 +193,8 @@ serve(async (req) => {
     if (authError || !authData.user) {
       console.error("[AI] Auth getUser failed", authError?.message ?? "unknown");
       return jsonResponse(corsHeaders, 401, {
-        error: "Sessao invalida",
-        hint: "Faca login novamente para renovar a sessao.",
+        error: "Sessão inválida",
+        hint: "Faça login novamente para renovar a sessão.",
       });
     }
 
@@ -213,11 +213,11 @@ serve(async (req) => {
 
     if (superAdminError || roleError) {
       console.error("[AI] Role read error", superAdminError?.message ?? roleError?.message ?? "unknown");
-      return jsonResponse(corsHeaders, 403, { error: "Sem permissao para gerar descricao" });
+      return jsonResponse(corsHeaders, 403, { error: "Sem permissão para gerar descrição" });
     }
 
     if (!superAdminRow && (!roleRows || roleRows.length === 0)) {
-      return jsonResponse(corsHeaders, 403, { error: "Sem permissao para gerar descricao" });
+      return jsonResponse(corsHeaders, 403, { error: "Sem permissão para gerar descrição" });
     }
 
     const now = Date.now();
@@ -233,7 +233,7 @@ serve(async (req) => {
     const body = (await req.json().catch(() => ({}))) as DescriptionRequest;
     const name = body.name?.trim();
     if (!name) {
-      return jsonResponse(corsHeaders, 400, { error: "Nome do produto obrigatorio" });
+      return jsonResponse(corsHeaders, 400, { error: "Nome do produto obrigatório" });
     }
 
     if (!openAiKey) {
@@ -246,10 +246,10 @@ serve(async (req) => {
     if (body.productType?.trim()) context.push(`Tipo: ${body.productType.trim()}`);
     if (body.unit?.trim()) context.push(`Unidade: ${body.unit.trim()}`);
     if (typeof body.personalizationEnabled === "boolean") {
-      context.push(`Personalizacao: ${body.personalizationEnabled ? "sim" : "nao"}`);
+      context.push(`Personalização: ${body.personalizationEnabled ? "sim" : "não"}`);
     }
     if (body.existingDescription?.trim()) {
-      context.push(`Descricao atual: ${body.existingDescription.trim()}`);
+      context.push(`Descrição atual: ${body.existingDescription.trim()}`);
     }
 
     const prompt = [
@@ -259,13 +259,13 @@ serve(async (req) => {
       "Gere um JSON com estas chaves obrigatorias:",
       `- description: texto comercial principal entre 180 e 320 caracteres.`,
       `- shortDescription: resumo com no maximo 140 caracteres.`,
-      `- longDescription: texto de catalogo em 2 ou 3 paragrafos curtos.`,
+      `- longDescription: texto de catálogo em 2 ou 3 parágrafos curtos.`,
       "",
       "Regras:",
       "- Escreva em portugues do Brasil.",
       "- Linguagem clara e objetiva.",
-      "- Nao usar markdown, emojis ou listas numeradas.",
-      "- Entregue somente JSON valido.",
+      "- Não usar markdown, emojis ou listas numeradas.",
+      "- Entregue somente JSON válido.",
     ].join("\n");
 
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -280,7 +280,7 @@ serve(async (req) => {
           {
             role: "system",
             content:
-              "Voce escreve descricoes comerciais para e-commerce em portugues do Brasil. Responda somente JSON valido.",
+              "Você escreve descrições comerciais para e-commerce em português do Brasil. Responda somente JSON válido.",
           },
           { role: "user", content: prompt },
         ],
@@ -354,7 +354,7 @@ serve(async (req) => {
     const message = error instanceof Error ? error.message : String(error);
     console.error("[AI] ERROR", message);
     return jsonResponse(corsHeaders, 400, {
-      error: "Falha ao gerar descricao",
+      error: "Falha ao gerar descrição",
       details: message,
     });
   }

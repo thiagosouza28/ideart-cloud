@@ -64,7 +64,7 @@ const paymentLabels: Record<PaymentMethod, string> = {
   cartao: 'Cartão',
   credito: 'Cartão crédito',
   debito: 'Cartão débito',
-  transferencia: 'Transferencia',
+  transferencia: 'Transferência',
   pix: 'PIX',
   boleto: 'Boleto',
   outro: 'Outro',
@@ -189,7 +189,7 @@ const SaleReceipt = forwardRef<HTMLDivElement, SaleReceiptProps>(
 
           <div className="pt-2 text-center">
             <p className="font-semibold uppercase">Documento não fiscal</p>
-            <p>Obrigado pela preferencia!</p>
+            <p>Obrigado pela preferência!</p>
           </div>
         </div>
       );
