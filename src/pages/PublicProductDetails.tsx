@@ -39,6 +39,7 @@ import {
   resolveCompanyDeliveryTimeDays,
 } from '@/lib/productionTime';
 import { isPromotionActive, resolveProductBasePrice, resolveProductPrice } from '@/lib/pricing';
+import { getProductSaleUnitPriceSuffix } from '@/lib/productSaleUnit';
 import { useToast } from '@/hooks/use-toast';
 import { loadPublicCatalogCompany } from '@/lib/publicCatalogCompany';
 import { Company, Product, ProductColor, ProductReview } from '@/types/database';
@@ -1371,14 +1372,16 @@ export default function PublicProductDetails() {
                       <span className="mr-1">De</span>
                       <span className="line-through">{formatCurrency(promoBasePrice)}</span>
                     </div>
-                    <div className="flex items-baseline gap-2">
+                    <div className="flex flex-wrap items-end gap-2">
                       <span className="text-sm text-slate-500">Por</span>
                       <span className="text-3xl font-bold catalog-price">{formatCurrency(unitPrice)}</span>
+                      <span className="text-sm text-slate-500">{getProductSaleUnitPriceSuffix(product.unit_type)}</span>
                     </div>
                   </div>
                 ) : (
-                  <div className="flex items-baseline gap-3">
+                  <div className="flex flex-wrap items-end gap-3">
                     <span className="text-3xl font-bold catalog-price">{formatCurrency(unitPrice)}</span>
+                    <span className="text-sm text-slate-500">{getProductSaleUnitPriceSuffix(product.unit_type)}</span>
                   </div>
                 )
               ) : (

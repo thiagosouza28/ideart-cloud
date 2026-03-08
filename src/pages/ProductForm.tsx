@@ -39,6 +39,14 @@ import {
   normalizeBarcode,
   type BarcodeFormat,
 } from '@/lib/barcode';
+import {
+  CUSTOM_PRODUCT_SALE_UNIT_VALUE,
+  DEFAULT_PRODUCT_SALE_UNIT,
+  PRODUCT_SALE_UNIT_OPTIONS,
+  getProductSaleUnitLabel,
+  isProductSaleUnitPreset,
+  resolveProductSaleUnit,
+} from '@/lib/productSaleUnit';
 import { useUnsavedChanges } from '@/hooks/use-unsaved-changes';
 
 const productSchema = z
@@ -50,6 +58,7 @@ const productSchema = z
     product_type: z.enum(['produto', 'confeccionado', 'servico']),
     category_id: z.string().uuid().optional().nullable(),
     unit: z.string().min(1, 'Unidade é obrigatória').max(10),
+    unit_type: z.string().min(1, 'Unidade de venda é obrigatória').max(50),
     is_active: z.boolean(),
     base_cost: z.number().min(0, 'Custo base deve ser positivo'),
     labor_cost: z.number().min(0, 'Custo de mão de obra deve ser positivo'),
@@ -97,6 +106,100 @@ const GENERATED_DESCRIPTION_GENERIC_MARKERS = [
   'da categoria',
 ];
 
+const DESCRIPTION_STOPWORDS = new Set([
+  'a',
+  'o',
+  'as',
+  'os',
+  'de',
+  'do',
+  'da',
+  'dos',
+  'das',
+  'e',
+  'em',
+  'para',
+  'com',
+  'sem',
+  'por',
+  'na',
+  'no',
+  'nas',
+  'nos',
+  'ao',
+  'aos',
+  'à',
+  'às',
+  'tipo',
+  'modelo',
+  'kit',
+]);
+
+const PRODUCT_COPY_PATTERNS: Array<{
+  keywords: string[];
+  lead: string;
+  support: string;
+  useCase: string;
+  shortFocus: string;
+}> = [
+  {
+    keywords: ['calendario', 'agenda', 'planner'],
+    lead: 'é ideal para destacar datas, organizar rotinas e manter a informação sempre visível',
+    support: 'Seu formato combina bem com ações promocionais, brindes, balcões e uso diário.',
+    useCase: 'É uma peça que ajuda na organização do dia a dia e ainda reforça a presença da marca em ambientes de trabalho, atendimento ou divulgação.',
+    shortFocus: 'organização visual, praticidade e boa apresentação',
+  },
+  {
+    keywords: ['banner', 'faixa', 'lona', 'painel', 'plotagem'],
+    lead: 'foi pensado para chamar atenção à distância e valorizar a comunicação visual da sua oferta',
+    support: 'A proposta funciona bem para promoções, campanhas, eventos, fachada e ambientação comercial.',
+    useCase: 'É uma escolha forte para destacar mensagens, preços, lançamentos e identidade visual com leitura clara e boa presença no ambiente.',
+    shortFocus: 'grande impacto visual, leitura clara e presença comercial',
+  },
+  {
+    keywords: ['cartao', 'cartão', 'cartoes', 'cartões'],
+    lead: 'valoriza a apresentação profissional e facilita o contato com clientes e parceiros',
+    support: 'É uma solução clássica para fortalecer identidade visual, networking e credibilidade da marca.',
+    useCase: 'Ajuda a transmitir profissionalismo em atendimentos, visitas, entregas e ações de relacionamento, com uma apresentação mais organizada.',
+    shortFocus: 'apresentação profissional, praticidade e fortalecimento da marca',
+  },
+  {
+    keywords: ['adesivo', 'etiqueta', 'rotulo', 'rótulo', 'selo'],
+    lead: 'é uma solução prática para identificação, personalização e acabamento visual do produto',
+    support: 'Funciona muito bem em embalagens, brindes, organização de itens e reforço de marca.',
+    useCase: 'Contribui para uma apresentação mais profissional, melhora a identificação e ajuda a destacar informações importantes no ponto de uso.',
+    shortFocus: 'identificação, personalização e acabamento visual',
+  },
+  {
+    keywords: ['caneca', 'copo', 'garrafa', 'squeeze'],
+    lead: 'combina utilidade no dia a dia com ótimo potencial para presentes, brindes e personalização',
+    support: 'É uma peça que entrega valor percebido tanto no uso pessoal quanto em ações promocionais.',
+    useCase: 'O produto funciona bem para lembranças, campanhas, ações de marca e vendas com apelo afetivo ou utilitário.',
+    shortFocus: 'uso diário, valor percebido e personalização',
+  },
+  {
+    keywords: ['camiseta', 'camisa', 'uniforme', 'boné', 'bone'],
+    lead: 'foi desenvolvido para unir identidade visual, conforto e presença de marca',
+    support: 'É indicado para equipes, eventos, ações promocionais e projetos personalizados.',
+    useCase: 'Ajuda a fortalecer a apresentação da marca, padronizar equipes e criar peças com mais impacto visual em campanhas e atendimento.',
+    shortFocus: 'identidade visual, presença de marca e personalização',
+  },
+  {
+    keywords: ['caixa', 'embalagem', 'sacola', 'sacolinha', 'pacote'],
+    lead: 'agrega valor à entrega e melhora a experiência de apresentação do produto',
+    support: 'É uma solução que combina proteção, organização e percepção de cuidado com a marca.',
+    useCase: 'Contribui para uma entrega mais profissional, reforça identidade visual e torna o produto final mais atraente para venda ou presente.',
+    shortFocus: 'apresentação, proteção e valorização da entrega',
+  },
+  {
+    keywords: ['flyer', 'folder', 'panfleto', 'catalogo', 'catálogo', 'folheto', 'convite'],
+    lead: 'foi pensado para apresentar informações de forma clara e atrativa',
+    support: 'É indicado para divulgação, campanhas promocionais, apresentações e materiais institucionais.',
+    useCase: 'Ajuda a comunicar melhor ofertas, serviços ou identidade da marca, com leitura objetiva e visual mais profissional.',
+    shortFocus: 'divulgação clara, apresentação atrativa e comunicação comercial',
+  },
+];
+
 function generateSlug(name: string): string {
   return name
     .toLowerCase()
@@ -141,6 +244,40 @@ const toCopyUnitLabel = (value?: string | null) => {
   if (normalized === 'g') return 'grama';
   if (normalized === 'cx') return 'caixa';
   return normalized;
+};
+
+const normalizeForMatching = (value: string) =>
+  value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9\s-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const extractMeaningfulNameTokens = (value: string) =>
+  normalizeForMatching(value)
+    .split(' ')
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 3 && !DESCRIPTION_STOPWORDS.has(token));
+
+const detectProductCopyPattern = (name: string, category?: string) => {
+  const haystack = `${normalizeForMatching(name)} ${normalizeForMatching(category || '')}`;
+  return PRODUCT_COPY_PATTERNS.find((pattern) =>
+    pattern.keywords.some((keyword) => haystack.includes(normalizeForMatching(keyword))),
+  );
+};
+
+const mentionsProductTitle = (content: string, name: string) => {
+  const normalizedContent = normalizeForMatching(content);
+  const normalizedName = normalizeForMatching(name);
+  if (!normalizedContent || !normalizedName) return false;
+  if (normalizedContent.includes(normalizedName)) return true;
+
+  const tokens = extractMeaningfulNameTokens(name);
+  if (!tokens.length) return false;
+  const matchedTokens = tokens.filter((token) => normalizedContent.includes(token));
+  return matchedTokens.length >= Math.min(2, tokens.length);
 };
 
 const formatLongDescriptionParagraphs = (value: string) => {
@@ -190,32 +327,52 @@ const buildElegantDescriptions = ({
       : productType === 'confeccionado'
         ? 'um item produzido sob demanda'
         : 'um produto';
+  const copyPattern = detectProductCopyPattern(trimmedName, category);
   const unitLabel = toCopyUnitLabel(unit);
-  const unitLine = unitLabel ? ` A venda acontece por ${unitLabel}, o que facilita a organização comercial e a apresentação da oferta.` : '';
+  const unitLine = unitLabel ? ` A venda acontece por ${unitLabel}, o que facilita a composição comercial e a organização da oferta.` : '';
   const personalizationLine = personalizationEnabled
     ? ' A possibilidade de personalização amplia o apelo comercial e torna a oferta mais versátil para diferentes pedidos.'
     : '';
+  const genericLead =
+    productType === 'servico'
+      ? 'foi estruturado para entregar praticidade, boa apresentação e uma experiência mais profissional ao cliente'
+      : productType === 'confeccionado'
+        ? 'foi desenvolvido para unir apresentação, praticidade e bom valor percebido'
+        : 'é uma opção pensada para unir boa apresentação, praticidade e valor percebido';
+  const lead = copyPattern?.lead || genericLead;
+  const support =
+    copyPattern?.support ||
+    'Seu visual e proposta comercial ajudam a destacar o item no catálogo com uma comunicação mais clara e atrativa.';
+  const useCase =
+    copyPattern?.useCase ||
+    'É uma alternativa interessante para compor vendas com mais clareza, reforçar a apresentação do produto e tornar a oferta mais fácil de entender.';
+  const shortFocus =
+    copyPattern?.shortFocus ||
+    'boa apresentação, praticidade e percepção de valor';
+  const leadSentence = ensureSentenceEnding(lead);
+  const supportSentence = ensureSentenceEnding(support);
+  const useCaseSentence = ensureSentenceEnding(useCase);
 
   const description = truncateAtWord(
     ensureSentenceEnding(
-      `${trimmedName} é ${productLabel}${categoryText} que combina boa apresentação, acabamento caprichado e praticidade no uso. Ideal para quem busca qualidade, ótimo custo-benefício e mais valor percebido na entrega final.${personalizationLine}`,
+      `${trimmedName}${categoryText} é ${productLabel}. ${leadSentence} ${supportSentence}${personalizationLine}${unitLine}`,
     ),
     320,
   );
 
   const shortDescription = truncateAtWord(
     ensureSentenceEnding(
-      `${trimmedName} com acabamento caprichado, ótima apresentação e excelente custo-benefício.`,
+      `${trimmedName} com ${shortFocus}.`,
     ),
     140,
   );
 
   const longDescription = [
-    `${trimmedName}${categoryText} foi pensado para oferecer uma apresentação mais profissional, acabamento caprichado e uma experiência de uso prática no dia a dia.`,
-    `É uma escolha versátil para quem deseja unir qualidade, boa percepção de valor e um visual mais atrativo para exposição, venda ou revenda.${unitLine}`,
+    `${trimmedName}${categoryText} é ${productLabel}. ${leadSentence} ${supportSentence}`,
+    `${useCaseSentence}${unitLine}`,
     personalizationEnabled
-      ? 'Com opção de personalização, o produto ganha ainda mais flexibilidade para campanhas, temas e pedidos sob medida, reforçando seu diferencial no catálogo.'
-      : 'Sua proposta valoriza o catálogo com uma descrição mais clara, comercial e agradável de ler, destacando os principais benefícios do item.',
+      ? 'Com opção de personalização, o item ganha ainda mais flexibilidade para campanhas, temas e pedidos sob medida, reforçando seu diferencial comercial.'
+      : 'A proposta valoriza o catálogo com uma descrição mais clara, conectada ao produto e focada nos benefícios que realmente fazem sentido para a venda.',
   ]
     .map((paragraph) => ensureSentenceEnding(paragraph))
     .join('\n\n');
@@ -253,7 +410,8 @@ const refineGeneratedDescriptions = ({
   const combinedText = [normalizedDescription, normalizedShort, normalizedLong].join(' ').toLowerCase();
   const shouldUseElegantTemplate =
     !normalizedDescription ||
-    GENERATED_DESCRIPTION_GENERIC_MARKERS.some((marker) => combinedText.includes(marker));
+    GENERATED_DESCRIPTION_GENERIC_MARKERS.some((marker) => combinedText.includes(marker)) ||
+    !mentionsProductTitle([normalizedDescription, normalizedShort, normalizedLong].join(' '), name);
 
   if (shouldUseElegantTemplate) {
     return buildElegantDescriptions({
@@ -394,6 +552,8 @@ export default function ProductForm() {
   const [productType, setProductType] = useState<ProductType>('produto');
   const [categoryId, setCategoryId] = useState<string>('');
   const [unit, setUnit] = useState('un');
+  const [saleUnitPreset, setSaleUnitPreset] = useState<string>(DEFAULT_PRODUCT_SALE_UNIT);
+  const [saleUnitCustom, setSaleUnitCustom] = useState('');
   const [isActive, setIsActive] = useState(true);
   const [showInCatalog, setShowInCatalog] = useState(false);
   const [catalogFeatured, setCatalogFeatured] = useState(false);
@@ -457,6 +617,10 @@ export default function ProductForm() {
 
   const [errors, setErrors] = useState<Record<string, string>>();
   const currentUserId = profile?.id || null;
+  const resolvedSaleUnitType = useMemo(
+    () => resolveProductSaleUnit(saleUnitPreset, saleUnitCustom),
+    [saleUnitCustom, saleUnitPreset],
+  );
   const isProductOwner = !isEditing || (Boolean(currentUserId) && productOwnerId === currentUserId);
   const isReadOnlyPublicProduct = isEditing && isPublicProduct && !isProductOwner;
   const canCreateCopy = isReadOnlyPublicProduct;
@@ -670,6 +834,13 @@ export default function ProductForm() {
       setProductType(product.product_type as ProductType);
       setCategoryId(product.category_id || '');
       setUnit(product.unit);
+      if (isProductSaleUnitPreset((product as any).unit_type)) {
+        setSaleUnitPreset(resolveProductSaleUnit(String((product as any).unit_type || DEFAULT_PRODUCT_SALE_UNIT)));
+        setSaleUnitCustom('');
+      } else {
+        setSaleUnitPreset(CUSTOM_PRODUCT_SALE_UNIT_VALUE);
+        setSaleUnitCustom(resolveProductSaleUnit(CUSTOM_PRODUCT_SALE_UNIT_VALUE, (product as any).unit_type || ''));
+      }
       setIsActive(product.is_active);
       setShowInCatalog(product.catalog_enabled ?? product.show_in_catalog ?? false);
       setCatalogFeatured(product.catalog_featured ?? false);
@@ -790,6 +961,8 @@ export default function ProductForm() {
         })),
       );
     } else {
+      setSaleUnitPreset(DEFAULT_PRODUCT_SALE_UNIT);
+      setSaleUnitCustom('');
       setProductColors([]);
       setPersonalizationEnabled(false);
       setImageUrls([]);
@@ -975,6 +1148,7 @@ export default function ProductForm() {
       image_url: imageUrls[0] || null,
       image_urls: imageUrls,
       unit,
+      unit_type: resolvedSaleUnitType,
       is_active: isActive,
       show_in_catalog: showInCatalog,
       catalog_enabled: showInCatalog,
@@ -1020,6 +1194,7 @@ export default function ProductForm() {
       originalProductId,
       imageUrls,
       unit,
+      resolvedSaleUnitType,
       isActive,
       showInCatalog,
       catalogFeatured,
@@ -1109,6 +1284,8 @@ export default function ProductForm() {
     productType,
     categoryId,
     unit,
+    saleUnitPreset,
+    saleUnitCustom,
     isActive,
     showInCatalog,
     catalogFeatured,
@@ -1172,6 +1349,8 @@ export default function ProductForm() {
     productType,
     categoryId,
     unit,
+    saleUnitPreset,
+    saleUnitCustom,
     isActive,
     showInCatalog,
     catalogFeatured,
@@ -1261,6 +1440,18 @@ export default function ProductForm() {
       setProductType(draftData.productType ?? 'produto');
       setCategoryId(draftData.categoryId ?? '');
       setUnit(draftData.unit ?? 'un');
+      setSaleUnitPreset(
+        draftData.saleUnitPreset ??
+          (isProductSaleUnitPreset((draftData as any).unitType)
+            ? resolveProductSaleUnit((draftData as any).unitType)
+            : CUSTOM_PRODUCT_SALE_UNIT_VALUE),
+      );
+      setSaleUnitCustom(
+        draftData.saleUnitCustom ??
+          (isProductSaleUnitPreset((draftData as any).unitType)
+            ? ''
+            : resolveProductSaleUnit(CUSTOM_PRODUCT_SALE_UNIT_VALUE, (draftData as any).unitType)),
+      );
       setIsActive(Boolean(draftData.isActive));
       setShowInCatalog(Boolean(draftData.showInCatalog));
       setCatalogFeatured(Boolean(draftData.catalogFeatured));
@@ -1546,7 +1737,7 @@ export default function ProductForm() {
         name: trimmedName,
         category: selectedCategory,
         productType,
-        unit,
+        unit: resolvedSaleUnitType,
         personalizationEnabled,
         existingDescription: description.trim() || undefined,
       });
@@ -1555,7 +1746,7 @@ export default function ProductForm() {
         name: trimmedName,
         category: selectedCategory,
         productType,
-        unit,
+        unit: resolvedSaleUnitType,
         personalizationEnabled,
         description: resp.description,
         shortDescription: resp.shortDescription,
@@ -1978,6 +2169,12 @@ export default function ProductForm() {
         personalization_enabled: (sourceProduct as any).personalization_enabled ?? false,
         production_time_days: (sourceProduct as any).production_time_days ?? null,
         unit: sourceProduct.unit || 'un',
+        unit_type: resolveProductSaleUnit(
+          isProductSaleUnitPreset((sourceProduct as any).unit_type)
+            ? String((sourceProduct as any).unit_type || DEFAULT_PRODUCT_SALE_UNIT)
+            : CUSTOM_PRODUCT_SALE_UNIT_VALUE,
+          (sourceProduct as any).unit_type || '',
+        ),
         is_active: Boolean(sourceProduct.is_active),
         base_cost: Number(sourceProduct.base_cost || 0),
         labor_cost: Number(sourceProduct.labor_cost || 0),
@@ -2136,6 +2333,7 @@ export default function ProductForm() {
       personalization_enabled: personalizationEnabled,
       production_time_days: normalizedProductionTimeDays,
       unit,
+      unit_type: resolvedSaleUnitType,
       is_active: isActive,
       base_cost: baseCost,
       labor_cost: laborCost,
@@ -3694,6 +3892,58 @@ export default function ProductForm() {
                     </SelectContent>
                   </Select>
                 </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="saleUnitType">Unidade de venda *</Label>
+                  <Select
+                    value={saleUnitPreset}
+                    onValueChange={(value) => {
+                      setSaleUnitPreset(value);
+                      if (value !== CUSTOM_PRODUCT_SALE_UNIT_VALUE) {
+                        setErrors((prev) => {
+                          if (!prev?.unit_type) return prev;
+                          const next = { ...(prev || {}) };
+                          delete next.unit_type;
+                          return next;
+                        });
+                      }
+                    }}
+                  >
+                    <SelectTrigger id="saleUnitType" className={errors?.unit_type ? 'border-destructive' : ''}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PRODUCT_SALE_UNIT_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                      <SelectItem value={CUSTOM_PRODUCT_SALE_UNIT_VALUE}>Outro (personalizado)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    O catálogo exibirá o preço como por {getProductSaleUnitLabel(resolvedSaleUnitType || DEFAULT_PRODUCT_SALE_UNIT)}.
+                  </p>
+                  {errors?.unit_type && (
+                    <p className="text-xs text-destructive">{errors.unit_type}</p>
+                  )}
+                </div>
+
+                {saleUnitPreset === CUSTOM_PRODUCT_SALE_UNIT_VALUE && (
+                  <div className="space-y-2">
+                    <Label htmlFor="saleUnitCustom">Unidade personalizada *</Label>
+                    <Input
+                      id="saleUnitCustom"
+                      value={saleUnitCustom}
+                      onChange={(e) => setSaleUnitCustom(e.target.value)}
+                      placeholder="Ex.: bloco, pacote com 50, dúzia"
+                      className={errors?.unit_type ? 'border-destructive' : ''}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Informe como o produto será vendido para o cliente.
+                    </p>
+                  </div>
+                )}
 
                 <div className="space-y-2">
                   <Label htmlFor="minOrderQuantity">Quantidade mínima para pedido no catálogo</Label>

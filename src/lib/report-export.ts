@@ -5,32 +5,281 @@ const buildHeaders = (rows: ExportRow[]) => {
   return Object.keys(rows[0]);
 };
 
+const escapeHtml = (value: string) =>
+  value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
 const normalizeValue = (value: ExportRow[keyof ExportRow]) => {
   if (value === null || value === undefined) return '';
   if (typeof value === 'number') return value.toLocaleString('pt-BR');
   return String(value);
 };
 
+const escapeCsv = (value: string) => {
+  if (!/[;"\n\r]/.test(value)) return value;
+  return `"${value.replace(/"/g, '""')}"`;
+};
+
 const buildCsv = (rows: ExportRow[]) => {
   const headers = buildHeaders(rows);
   const body = rows.map((row) =>
-    headers.map((header) => normalizeValue(row[header])).join(';'),
+    headers.map((header) => escapeCsv(normalizeValue(row[header]))).join(';'),
   );
-  return [headers.join(';'), ...body].join('\n');
+  return [headers.map(escapeCsv).join(';'), ...body].join('\n');
 };
 
 const buildHtmlTable = (rows: ExportRow[]) => {
   const headers = buildHeaders(rows);
-  const headerHtml = headers.map((header) => `<th>${header}</th>`).join('');
+  const headerHtml = headers.map((header) => `<th>${escapeHtml(header)}</th>`).join('');
   const bodyHtml = rows
     .map(
       (row) =>
         `<tr>${headers
-          .map((header) => `<td>${normalizeValue(row[header])}</td>`)
+          .map((header) => `<td>${escapeHtml(normalizeValue(row[header]))}</td>`)
           .join('')}</tr>`,
     )
     .join('');
-  return `<table border="1" cellpadding="6" cellspacing="0"><thead><tr>${headerHtml}</tr></thead><tbody>${bodyHtml}</tbody></table>`;
+  return `
+    <div class="table-shell">
+      <table>
+        <thead><tr>${headerHtml}</tr></thead>
+        <tbody>${bodyHtml}</tbody>
+      </table>
+    </div>
+  `;
+};
+
+const buildHtmlDocument = (title: string, rows: ExportRow[], includeToolbar: boolean) => {
+  const html = buildHtmlTable(rows);
+  const generatedAt = new Date().toLocaleString('pt-BR');
+  const safeTitle = escapeHtml(title);
+
+  return `
+    <!DOCTYPE html>
+    <html lang="pt-BR">
+      <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>${safeTitle}</title>
+        <style>
+          :root {
+            color-scheme: light;
+            --page-bg: #f8fafc;
+            --surface: #ffffff;
+            --surface-soft: #f8fafc;
+            --border: #dbe4f0;
+            --text: #0f172a;
+            --muted: #475569;
+            --primary: #2563eb;
+          }
+
+          * {
+            box-sizing: border-box;
+          }
+
+          body {
+            margin: 0;
+            background: var(--page-bg);
+            color: var(--text);
+            font-family: "Segoe UI", Arial, sans-serif;
+          }
+
+          .toolbar {
+            position: sticky;
+            top: 0;
+            z-index: 20;
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+            padding: 16px 24px;
+            border-bottom: 1px solid var(--border);
+            background: rgba(248, 250, 252, 0.96);
+            backdrop-filter: blur(10px);
+          }
+
+          .toolbar button {
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            background: var(--surface);
+            color: var(--text);
+            padding: 10px 16px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+          }
+
+          .toolbar button.primary {
+            border-color: var(--primary);
+            background: var(--primary);
+            color: #fff;
+          }
+
+          .page {
+            padding: 24px;
+          }
+
+          .report-card {
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            background: var(--surface);
+            box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+            overflow: hidden;
+          }
+
+          .report-head {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 16px;
+            padding: 24px;
+            border-bottom: 1px solid var(--border);
+          }
+
+          .report-head h1 {
+            margin: 0;
+            font-size: 28px;
+            line-height: 1.1;
+          }
+
+          .report-head p {
+            margin: 6px 0 0;
+            color: var(--muted);
+            font-size: 14px;
+          }
+
+          .report-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 104px;
+            padding: 10px 14px;
+            border-radius: 999px;
+            background: #eff6ff;
+            color: var(--primary);
+            font-size: 13px;
+            font-weight: 700;
+          }
+
+          .table-shell {
+            width: 100%;
+            overflow: auto;
+          }
+
+          table {
+            width: 100%;
+            min-width: 960px;
+            border-collapse: collapse;
+          }
+
+          th,
+          td {
+            padding: 12px 14px;
+            border-bottom: 1px solid var(--border);
+            border-right: 1px solid var(--border);
+            text-align: left;
+            font-size: 13px;
+            vertical-align: top;
+          }
+
+          th:last-child,
+          td:last-child {
+            border-right: 0;
+          }
+
+          th {
+            position: sticky;
+            top: 0;
+            background: var(--surface-soft);
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+            text-transform: uppercase;
+          }
+
+          tbody tr:nth-child(even) td {
+            background: #fcfdff;
+          }
+
+          .empty-state {
+            padding: 24px;
+            color: var(--muted);
+            font-size: 14px;
+          }
+
+          @page {
+            size: A4 landscape;
+            margin: 12mm;
+          }
+
+          @media print {
+            body {
+              background: #fff;
+            }
+
+            .toolbar {
+              display: none;
+            }
+
+            .page {
+              padding: 0;
+            }
+
+            .report-card {
+              border: 0;
+              border-radius: 0;
+              box-shadow: none;
+            }
+
+            .report-head {
+              padding: 0 0 16px;
+            }
+
+            .table-shell {
+              overflow: visible;
+            }
+
+            table {
+              min-width: 0;
+            }
+
+            th {
+              position: static;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        ${
+          includeToolbar
+            ? `
+              <div class="toolbar">
+                <button onclick="window.close()">Fechar</button>
+                <button class="primary" onclick="window.print()">Imprimir / Salvar PDF</button>
+              </div>
+            `
+            : ''
+        }
+        <main class="page">
+          <section class="report-card">
+            <header class="report-head">
+              <div>
+                <h1>${safeTitle}</h1>
+                <p>Gerado em ${escapeHtml(generatedAt)} • ${rows.length} linha(s)</p>
+              </div>
+              <span class="report-badge">Exportação</span>
+            </header>
+            ${rows.length ? html : '<div class="empty-state">Nenhum dado para exportar.</div>'}
+          </section>
+        </main>
+      </body>
+    </html>
+  `;
 };
 
 const downloadBlob = (content: string, filename: string, type: string) => {
@@ -51,64 +300,46 @@ export const exportToCsv = (rows: ExportRow[], filename: string) => {
 };
 
 export const exportToExcel = (rows: ExportRow[], filename: string) => {
-  const html = buildHtmlTable(rows);
+  const html = buildHtmlDocument(filename.replace(/\.[^.]+$/, ''), rows, false);
   downloadBlob(html, filename, 'application/vnd.ms-excel;charset=utf-8;');
 };
 
+const openExportWindow = () => {
+  const width = Math.max(window.screen.availWidth - 32, 1200);
+  const height = Math.max(window.screen.availHeight - 48, 820);
+  const popup = window.open('', '_blank', `popup=yes,left=0,top=0,width=${width},height=${height}`);
+
+  if (!popup) return null;
+
+  try {
+    popup.moveTo(0, 0);
+    popup.resizeTo(window.screen.availWidth, window.screen.availHeight);
+  } catch {
+    // Ignore environments that block window repositioning.
+  }
+
+  return popup;
+};
+
 export const openPdfPreview = (title: string, rows: ExportRow[]) => {
-  const html = buildHtmlTable(rows);
-  const win = window.open('', '_blank');
+  const html = buildHtmlDocument(title, rows, true);
+  const win = openExportWindow();
   if (!win) return;
-  win.document.write(`
-    <!DOCTYPE html>
-    <html>
-      <head>
-        <title>${title}</title>
-        <style>
-          body { font-family: Arial, sans-serif; padding: 24px; color: #0f172a; }
-          h1 { font-size: 18px; margin-bottom: 16px; }
-          table { border-collapse: collapse; width: 100%; }
-          th { text-align: left; background: #f1f5f9; }
-          th, td { border: 1px solid #e2e8f0; font-size: 12px; }
-        </style>
-      </head>
-      <body>
-        <h1>${title}</h1>
-        ${html}
-      </body>
-    </html>
-  `);
+  win.document.open();
+  win.document.write(html);
   win.document.close();
   win.focus();
 };
 
 export const printPdf = (title: string, rows: ExportRow[]) => {
-  const html = buildHtmlTable(rows);
-  const win = window.open('', '_blank');
+  const html = buildHtmlDocument(title, rows, false);
+  const win = openExportWindow();
   if (!win) return;
-  win.document.write(`
-    <!DOCTYPE html>
-    <html>
-      <head>
-        <title>${title}</title>
-        <style>
-          body { font-family: Arial, sans-serif; padding: 24px; color: #0f172a; }
-          h1 { font-size: 18px; margin-bottom: 16px; }
-          table { border-collapse: collapse; width: 100%; }
-          th { text-align: left; background: #f1f5f9; }
-          th, td { border: 1px solid #e2e8f0; font-size: 12px; }
-        </style>
-      </head>
-      <body>
-        <h1>${title}</h1>
-        ${html}
-      </body>
-    </html>
-  `);
+  win.document.open();
+  win.document.write(html);
   win.document.close();
-  win.focus();
   win.onload = () => {
+    win.focus();
     win.print();
-    win.close();
   };
 };

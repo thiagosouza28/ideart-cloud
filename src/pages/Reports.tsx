@@ -56,6 +56,17 @@ const percent = (value: number) => `${value.toFixed(1)}%`;
 
 const formatDateTime = (value: string) => new Date(value).toLocaleString('pt-BR');
 
+const toExportFilename = (title: string) => {
+  const slug = title
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  const date = new Date().toISOString().split('T')[0];
+  return `${slug || 'relatorio'}-${date}`;
+};
+
 const defaultDateRange = () => {
   const end = new Date();
   const start = new Date();
@@ -179,6 +190,7 @@ export default function Reports() {
     const tabLabel = reportTabs.find((tab) => tab.value === activeTab)?.label || 'Relatório';
     return `Relatório - ${tabLabel}`;
   }, [activeTab]);
+  const exportFilenameBase = useMemo(() => toExportFilename(exportTitle), [exportTitle]);
 
   const loadData = async (nextFilters: ReportFilters) => {
     setLoading(true);
@@ -991,48 +1003,72 @@ export default function Reports() {
       </Tabs>
 
       <Dialog open={exportOpen} onOpenChange={setExportOpen}>
-        <DialogContent aria-describedby={undefined} className="max-w-4xl max-h-[80vh] overflow-auto">
-          <DialogHeader>
+        <DialogContent
+          aria-describedby={undefined}
+          className="h-[min(88vh,820px)] w-[min(1120px,calc(100vw-2rem))] max-w-none grid-rows-[auto,1fr,auto] overflow-hidden p-0"
+        >
+          <DialogHeader className="border-b border-border px-6 py-5">
             <DialogTitle>Preview - {exportTitle}</DialogTitle>
           </DialogHeader>
           {exportRows.length > 0 ? (
-            <div className="space-y-2">
-              <p className="text-sm text-muted-foreground">
-                {exportRows.length} linhas encontradas.
-              </p>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    {Object.keys(exportRows[0]).map((key) => (
-                      <TableHead key={key}>{key}</TableHead>
-                    ))}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {exportRows.slice(0, 15).map((row, index) => (
-                    <TableRow key={index}>
-                      {Object.keys(row).map((key) => (
-                        <TableCell key={key}>{String(row[key] ?? '')}</TableCell>
+            <div className="flex min-h-0 flex-col gap-4 px-6 py-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="space-y-1">
+                  <p className="text-sm font-medium text-foreground">
+                    {exportRows.length} linhas prontas para exportação.
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    {exportRows.length > 50
+                      ? 'Mostrando prévia das primeiras 50 linhas.'
+                      : 'A prévia abaixo será a base da exportação.'}
+                  </p>
+                </div>
+                <Badge variant="secondary">{reportTabs.find((tab) => tab.value === activeTab)?.label}</Badge>
+              </div>
+
+              <div className="min-h-0 overflow-hidden rounded-2xl border border-border">
+                <div className="h-full max-h-[52vh] overflow-auto">
+                  <Table className="min-w-[920px]">
+                    <TableHeader className="sticky top-0 z-10 bg-background">
+                      <TableRow>
+                        {Object.keys(exportRows[0]).map((key) => (
+                          <TableHead key={key}>{key}</TableHead>
+                        ))}
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {exportRows.slice(0, 50).map((row, index) => (
+                        <TableRow key={index}>
+                          {Object.keys(row).map((key) => (
+                            <TableCell key={key}>{String(row[key] ?? '')}</TableCell>
+                          ))}
+                        </TableRow>
                       ))}
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">Nenhum dado para exportar.</p>
+            <div className="px-6 py-4">
+              <p className="text-sm text-muted-foreground">Nenhum dado para exportar.</p>
+            </div>
           )}
-          <DialogFooter>
+          <DialogFooter className="border-t border-border px-6 py-4">
             <Button variant="outline" onClick={() => openPdfPreview(exportTitle, exportRows)} disabled={!exportRows.length}>
-              Preview PDF
+              Abrir prévia
             </Button>
             <Button variant="outline" onClick={() => printPdf(exportTitle, exportRows)} disabled={!exportRows.length}>
-              PDF
+              Imprimir / PDF
             </Button>
-            <Button variant="outline" onClick={() => exportToExcel(exportRows, 'relatorio.xls')} disabled={!exportRows.length}>
+            <Button
+              variant="outline"
+              onClick={() => exportToExcel(exportRows, `${exportFilenameBase}.xls`)}
+              disabled={!exportRows.length}
+            >
               Excel
             </Button>
-            <Button onClick={() => exportToCsv(exportRows, 'relatorio.csv')} disabled={!exportRows.length}>
+            <Button onClick={() => exportToCsv(exportRows, `${exportFilenameBase}.csv`)} disabled={!exportRows.length}>
               CSV
             </Button>
           </DialogFooter>

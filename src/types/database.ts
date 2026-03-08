@@ -318,6 +318,7 @@ export interface Product {
   image_url: string | null;
   image_urls?: string[] | null;
   unit: string;
+  unit_type?: string | null;
   is_active: boolean;
   show_in_catalog: boolean;
   catalog_enabled?: boolean | null;

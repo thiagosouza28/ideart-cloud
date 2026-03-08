@@ -15,6 +15,11 @@ import { normalizeDigits } from '@/components/ui/masked-input';
 import { useUnsavedChanges } from '@/hooks/use-unsaved-changes';
 import { ensurePublicStorageUrl } from '@/lib/storage';
 import { buildOrderDetailsPath } from '@/lib/orderRouting';
+import {
+  getProductSaleEquivalentText,
+  getProductSaleUnitLabel,
+  getProductSaleUnitPriceSuffix,
+} from '@/lib/productSaleUnit';
 import { fetchCompanyPaymentMethods } from '@/services/companyPaymentMethods';
 import {
   defaultCompanyPaymentMethods,
@@ -1137,10 +1142,13 @@ export default function OrderForm() {
                                 <div className="order-product-meta">
                                   <strong>{product.name}</strong>
                                   <span>SKU: {product.sku || '-'}</span>
+                                  <span>Unidade de venda: {getProductSaleUnitLabel(product.unit_type, { capitalize: true })}</span>
                                 </div>
                               </div>
                               <div className="order-product-result-right">
-                                <span>{fmt(getProductPrice(product, 1))}</span>
+                                <span>
+                                  {fmt(getProductPrice(product, 1))} {getProductSaleUnitPriceSuffix(product.unit_type)}
+                                </span>
                                 <button
                                   type="button"
                                   className="order-add-btn"
@@ -1186,6 +1194,15 @@ export default function OrderForm() {
                               <div className="order-product-cell">
                                 <strong>{item.product.name}</strong>
                                 <span>{item.product.sku || 'Sem SKU'}</span>
+                                <span>
+                                  Unidade de venda: {getProductSaleUnitLabel(item.product.unit_type, { capitalize: true })}
+                                </span>
+                                {getProductSaleEquivalentText(item.product.unit_type, item.quantity, item.product.name) ? (
+                                  <span>
+                                    Total equivalente:{' '}
+                                    {getProductSaleEquivalentText(item.product.unit_type, item.quantity, item.product.name)}
+                                  </span>
+                                ) : null}
                               </div>
                             </td>
                             <td>
@@ -1211,7 +1228,12 @@ export default function OrderForm() {
                                 </button>
                               </div>
                             </td>
-                            <td>{fmt(item.unit_price)}</td>
+                            <td>
+                              {fmt(item.unit_price)}
+                              <div className="text-xs text-[var(--order-muted)]">
+                                {getProductSaleUnitPriceSuffix(item.product.unit_type)}
+                              </div>
+                            </td>
                             <td>{fmt(calculateItemTotal(item))}</td>
                             <td>
                               <button

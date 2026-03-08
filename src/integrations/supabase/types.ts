@@ -1576,6 +1576,7 @@ export type Database = {
           stock_quantity: number
           track_stock: boolean
           unit: string
+          unit_type: string
           updated_at: string
           view_count: number
           waste_percentage: number
@@ -1617,6 +1618,7 @@ export type Database = {
           stock_quantity?: number
           track_stock?: boolean
           unit?: string
+          unit_type?: string
           updated_at?: string
           view_count?: number
           waste_percentage?: number
@@ -1658,6 +1660,7 @@ export type Database = {
           stock_quantity?: number
           track_stock?: boolean
           unit?: string
+          unit_type?: string
           updated_at?: string
           view_count?: number
           waste_percentage?: number

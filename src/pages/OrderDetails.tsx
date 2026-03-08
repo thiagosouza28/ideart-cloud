@@ -230,7 +230,7 @@ export default function OrderDetails() {
 
   const [publicLinkToken, setPublicLinkToken] = useState<string | null>(null);
   const [linkLoading, setLinkLoading] = useState(false);
-  const [copiedLink, setCopiedLink] = useState<'public' | 'message' | null>(null);
+  const [copiedLink, setCopiedLink] = useState<'public' | 'message' | 'art-file' | null>(null);
   const [messageText, setMessageText] = useState('');
   const [messageDirty, setMessageDirty] = useState(false);
   const [isEditingItems, setIsEditingItems] = useState(false);
@@ -1517,6 +1517,17 @@ const sendWhatsAppMessage = (message: string) => {
   };
 
   const clientMessage = messageDirty ? messageText : buildWhatsAppMessage(messageLink);
+  const suggestedArtFileName = useMemo(
+    () =>
+      buildSuggestedOrderFileName({
+        customerName: order?.customer?.name || order?.customer_name || 'Cliente',
+        productName: items[0]?.product_name || 'Arte',
+        orderNumber: order?.order_number,
+        date: order?.created_at,
+        fallbackBaseName: 'arte',
+      }),
+    [items, order?.created_at, order?.customer?.name, order?.customer_name, order?.order_number],
+  );
   const ensurePublicLink = async () => {
     if (!order) return null;
     if (publicLinkToken) return publicLinkToken;
@@ -1562,6 +1573,17 @@ const sendWhatsAppMessage = (message: string) => {
     setCopiedLink('message');
     setTimeout(() => setCopiedLink(null), 2000);
     toast({ title: 'Copiado com sucesso!' });
+  };
+
+  const handleCopySuggestedArtFileName = async () => {
+    const copied = await copyToClipboard(suggestedArtFileName);
+    if (!copied) {
+      toast({ title: 'Falha ao copiar', description: 'Tente novamente.', variant: 'destructive' });
+      return;
+    }
+    setCopiedLink('art-file');
+    setTimeout(() => setCopiedLink(null), 2000);
+    toast({ title: 'Nome do arquivo copiado' });
   };
 
   const handleSendWhatsAppUpdate = async () => {
@@ -1813,6 +1835,7 @@ const sendWhatsAppMessage = (message: string) => {
         customerName: order?.customer?.name || order?.customer_name || 'Cliente',
         productName: items[0]?.product_name || 'Arte',
         orderNumber: order?.order_number,
+        date: order?.created_at,
         originalFileName: file.name,
         fallbackBaseName: 'arte',
       }),
@@ -2097,6 +2120,7 @@ const sendWhatsAppMessage = (message: string) => {
     : copiedLink === 'message'
       ? 'Copiado'
       : 'Copiar';
+  const suggestedArtFileLabel = copiedLink === 'art-file' ? 'Copiado' : 'Copiar nome do arquivo';
   const finalPhotosWithUrls = finalPhotos.map((photo) => ({
     ...photo,
     url: ensurePublicStorageUrl('order-final-photos', photo.storage_path),
@@ -2241,6 +2265,27 @@ const sendWhatsAppMessage = (message: string) => {
                 {publicLinkLabel}
               </Button>
             </div>
+          </div>
+          <div className="space-y-2">
+            <Label>Sugestão de nome do arquivo da arte</Label>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <Input
+                readOnly
+                value={suggestedArtFileName}
+                placeholder="Nome da arte"
+              />
+              <Button
+                variant="outline"
+                onClick={handleCopySuggestedArtFileName}
+                className="w-full gap-2 sm:w-auto"
+              >
+                <Copy className="h-4 w-4" />
+                {suggestedArtFileLabel}
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Use este nome ao salvar a arte no CorelDRAW, Illustrator ou outro editor. A extensão pode ser adicionada no momento do salvamento.
+            </p>
           </div>
           <div className="space-y-2">
             <Label>Mensagem para o cliente</Label>

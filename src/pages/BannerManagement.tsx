@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
     Plus,
@@ -15,7 +15,9 @@ import {
     XCircle,
     Clock,
     Upload,
-    Loader2
+    Loader2,
+    Move,
+    ZoomIn,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -39,11 +41,17 @@ import {
 } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { Slider } from '@/components/ui/slider';
 import { toast } from 'sonner';
 import {
     CATALOG_BANNER_ASPECT_RATIO_CSS,
+    cropBannerImageFile,
+    getBannerAspectRatioCss,
+    getBannerTargetSize,
     getBannerUploadHint,
+    readBannerImageDimensions,
     validateBannerImageFile,
+    type BannerPosition,
 } from '@/lib/bannerLayout';
 import { ensurePublicStorageUrl } from '@/lib/storage';
 import { format } from 'date-fns';
@@ -64,6 +72,90 @@ interface Banner {
     ends_at: string | null;
     created_at: string;
 }
+
+interface BannerCropDraft {
+    file: File;
+    sourceUrl: string;
+    position: BannerPosition;
+    naturalWidth: number;
+    naturalHeight: number;
+    zoom: number;
+    offsetX: number;
+    offsetY: number;
+}
+
+const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
+
+const getCropScale = ({
+    naturalWidth,
+    naturalHeight,
+    viewportWidth,
+    viewportHeight,
+    zoom,
+}: {
+    naturalWidth: number;
+    naturalHeight: number;
+    viewportWidth: number;
+    viewportHeight: number;
+    zoom: number;
+}) => {
+    if (!viewportWidth || !viewportHeight || !naturalWidth || !naturalHeight) return 1;
+    const baseScale = Math.max(viewportWidth / naturalWidth, viewportHeight / naturalHeight);
+    return baseScale * zoom;
+};
+
+const clampCropOffsets = ({
+    naturalWidth,
+    naturalHeight,
+    viewportWidth,
+    viewportHeight,
+    scale,
+    offsetX,
+    offsetY,
+}: {
+    naturalWidth: number;
+    naturalHeight: number;
+    viewportWidth: number;
+    viewportHeight: number;
+    scale: number;
+    offsetX: number;
+    offsetY: number;
+}) => {
+    const displayWidth = naturalWidth * scale;
+    const displayHeight = naturalHeight * scale;
+    const maxOffsetX = Math.max((displayWidth - viewportWidth) / 2, 0);
+    const maxOffsetY = Math.max((displayHeight - viewportHeight) / 2, 0);
+
+    return {
+        offsetX: clamp(offsetX, -maxOffsetX, maxOffsetX),
+        offsetY: clamp(offsetY, -maxOffsetY, maxOffsetY),
+    };
+};
+
+const getCropAreaPixels = ({
+    naturalWidth,
+    naturalHeight,
+    viewportWidth,
+    viewportHeight,
+    scale,
+    offsetX,
+    offsetY,
+}: {
+    naturalWidth: number;
+    naturalHeight: number;
+    viewportWidth: number;
+    viewportHeight: number;
+    scale: number;
+    offsetX: number;
+    offsetY: number;
+}) => {
+    const cropWidth = viewportWidth / scale;
+    const cropHeight = viewportHeight / scale;
+    const x = clamp((naturalWidth - cropWidth) / 2 - offsetX / scale, 0, naturalWidth - cropWidth);
+    const y = clamp((naturalHeight - cropHeight) / 2 - offsetY / scale, 0, naturalHeight - cropHeight);
+
+    return { x, y, width: cropWidth, height: cropHeight };
+};
 
 const emptyBanner: Partial<Banner> = {
     title: '',
@@ -90,8 +182,13 @@ export default function BannerManagement() {
     const [currentBanner, setCurrentBanner] = useState<Partial<Banner>>(emptyBanner);
     const [saving, setSaving] = useState(false);
     const [uploading, setUploading] = useState(false);
+    const [cropDialogOpen, setCropDialogOpen] = useState(false);
+    const [cropDraft, setCropDraft] = useState<BannerCropDraft | null>(null);
+    const [cropViewportSize, setCropViewportSize] = useState({ width: 0, height: 0 });
+    const [cropViewportElement, setCropViewportElement] = useState<HTMLDivElement | null>(null);
     const [initialBannerSnapshot, setInitialBannerSnapshot] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const dragStateRef = useRef<{ startX: number; startY: number; offsetX: number; offsetY: number } | null>(null);
     const confirm = useConfirm();
 
     const currentSnapshot = useMemo(() => JSON.stringify(currentBanner), [currentBanner]);
@@ -108,6 +205,83 @@ export default function BannerManagement() {
             loadBanners();
         }
     }, [profile?.company_id]);
+
+    useLayoutEffect(() => {
+        if (!cropDialogOpen || !cropViewportElement) return;
+
+        const updateSize = () => {
+            const rect = cropViewportElement.getBoundingClientRect();
+            setCropViewportSize({
+                width: Math.round(rect.width),
+                height: Math.round(rect.height),
+            });
+        };
+
+        const raf = requestAnimationFrame(updateSize);
+        const timer = window.setTimeout(updateSize, 120);
+        const observer = new ResizeObserver(() => updateSize());
+        observer.observe(cropViewportElement);
+
+        return () => {
+            cancelAnimationFrame(raf);
+            window.clearTimeout(timer);
+            observer.disconnect();
+        };
+    }, [cropDialogOpen, cropDraft?.sourceUrl, cropViewportElement]);
+
+    useEffect(() => {
+        return () => {
+            if (cropDraft?.sourceUrl) {
+                URL.revokeObjectURL(cropDraft.sourceUrl);
+            }
+        };
+    }, [cropDraft?.sourceUrl]);
+
+    const closeCropDialog = () => {
+        if (cropDraft?.sourceUrl) {
+            URL.revokeObjectURL(cropDraft.sourceUrl);
+        }
+        setCropDraft(null);
+        setCropDialogOpen(false);
+        setCropViewportElement(null);
+        setCropViewportSize({ width: 0, height: 0 });
+        dragStateRef.current = null;
+        if (fileInputRef.current) fileInputRef.current.value = '';
+    };
+
+    const getActiveCropViewportSize = () => {
+        const rect = cropViewportElement?.getBoundingClientRect();
+        const width = Math.round(rect?.width || cropViewportSize.width || 0);
+        const height = Math.round(rect?.height || cropViewportSize.height || 0);
+        return { width, height };
+    };
+
+    const cropScale = useMemo(() => {
+        if (!cropDraft) return 1;
+        const viewport = getActiveCropViewportSize();
+        return getCropScale({
+            naturalWidth: cropDraft.naturalWidth,
+            naturalHeight: cropDraft.naturalHeight,
+            viewportWidth: viewport.width,
+            viewportHeight: viewport.height,
+            zoom: cropDraft.zoom,
+        });
+    }, [cropDraft, cropViewportElement, cropViewportSize.height, cropViewportSize.width]);
+
+    const cropPreviewStyle = useMemo(() => {
+        if (!cropDraft) return null;
+
+        const displayWidth = cropDraft.naturalWidth * cropScale;
+        const displayHeight = cropDraft.naturalHeight * cropScale;
+
+        return {
+            width: `${displayWidth}px`,
+            height: `${displayHeight}px`,
+            left: '50%',
+            top: '50%',
+            transform: `translate(calc(-50% + ${cropDraft.offsetX}px), calc(-50% + ${cropDraft.offsetY}px))`,
+        };
+    }, [cropDraft, cropScale]);
 
     const loadBanners = async () => {
         setLoading(true);
@@ -182,7 +356,6 @@ export default function BannerManagement() {
         const file = e.target.files?.[0];
         if (!file) return;
 
-        setUploading(true);
         try {
             const bannerPosition = currentBanner.position || 'catalog';
             const validationError = await validateBannerImageFile(file, bannerPosition);
@@ -191,12 +364,125 @@ export default function BannerManagement() {
                 return;
             }
 
-            const fileExt = file.name.split('.').pop();
-            const fileName = `banners/${profile?.company_id}/${Math.random()}.${fileExt}`;
+            const { width, height } = await readBannerImageDimensions(file);
+            const sourceUrl = URL.createObjectURL(file);
+
+            setCropDraft({
+                file,
+                sourceUrl,
+                position: bannerPosition,
+                naturalWidth: width,
+                naturalHeight: height,
+                zoom: 1,
+                offsetX: 0,
+                offsetY: 0,
+            });
+            setCropDialogOpen(true);
+        } catch (error: any) {
+            toast.error('Erro ao enviar imagem: ' + error.message);
+        } finally {
+            if (fileInputRef.current) fileInputRef.current.value = '';
+        }
+    };
+
+    const handleCropZoomChange = (values: number[]) => {
+        const nextZoom = values[0] ?? 1;
+        setCropDraft((prev) => {
+            if (!prev) return prev;
+            const viewport = getActiveCropViewportSize();
+
+            const nextScale = getCropScale({
+                naturalWidth: prev.naturalWidth,
+                naturalHeight: prev.naturalHeight,
+                viewportWidth: viewport.width,
+                viewportHeight: viewport.height,
+                zoom: nextZoom,
+            });
+            const nextOffsets = clampCropOffsets({
+                naturalWidth: prev.naturalWidth,
+                naturalHeight: prev.naturalHeight,
+                viewportWidth: viewport.width,
+                viewportHeight: viewport.height,
+                scale: nextScale,
+                offsetX: prev.offsetX,
+                offsetY: prev.offsetY,
+            });
+
+            return { ...prev, zoom: nextZoom, ...nextOffsets };
+        });
+    };
+
+    const handleCropPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+        if (!cropDraft) return;
+        event.currentTarget.setPointerCapture(event.pointerId);
+        dragStateRef.current = {
+            startX: event.clientX,
+            startY: event.clientY,
+            offsetX: cropDraft.offsetX,
+            offsetY: cropDraft.offsetY,
+        };
+    };
+
+    const handleCropPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+        if (!cropDraft || !dragStateRef.current) return;
+        const viewport = getActiveCropViewportSize();
+
+        const nextOffsetX = dragStateRef.current.offsetX + (event.clientX - dragStateRef.current.startX);
+        const nextOffsetY = dragStateRef.current.offsetY + (event.clientY - dragStateRef.current.startY);
+        const nextOffsets = clampCropOffsets({
+            naturalWidth: cropDraft.naturalWidth,
+            naturalHeight: cropDraft.naturalHeight,
+            viewportWidth: viewport.width,
+            viewportHeight: viewport.height,
+            scale: cropScale,
+            offsetX: nextOffsetX,
+            offsetY: nextOffsetY,
+        });
+
+        setCropDraft((prev) => (prev ? { ...prev, ...nextOffsets } : prev));
+    };
+
+    const handleCropPointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+            event.currentTarget.releasePointerCapture(event.pointerId);
+        }
+        dragStateRef.current = null;
+    };
+
+    const handleConfirmCrop = async () => {
+        const viewport = getActiveCropViewportSize();
+        if (!cropDraft || !profile?.company_id || !viewport.width || !viewport.height) {
+            toast.error('Não foi possível preparar o recorte do banner.');
+            return;
+        }
+
+        setUploading(true);
+        try {
+            const cropArea = getCropAreaPixels({
+                naturalWidth: cropDraft.naturalWidth,
+                naturalHeight: cropDraft.naturalHeight,
+                viewportWidth: viewport.width,
+                viewportHeight: viewport.height,
+                scale: cropScale,
+                offsetX: cropDraft.offsetX,
+                offsetY: cropDraft.offsetY,
+            });
+
+            const croppedFile = await cropBannerImageFile({
+                file: cropDraft.file,
+                position: cropDraft.position,
+                crop: cropArea,
+            });
+
+            const fileExt = croppedFile.name.split('.').pop() || 'jpg';
+            const fileName = `banners/${profile.company_id}/${Math.random()}.${fileExt}`;
 
             const { error: uploadError } = await supabase.storage
                 .from('product-images')
-                .upload(fileName, file);
+                .upload(fileName, croppedFile, {
+                    upsert: true,
+                    contentType: croppedFile.type,
+                });
 
             if (uploadError) throw uploadError;
 
@@ -204,13 +490,13 @@ export default function BannerManagement() {
                 .from('product-images')
                 .getPublicUrl(fileName);
 
-            setCurrentBanner(prev => ({ ...prev, image_url: publicUrl }));
-            toast.success('Imagem enviada com sucesso');
+            setCurrentBanner((prev) => ({ ...prev, image_url: publicUrl }));
+            closeCropDialog();
+            toast.success('Imagem ajustada e enviada com sucesso');
         } catch (error: any) {
-            toast.error('Erro ao enviar imagem: ' + error.message);
+            toast.error('Erro ao processar imagem: ' + error.message);
         } finally {
             setUploading(false);
-            if (fileInputRef.current) fileInputRef.current.value = '';
         }
     };
 
@@ -295,13 +581,14 @@ export default function BannerManagement() {
                             <Label>Imagem do Banner *</Label>
                             <div
                                 className="relative cursor-pointer overflow-hidden rounded-lg border-2 border-dashed bg-muted/20 transition-colors hover:border-primary/50"
-                                style={{ aspectRatio: CATALOG_BANNER_ASPECT_RATIO_CSS }}
+                                style={{ aspectRatio: getBannerAspectRatioCss(currentBanner.position || 'catalog') }}
                                 onClick={() => fileInputRef.current?.click()}
                             >
                                 {currentBanner.image_url ? (
                                     <>
                                         <img
                                             src={ensurePublicStorageUrl('product-images', currentBanner.image_url) || ''}
+                                            alt={currentBanner.title || 'Banner'}
                                             className="w-full h-full object-cover"
                                         />
                                         <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
@@ -319,7 +606,9 @@ export default function BannerManagement() {
                                             <>
                                                 <ImageIcon className="h-10 w-10 text-muted-foreground mx-auto mb-2" />
                                                 <p className="text-sm text-muted-foreground">Clique para selecionar</p>
-                                                <p className="mt-1 text-[10px] text-muted-foreground">Recomendado: 1600x400px</p>
+                                                <p className="mt-1 text-[10px] text-muted-foreground">
+                                                    O sistema vai aplicar o recorte ideal após a seleção.
+                                                </p>
                                             </>
                                         )}
                                     </div>
@@ -429,6 +718,77 @@ export default function BannerManagement() {
                             </Button>
                         </DialogFooter>
                     </div>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog open={cropDialogOpen} onOpenChange={(open) => { if (!open) closeCropDialog(); }}>
+                <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-5xl">
+                    <DialogHeader>
+                        <DialogTitle>Ajustar enquadramento do banner</DialogTitle>
+                        <DialogDescription>
+                            Arraste a imagem e use o zoom para escolher a área que deve aparecer no banner final.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    {cropDraft && (
+                        <div className="grid gap-5">
+                            <div
+                                ref={setCropViewportElement}
+                                className="relative overflow-hidden rounded-2xl border bg-muted/30"
+                                style={{ aspectRatio: getBannerAspectRatioCss(cropDraft.position) }}
+                                onPointerDown={handleCropPointerDown}
+                                onPointerMove={handleCropPointerMove}
+                                onPointerUp={handleCropPointerUp}
+                                onPointerCancel={handleCropPointerUp}
+                            >
+                                <img
+                                    src={cropDraft.sourceUrl}
+                                    alt="Prévia do recorte"
+                                    className="absolute max-w-none select-none touch-none cursor-grab active:cursor-grabbing"
+                                    style={cropPreviewStyle || undefined}
+                                    draggable={false}
+                                />
+                                <div className="pointer-events-none absolute inset-0 border border-primary/60 shadow-[inset_0_0_0_9999px_rgba(15,23,42,0.18)]" />
+                            </div>
+
+                            <div className="grid gap-4 rounded-2xl border bg-muted/20 p-4">
+                                <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                                    <div className="flex items-center gap-2 text-muted-foreground">
+                                        <Move className="h-4 w-4" />
+                                        Arraste a imagem para reposicionar.
+                                    </div>
+                                    <span className="text-muted-foreground">
+                                        Saída final: {getBannerTargetSize(cropDraft.position).width} x {getBannerTargetSize(cropDraft.position).height}px
+                                    </span>
+                                </div>
+
+                                <div className="grid gap-2">
+                                    <div className="flex items-center gap-2 text-sm font-medium">
+                                        <ZoomIn className="h-4 w-4" />
+                                        Zoom
+                                    </div>
+                                    <Slider
+                                        value={[cropDraft.zoom]}
+                                        min={1}
+                                        max={3.5}
+                                        step={0.01}
+                                        onValueChange={handleCropZoomChange}
+                                        disabled={uploading}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    <DialogFooter>
+                        <Button variant="outline" onClick={closeCropDialog} disabled={uploading}>
+                            Cancelar
+                        </Button>
+                        <Button onClick={handleConfirmCrop} disabled={uploading || !cropDraft}>
+                            {uploading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            Usar este recorte
+                        </Button>
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
 
