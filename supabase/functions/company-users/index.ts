@@ -1,7 +1,10 @@
 /// <reference path="../deno-types.d.ts" />
 import { createClient } from "@supabase/supabase-js";
+import { sendSmtpEmail } from "../_shared/email.ts";
 
 export const config = { verify_jwt: false };
+
+type AccountType = "store" | "customer";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -93,11 +96,14 @@ const getAuthenticatedUser = async (
 };
 
 type CreateUserPayload = {
+  action?: string;
   email?: string;
   password?: string;
   full_name?: string;
   role?: string;
   company_id?: string;
+  user_id?: string;
+  redirectTo?: string;
 };
 
 const allowedRoles = new Set(["super_admin", "admin", "financeiro", "atendente", "caixa", "producao"]);
@@ -140,6 +146,132 @@ const findUserByEmail = async (
     }
     page += 1;
   }
+};
+
+const getRequesterCompanyId = async (
+  supabase: ReturnType<typeof getSupabaseClient>,
+  requesterId: string,
+) => {
+  const { data: requesterProfile } = await supabase
+    .from("profiles")
+    .select("company_id")
+    .eq("id", requesterId)
+    .maybeSingle();
+
+  return requesterProfile?.company_id || null;
+};
+
+const canManageTargetUser = async (
+  supabase: ReturnType<typeof getSupabaseClient>,
+  isSuperAdmin: boolean,
+  requesterCompanyId: string | null,
+  targetUserId: string,
+) => {
+  if (isSuperAdmin) return true;
+  if (!requesterCompanyId) return false;
+
+  const { data: targetProfile } = await supabase
+    .from("profiles")
+    .select("company_id")
+    .eq("id", targetUserId)
+    .maybeSingle();
+
+  return Boolean(targetProfile?.company_id && targetProfile.company_id === requesterCompanyId);
+};
+
+const normalizeAppUrl = () => {
+  const appUrl = Deno.env.get("APP_PUBLIC_URL")?.trim();
+  if (!appUrl) return "https://ideartcloud.com.br";
+
+  try {
+    return new URL(appUrl).toString();
+  } catch {
+    return "https://ideartcloud.com.br";
+  }
+};
+
+const getDefaultRecoveryPath = (accountType: AccountType) =>
+  accountType === "customer" ? "/minha-conta/alterar-senha" : "/alterar-senha";
+
+const resolveRedirectTo = (rawRedirectTo: string | null, accountType: AccountType) => {
+  const fallback = new URL(getDefaultRecoveryPath(accountType), normalizeAppUrl()).toString();
+  if (!rawRedirectTo) return fallback;
+
+  try {
+    return new URL(rawRedirectTo).toString();
+  } catch {
+    return fallback;
+  }
+};
+
+const getLinkProperties = (linkData: unknown) => {
+  const data = linkData as Record<string, any> | null;
+  return {
+    actionLink: data?.action_link ?? data?.properties?.action_link ?? data?.properties?.actionLink ?? null,
+    hashedToken: data?.hashed_token ?? data?.properties?.hashed_token ?? null,
+    verificationType:
+      data?.verification_type ?? data?.properties?.verification_type ?? data?.properties?.verificationType ?? null,
+  };
+};
+
+const buildPublicRecoveryLink = (redirectTo: string, linkData: unknown) => {
+  const { actionLink, hashedToken, verificationType } = getLinkProperties(linkData);
+  if (!actionLink) return null;
+  if (!hashedToken || !verificationType) return actionLink;
+
+  try {
+    const parsedRedirect = new URL(redirectTo);
+    parsedRedirect.searchParams.set("token_hash", hashedToken);
+    parsedRedirect.searchParams.set("type", verificationType);
+    return parsedRedirect.toString();
+  } catch {
+    return actionLink;
+  }
+};
+
+const sendRecoveryEmail = async ({
+  email,
+  recoveryLink,
+  fullName,
+}: {
+  email: string;
+  recoveryLink: string;
+  fullName?: string | null;
+}) => {
+  const displayName = fullName?.trim();
+  const greeting = displayName ? `Olá ${displayName},` : "Olá,";
+
+  const text = [
+    "Redefinição de senha",
+    "",
+    greeting,
+    "",
+    "Um administrador da sua loja solicitou a redefinição do seu acesso.",
+    `Clique no link para criar uma nova senha: ${recoveryLink}`,
+    "",
+    "Se você não esperava este e-mail, ignore a mensagem.",
+  ].join("\n");
+
+  const html = `
+    <div style="font-family:Arial, sans-serif;color:#0f172a;">
+      <h2>Redefinição de senha</h2>
+      <p>${greeting}</p>
+      <p>Um administrador da sua loja solicitou a redefinição do seu acesso.</p>
+      <p>
+        <a href="${recoveryLink}" style="display:inline-block;padding:12px 18px;background:#0f172a;color:#fff;text-decoration:none;border-radius:8px;">
+          Criar nova senha
+        </a>
+      </p>
+      <p style="font-size:12px;color:#64748b;">Se você não esperava este e-mail, ignore a mensagem.</p>
+    </div>
+  `;
+
+  return sendSmtpEmail({
+    to: email,
+    subject: "Redefinição de senha - IDEART CLOUD",
+    text,
+    html,
+  });
 };
 
 Deno.serve(async (req) => {
@@ -189,11 +321,141 @@ Deno.serve(async (req) => {
 
     // Parse body
     const body = (await req.json().catch(() => ({}))) as CreateUserPayload;
+    const action = body.action?.trim().toLowerCase() || "create";
     const email = body.email?.trim().toLowerCase();
     const password = body.password ?? "";
     const fullName = body.full_name?.trim();
     const role = body.role?.trim();
     const requestedCompanyId = body.company_id?.trim();
+    const targetUserId = body.user_id?.trim();
+    const redirectTo = body.redirectTo?.trim() || null;
+
+    const requesterCompanyId = isSuperAdmin
+      ? null
+      : await getRequesterCompanyId(supabase, requesterId);
+
+    if (action === "send_reset_email") {
+      if (!targetUserId) {
+        return jsonResponse(corsHeaders, 400, { error: "Usuário é obrigatório" });
+      }
+
+      const canManage = await canManageTargetUser(
+        supabase,
+        isSuperAdmin,
+        requesterCompanyId,
+        targetUserId,
+      );
+
+      if (!canManage) {
+        return jsonResponse(corsHeaders, 403, {
+          error: "Você só pode enviar redefinição para usuários da sua própria loja",
+        });
+      }
+
+      const { data: targetProfile } = await supabase
+        .from("profiles")
+        .select("id, full_name")
+        .eq("id", targetUserId)
+        .maybeSingle();
+
+      const { data: userData, error: getUserError } = await supabase.auth.admin.getUserById(targetUserId);
+      if (getUserError) {
+        return jsonResponse(corsHeaders, 400, { error: "Não foi possível localizar o usuário" });
+      }
+
+      const userEmail = userData?.user?.email?.trim().toLowerCase();
+      if (!userEmail) {
+        return jsonResponse(corsHeaders, 400, { error: "O usuário não possui e-mail cadastrado" });
+      }
+
+      const resolvedRedirectTo = resolveRedirectTo(redirectTo, "store");
+      const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
+        type: "recovery",
+        email: userEmail,
+        options: { redirectTo: resolvedRedirectTo },
+      });
+
+      if (linkError) {
+        return jsonResponse(corsHeaders, 400, {
+          error: "Falha ao gerar link de redefinição: " + linkError.message,
+        });
+      }
+
+      const recoveryLink = buildPublicRecoveryLink(resolvedRedirectTo, linkData);
+      if (!recoveryLink) {
+        return jsonResponse(corsHeaders, 400, { error: "Falha ao montar o link de redefinição" });
+      }
+
+      const sent = await sendRecoveryEmail({
+        email: userEmail,
+        recoveryLink,
+        fullName: targetProfile?.full_name || String(userData?.user?.user_metadata?.full_name || "") || null,
+      });
+
+      if (!sent) {
+        return jsonResponse(corsHeaders, 500, { error: "Falha ao enviar o e-mail de redefinição" });
+      }
+
+      return jsonResponse(corsHeaders, 200, {
+        user_id: targetUserId,
+        email: userEmail,
+        email_sent: true,
+      });
+    }
+
+    if (action === "reset_password") {
+      if (!targetUserId || !password) {
+        return jsonResponse(corsHeaders, 400, { error: "Usuário e senha são obrigatórios" });
+      }
+
+      if (password.length < 6) {
+        return jsonResponse(corsHeaders, 400, { error: "A senha deve ter pelo menos 6 caracteres" });
+      }
+
+      const canManage = await canManageTargetUser(
+        supabase,
+        isSuperAdmin,
+        requesterCompanyId,
+        targetUserId,
+      );
+
+      if (!canManage) {
+        return jsonResponse(corsHeaders, 403, {
+          error: "Você só pode redefinir a senha de usuários da sua própria loja",
+        });
+      }
+
+      const { error: resetPasswordError } = await supabase.auth.admin.updateUserById(targetUserId, {
+        password,
+        email_confirm: true,
+      });
+
+      if (resetPasswordError) {
+        return jsonResponse(corsHeaders, 400, {
+          error: "Falha ao redefinir senha: " + resetPasswordError.message,
+        });
+      }
+
+      const { error: profileUpdateError } = await supabase
+        .from("profiles")
+        .update({
+          password_defined: true,
+          must_change_password: false,
+          force_password_change: false,
+        })
+        .eq("id", targetUserId);
+
+      if (profileUpdateError) {
+        return jsonResponse(corsHeaders, 400, {
+          error: "Senha redefinida, mas não foi possível atualizar o perfil: " + profileUpdateError.message,
+        });
+      }
+
+      return jsonResponse(corsHeaders, 200, {
+        user_id: targetUserId,
+        password_changed: true,
+      });
+    }
 
     if (!email || !password || !fullName || !role) {
       return jsonResponse(corsHeaders, 400, { error: "Dados obrigatórios ausentes" });
@@ -215,13 +477,7 @@ Deno.serve(async (req) => {
       companyIdToUse = requestedCompanyId || null;
     } else {
       // Regular admin MUST stay in their company
-      const { data: requesterProfile } = await supabase
-        .from("profiles")
-        .select("company_id")
-        .eq("id", requesterId)
-        .maybeSingle();
-
-      companyIdToUse = requesterProfile?.company_id || null;
+      companyIdToUse = requesterCompanyId;
 
       if (!companyIdToUse) {
         return jsonResponse(corsHeaders, 400, { error: "Empresa do administrador não encontrada" });

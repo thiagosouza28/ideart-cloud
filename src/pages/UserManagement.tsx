@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Search, Shield, UserPlus, Loader2, Mail, UserMinus, UserCheck, Users, LayoutGrid } from 'lucide-react';
+import { Search, Shield, UserPlus, Loader2, Mail, UserMinus, UserCheck, Users, LayoutGrid, KeyRound, Copy, RefreshCw, Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -87,6 +87,13 @@ export default function UserManagement() {
   const [removeUserId, setRemoveUserId] = useState<string | null>(null);
   const [removeUserName, setRemoveUserName] = useState<string>('');
   const [removing, setRemoving] = useState(false);
+  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
+  const [passwordTargetUser, setPasswordTargetUser] = useState<UserWithRole | null>(null);
+  const [resetPasswordValue, setResetPasswordValue] = useState('');
+  const [showResetPassword, setShowResetPassword] = useState(false);
+  const [savingPassword, setSavingPassword] = useState(false);
+  const [passwordSaved, setPasswordSaved] = useState(false);
+  const [sendingResetEmail, setSendingResetEmail] = useState(false);
 
   const [inactiveUsers, setInactiveUsers] = useState<UserWithRole[]>([]);
   const [showInactiveDialog, setShowInactiveDialog] = useState(false);
@@ -418,6 +425,121 @@ export default function UserManagement() {
     }
   };
 
+  const generateTemporaryPassword = () => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%';
+    const values = new Uint32Array(10);
+    crypto.getRandomValues(values);
+    return Array.from(values, (value) => chars[value % chars.length]).join('');
+  };
+
+  const handleOpenPasswordDialog = (targetUser: UserWithRole) => {
+    setPasswordTargetUser(targetUser);
+    setResetPasswordValue(generateTemporaryPassword());
+    setShowResetPassword(true);
+    setPasswordSaved(false);
+    setPasswordDialogOpen(true);
+  };
+
+  const handleCopyPassword = async () => {
+    if (!resetPasswordValue) return;
+
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(resetPasswordValue);
+      } else {
+        const tempInput = document.createElement('textarea');
+        tempInput.value = resetPasswordValue;
+        tempInput.setAttribute('readonly', '');
+        tempInput.style.position = 'fixed';
+        tempInput.style.opacity = '0';
+        tempInput.style.pointerEvents = 'none';
+        document.body.appendChild(tempInput);
+        tempInput.focus();
+        tempInput.select();
+        tempInput.setSelectionRange(0, tempInput.value.length);
+        const copied = document.execCommand('copy');
+        document.body.removeChild(tempInput);
+
+        if (!copied) {
+          throw new Error('copy_failed');
+        }
+      }
+      toast.success('Senha copiada');
+    } catch (error) {
+      console.error('Copy password error:', error);
+      toast.error('Não foi possível copiar a senha');
+    }
+  };
+
+  const handleResetPassword = async () => {
+    if (!passwordTargetUser) return;
+
+    if (!resetPasswordValue || resetPasswordValue.length < 6) {
+      toast.error('A senha deve ter pelo menos 6 caracteres');
+      return;
+    }
+
+    setSavingPassword(true);
+
+    try {
+      await invokeEdgeFunction<{ password_changed?: boolean }>('company-users', {
+        action: 'reset_password',
+        user_id: passwordTargetUser.id,
+        password: resetPasswordValue,
+      });
+
+      setPasswordSaved(true);
+      setShowResetPassword(true);
+      toast.success('Nova senha definida com sucesso');
+    } catch (error: any) {
+      console.error('Reset password error:', error);
+      toast.error(error?.payload?.error || error.message || 'Erro ao redefinir senha');
+    } finally {
+      setSavingPassword(false);
+    }
+  };
+
+  const handleSendResetEmail = async () => {
+    if (!passwordTargetUser) return;
+    if (!passwordTargetUser.email) {
+      toast.error('Este usuário não possui e-mail cadastrado');
+      return;
+    }
+
+    setSendingResetEmail(true);
+
+    try {
+      const redirectTo =
+        typeof window !== 'undefined'
+          ? `${window.location.origin}/alterar-senha`
+          : '/alterar-senha';
+
+      await invokeEdgeFunction<{ email_sent?: boolean; email?: string }>('company-users', {
+        action: 'send_reset_email',
+        user_id: passwordTargetUser.id,
+        redirectTo,
+      });
+
+      toast.success(`Link de redefinição enviado para ${passwordTargetUser.email}`);
+    } catch (error: any) {
+      console.error('Send reset email error:', error);
+      toast.error(error?.payload?.error || error.message || 'Não foi possível enviar o e-mail de redefinição');
+    } finally {
+      setSendingResetEmail(false);
+    }
+  };
+
+  const handleClosePasswordDialog = (open: boolean) => {
+    setPasswordDialogOpen(open);
+    if (!open) {
+      setPasswordTargetUser(null);
+      setResetPasswordValue('');
+      setShowResetPassword(false);
+      setPasswordSaved(false);
+      setSendingResetEmail(false);
+    }
+  };
+
   const openRemoveDialog = (userId: string, userName: string) => {
     setRemoveUserId(userId);
     setRemoveUserName(userName);
@@ -573,14 +695,24 @@ export default function UserManagement() {
                     {u.id === user.id ? (
                       <span className="text-sm text-slate-500">-</span>
                     ) : (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => openRemoveDialog(u.id, u.full_name)}
-                        title="Remover da empresa"
-                      >
-                        <UserMinus className="h-4 w-4 text-destructive" />
-                      </Button>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleOpenPasswordDialog(u)}
+                          title="Definir e visualizar nova senha"
+                        >
+                          <KeyRound className="h-4 w-4 text-primary" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => openRemoveDialog(u.id, u.full_name)}
+                          title="Remover da empresa"
+                        >
+                          <UserMinus className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
                     )}
                   </TableCell>
                 </TableRow>
@@ -720,6 +852,121 @@ export default function UserManagement() {
             <Button onClick={handleAddUser} disabled={addingUser}>
               {addingUser && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Adicionar Usuário
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={passwordDialogOpen} onOpenChange={handleClosePasswordDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <KeyRound className="h-5 w-5" />
+              Senha de acesso
+            </DialogTitle>
+            <DialogDescription>
+              A senha atual do usuário não fica disponível para visualização. Defina uma nova senha para copiar ou envie um link de redefinição por e-mail.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+              <p className="font-medium text-slate-900">{passwordTargetUser?.full_name || 'Usuário'}</p>
+              <p className="text-slate-500">{passwordTargetUser?.email || 'Sem e-mail cadastrado'}</p>
+              <p className="mt-1 text-slate-500">
+                {isSuperAdmin ? (passwordTargetUser?.company_name || 'Sem loja') : (profile?.company_name || 'Sua loja')}
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="reset-password">Nova senha</Label>
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <Input
+                    id="reset-password"
+                    type={showResetPassword ? 'text' : 'password'}
+                    value={resetPasswordValue}
+                    onChange={(e) => {
+                      setResetPasswordValue(e.target.value);
+                      setPasswordSaved(false);
+                    }}
+                    placeholder="Defina uma nova senha"
+                    className="pr-10"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-1 top-1/2 h-8 w-8 -translate-y-1/2"
+                    onClick={() => setShowResetPassword((current) => !current)}
+                  >
+                    {showResetPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </Button>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setResetPasswordValue(generateTemporaryPassword());
+                    setShowResetPassword(true);
+                    setPasswordSaved(false);
+                  }}
+                  title="Gerar outra senha"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                </Button>
+              </div>
+              <p className="text-xs text-slate-500">
+                Apenas administradores da própria loja podem redefinir a senha deste usuário.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-between rounded-lg border border-dashed border-slate-200 p-3 text-sm">
+              <div>
+                <p className="font-medium text-slate-900">Senha visível para copiar</p>
+                <p className="text-slate-500">
+                  {passwordSaved ? 'Nova senha salva com sucesso.' : 'Você já pode copiar a senha exibida antes de salvar.'}
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleCopyPassword}
+                disabled={!resetPasswordValue}
+              >
+                <Copy className="mr-2 h-4 w-4" />
+                Copiar
+              </Button>
+            </div>
+
+            <div className="flex items-center justify-between rounded-lg border border-dashed border-slate-200 p-3 text-sm">
+              <div>
+                <p className="font-medium text-slate-900">Resetar por e-mail</p>
+                <p className="text-slate-500">
+                  {passwordTargetUser?.email
+                    ? `Envia um link de redefinição para ${passwordTargetUser.email}.`
+                    : 'Cadastre um e-mail no usuário para liberar o envio.'}
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleSendResetEmail}
+                disabled={sendingResetEmail || !passwordTargetUser?.email}
+              >
+                {sendingResetEmail ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Mail className="mr-2 h-4 w-4" />}
+                Enviar e-mail
+              </Button>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => handleClosePasswordDialog(false)}>
+              Fechar
+            </Button>
+            <Button onClick={handleResetPassword} disabled={savingPassword || !passwordTargetUser}>
+              {savingPassword && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Salvar nova senha
             </Button>
           </DialogFooter>
         </DialogContent>

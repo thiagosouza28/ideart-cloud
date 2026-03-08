@@ -86,9 +86,7 @@ const formatCpfCnpj = (value: string) => {
 };
 
 const formatCurrency = (value: number) =>
-  new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(
-    Number(value || 0),
-  );
+  new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(value || 0));
 
 const formatDateTime = (value: string) => {
   const raw = String(value || "").trim();
@@ -172,7 +170,7 @@ const renderSignature = (payload: PaymentReceiptPayload) => {
 const buildThemeVars = (theme?: PaymentReceiptTheme) => {
   const vars = {
     primary: theme?.primaryColor || "#0f172a",
-    accent: theme?.accentColor || "#1d4ed8",
+    accent: theme?.accentColor || "#2563eb",
     text: theme?.textColor || "#0f172a",
     muted: theme?.mutedTextColor || "#64748b",
     border: theme?.borderColor || "#dbe3ef",
@@ -203,11 +201,7 @@ export const buildPaymentReceiptHtml = (
   const storeAddress = payload.loja.endereco || "-";
 
   const customerName = payload.cliente.nome || "Cliente";
-  const customerDoc = payload.cliente.documento ? formatCpfCnpj(payload.cliente.documento) : "";
-  const customerDocLine = customerDoc
-    ? `<p class="receipt-small">Documento: ${escapeHtml(customerDoc)}</p>`
-    : "";
-
+  const customerDoc = payload.cliente.documento ? formatCpfCnpj(payload.cliente.documento) : "-";
   const receiptNumber = payload.numeroRecibo || "-";
   const paymentDate = formatDateTime(payload.pagamento.data || "-");
   const paymentMethod = payload.pagamento.forma || "-";
@@ -236,8 +230,8 @@ export const buildPaymentReceiptHtml = (
     referenceType === "pedido"
       ? "Comprovante de pagamento"
       : referenceType === "pdv" || referenceType === "venda"
-        ? "Recibo de venda"
-        : "Recibo de pagamento";
+        ? "Comprovante de venda"
+        : "Comprovante de pagamento";
 
   const themeVars = buildThemeVars(options?.theme);
 
@@ -250,199 +244,174 @@ export const buildPaymentReceiptHtml = (
         background: var(--receipt-bg);
         border: 1px solid var(--receipt-border);
         border-radius: 14px;
-        padding: 22px;
-        width: min(100%, 560px);
-        max-width: 560px;
+        padding: 24px;
+        width: min(100%, 794px);
         margin: 0 auto;
         box-sizing: border-box;
       }
 
+      .receipt-block {
+        page-break-inside: avoid;
+      }
+
       .receipt-header {
+        border-bottom: 1px solid var(--receipt-border);
+        padding-bottom: 16px;
+      }
+
+      .receipt-header-row {
         display: flex;
         justify-content: space-between;
-        align-items: stretch;
-        gap: 12px;
-        padding: 14px;
-        border-radius: 12px;
-        border: 1px solid var(--receipt-border);
-        background: linear-gradient(135deg, rgba(37, 99, 235, 0.08), rgba(255, 255, 255, 0.92));
+        align-items: flex-start;
+        gap: 16px;
       }
 
-      .receipt-header-main {
+      .receipt-brand {
         display: flex;
         align-items: center;
         gap: 12px;
-      }
-
-      .receipt-logo {
-        display: flex;
-        align-items: center;
       }
 
       .receipt-logo img {
-        max-width: 72px;
-        max-height: 72px;
+        width: 48px;
+        height: 48px;
         object-fit: contain;
-      }
-
-      .receipt-store h1 {
-        margin: 0;
-        font-size: 18px;
-        font-weight: 700;
-        letter-spacing: 0.3px;
-        text-transform: uppercase;
-      }
-
-      .receipt-store p {
-        margin: 3px 0 0;
-        font-size: 12px;
-        color: var(--receipt-muted);
-        line-height: 1.35;
-      }
-
-      .receipt-header-side {
-        text-align: right;
-        min-width: 145px;
-      }
-
-      .receipt-header-side span {
-        display: block;
-        color: var(--receipt-muted);
-        font-size: 11px;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-      }
-
-      .receipt-header-side strong {
-        display: block;
-        margin-top: 5px;
-        color: var(--receipt-primary);
-        font-size: 13px;
-        word-break: break-word;
+        border: 1px solid var(--receipt-border);
+        border-radius: 8px;
+        background: #ffffff;
+        padding: 4px;
       }
 
       .receipt-title {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        flex-wrap: wrap;
-        gap: 8px;
-        margin: 16px 0 10px;
-      }
-
-      .receipt-title h2 {
         margin: 0;
-        font-size: 17px;
-        color: var(--receipt-primary);
+        font-size: 20px;
+        font-weight: 700;
+        line-height: 1.2;
       }
 
-      .receipt-subtitle {
+      .receipt-kicker {
+        margin: 2px 0 0;
+        font-size: 10px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--receipt-muted);
+      }
+
+      .receipt-meta {
+        margin-top: 8px;
         font-size: 11px;
         color: var(--receipt-muted);
-        text-transform: uppercase;
-        letter-spacing: 0.6px;
+        line-height: 1.45;
       }
 
-      .receipt-statement {
-        margin-top: 10px;
+      .receipt-header-side {
+        min-width: 170px;
         border: 1px solid var(--receipt-border);
-        border-left: 4px solid var(--receipt-accent);
         border-radius: 10px;
-        padding: 10px 12px;
-        font-size: 13px;
-        line-height: 1.5;
-        background: #f8fbff;
-      }
-
-      .receipt-statement strong {
-        color: var(--receipt-primary);
-      }
-
-      .receipt-grid {
-        display: grid;
-        grid-template-columns: repeat(2, 1fr);
-        gap: 10px;
         background: #f8fafc;
-        border: 1px solid var(--receipt-border);
-        border-radius: 10px;
-        padding: 10px;
-        margin-top: 14px;
+        padding: 10px 12px;
+        text-align: right;
+        font-size: 11px;
       }
 
-      .receipt-field span {
+      .label {
         display: block;
-        font-size: 10px;
-        letter-spacing: 0.6px;
-        text-transform: uppercase;
         color: var(--receipt-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
         margin-bottom: 4px;
       }
 
-      .receipt-field strong {
-        font-size: 13px;
+      .value {
         color: var(--receipt-text);
+        font-weight: 600;
         word-break: break-word;
       }
 
-      .receipt-section {
-        margin-top: 12px;
+      .receipt-header-side .value {
+        display: block;
+        font-size: 14px;
+      }
+
+      .receipt-summary {
+        margin-top: 16px;
+        display: grid;
+        gap: 8px;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        border: 1px solid var(--receipt-border);
+        border-radius: 10px;
+        background: #f8fafc;
+        padding: 10px 12px;
+        font-size: 11px;
+      }
+
+      .receipt-box {
+        margin-top: 16px;
         border: 1px solid var(--receipt-border);
         border-radius: 10px;
         padding: 12px;
+        font-size: 11px;
       }
 
-      .receipt-section h3 {
-        margin: 0 0 8px;
-        font-size: 12px;
-        letter-spacing: 0.6px;
-        text-transform: uppercase;
-        color: var(--receipt-muted);
+      .receipt-grid {
+        margin-top: 16px;
+        display: grid;
+        gap: 12px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
       }
 
-      .receipt-section p {
-        margin: 0;
-        font-size: 13px;
-        color: var(--receipt-text);
-        line-height: 1.45;
-        overflow-wrap: anywhere;
+      .receipt-signatures {
+        margin-top: 24px;
+        display: grid;
+        gap: 16px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
       }
 
-      .receipt-section .receipt-small {
-        font-size: 12px;
-        color: var(--receipt-muted);
-        margin-top: 4px;
+      .receipt-signature-box {
+        border: 1px solid var(--receipt-border);
+        border-radius: 10px;
+        padding: 12px;
+        font-size: 11px;
       }
 
-      .receipt-signature {
+      .receipt-signature-image {
+        min-height: 64px;
+        display: flex;
+        align-items: flex-end;
+        justify-content: center;
+      }
+
+      .receipt-signature-image img {
+        max-width: 220px;
+        max-height: 56px;
+        object-fit: contain;
+      }
+
+      .receipt-signature-line {
+        width: 100%;
+        border-top: 1px dashed #cbd5e1;
+        min-height: 56px;
+      }
+
+      .receipt-signature-text {
         margin-top: 8px;
         text-align: center;
       }
 
-      .receipt-signature-line {
-        border-top: 1px solid var(--receipt-text);
-        width: 240px;
-        margin: 12px auto 8px;
-      }
-
-      .receipt-signature-image img {
-        max-width: 200px;
-        max-height: 100px;
-        object-fit: contain;
-      }
-
       .receipt-signature-name {
-        font-size: 12px;
+        font-size: 14px;
         font-weight: 600;
+        color: var(--receipt-text);
       }
 
       .receipt-signature-role {
-        font-size: 11px;
-        color: var(--receipt-muted);
         margin-top: 2px;
+        font-size: 10px;
+        color: var(--receipt-muted);
       }
 
       .receipt-footer {
-        margin-top: 16px;
+        margin-top: 20px;
         text-align: center;
         font-size: 11px;
         color: var(--receipt-muted);
@@ -451,104 +420,113 @@ export const buildPaymentReceiptHtml = (
       @media (max-width: 640px) {
         .receipt-root {
           padding: 16px;
-          border-radius: 10px;
         }
 
-        .receipt-header {
+        .receipt-header-row {
           flex-direction: column;
-          align-items: flex-start;
-          gap: 10px;
-        }
-
-        .receipt-header-main {
-          width: 100%;
         }
 
         .receipt-header-side {
-          text-align: left;
           width: 100%;
+          text-align: left;
         }
 
-        .receipt-grid {
+        .receipt-summary,
+        .receipt-grid,
+        .receipt-signatures {
           grid-template-columns: 1fr;
         }
       }
     </style>
 
     <div class="receipt-root">
-      <div class="receipt-header">
-        <div class="receipt-header-main">
-          ${renderLogo(payload.loja.logo, storeName)}
-          <div class="receipt-store">
-            <h1>${escapeHtml(storeName)}</h1>
-            <p>Tipo de pessoa: ${escapeHtml(personType || "-")}</p>
-            <p>${escapeHtml(storeDocLabel)}: ${escapeHtml(storeDocValue)}</p>
-            <p>Endereço: ${escapeHtml(storeAddress)}</p>
+      <div class="receipt-block receipt-header">
+        <div class="receipt-header-row">
+          <div>
+            <div class="receipt-brand">
+              ${renderLogo(payload.loja.logo, storeName)}
+              <div>
+                <p class="receipt-title">${escapeHtml(storeName)}</p>
+                <p class="receipt-kicker">${escapeHtml(title)}</p>
+              </div>
+            </div>
+            <div class="receipt-meta">
+              <p>${escapeHtml(storeDocLabel)}: ${escapeHtml(storeDocValue)}</p>
+              <p>Endereço: ${escapeHtml(storeAddress)}</p>
+            </div>
+          </div>
+          <div class="receipt-header-side">
+            <span class="label">Recibo</span>
+            <span class="value">${escapeHtml(receiptNumber)}</span>
+            <span class="label" style="margin-top:8px;">Emitido em</span>
+            <span class="value" style="font-size:12px;">${escapeHtml(paymentDate)}</span>
           </div>
         </div>
-        <div class="receipt-header-side">
-          <span>Número do recibo</span>
-          <strong>${escapeHtml(receiptNumber)}</strong>
+      </div>
+
+      <div class="receipt-block receipt-summary">
+        <div>
+          <span class="label">Cliente</span>
+          <span class="value">${escapeHtml(customerName)}</span>
+        </div>
+        <div>
+          <span class="label">${escapeHtml(referenceLabel)}</span>
+          <span class="value">${escapeHtml(referenceNumber)}</span>
+        </div>
+        <div>
+          <span class="label">Forma</span>
+          <span class="value">${escapeHtml(paymentMethod)}</span>
+        </div>
+        <div>
+          <span class="label">Valor</span>
+          <span class="value">${escapeHtml(paymentValue)}</span>
         </div>
       </div>
 
-      <div class="receipt-title">
-        <h2>${escapeHtml(title)}</h2>
-        <div class="receipt-subtitle">${escapeHtml(referenceLabel)} ${escapeHtml(referenceNumber)}</div>
+      <div class="receipt-block receipt-box">
+        <span class="label">Descrição</span>
+        <span class="value">Recebemos de <strong>${escapeHtml(customerName)}</strong> o valor de <strong>${escapeHtml(paymentValue)}</strong>, referente a <strong>${escapeHtml(paymentDescription)}</strong>.</span>
       </div>
 
-      <div class="receipt-statement">
-        Recebemos de <strong>${escapeHtml(customerName)}</strong> o valor de
-        <strong>${escapeHtml(paymentValue)}</strong>, referente a
-        <strong>${escapeHtml(paymentDescription)}</strong>.
-      </div>
-
-      <div class="receipt-grid">
-        <div class="receipt-field">
-          <span>Data e hora</span>
-          <strong>${escapeHtml(paymentDate)}</strong>
+      <div class="receipt-block receipt-grid">
+        <div class="receipt-box" style="margin-top:0;">
+          <span class="label">Dados do cliente</span>
+          <span class="value">${escapeHtml(customerName)}</span>
+          <span class="value" style="display:block; margin-top:4px; font-weight:500; color: var(--receipt-muted);">Documento: ${escapeHtml(customerDoc)}</span>
         </div>
-        <div class="receipt-field">
-          <span>Forma de pagamento</span>
-          <strong>${escapeHtml(paymentMethod)}</strong>
+        <div class="receipt-box" style="margin-top:0;">
+          <span class="label">Dados do pagamento</span>
+          <span class="value">Forma: ${escapeHtml(paymentMethod)}</span>
+          <span class="value" style="display:block; margin-top:4px;">Valor recebido: ${escapeHtml(paymentValue)}</span>
+          <span class="value" style="display:block; margin-top:4px; font-weight:500; color: var(--receipt-muted);">Código interno: ${escapeHtml(referenceCode)}</span>
         </div>
-        <div class="receipt-field">
-          <span>Valor recebido</span>
-          <strong>${escapeHtml(paymentValue)}</strong>
-        </div>
-        <div class="receipt-field">
-          <span>Código interno</span>
-          <strong>${escapeHtml(referenceCode)}</strong>
-        </div>
-      </div>
-
-      <div class="receipt-section">
-        <h3>Cliente</h3>
-        <p>${escapeHtml(customerName)}</p>
-        ${customerDocLine}
-      </div>
-
-      <div class="receipt-section">
-        <h3>Descrição</h3>
-        <p>${escapeHtml(paymentDescription)}</p>
       </div>
 
       ${hasProductionInfo ? `
-        <div class="receipt-section">
-          <h3>Prazos do pedido</h3>
-          <p>Tempo de produção: <strong>${escapeHtml(
+        <div class="receipt-block receipt-box">
+          <span class="label">Prazos do pedido</span>
+          <span class="value">Tempo de produção: ${escapeHtml(
             productionTimeDays !== null
               ? `${productionTimeDays} ${productionTimeDays === 1 ? "dia" : "dias"}`
               : "-"
-          )}</strong></p>
-          <p class="receipt-small">Previsão de entrega: ${escapeHtml(estimatedDeliveryLabel)}</p>
+          )}</span>
+          <span class="value" style="display:block; margin-top:4px; font-weight:500; color: var(--receipt-muted);">Previsão de entrega: ${escapeHtml(estimatedDeliveryLabel)}</span>
         </div>
       ` : ""}
 
-      <div class="receipt-section">
-        <h3>Assinatura da loja</h3>
-        <div class="receipt-signature">
+      <div class="receipt-block receipt-signatures">
+        <div class="receipt-signature-box">
+          <span class="label">Assinatura da loja</span>
           ${renderSignature(payload)}
+        </div>
+        <div class="receipt-signature-box">
+          <span class="label">Assinatura do cliente</span>
+          <div class="receipt-signature-image">
+            <div class="receipt-signature-line"></div>
+          </div>
+          <div class="receipt-signature-text">
+            <div class="receipt-signature-name">${escapeHtml(customerName)}</div>
+          </div>
         </div>
       </div>
 

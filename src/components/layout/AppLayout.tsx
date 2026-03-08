@@ -36,6 +36,7 @@ export function AppLayout({ children }: AppLayoutProps) {
     refreshCompany,
     role,
     user,
+    profile,
     getLoggedCompany,
     isImpersonating,
     stopImpersonation,
@@ -63,7 +64,20 @@ export function AppLayout({ children }: AppLayoutProps) {
   const logoFromCompany = ensurePublicStorageUrl('product-images', company?.logo_url);
   const logoFromUser = user.user_metadata?.company_logo as string | undefined;
   const logoUrl = logoFromCompany || logoFromUser || null;
-  const fallbackText = (company?.name || user.user_metadata?.full_name || user.email || 'Empresa')
+  const rawDisplayName = (
+    profile?.full_name ||
+    (typeof user.user_metadata?.full_name === 'string' ? user.user_metadata.full_name : '') ||
+    user.email ||
+    company?.name ||
+    'Usuário'
+  )
+    .toString()
+    .trim();
+  const displayNameParts = rawDisplayName.split(' ').filter(Boolean);
+  const displayName = displayNameParts.length > 1
+    ? `${displayNameParts[0]} ${displayNameParts[displayNameParts.length - 1]}`
+    : rawDisplayName;
+  const fallbackText = (displayName || company?.name || 'Usuário')
     .toString()
     .split(' ')
     .filter(Boolean)
@@ -456,7 +470,7 @@ export function AppLayout({ children }: AppLayoutProps) {
                 </PopoverContent>
               </Popover>
               <div className="hidden flex-col items-end leading-tight sm:flex">
-                <span className="text-sm font-semibold text-foreground">{company?.name || 'Ideart Cloud'}</span>
+                <span className="text-sm font-semibold text-foreground">{displayName}</span>
                 <span className="text-[11px] font-semibold text-muted-foreground">{role ? roleLabels[role] : 'ADMIN'}</span>
               </div>
               {logoUrl ? (

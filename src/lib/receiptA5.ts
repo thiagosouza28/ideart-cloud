@@ -44,12 +44,15 @@ export const buildReceiptA5Url = (
   params.set('referenceType', referenceType);
   params.set('referenceNumber', referenceNumber);
   params.set('client', payload.cliente.nome || 'Cliente');
+  params.set('clientDoc', payload.cliente.documento || '-');
   params.set('description', payload.pagamento.descricao || '-');
   params.set('amount', formatCurrency(payload.pagamento.valor || 0));
   params.set('payment', payload.pagamento.forma || '-');
   params.set('date', formatDateTime(payload.pagamento.data || ''));
   params.set('internalCode', resolveInternalCode(payload));
   params.set('signature', payload.loja.responsavel || payload.loja.nome || 'Loja');
+  params.set('productionDays', String(payload.pedido?.tempoProducaoDias ?? ''));
+  params.set('deliveryDate', payload.pedido?.previsaoEntrega || '');
   if (payload.loja.logo) {
     params.set('logo', payload.loja.logo);
   }

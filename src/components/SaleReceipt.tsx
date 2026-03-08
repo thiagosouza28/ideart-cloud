@@ -1,5 +1,4 @@
 import { forwardRef } from 'react';
-import { CheckCircle2, CreditCard, Mail, Phone, User } from 'lucide-react';
 import { PaymentMethod } from '@/types/database';
 import { formatAreaM2 } from '@/lib/measurements';
 
@@ -46,10 +45,10 @@ interface SaleReceiptProps {
   createdAt?: Date;
 }
 
-const formatCurrency = (v: number) =>
-  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
+const formatCurrency = (value: number) =>
+  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 
-const formatDate = (d: Date) =>
+const formatDate = (value: Date) =>
   new Intl.DateTimeFormat('pt-BR', {
     day: '2-digit',
     month: '2-digit',
@@ -57,7 +56,7 @@ const formatDate = (d: Date) =>
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
-  }).format(d);
+  }).format(value);
 
 const paymentLabels: Record<PaymentMethod, string> = {
   dinheiro: 'Dinheiro',
@@ -92,6 +91,7 @@ const SaleReceipt = forwardRef<HTMLDivElement, SaleReceiptProps>(
     const paymentLabel = paymentLabels[paymentMethod] || paymentMethod;
     const saleStatus = amountPaid >= total ? 'Pago' : amountPaid > 0 ? 'Parcial' : 'Pendente';
     const saleNumber = saleId.slice(0, 8).toUpperCase();
+    const issueDate = createdAt || new Date();
     const isThermal = layout === 'thermal80' || layout === 'thermal58';
 
     if (isThermal) {
@@ -115,7 +115,7 @@ const SaleReceipt = forwardRef<HTMLDivElement, SaleReceiptProps>(
             </div>
             <div className="flex items-center justify-between gap-2">
               <span>Data</span>
-              <span>{formatDate(createdAt || new Date())}</span>
+              <span>{formatDate(issueDate)}</span>
             </div>
             <div className="flex items-center justify-between gap-2">
               <span>Status</span>
@@ -137,16 +137,17 @@ const SaleReceipt = forwardRef<HTMLDivElement, SaleReceiptProps>(
           <div className="space-y-2 border-b border-dashed border-slate-300 py-2">
             {items.length === 0 && <p>Sem itens no pedido.</p>}
             {items.map((item, index) => {
-              const isM2 = item.unitLabel === 'm\u00B2' || Boolean(item.areaM2) || (item.widthCm && item.heightCm);
-              const quantityLabel = isM2 ? `${formatAreaM2(item.quantity)} m\u00B2` : `${item.quantity} un`;
-              const unitSuffix = isM2 ? ' / m\u00B2' : '';
+              const isM2 = item.unitLabel === 'm²' || Boolean(item.areaM2) || Boolean(item.widthCm && item.heightCm);
+              const quantityLabel = isM2 ? `${formatAreaM2(item.quantity)} m²` : `${item.quantity} un`;
+              const unitSuffix = isM2 ? ' / m²' : '';
               const hasDimensions = Boolean(item.widthCm && item.heightCm);
 
               return (
                 <div key={`${item.name}-${index}`} className="space-y-1">
                   <p className="font-semibold uppercase">{item.name}</p>
                   <p>
-                    {quantityLabel} x {formatCurrency(item.unitPrice)}{unitSuffix}
+                    {quantityLabel} x {formatCurrency(item.unitPrice)}
+                    {unitSuffix}
                   </p>
                   {hasDimensions && (
                     <p>
@@ -196,125 +197,183 @@ const SaleReceipt = forwardRef<HTMLDivElement, SaleReceiptProps>(
     }
 
     return (
-      <div ref={ref} className="mx-auto w-full max-w-[1100px] text-slate-900">
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
-          <div className="space-y-6">
-            <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
-              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100">
-                <CheckCircle2 className="h-8 w-8 text-emerald-600" />
-              </div>
-              <h2 className="mt-4 text-2xl font-semibold">Venda confirmada!</h2>
-              <p className="mt-2 text-sm text-slate-500">
-                O pedido #{saleNumber} foi registrado com sucesso.
-              </p>
-              <div className="mt-6 flex flex-wrap items-center justify-center gap-3 text-xs text-slate-500">
-                <span>Data: {formatDate(createdAt || new Date())}</span>
-                <span>|</span>
-                <span>Status: {saleStatus}</span>
-              </div>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="rounded-xl border border-slate-200 bg-white p-4">
-                <p className="text-[11px] uppercase tracking-wide text-slate-400">Dados do cliente</p>
-                <div className="mt-3 space-y-2 text-sm">
-                  <div className="flex items-center gap-2">
-                    <User className="h-4 w-4 text-slate-400" />
-                    <span className="font-medium">{customerLabel}</span>
-                  </div>
-                  {customer?.email && (
-                    <div className="flex items-center gap-2 text-slate-500">
-                      <Mail className="h-4 w-4" />
-                      {customer.email}
-                    </div>
-                  )}
-                  {customer?.phone && (
-                    <div className="flex items-center gap-2 text-slate-500">
-                      <Phone className="h-4 w-4" />
-                      {customer.phone}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="rounded-xl border border-slate-200 bg-white p-4">
-                <p className="text-[11px] uppercase tracking-wide text-slate-400">Detalhes do pagamento</p>
-                <div className="mt-3 space-y-2 text-sm">
-                  <div className="flex items-center gap-2">
-                    <CreditCard className="h-4 w-4 text-slate-400" />
-                    <span className="font-medium">{paymentLabel}</span>
-                  </div>
-                  <div className="flex justify-between text-slate-500">
-                    <span>Valor recebido</span>
-                    <span className="font-medium text-slate-700">{formatCurrency(amountPaid)}</span>
-                  </div>
-                  {change > 0 && (
-                    <div className="flex justify-between text-emerald-600">
-                      <span>Troco</span>
-                      <span className="font-semibold">{formatCurrency(change)}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-slate-200 bg-white p-4 text-center text-xs text-slate-500">
-              Documento não fiscal. {company?.name ? `Empresa: ${company.name}.` : ''}
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="mb-4 flex items-center justify-between">
+      <div
+        ref={ref}
+        className="receipt-root mx-auto w-full max-w-[794px] rounded-xl border border-slate-200 bg-white p-6 text-slate-900 shadow-sm"
+      >
+        <div className="receipt-block border-b border-slate-200 pb-4">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <div className="flex items-center gap-3">
+                {company?.logo_url && (
+                  <img
+                    src={company.logo_url}
+                    alt="Logo da loja"
+                    className="h-12 w-12 rounded-md border border-slate-200 bg-white object-contain p-1"
+                  />
+                )}
                 <div>
-                  <h3 className="text-base font-semibold">Resumo do pedido</h3>
-                  <p className="text-xs text-slate-500">{items.length} itens confirmados</p>
+                  <p className="text-lg font-semibold leading-tight">{company?.name || 'Comprovante de venda'}</p>
+                  <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Comprovante de pagamento</p>
                 </div>
-                <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-medium text-emerald-700">
-                  {saleStatus.toUpperCase()}
-                </span>
               </div>
-              <div className="space-y-3">
-                {items.map((item, index) => {
-                  const isM2 = item.unitLabel === 'm\u00B2' || Boolean(item.areaM2) || (item.widthCm && item.heightCm);
-                  const quantityLabel = isM2 ? `${formatAreaM2(item.quantity)} m\u00B2` : String(item.quantity);
-                  const unitSuffix = isM2 ? ' / m\u00B2' : '';
-                  const hasDimensions = Boolean(item.widthCm && item.heightCm);
+              <div className="mt-2 space-y-0.5 text-[11px] text-slate-600">
+                {company?.address && <p>Endereço: {company.address}</p>}
+                {(company?.city || company?.state) && <p>Cidade/UF: {[company?.city, company?.state].filter(Boolean).join(' - ')}</p>}
+                {company?.phone && <p>Tel: {company.phone}</p>}
+                {company?.whatsapp && company.whatsapp !== company.phone && <p>WhatsApp: {company.whatsapp}</p>}
+                {company?.email && <p>{company.email}</p>}
+              </div>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-right text-[11px]">
+              <p className="uppercase tracking-wide text-slate-500">Venda</p>
+              <p className="text-sm font-semibold">#{saleNumber}</p>
+              <p className="mt-1 uppercase tracking-wide text-slate-500">Emitido em</p>
+              <p className="font-medium">{formatDate(issueDate)}</p>
+            </div>
+          </div>
+        </div>
 
-                  return (
-                    <div key={index} className="flex items-center justify-between text-sm">
-                      <div>
-                        <p className="font-medium text-slate-800">{item.name}</p>
-                        <p className="text-xs text-slate-400">
-                          {quantityLabel} x {formatCurrency(item.unitPrice)}{unitSuffix}
-                        </p>
-                        {hasDimensions && (
-                          <p className="text-[11px] text-slate-400">
-                            {item.widthCm}cm x {item.heightCm}cm
-                          </p>
-                        )}
-                      </div>
-                      <span className="font-semibold">{formatCurrency(item.unitPrice * item.quantity)}</span>
-                    </div>
-                  );
-                })}
+        <div className="receipt-block mt-4 grid gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] sm:grid-cols-4">
+          <div>
+            <p className="uppercase tracking-wide text-slate-500">Cliente</p>
+            <p className="font-semibold text-slate-900">{customerLabel}</p>
+          </div>
+          <div>
+            <p className="uppercase tracking-wide text-slate-500">Status</p>
+            <p className="font-semibold text-slate-900">{saleStatus}</p>
+          </div>
+          <div>
+            <p className="uppercase tracking-wide text-slate-500">Pagamento</p>
+            <p className="font-semibold text-slate-900">{paymentLabel}</p>
+          </div>
+          <div>
+            <p className="uppercase tracking-wide text-slate-500">Total</p>
+            <p className="font-semibold text-slate-900">{formatCurrency(total)}</p>
+          </div>
+        </div>
+
+        <div className="receipt-block mt-4 rounded-lg border border-slate-200 px-3 py-2 text-[11px]">
+          <div className="grid gap-2 sm:grid-cols-3">
+            <div>
+              <p className="uppercase tracking-wide text-slate-500">Cliente</p>
+              <p className="font-semibold text-slate-900">{customerLabel}</p>
+            </div>
+            <div>
+              <p className="uppercase tracking-wide text-slate-500">Documento</p>
+              <p className="font-medium text-slate-700">{customer?.document || '-'}</p>
+            </div>
+            <div>
+              <p className="uppercase tracking-wide text-slate-500">Contato</p>
+              <p className="font-medium text-slate-700">{customer?.phone || customer?.email || '-'}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="receipt-block mt-4 overflow-hidden rounded-lg border border-slate-200">
+          <table className="receipt-table w-full text-[11px]">
+            <thead className="bg-slate-100 text-slate-600">
+              <tr>
+                <th className="px-3 py-2 text-left font-medium">Produto</th>
+                <th className="px-3 py-2 text-center font-medium">Qtd</th>
+                <th className="px-3 py-2 text-right font-medium">Unitário</th>
+                <th className="px-3 py-2 text-right font-medium">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((item, index) => {
+                const isM2 = item.unitLabel === 'm²' || Boolean(item.areaM2) || Boolean(item.widthCm && item.heightCm);
+                const quantityLabel = isM2 ? `${formatAreaM2(item.quantity)} m²` : item.quantity;
+                const unitSuffix = isM2 ? ' / m²' : '';
+                const hasDimensions = Boolean(item.widthCm && item.heightCm);
+                const details = hasDimensions ? `${item.widthCm}cm x ${item.heightCm}cm` : '';
+
+                return (
+                  <tr key={`${item.name}-${index}`} className="receipt-row border-t border-slate-200">
+                    <td className="px-3 py-2 align-top">
+                      <div className="font-medium text-slate-800">{item.name}</div>
+                      {details && <div className="mt-1 text-[10px] text-slate-500">{details}</div>}
+                    </td>
+                    <td className="px-3 py-2 text-center align-top">{quantityLabel}</td>
+                    <td className="px-3 py-2 text-right align-top">
+                      {formatCurrency(item.unitPrice)}
+                      {unitSuffix}
+                    </td>
+                    <td className="px-3 py-2 text-right font-medium align-top">
+                      {formatCurrency(item.unitPrice * item.quantity)}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="receipt-block mt-4 grid gap-3 sm:grid-cols-2">
+          <div className="rounded-lg border border-slate-200 p-3 text-[11px]">
+            <div className="space-y-1">
+              <div className="flex justify-between">
+                <span className="text-slate-500">Subtotal</span>
+                <span>{formatCurrency(subtotal)}</span>
               </div>
-              <div className="mt-4 space-y-2 border-t border-slate-200 pt-4 text-sm">
-                <div className="flex justify-between text-slate-500">
-                  <span>Subtotal</span>
-                  <span>{formatCurrency(subtotal)}</span>
+              {discount > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Desconto</span>
+                  <span>-{formatCurrency(discount)}</span>
                 </div>
-                <div className="flex justify-between text-slate-500">
-                  <span>Desconto</span>
-                  <span>- {formatCurrency(discount || 0)}</span>
-                </div>
-                <div className="flex justify-between text-base font-semibold">
-                  <span>Total pago</span>
-                  <span>{formatCurrency(total)}</span>
-                </div>
+              )}
+              <div className="flex justify-between border-t border-slate-200 pt-2 text-sm font-semibold">
+                <span>Total da venda</span>
+                <span>{formatCurrency(total)}</span>
               </div>
             </div>
           </div>
+
+          <div className="rounded-lg border border-slate-200 p-3 text-[11px]">
+            <div className="space-y-1">
+              <div className="flex justify-between">
+                <span className="text-slate-500">Status do pagamento</span>
+                <span className="font-medium">{saleStatus}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Forma</span>
+                <span className="font-medium">{paymentLabel}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Valor recebido</span>
+                <span className="font-medium">{formatCurrency(amountPaid)}</span>
+              </div>
+              {change > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Troco</span>
+                  <span className="font-medium">{formatCurrency(change)}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="receipt-block mt-6 grid gap-4 sm:grid-cols-2">
+          <div className="rounded-lg border border-slate-200 p-3 text-[11px]">
+            <p className="text-[10px] uppercase tracking-wide text-slate-500">Assinatura da loja</p>
+            <div className="mt-2 flex min-h-[64px] items-end">
+              <div className="w-full border-b border-dashed border-slate-300" />
+            </div>
+            <p className="mt-2 text-sm font-medium italic text-slate-900">{company?.name || 'Loja'}</p>
+          </div>
+
+          <div className="rounded-lg border border-slate-200 p-3 text-[11px]">
+            <p className="text-[10px] uppercase tracking-wide text-slate-500">Assinatura do cliente</p>
+            <div className="mt-2 flex min-h-[64px] items-end">
+              <div className="w-full border-b border-dashed border-slate-300" />
+            </div>
+            <p className="mt-2 text-sm font-medium text-slate-900">{customerLabel}</p>
+          </div>
+        </div>
+
+        <div className="receipt-block mt-5 text-center text-[11px] text-slate-500">
+          <p>Documento não fiscal</p>
+          <p className="mt-1">Obrigado pela preferência!</p>
         </div>
       </div>
     );
