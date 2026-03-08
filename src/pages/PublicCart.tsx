@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { CatalogFooter, CatalogTopNav } from '@/components/catalog/PublicCatalogChrome';
 import { CpfCnpjInput, PhoneInput, normalizeDigits, validateCpf, validatePhone } from '@/components/ui/masked-input';
 import { useCustomerAuth } from '@/hooks/use-customer-auth';
@@ -40,6 +41,11 @@ import { loadPublicCatalogCompany } from '@/lib/publicCatalogCompany';
 import { buildSystemStorageViewerUrl, ensurePublicStorageUrl } from '@/lib/storage';
 import { createPublicPixPayment, type PublicPixPaymentResult } from '@/services/payments';
 import { Company, PaymentMethod } from '@/types/database';
+import {
+  normalizeCheckoutPaymentOptions,
+  type CheckoutPaymentMethodOption,
+} from '@/lib/paymentMethods';
+import { buildSuggestedOrderFileName, sanitizeDisplayFileName } from '@/lib/orderFiles';
 
 const asCurrency = (value: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
@@ -144,17 +150,23 @@ export default function PublicCart() {
     pixAvailable: boolean;
     pixGateway: string | null;
     hasAccess: boolean;
-    paymentMethods: CatalogCheckoutPaymentMethod[];
+    paymentMethods: CheckoutPaymentMethodOption[];
   }>({
     pixAvailable: false,
     pixGateway: null,
     hasAccess: true,
-    paymentMethods: normalizeCatalogPaymentMethods(null),
+    paymentMethods: normalizeCheckoutPaymentOptions(normalizeCatalogPaymentMethods(null)),
   });
   const [savedAddressLoaded, setSavedAddressLoaded] = useState(false);
   const [hasSavedAddress, setHasSavedAddress] = useState(false);
   const [editingSavedAddress, setEditingSavedAddress] = useState(true);
   const [uploadingReferenceByProduct, setUploadingReferenceByProduct] = useState<Record<string, boolean>>({});
+  const [referenceUploadDialogOpen, setReferenceUploadDialogOpen] = useState(false);
+  const [pendingReferenceUpload, setPendingReferenceUpload] = useState<{
+    item: PublicCartItem;
+    file: File;
+    displayName: string;
+  } | null>(null);
   const [form, setForm] = useState({
     name: '',
     phone: '',
@@ -271,7 +283,7 @@ export default function PublicCart() {
         pixAvailable: false,
         pixGateway: null,
         hasAccess: true,
-        paymentMethods: normalizeCatalogPaymentMethods(company?.accepted_payment_methods),
+        paymentMethods: normalizeCheckoutPaymentOptions(company?.accepted_payment_methods),
       });
       return;
     }
@@ -290,7 +302,7 @@ export default function PublicCart() {
           pixAvailable: false,
           pixGateway: null,
           hasAccess: true,
-          paymentMethods: normalizeCatalogPaymentMethods(company?.accepted_payment_methods),
+          paymentMethods: normalizeCheckoutPaymentOptions(company?.accepted_payment_methods),
         });
         return;
       }
@@ -300,14 +312,15 @@ export default function PublicCart() {
         pix_gateway?: string | null;
         has_access?: boolean;
         payment_methods?: CatalogCheckoutPaymentMethod[] | null;
+        payment_method_details?: CheckoutPaymentMethodOption[] | null;
       };
 
       setPaymentOptions({
         pixAvailable: Boolean(options.pix_available),
         pixGateway: options.pix_gateway || null,
         hasAccess: options.has_access !== false,
-        paymentMethods: normalizeCatalogPaymentMethods(
-          options.payment_methods ?? company.accepted_payment_methods,
+        paymentMethods: normalizeCheckoutPaymentOptions(
+          options.payment_method_details ?? options.payment_methods ?? company.accepted_payment_methods,
         ),
       });
     };
@@ -420,7 +433,7 @@ export default function PublicCart() {
 
   useEffect(() => {
     if (!form.paymentMethod) return;
-    if (!paymentOptions.paymentMethods.includes(form.paymentMethod as CatalogCheckoutPaymentMethod)) {
+    if (!paymentOptions.paymentMethods.some((method) => method.type === form.paymentMethod)) {
       setForm((prev) => ({ ...prev, paymentMethod: '' }));
       return;
     }
@@ -600,6 +613,14 @@ export default function PublicCart() {
 
   const updateItemQuantity = (productId: string, quantity: number, minOrderQuantity: number) => {
     if (!company?.id) return;
+    if (quantity < minOrderQuantity) {
+      toast({
+        title: 'Quantidade mínima',
+        description: `A quantidade mínima para este produto é ${minOrderQuantity} unidade(s).`,
+        variant: 'destructive',
+      });
+      return;
+    }
     setPublicCartItemQuantity(company.id, productId, Math.max(minOrderQuantity, quantity));
   };
 
@@ -608,7 +629,38 @@ export default function PublicCart() {
     removePublicCartItem(company.id, productId);
   };
 
-  const handleReferenceFileUpload = async (item: PublicCartItem, file: File) => {
+  const openReferenceUploadDialog = (item: PublicCartItem, file: File) => {
+    if (!PERSONALIZED_REFERENCE_MIME_TYPES.has(file.type)) {
+      toast({
+        title: 'Arquivo inválido',
+        description: 'Envie somente JPG, PNG, WEBP ou PDF.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setPendingReferenceUpload({
+      item,
+      file,
+      displayName: sanitizeDisplayFileName(
+        buildSuggestedOrderFileName({
+          customerName: form.name || user?.user_metadata?.full_name?.toString() || 'Cliente',
+          productName: item.name,
+          originalFileName: file.name,
+          fallbackBaseName: 'referencia',
+        }),
+        file.name,
+        'referencia',
+      ),
+    });
+    setReferenceUploadDialogOpen(true);
+  };
+
+  const handleReferenceFileUpload = async (
+    item: PublicCartItem,
+    file: File,
+    displayName: string,
+  ) => {
     if (!company?.id) return;
 
     if (!PERSONALIZED_REFERENCE_MIME_TYPES.has(file.type)) {
@@ -621,7 +673,7 @@ export default function PublicCart() {
     }
 
     const uploadClient = user ? customerSupabase : publicSupabase;
-    const safeName = (file.name || 'referencia').replace(/[^a-zA-Z0-9._-]/g, '_');
+    const safeName = sanitizeDisplayFileName(displayName, file.name, 'referencia').replace(/[^a-zA-Z0-9._-]/g, '_');
     const path = `public-catalog/${company.id}/${item.productId}/${Date.now()}-${Math.random()
       .toString(36)
       .slice(2, 10)}-${safeName}`;
@@ -648,7 +700,7 @@ export default function PublicCart() {
       {
         ...item,
         referenceFilePath: path,
-        referenceFileName: file.name || safeName,
+        referenceFileName: sanitizeDisplayFileName(displayName, file.name, 'referencia'),
         referenceFileType: file.type || null,
       },
       'replace',
@@ -783,7 +835,7 @@ export default function PublicCart() {
     let paymentError: string | undefined;
     if (!form.paymentMethod) {
       paymentError = 'Selecione a forma de pagamento.';
-    } else if (!paymentOptions.paymentMethods.includes(form.paymentMethod as CatalogCheckoutPaymentMethod)) {
+    } else if (!paymentOptions.paymentMethods.some((method) => method.type === form.paymentMethod)) {
       paymentError = 'A forma de pagamento selecionada nao esta disponivel para esta loja.';
     } else if (form.paymentMethod === 'pix' && !paymentOptions.pixAvailable) {
       paymentError = 'PIX indisponível para esta loja.';
@@ -1020,9 +1072,13 @@ export default function PublicCart() {
   const reviewProductionTimeDays = orderResult?.productionTimeDaysUsed ?? productionTimeDaysUsed;
   const reviewEstimatedDeliveryDate = orderResult?.estimatedDeliveryDate || estimatedDeliveryInfo?.isoDate || null;
   const availablePaymentMethods = paymentOptions.paymentMethods.filter(
-    (method) => method !== 'pix' || paymentOptions.pixAvailable,
+    (method) => method.type !== 'pix' || paymentOptions.pixAvailable,
   );
-  const selectedPaymentLabel = form.paymentMethod ? paymentMethodLabels[form.paymentMethod as PaymentMethod] || form.paymentMethod : '-';
+  const selectedPaymentLabel = form.paymentMethod
+    ? availablePaymentMethods.find((method) => method.type === form.paymentMethod)?.name ||
+      paymentMethodLabels[form.paymentMethod as PaymentMethod] ||
+      form.paymentMethod
+    : '-';
   const personalizedItemsCount = cartItems.filter((item) => item.isPersonalized).length;
   const personalizedItemsWithReference = cartItems.filter((item) => item.isPersonalized && Boolean(item.referenceFilePath)).length;
   const personalizedItemsMissingReference = Math.max(0, personalizedItemsCount - personalizedItemsWithReference);
@@ -1185,7 +1241,7 @@ export default function PublicCart() {
                                       onChange={(event) => {
                                         const file = event.target.files?.[0];
                                         event.currentTarget.value = '';
-                                        if (file) void handleReferenceFileUpload(item, file);
+                                        if (file) openReferenceUploadDialog(item, file);
                                       }}
                                     />
                                   </label>
@@ -1270,6 +1326,11 @@ export default function PublicCart() {
                             {asCurrency(item.unitPrice * item.quantity)}
                           </p>
                         </div>
+                        {Math.max(1, item.minOrderQuantity) > 1 && (
+                          <p className="mt-2 text-xs font-medium text-amber-700">
+                            Pedido mínimo: {Math.max(1, item.minOrderQuantity)} unidades
+                          </p>
+                        )}
                       </div>
                     </article>
                   ))}
@@ -1606,13 +1667,13 @@ export default function PublicCart() {
                       </SelectTrigger>
                       <SelectContent>
                         {availablePaymentMethods.map((method) => (
-                          <SelectItem key={method} value={method}>
-                            {catalogPaymentMethodLabels[method]}
+                          <SelectItem key={method.type} value={method.type}>
+                            {method.name || catalogPaymentMethodLabels[method.type]}
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
-                    {!paymentOptions.pixAvailable && paymentOptions.paymentMethods.includes('pix') && (
+                    {!paymentOptions.pixAvailable && paymentOptions.paymentMethods.some((method) => method.type === 'pix') && (
                       <p className="mt-1 text-xs text-slate-500">PIX indisponível: configure o gateway completo na loja.</p>
                     )}
                     {formErrors.paymentMethod && <p className="mt-1 text-xs text-destructive">{formErrors.paymentMethod}</p>}
@@ -1651,7 +1712,7 @@ export default function PublicCart() {
                       <strong>Recebimento:</strong>{' '}
                       {(orderResult?.deliveryMethod || form.deliveryMethod) === 'entrega' ? 'Entrega' : 'Retirada'}
                     </p>
-                    <p><strong>Pagamento:</strong> {orderResult ? paymentMethodLabels[orderResult.paymentMethod] : selectedPaymentLabel}</p>
+                    <p><strong>Pagamento:</strong> {selectedPaymentLabel}</p>
                     {(orderResult?.orderNotes || form.orderNotes.trim()) && (
                       <p><strong>Observações:</strong> {orderResult?.orderNotes || form.orderNotes.trim()}</p>
                     )}
@@ -1757,7 +1818,9 @@ export default function PublicCart() {
                         </div>
                         <div className="rounded-md border border-emerald-200 bg-white p-2 text-xs">
                           <p className="text-emerald-700">Pagamento</p>
-                          <p className="font-semibold text-emerald-900">{paymentMethodLabels[orderResult.paymentMethod]}</p>
+                          <p className="font-semibold text-emerald-900">
+                            {selectedPaymentLabel}
+                          </p>
                         </div>
                         <div className="rounded-md border border-emerald-200 bg-white p-2 text-xs">
                           <p className="text-emerald-700">Recebimento</p>
@@ -1883,6 +1946,89 @@ export default function PublicCart() {
           </Card>
         </div>
       </main>
+
+      <Dialog
+        open={referenceUploadDialogOpen}
+        onOpenChange={(open) => {
+          if (Object.values(uploadingReferenceByProduct).some(Boolean)) return;
+          setReferenceUploadDialogOpen(open);
+          if (!open) {
+            setPendingReferenceUpload(null);
+          }
+        }}
+      >
+        <DialogContent aria-describedby={undefined} className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Nome do arquivo de referência</DialogTitle>
+            <DialogDescription>
+              O sistema sugeriu um nome organizado para o arquivo. Você pode ajustar antes de anexar.
+            </DialogDescription>
+          </DialogHeader>
+
+          {pendingReferenceUpload ? (
+            <div className="space-y-4">
+              <div className="rounded-xl border border-border bg-muted/20 p-4">
+                <p className="text-sm font-medium text-foreground">{pendingReferenceUpload.item.name}</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Arquivo original: {pendingReferenceUpload.file.name}
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Nome do arquivo</Label>
+                <Input
+                  value={pendingReferenceUpload.displayName}
+                  onChange={(event) =>
+                    setPendingReferenceUpload((prev) =>
+                      prev
+                        ? {
+                            ...prev,
+                            displayName: sanitizeDisplayFileName(
+                              event.target.value,
+                              prev.file.name,
+                              'referencia',
+                            ),
+                          }
+                        : prev,
+                    )
+                  }
+                  placeholder="Nome do arquivo"
+                />
+              </div>
+            </div>
+          ) : null}
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setReferenceUploadDialogOpen(false);
+                setPendingReferenceUpload(null);
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              disabled={!pendingReferenceUpload}
+              onClick={() => {
+                if (!pendingReferenceUpload) return;
+                void handleReferenceFileUpload(
+                  pendingReferenceUpload.item,
+                  pendingReferenceUpload.file,
+                  pendingReferenceUpload.displayName,
+                ).then(() => {
+                  setReferenceUploadDialogOpen(false);
+                  setPendingReferenceUpload(null);
+                });
+              }}
+            >
+              Anexar arquivo
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <CatalogFooter company={company} showAccount accountHref={customerOrdersPath} />
     </div>

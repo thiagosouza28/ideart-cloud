@@ -42,12 +42,21 @@ import { resolveProductPrice } from '@/lib/pricing';
 import { useUnsavedChanges } from '@/hooks/use-unsaved-changes';
 import { localizeOrderHistoryNote } from '@/lib/orderHistoryNotes';
 import { extractOrderIdFromParam } from '@/lib/orderRouting';
+import { fetchCompanyPaymentMethods } from '@/services/companyPaymentMethods';
 import {
   isPendingCustomerInfoOrder,
   isPublicCatalogPersonalizedOrder,
   stripPendingCustomerInfoNotes,
 } from '@/lib/orderMetadata';
 import { extractVisibleOrderNotes, mergeOrderNotes } from '@/lib/orderNotes';
+import { buildSuggestedOrderFileName, sanitizeDisplayFileName } from '@/lib/orderFiles';
+import {
+  defaultCompanyPaymentMethods,
+  getActiveCompanyPaymentMethods,
+  getPaymentMethodDisplayName,
+  getSelectableCompanyPaymentMethods,
+  type CompanyPaymentMethodConfig,
+} from '@/lib/paymentMethods';
 
 const statusConfig: Record<OrderStatus, { label: string; icon: React.ComponentType<any>; color: string; next: OrderStatus[] }> = {
   orcamento: {
@@ -233,9 +242,40 @@ export default function OrderDetails() {
   const [notesDraft, setNotesDraft] = useState('');
   const [showNotesOnPdf, setShowNotesOnPdf] = useState(true);
   const [savingNotes, setSavingNotes] = useState(false);
+  const [companyPaymentMethods, setCompanyPaymentMethods] = useState<CompanyPaymentMethodConfig[]>(
+    getActiveCompanyPaymentMethods(defaultCompanyPaymentMethods),
+  );
+  const [artUploadDialogOpen, setArtUploadDialogOpen] = useState(false);
+  const [pendingArtUploads, setPendingArtUploads] = useState<
+    Array<{ id: string; file: File; displayName: string }>
+  >([]);
 
   const formatCurrency = (v: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadPaymentMethods = async () => {
+      try {
+        const result = await fetchCompanyPaymentMethods({ activeOnly: true });
+        if (!active) return;
+        setCompanyPaymentMethods(
+          result.length > 0 ? result : getActiveCompanyPaymentMethods(defaultCompanyPaymentMethods),
+        );
+      } catch (error) {
+        console.error(error);
+        if (!active) return;
+        setCompanyPaymentMethods(getActiveCompanyPaymentMethods(defaultCompanyPaymentMethods));
+      }
+    };
+
+    void loadPaymentMethods();
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const companyStatusMessages = useMemo(
     () => resolveOrderStatusMessageTemplates(order?.company?.order_status_message_templates),
@@ -350,6 +390,17 @@ export default function OrderDetails() {
 
   const getPaymentMethodLabel = (method?: PaymentMethod | null) =>
     method ? paymentReceiptMethodLabels[method] || String(method) : 'NÃ£o informado';
+
+  const selectablePaymentMethods = useMemo(
+    () =>
+      getSelectableCompanyPaymentMethods(companyPaymentMethods, [
+        order?.payment_method,
+        paymentMethod,
+        entryMethod,
+        deliveryPaymentMethod,
+      ]),
+    [companyPaymentMethods, deliveryPaymentMethod, entryMethod, order?.payment_method, paymentMethod],
+  );
 
   const buildDeliveryReceiptPaymentInfo = (
     sourceOrder: Order,
@@ -1644,6 +1695,94 @@ const sendWhatsAppMessage = (message: string) => {
     return new File([file], `arte-${Date.now()}-${index}.${extension}`, { type: file.type || 'image/png' });
   };
 
+  const buildSuggestedArtFileDisplayName = (file: File) =>
+    sanitizeDisplayFileName(
+      buildSuggestedOrderFileName({
+        customerName: order?.customer?.name || order?.customer_name || 'Cliente',
+        productName: items[0]?.product_name || 'Arte',
+        orderNumber: order?.order_number,
+        originalFileName: file.name,
+        fallbackBaseName: 'arte',
+      }),
+      file.name,
+      'arte',
+    );
+
+  const queueArtFilesForUpload = (files: File[]) => {
+    if (!order || files.length === 0) return;
+
+    const validFiles = files.filter((file) => {
+      if (allowedArtMimeTypes.includes(file.type)) return true;
+      toast({
+        title: 'Arquivo inválido',
+        description: 'Use JPG, PNG, WEBP ou PDF.',
+        variant: 'destructive',
+      });
+      return false;
+    });
+
+    if (validFiles.length === 0) return;
+
+    setPendingArtUploads(
+      validFiles.map((file, index) => ({
+        id:
+          typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+            ? crypto.randomUUID()
+            : `${Date.now()}-${index}`,
+        file,
+        displayName: buildSuggestedArtFileDisplayName(file),
+      })),
+    );
+    setArtUploadDialogOpen(true);
+  };
+
+  const handlePendingArtUploadNameChange = (id: string, value: string) => {
+    setPendingArtUploads((prev) =>
+      prev.map((item) =>
+        item.id === id
+          ? {
+              ...item,
+              displayName: sanitizeDisplayFileName(value, item.file.name, 'arte'),
+            }
+          : item,
+      ),
+    );
+  };
+
+  const handleRemovePendingArtUpload = (id: string) => {
+    setPendingArtUploads((prev) => prev.filter((item) => item.id !== id));
+  };
+
+  const confirmArtFilesUpload = async () => {
+    if (!order || pendingArtUploads.length === 0) return;
+    setUploadingArtFile(true);
+    const uploaded: OrderArtFile[] = [];
+    try {
+      const { uploadOrderArtFile } = await import('@/services/orders');
+      for (const item of pendingArtUploads) {
+        const artFile = await uploadOrderArtFile(order.id, item.file, user.id, {
+          customerId: order.customer_id || null,
+          displayFileName: item.displayName,
+        });
+        uploaded.push(artFile as OrderArtFile);
+      }
+
+      if (uploaded.length > 0) {
+        setArtFiles((prev) => [...uploaded, ...prev]);
+        toast({ title: 'Arquivos enviados com sucesso!' });
+      }
+
+      setArtUploadDialogOpen(false);
+      setPendingArtUploads([]);
+    } catch (error: any) {
+      console.error(error);
+      toast({ title: 'Erro ao enviar arquivos', description: error?.message, variant: 'destructive' });
+    } finally {
+      setUploadingArtFile(false);
+      if (artFileInputRef.current) artFileInputRef.current.value = '';
+    }
+  };
+
   const uploadArtFiles = async (files: File[]) => {
     if (!order || files.length === 0) return;
     setUploadingArtFile(true);
@@ -1678,7 +1817,7 @@ const sendWhatsAppMessage = (message: string) => {
 
   const handleArtFilesUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files ? Array.from(e.target.files) : [];
-    await uploadArtFiles(files);
+    queueArtFilesForUpload(files);
   };
 
   const handleArtPaste = async (event: React.ClipboardEvent<HTMLDivElement>) => {
@@ -1692,7 +1831,7 @@ const sendWhatsAppMessage = (message: string) => {
     if (imageFiles.length === 0) return;
     event.preventDefault();
     const normalized = imageFiles.map((file, index) => normalizeClipboardFile(file, index));
-    await uploadArtFiles(normalized);
+    queueArtFilesForUpload(normalized);
   };
 
   const handleReceiptDialogChange = (open: boolean) => {
@@ -2546,7 +2685,7 @@ const sendWhatsAppMessage = (message: string) => {
                 {order.payment_method && (
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Forma</span>
-                    <span className="capitalize">{order.payment_method}</span>
+                    <span>{getPaymentMethodDisplayName(order.payment_method, companyPaymentMethods)}</span>
                   </div>
                 )}
                 <div className="flex justify-between">
@@ -2568,7 +2707,7 @@ const sendWhatsAppMessage = (message: string) => {
                       <div>
                         <p className="font-medium">{formatCurrency(Number(payment.amount))}</p>
                         <p className="text-xs text-muted-foreground">
-                          {(payment.method || '-').toString()} - {formatDate(payment.paid_at || payment.created_at)}
+                          {getPaymentMethodDisplayName(payment.method, companyPaymentMethods) || '-'} - {formatDate(payment.paid_at || payment.created_at)}
                         </p>
                       </div>
                       <div className="flex items-center gap-1 sm:gap-2">
@@ -2709,11 +2848,11 @@ const sendWhatsAppMessage = (message: string) => {
                   <SelectValue placeholder="Selecione" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="dinheiro">Dinheiro</SelectItem>
-                  <SelectItem value="cartao">Cartão</SelectItem>
-                  <SelectItem value="pix">PIX</SelectItem>
-                  <SelectItem value="boleto">Boleto</SelectItem>
-                  <SelectItem value="outro">Outro</SelectItem>
+                  {selectablePaymentMethods.map((option) => (
+                    <SelectItem key={option.type} value={option.type}>
+                      {getPaymentMethodDisplayName(option.type, companyPaymentMethods)}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -2872,14 +3011,11 @@ const sendWhatsAppMessage = (message: string) => {
                             <SelectValue placeholder="Selecione a forma de pagamento" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="dinheiro">Dinheiro</SelectItem>
-                            <SelectItem value="cartao">Cartão</SelectItem>
-                            <SelectItem value="credito">Cartão crédito</SelectItem>
-                            <SelectItem value="debito">Cartão débito</SelectItem>
-                            <SelectItem value="transferencia">Transferência</SelectItem>
-                            <SelectItem value="pix">PIX</SelectItem>
-                            <SelectItem value="boleto">Boleto</SelectItem>
-                            <SelectItem value="outro">Outro</SelectItem>
+                            {selectablePaymentMethods.map((option) => (
+                              <SelectItem key={option.type} value={option.type}>
+                                {getPaymentMethodDisplayName(option.type, companyPaymentMethods)}
+                              </SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                       </div>
@@ -3037,11 +3173,11 @@ const sendWhatsAppMessage = (message: string) => {
                   <SelectValue placeholder="Selecione" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="dinheiro">Dinheiro</SelectItem>
-                  <SelectItem value="cartao">Cartão</SelectItem>
-                  <SelectItem value="pix">Pix</SelectItem>
-                  <SelectItem value="boleto">Boleto</SelectItem>
-                  <SelectItem value="outro">Outro</SelectItem>
+                  {selectablePaymentMethods.map((option) => (
+                    <SelectItem key={option.type} value={option.type}>
+                      {getPaymentMethodDisplayName(option.type, companyPaymentMethods)}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -3053,6 +3189,81 @@ const sendWhatsAppMessage = (message: string) => {
             <Button onClick={() => applyStatusChange(entryAmount)} disabled={saving || entryAmount <= 0}>
               {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Registrar entrada e continuar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={artUploadDialogOpen}
+        onOpenChange={(open) => {
+          if (uploadingArtFile) return;
+          setArtUploadDialogOpen(open);
+          if (!open) {
+            setPendingArtUploads([]);
+            if (artFileInputRef.current) artFileInputRef.current.value = '';
+          }
+        }}
+      >
+        <DialogContent aria-describedby={undefined} className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Organizar arquivos do cliente</DialogTitle>
+            <DialogDescription>
+              O sistema sugeriu um nome padrão para cada arquivo. Você pode ajustar antes de salvar.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            {pendingArtUploads.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Nenhum arquivo selecionado.</p>
+            ) : (
+              pendingArtUploads.map((item) => (
+                <div key={item.id} className="rounded-xl border border-border p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-foreground">{item.file.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {(item.file.type || 'Arquivo').toUpperCase()} - {(item.file.size / 1024).toFixed(1)} KB
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleRemovePendingArtUpload(item.id)}
+                    >
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </div>
+                  <div className="mt-3 space-y-2">
+                    <Label>Nome do arquivo</Label>
+                    <Input
+                      value={item.displayName}
+                      onChange={(event) =>
+                        handlePendingArtUploadNameChange(item.id, event.target.value)
+                      }
+                      placeholder="Nome do arquivo"
+                    />
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setArtUploadDialogOpen(false);
+                setPendingArtUploads([]);
+              }}
+              disabled={uploadingArtFile}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={confirmArtFilesUpload}
+              disabled={uploadingArtFile || pendingArtUploads.length === 0}
+            >
+              {uploadingArtFile ? 'Enviando...' : 'Salvar arquivos'}
             </Button>
           </DialogFooter>
         </DialogContent>

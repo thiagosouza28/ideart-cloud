@@ -437,8 +437,21 @@ export default function PublicProductDetails() {
     navigate(href);
   };
 
+  const validateMinimumOrderQuantity = () => {
+    if (orderForm.quantity >= minimumOrderQuantity) return true;
+
+    setOrderForm((prev) => ({ ...prev, quantity: minimumOrderQuantity }));
+    toast({
+      title: 'Quantidade mínima',
+      description: `A quantidade mínima para este produto é ${minimumOrderQuantity} unidade(s).`,
+      variant: 'destructive',
+    });
+    return false;
+  };
+
   const handleAddToCart = (mode: 'sum' | 'replace' = 'sum') => {
     if (!company || !product) return;
+    if (!validateMinimumOrderQuantity()) return false;
 
     const minimumQuantity = Math.max(1, Number(product.catalog_min_order ?? product.min_order_quantity ?? 1));
     const quantity = Math.max(minimumQuantity, Number(orderForm.quantity || minimumQuantity));
@@ -466,11 +479,13 @@ export default function PublicProductDetails() {
       title: 'Produto adicionado',
       description: `${product.name} foi adicionado ao carrinho.`,
     });
+    return true;
   };
 
   const handleGoToCheckout = () => {
-    handleAddToCart('replace');
-    openCart();
+    if (handleAddToCart('replace')) {
+      openCart();
+    }
   };
 
   const handleReviewFieldChange = (field: 'name' | 'phone' | 'comment', value: string) => {
@@ -1389,12 +1404,21 @@ export default function PublicProductDetails() {
                   <button
                     type="button"
                     className="w-8 h-full flex items-center justify-center text-slate-400 hover:text-slate-700"
-                    onClick={() =>
+                    onClick={() => {
+                      if (orderForm.quantity <= minimumOrderQuantity) {
+                        toast({
+                          title: 'Quantidade mínima',
+                          description: `A quantidade mínima para este produto é ${minimumOrderQuantity} unidade(s).`,
+                          variant: 'destructive',
+                        });
+                        return;
+                      }
+
                       setOrderForm((prev) => ({
                         ...prev,
-                        quantity: Math.max(1, prev.quantity - 1),
-                      }))
-                    }
+                        quantity: Math.max(minimumOrderQuantity, prev.quantity - 1),
+                      }));
+                    }}
                     aria-label="Diminuir"
                   >
                     <Minus className="h-4 w-4" />
@@ -1422,6 +1446,11 @@ export default function PublicProductDetails() {
                   Fazer Pedido
                 </Button>
               </div>
+              {minimumOrderQuantity > 1 && (
+                <p className="text-sm font-medium text-amber-700">
+                  Pedido mínimo: {minimumOrderQuantity} unidades
+                </p>
+              )}
               <div className="flex flex-wrap gap-4 text-xs text-slate-500">
                 <span className="flex items-center gap-1"><Check className="h-3 w-3 text-primary" />Compra segura</span>
                 <span className="flex items-center gap-1"><Check className="h-3 w-3 text-primary" />Frete grátis acima de R$199</span>

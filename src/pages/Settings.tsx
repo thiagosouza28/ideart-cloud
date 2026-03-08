@@ -50,6 +50,7 @@ import {
   Company,
   CompanyTheme,
   CompanyThemeBorderRadius,
+  CompanyThemeBorderSize,
   CompanyThemeButtonStyle,
   CompanyThemeFontFamily,
   CompanyThemeLayoutDensity,
@@ -66,8 +67,12 @@ import { invokeEdgeFunction } from '@/services/edgeFunctions';
 import { z } from 'zod';
 import { ensurePublicStorageUrl } from '@/lib/storage';
 import {
+  applyCompanyThemeTemplate,
+  companyThemeTemplateLabels,
+  CompanyThemeTemplateId,
   defaultCompanyTheme,
   extractDominantColorFromFile,
+  extractDominantColorFromImageUrl,
   getCompanyThemePalette,
   normalizeCompanyTheme,
   normalizeHexColor,
@@ -169,6 +174,16 @@ const borderRadiusOptions: Array<{
   { value: 'large', title: 'Grande', description: 'Raio aproximado de 20px.' },
 ];
 
+const borderSizeOptions: Array<{
+  value: CompanyThemeBorderSize;
+  title: string;
+  description: string;
+}> = [
+  { value: 'thin', title: 'Fina', description: 'Contornos mais discretos e leves.' },
+  { value: 'normal', title: 'Normal', description: 'Equilíbrio entre definição visual e suavidade.' },
+  { value: 'thick', title: 'Marcada', description: 'Mais presença em cards, campos e tabelas.' },
+];
+
 const densityOptions: Array<{
   value: CompanyThemeLayoutDensity;
   title: string;
@@ -187,6 +202,8 @@ const themeColorFields: Array<{
     | 'primary_color'
     | 'secondary_color'
     | 'background_color'
+    | 'card_color'
+    | 'border_color'
     | 'text_color'
     | 'button_color'
     | 'button_hover_color'
@@ -197,6 +214,8 @@ const themeColorFields: Array<{
   { key: 'primary_color', label: 'Cor primária' },
   { key: 'secondary_color', label: 'Cor secundária' },
   { key: 'background_color', label: 'Cor de fundo' },
+  { key: 'card_color', label: 'Cor dos cards' },
+  { key: 'border_color', label: 'Cor das bordas' },
   { key: 'text_color', label: 'Cor do texto' },
   { key: 'button_color', label: 'Cor dos botões' },
   { key: 'button_hover_color', label: 'Hover dos botões' },
@@ -211,6 +230,16 @@ const themePaletteModeOptions: Array<{
 }> = [
   { value: 'light', title: 'Paleta clara', description: 'Usada quando o sistema estiver em modo claro.', icon: Sun },
   { value: 'dark', title: 'Paleta escura', description: 'Usada quando o sistema estiver em modo escuro.', icon: Moon },
+];
+
+const themeTemplateOptions: Array<{
+  value: CompanyThemeTemplateId;
+  description: string;
+}> = [
+  { value: 'blue', description: 'Base sóbria e profissional, com contraste seguro para SaaS.' },
+  { value: 'green', description: 'Mais fresca e moderna, com ênfase em conversão e destaque.' },
+  { value: 'purple', description: 'Visual SaaS mais expressivo, sem fugir do padrão atual.' },
+  { value: 'logo', description: 'Gera uma paleta clara e escura a partir da cor dominante da logo.' },
 ];
 
 export default function Settings() {
@@ -506,6 +535,52 @@ export default function Settings() {
     [themePaletteMode],
   );
 
+  const applyThemeTemplatePreset = useCallback(
+    async (templateId: CompanyThemeTemplateId) => {
+      try {
+        let logoBaseColor: string | null = null;
+
+        if (templateId === 'logo') {
+          const storedLogoUrl = company?.logo_url ? ensurePublicStorageUrl(company.logo_url) : null;
+          const logoSource = logoPreview || storedLogoUrl;
+
+          if (!logoSource) {
+            toast({
+              title: 'Envie uma logo primeiro',
+              description: 'A paleta baseada na logo precisa de uma imagem da empresa para extrair a cor dominante.',
+              variant: 'destructive',
+            });
+            return;
+          }
+
+          logoBaseColor = await extractDominantColorFromImageUrl(logoSource);
+        }
+
+        setThemeForm((prev) =>
+          applyCompanyThemeTemplate(prev, templateId, {
+            logoBaseColor,
+          }),
+        );
+
+        toast({
+          title:
+            templateId === 'logo'
+              ? 'Paleta gerada a partir da logo'
+              : `Template ${companyThemeTemplateLabels[templateId].toLowerCase()} aplicado`,
+          description: 'Revise o preview e salve o tema para aplicar no sistema inteiro.',
+        });
+      } catch (error) {
+        console.error('Erro ao aplicar template de tema:', error);
+        toast({
+          title: 'Erro ao aplicar template',
+          description: 'Não foi possível gerar a nova paleta agora.',
+          variant: 'destructive',
+        });
+      }
+    },
+    [company?.logo_url, logoPreview, toast],
+  );
+
   const handleLogoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -568,6 +643,7 @@ export default function Settings() {
       light_palette: getCompanyThemePalette(theme, 'light'),
       dark_palette: getCompanyThemePalette(theme, 'dark'),
       border_radius: theme.border_radius,
+      border_size: theme.border_size,
       button_style: theme.button_style,
       layout_density: theme.layout_density,
       font_family: theme.font_family,
@@ -1694,7 +1770,7 @@ export default function Settings() {
                 </CardHeader>
                 <CardContent className="space-y-6">
                   <div className="rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground">
-                    Ao enviar uma nova logo em Dados da Empresa, o sistema extrai automaticamente a cor principal e sugere uma nova paleta aqui.
+                    Ao enviar uma nova logo em Dados da Empresa, o sistema extrai automaticamente a cor principal e sugere uma nova paleta aqui. Você também pode aplicar templates prontos para começar mais rápido.
                   </div>
 
                   <div className="space-y-3">
@@ -1730,6 +1806,35 @@ export default function Settings() {
                         </Label>
                       ))}
                     </RadioGroup>
+                  </div>
+
+                  <div className="space-y-4">
+                    <Label className="flex items-center gap-2">
+                      <LayoutTemplate className="h-4 w-4" />
+                      Templates de tema
+                    </Label>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      {themeTemplateOptions.map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => void applyThemeTemplatePreset(option.value)}
+                          className="rounded-lg border border-border bg-background p-4 text-left transition-colors hover:bg-muted/40"
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <p className="font-medium text-foreground">
+                              {companyThemeTemplateLabels[option.value]}
+                            </p>
+                            {option.value === 'logo' && (
+                              <span className="rounded-full bg-primary/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-primary">
+                                Auto
+                              </span>
+                            )}
+                          </div>
+                          <p className="mt-2 text-xs text-muted-foreground">{option.description}</p>
+                        </button>
+                      ))}
+                    </div>
                   </div>
 
                   <div className="space-y-4">
@@ -1854,6 +1959,33 @@ export default function Settings() {
                     </div>
 
                     <div className="space-y-3">
+                      <Label>Espessura das bordas</Label>
+                      <RadioGroup
+                        value={themeForm.border_size}
+                        onValueChange={(value) =>
+                          updateThemeField('border_size', value as CompanyThemeBorderSize)
+                        }
+                        className="space-y-2"
+                      >
+                        {borderSizeOptions.map((option) => (
+                          <Label
+                            key={option.value}
+                            htmlFor={`border-size-${option.value}`}
+                            className="flex cursor-pointer items-start gap-3 rounded-lg border border-border p-3"
+                          >
+                            <RadioGroupItem id={`border-size-${option.value}`} value={option.value} className="mt-1" />
+                            <div className="space-y-1">
+                              <div className="font-medium text-foreground">{option.title}</div>
+                              <p className="text-xs text-muted-foreground">{option.description}</p>
+                            </div>
+                          </Label>
+                        ))}
+                      </RadioGroup>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-6 md:grid-cols-2">
+                    <div className="space-y-3">
                       <Label>Layout do sistema</Label>
                       <RadioGroup
                         value={themeForm.layout_density}
@@ -1876,6 +2008,13 @@ export default function Settings() {
                           </Label>
                         ))}
                       </RadioGroup>
+                    </div>
+
+                    <div className="space-y-3">
+                      <Label>Impacto do layout</Label>
+                      <div className="rounded-lg border border-dashed border-border bg-muted/20 p-4 text-sm text-muted-foreground">
+                        O layout compacto ou espaçado continua afetando cards, tabelas, formulários e navegação lateral em todo o sistema.
+                      </div>
                     </div>
                   </div>
 

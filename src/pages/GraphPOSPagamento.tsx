@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CreditCard, Banknote, Smartphone, Wallet, ChevronRight } from 'lucide-react';
 import GraphPOSBreadcrumb from '@/components/graphpos/GraphPOSBreadcrumb';
@@ -11,6 +11,13 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { PaymentMethod } from '@/types/database';
 import { buildM2Attributes, formatAreaM2 } from '@/lib/measurements';
+import { fetchCompanyPaymentMethods } from '@/services/companyPaymentMethods';
+import {
+  defaultCompanyPaymentMethods,
+  getActiveCompanyPaymentMethods,
+  type CompanyPaymentMethodConfig,
+} from '@/lib/paymentMethods';
+import { consumeProductSupplies } from '@/lib/supplyConsumption';
 
 const formatCurrency = (v: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
@@ -42,13 +49,16 @@ const parseAmountInput = (rawValue: string) => {
 const graphPosAmountInputClass =
   'mt-2 h-12 w-full rounded-2xl border border-border bg-card px-4 text-lg font-semibold text-foreground shadow-sm outline-none transition placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/15';
 
-const paymentOptions = [
-  { value: 'dinheiro', label: 'Dinheiro', icon: Banknote },
-  { value: 'credito', label: 'Credito', icon: CreditCard },
-  { value: 'debito', label: 'Debito', icon: CreditCard },
-  { value: 'pix', label: 'Pix', icon: Smartphone },
-  { value: 'outros', label: 'Outros', icon: Wallet },
-] as const;
+const paymentMethodIcons: Record<PaymentMethod, typeof Wallet> = {
+  dinheiro: Banknote,
+  cartao: CreditCard,
+  credito: CreditCard,
+  debito: CreditCard,
+  pix: Smartphone,
+  boleto: CreditCard,
+  transferencia: Wallet,
+  outro: Wallet,
+};
 
 export default function GraphPOSPagamento() {
   const navigate = useNavigate();
@@ -56,10 +66,13 @@ export default function GraphPOSPagamento() {
   const { toast } = useToast();
   const checkout = useMemo(() => getGraphPOSCheckoutState(), []);
   const initialAmountPaid = checkout?.amountPaid || checkout?.total || 0;
-  const [paymentMethod, setPaymentMethod] = useState(checkout?.paymentMethod || 'dinheiro');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(checkout?.paymentMethod || 'dinheiro');
   const [amountPaid, setAmountPaid] = useState(initialAmountPaid);
   const [amountPaidInput, setAmountPaidInput] = useState(() => formatAmountInput(initialAmountPaid));
   const [saving, setSaving] = useState(false);
+  const [paymentMethods, setPaymentMethods] = useState<CompanyPaymentMethodConfig[]>(
+    getActiveCompanyPaymentMethods(defaultCompanyPaymentMethods),
+  );
   const draftStorageKey = 'graphpos_pdv_draft';
 
   const items = checkout?.items || [];
@@ -70,12 +83,39 @@ export default function GraphPOSPagamento() {
   const customer = checkout?.customer;
   const companyId = profile?.company_id || company?.id || null;
 
-  const mapPaymentMethod = (): PaymentMethod => {
-    if (paymentMethod === 'dinheiro') return 'dinheiro';
-    if (paymentMethod === 'pix') return 'pix';
-    if (paymentMethod === 'outros') return 'outro';
-    return 'cartao';
-  };
+  useEffect(() => {
+    let active = true;
+
+    const loadPaymentMethods = async () => {
+      try {
+        const result = await fetchCompanyPaymentMethods({
+          companyId,
+          activeOnly: true,
+        });
+        if (!active) return;
+        const resolved = result.length > 0
+          ? result
+          : getActiveCompanyPaymentMethods(defaultCompanyPaymentMethods);
+        setPaymentMethods(resolved);
+      } catch (error) {
+        console.error(error);
+        if (!active) return;
+        setPaymentMethods(getActiveCompanyPaymentMethods(defaultCompanyPaymentMethods));
+      }
+    };
+
+    void loadPaymentMethods();
+
+    return () => {
+      active = false;
+    };
+  }, [companyId]);
+
+  useEffect(() => {
+    if (paymentMethods.some((option) => option.type === paymentMethod)) return;
+    const fallback = paymentMethods[0]?.type || 'dinheiro';
+    setPaymentMethod(fallback);
+  }, [paymentMethod, paymentMethods]);
 
   const updateAmountPaid = (value: number) => {
     setAmountPaid(value);
@@ -142,21 +182,25 @@ export default function GraphPOSPagamento() {
                 Forma de Pagamento
               </div>
               <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-5">
-                {paymentOptions.map((option) => (
+                {paymentMethods.map((option) => {
+                  const Icon = paymentMethodIcons[option.type] || Wallet;
+                  const selected = paymentMethod === option.type;
+
+                  return (
                   <button
-                    key={option.value}
+                    key={option.type}
                     type="button"
-                    onClick={() => setPaymentMethod(option.value)}
+                    onClick={() => setPaymentMethod(option.type)}
                     className={`flex h-20 flex-col items-center justify-center gap-2 rounded-2xl border bg-card text-sm shadow-sm transition ${
-                      paymentMethod === option.value
+                      selected
                         ? 'border-primary bg-primary/10 text-primary'
                         : 'border-border text-muted-foreground hover:border-primary/35 hover:bg-muted/40'
                     }`}
                   >
-                    <option.icon className={`h-5 w-5 ${paymentMethod === option.value ? 'text-primary' : 'text-muted-foreground'}`} />
-                    <span className="font-medium">{option.label}</span>
+                    <Icon className={`h-5 w-5 ${selected ? 'text-primary' : 'text-muted-foreground'}`} />
+                    <span className="font-medium">{option.name}</span>
                   </button>
-                ))}
+                )})}
               </div>
 
               <div className="mt-6 grid gap-4 lg:grid-cols-[1fr_220px]">
@@ -259,7 +303,7 @@ export default function GraphPOSPagamento() {
                     }
 
                     setSaving(true);
-                    const payment = mapPaymentMethod();
+                    const payment = paymentMethod;
                     const paidAmount = payment === 'dinheiro' ? amountPaid : total;
                     const changeAmount = payment === 'dinheiro' ? Math.max(0, amountPaid - total) : 0;
 
@@ -348,38 +392,16 @@ export default function GraphPOSPagamento() {
                       }));
                     }
 
-                    const { data: productSupplies } = await supabase
-                      .from('product_supplies')
-                      .select('product_id, supply_id, quantity')
-                      .in('product_id', productIds);
-
-                    if (productSupplies && productSupplies.length > 0) {
-                      const usageBySupply: Record<string, number> = {};
-
-                      productSupplies.forEach((ps: any) => {
-                        const qty = quantitiesByProduct[ps.product_id];
-                        if (!qty) return;
-                        const usage = Number(ps.quantity) * qty;
-                        if (usage <= 0) return;
-                        usageBySupply[ps.supply_id] = (usageBySupply[ps.supply_id] || 0) + usage;
-                      });
-
-                      const supplyIds = Object.keys(usageBySupply);
-                      if (supplyIds.length > 0) {
-                        const { data: suppliesData } = await supabase
-                          .from('supplies')
-                          .select('id, stock_quantity')
-                          .in('id', supplyIds);
-
-                        if (suppliesData && suppliesData.length > 0) {
-                          await Promise.all(suppliesData.map((supply: any) => {
-                            const usage = usageBySupply[supply.id] || 0;
-                            const newStock = Number(supply.stock_quantity) - usage;
-                            return supabase.from('supplies').update({ stock_quantity: newStock }).eq('id', supply.id);
-                          }));
-                        }
-                      }
-                    }
+                    await consumeProductSupplies({
+                      companyId,
+                      saleId: sale.id,
+                      userId: user.id,
+                      items: items.map((item) => ({
+                        product_id: item.id,
+                        product_name: item.name,
+                        quantity: item.quantity,
+                      })),
+                    });
 
                     setGraphPOSCheckoutState({
                       ...checkout,

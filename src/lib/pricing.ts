@@ -2,8 +2,63 @@ import type { PriceTier, Product } from '@/types/database';
 
 type ProductPricing = Pick<
   Product,
-  'base_cost' | 'labor_cost' | 'waste_percentage' | 'profit_margin' | 'final_price'
+  'base_cost' | 'labor_cost' | 'expense_percentage' | 'waste_percentage' | 'profit_margin' | 'final_price'
 >;
+
+export const calculateMarkupFactor = (expensePercentage = 0, profitPercentage = 0) => {
+  const appliedExpense = Number(expensePercentage) || 0;
+  const appliedProfit = Number(profitPercentage) || 0;
+  const denominator = 100 - (appliedExpense + appliedProfit);
+
+  if (denominator <= 0) return 1;
+  return 100 / denominator;
+};
+
+export const calculateEstimatedProfit = (cost: number, price: number) => {
+  const normalizedCost = Number(cost) || 0;
+  const normalizedPrice = Number(price) || 0;
+  return normalizedPrice - normalizedCost;
+};
+
+export const calculateRealMargin = (cost: number, price: number) => {
+  const normalizedPrice = Number(price) || 0;
+  if (normalizedPrice <= 0) return 0;
+  return (calculateEstimatedProfit(cost, price) / normalizedPrice) * 100;
+};
+
+export const calculatePriceByMultiplier = (cost: number, multiplier: number) =>
+  (Number(cost) || 0) * Math.max(Number(multiplier) || 0, 0);
+
+export const calculatePriceByMargin = (cost: number, marginPercentage: number) =>
+  (Number(cost) || 0) * (1 + (Number(marginPercentage) || 0) / 100);
+
+export const buildPriceSimulation = ({
+  cost,
+  expensePercentage = 0,
+  desiredMarginPercentage = 0,
+  manualMarkup,
+}: {
+  cost: number;
+  expensePercentage?: number;
+  desiredMarginPercentage?: number;
+  manualMarkup?: number | null;
+}) => {
+  const normalizedCost = Number(cost) || 0;
+  const markupSuggested = calculateMarkupFactor(expensePercentage, desiredMarginPercentage);
+  const appliedMarkup = manualMarkup && manualMarkup > 0 ? manualMarkup : markupSuggested;
+  const suggestedPrice = normalizedCost * appliedMarkup;
+  const estimatedProfit = calculateEstimatedProfit(normalizedCost, suggestedPrice);
+  const realMargin = calculateRealMargin(normalizedCost, suggestedPrice);
+
+  return {
+    cost: normalizedCost,
+    markupSuggested,
+    appliedMarkup,
+    suggestedPrice,
+    estimatedProfit,
+    realMargin,
+  };
+};
 
 export const calculateSuggestedPrice = (
   product: ProductPricing,
@@ -15,7 +70,7 @@ export const calculateSuggestedPrice = (
   const profitMargin = Number(product.profit_margin) || 0;
   const totalCost = baseCost + laborCost + suppliesCost;
   const costWithWaste = totalCost * (1 + wastePercentage / 100);
-  return costWithWaste * (1 + profitMargin / 100);
+  return calculatePriceByMargin(costWithWaste, profitMargin);
 };
 
 export const isPromotionActive = (product: Product) => {

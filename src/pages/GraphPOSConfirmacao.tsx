@@ -10,6 +10,7 @@ import SaleReceipt, { SaleReceiptCustomer, SaleReceiptLayout } from '@/component
 import { PaymentMethod } from '@/types/database';
 import { formatAreaM2 } from '@/lib/measurements';
 import { useAuth } from '@/contexts/AuthContext';
+import { getPaymentMethodDisplayName } from '@/lib/paymentMethods';
 
 const formatCurrency = (v: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
@@ -45,21 +46,7 @@ export default function GraphPOSConfirmacao() {
     phone: customer?.phone || '',
   });
 
-  const paymentLabelMap: Record<string, string> = {
-    dinheiro: 'Dinheiro',
-    credito: 'Credito',
-    debito: 'Debito',
-    pix: 'Pix',
-    outros: 'Outros',
-  };
-
-  const receiptPaymentMethod: PaymentMethod = paymentLabel === 'pix'
-    ? 'pix'
-    : paymentLabel === 'dinheiro'
-      ? 'dinheiro'
-      : paymentLabel === 'outros'
-        ? 'outro'
-        : 'cartao';
+  const receiptPaymentMethod: PaymentMethod = paymentLabel;
 
   const receiptCustomer: SaleReceiptCustomer = useMemo(() => {
     if (!useRealCustomer || !hasCheckoutCustomer) {
@@ -283,7 +270,9 @@ export default function GraphPOSConfirmacao() {
                   )}
                   <div className="flex items-center gap-2">
                     <CreditCard className="h-4 w-4 text-muted-foreground" />
-                    <span className="font-semibold text-foreground">{paymentLabelMap[paymentLabel] || 'Dinheiro'}</span>
+                    <span className="font-semibold text-foreground">
+                      {getPaymentMethodDisplayName(paymentLabel)}
+                    </span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span>Valor Recebido</span>

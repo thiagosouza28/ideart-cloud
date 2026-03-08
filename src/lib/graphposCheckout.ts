@@ -1,3 +1,5 @@
+import type { PaymentMethod } from '@/types/database';
+
 export interface GraphPOSCheckoutItem {
   id: string;
   name: string;
@@ -15,7 +17,7 @@ export interface GraphPOSCheckoutState {
   subtotal: number;
   discount: number;
   total: number;
-  paymentMethod: 'dinheiro' | 'credito' | 'debito' | 'pix' | 'outros';
+  paymentMethod: PaymentMethod;
   amountPaid: number;
   saleId?: string;
   createdAt?: string;

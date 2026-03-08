@@ -1,119 +1,149 @@
-import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { useEffect, useMemo, useState } from 'react';
+import Autoplay from 'embla-carousel-autoplay';
+import { publicSupabase } from '@/integrations/supabase/public-client';
 import {
-    Carousel,
-    CarouselContent,
-    CarouselItem,
-    CarouselNext,
-    CarouselPrevious,
-} from "@/components/ui/carousel";
+  Carousel,
+  CarouselContent,
+  CarouselItem,
+  CarouselNext,
+  CarouselPrevious,
+} from '@/components/ui/carousel';
 import { ensurePublicStorageUrl } from '@/lib/storage';
 import { Skeleton } from '@/components/ui/skeleton';
-import Autoplay from "embla-carousel-autoplay";
 
-interface Banner {
-    id: string;
-    image_url: string;
-    link_url: string | null;
-    title: string | null;
-}
+type Banner = {
+  id: string;
+  image_url: string;
+  link_url: string | null;
+  title: string | null;
+  position: 'catalog' | 'dashboard';
+  is_active: boolean;
+  sort_order: number;
+  starts_at: string | null;
+  ends_at: string | null;
+};
 
 interface BannerCarouselProps {
-    companyId: string;
-    position: 'catalog' | 'dashboard';
+  companyId: string;
+  position: 'catalog' | 'dashboard';
+  className?: string;
 }
 
-export function BannerCarousel({ companyId, position }: BannerCarouselProps) {
-    const [banners, setBanners] = useState<Banner[]>([]);
-    const [loading, setLoading] = useState(true);
+const isBannerVisible = (banner: Banner, referenceDate = new Date()) => {
+  if (!banner.is_active) return false;
 
-    useEffect(() => {
-        const fetchBanners = async () => {
-            setLoading(true);
-            try {
-                const now = new Date().toISOString();
-                const { data, error } = await supabase
-                    .from('banners')
-                    .select('id, image_url, link_url, title')
-                    .eq('company_id', companyId)
-                    .eq('position', position)
-                    .eq('is_active', true)
-                    .or(`starts_at.is.null,starts_at.lte.${now}`)
-                    .or(`ends_at.is.null,ends_at.gte.${now}`)
-                    .order('sort_order', { ascending: true });
+  const startDate = banner.starts_at ? new Date(banner.starts_at) : null;
+  const endDate = banner.ends_at ? new Date(banner.ends_at) : null;
 
-                if (error) throw error;
-                setBanners(data || []);
-            } catch (error) {
-                console.error('Erro ao buscar banners:', error);
-            } finally {
-                setLoading(false);
-            }
-        };
+  if (startDate && startDate.getTime() > referenceDate.getTime()) return false;
+  if (endDate && endDate.getTime() < referenceDate.getTime()) return false;
+  return true;
+};
 
-        if (companyId) {
-            fetchBanners();
-        }
-    }, [companyId, position]);
+export function BannerCarousel({ companyId, position, className }: BannerCarouselProps) {
+  const [banners, setBanners] = useState<Banner[]>([]);
+  const [loading, setLoading] = useState(true);
 
-    if (loading) {
-        return <Skeleton className="w-full aspect-[21/9] mb-8 rounded-xl" />;
-    }
+  useEffect(() => {
+    const fetchBanners = async () => {
+      if (!companyId) {
+        setBanners([]);
+        setLoading(false);
+        return;
+      }
 
-    if (banners.length === 0) {
-        return null;
-    }
+      setLoading(true);
 
-    const BannerContent = ({ banner }: { banner: Banner }) => (
-        <div className="relative aspect-[21/9] w-full overflow-hidden rounded-xl shadow-sm border">
-            <img
-                src={ensurePublicStorageUrl('product-images', banner.image_url) || ''}
-                alt={banner.title || 'Banner'}
-                loading="lazy"
-                className="h-full w-full object-cover transition-transform duration-500 hover:scale-105"
-            />
+      const { data, error } = await publicSupabase
+        .from('banners')
+        .select('id, image_url, link_url, title, position, is_active, sort_order, starts_at, ends_at')
+        .eq('company_id', companyId)
+        .eq('position', position)
+        .eq('is_active', true)
+        .order('sort_order', { ascending: true });
+
+      if (error) {
+        console.error('Erro ao buscar banners:', error);
+        setBanners([]);
+        setLoading(false);
+        return;
+      }
+
+      setBanners(((data || []) as Banner[]).filter((banner) => isBannerVisible(banner)));
+      setLoading(false);
+    };
+
+    void fetchBanners();
+  }, [companyId, position]);
+
+  const hasMultipleBanners = banners.length > 1;
+  const autoplayPlugin = useMemo(
+    () =>
+      hasMultipleBanners
+        ? [
+            Autoplay({
+              delay: 4500,
+              stopOnInteraction: false,
+            }),
+          ]
+        : [],
+    [hasMultipleBanners],
+  );
+
+  if (loading) {
+    return <Skeleton className={`w-full rounded-2xl aspect-[21/8] ${className || ''}`.trim()} />;
+  }
+
+  if (banners.length === 0) return null;
+
+  const BannerCard = ({ banner }: { banner: Banner }) => (
+    <div className="relative aspect-[21/8] w-full overflow-hidden rounded-2xl border border-[var(--pc-card-border,#e2e8f0)] bg-[var(--pc-card-bg,#fff)] shadow-sm">
+      <img
+        src={ensurePublicStorageUrl('product-images', banner.image_url) || ''}
+        alt={banner.title || 'Banner'}
+        loading="lazy"
+        className="h-full w-full object-cover"
+      />
+      {banner.title && (
+        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/65 via-black/30 to-transparent px-5 py-4">
+          <p className="text-sm font-semibold text-white sm:text-base">{banner.title}</p>
         </div>
-    );
+      )}
+    </div>
+  );
 
-    return (
-        <div className="w-full mb-8 px-4 md:px-0">
-            <Carousel
-                opts={{
-                    align: "start",
-                    loop: true,
-                }}
-                plugins={[
-                    Autoplay({
-                        delay: 5000,
-                    }),
-                ]}
-                className="w-full"
-            >
-                <CarouselContent>
-                    {banners.map((banner) => (
-                        <CarouselItem key={banner.id}>
-                            {banner.link_url ? (
-                                <a
-                                    href={banner.link_url}
-                                    target={banner.link_url.startsWith('http') ? '_blank' : '_self'}
-                                    rel="noopener noreferrer"
-                                    className="block"
-                                >
-                                    <BannerContent banner={banner} />
-                                </a>
-                            ) : (
-                                <BannerContent banner={banner} />
-                            )}
-                        </CarouselItem>
-                    ))}
-                </CarouselContent>
-                {banners.length > 1 && (
-                    <>
-                        <CarouselPrevious className="hidden md:flex -left-6" />
-                        <CarouselNext className="hidden md:flex -right-6" />
-                    </>
-                )}
-            </Carousel>
-        </div>
-    );
+  return (
+    <div className={className}>
+      <Carousel
+        opts={{ align: 'start', loop: hasMultipleBanners }}
+        plugins={autoplayPlugin}
+        className="w-full"
+      >
+        <CarouselContent>
+          {banners.map((banner) => (
+            <CarouselItem key={banner.id}>
+              {banner.link_url ? (
+                <a
+                  href={banner.link_url}
+                  target={banner.link_url.startsWith('http') ? '_blank' : '_self'}
+                  rel="noopener noreferrer"
+                  className="block"
+                >
+                  <BannerCard banner={banner} />
+                </a>
+              ) : (
+                <BannerCard banner={banner} />
+              )}
+            </CarouselItem>
+          ))}
+        </CarouselContent>
+        {hasMultipleBanners && (
+          <>
+            <CarouselPrevious className="-left-4 hidden md:flex" />
+            <CarouselNext className="-right-4 hidden md:flex" />
+          </>
+        )}
+      </Carousel>
+    </div>
+  );
 }

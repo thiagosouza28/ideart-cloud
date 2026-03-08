@@ -21,6 +21,7 @@ import { ensurePublicStorageUrl } from '@/lib/storage';
 import { normalizeProductionTimeDays } from '@/lib/productionTime';
 import { isPromotionActive, resolveProductBasePrice, resolveProductPrice } from '@/lib/pricing';
 import { Category, Company as DatabaseCompany, Product } from '@/types/database';
+import { BannerCarousel } from '@/components/BannerCarousel';
 
 
 interface Company extends Omit<DatabaseCompany, 'catalog_contact_url' | 'whatsapp'> {
@@ -1214,6 +1215,12 @@ export default function PublicCatalog() {
         </div>
       </header>
 
+      {company?.id && (
+        <div className="pc-container pt-6">
+          <BannerCarousel companyId={company.id} position="catalog" className="mb-2" />
+        </div>
+      )}
+
       <section className="pc-toolbar-wrap">
         <div className="pc-container pc-toolbar">
           <div className="pc-tabs" role="tablist" aria-label="Categorias">
@@ -1334,6 +1341,11 @@ export default function PublicCatalog() {
                       <p className="pc-product-description">
                         {product.catalog_short_description || 'Produto disponível no catálogo.'}
                       </p>
+                      {Math.max(1, Number(product.catalog_min_order ?? product.min_order_quantity ?? 1)) > 1 && (
+                        <p className="text-xs font-medium" style={{ color: 'var(--pc-price)' }}>
+                          Pedido mínimo: {Math.max(1, Number(product.catalog_min_order ?? product.min_order_quantity ?? 1))} unidades
+                        </p>
+                      )}
                       {productionTimeDays !== null && (
                         <p className="mt-1 text-xs text-slate-500">
                           Tempo de produção: {productionTimeDays}{' '}

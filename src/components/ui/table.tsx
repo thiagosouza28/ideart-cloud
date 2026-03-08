@@ -73,8 +73,12 @@ const Table = React.forwardRef<HTMLTableElement, React.HTMLAttributes<HTMLTableE
     }, [syncMobileLabels]);
 
     return (
-      <div className="relative w-full overflow-x-auto">
-        <table ref={setTableRef} className={cn("table-stack w-full caption-bottom text-sm", className)} {...props} />
+      <div className="company-table-shell relative w-full overflow-x-auto rounded-[var(--app-control-radius)]">
+        <table
+          ref={setTableRef}
+          className={cn("company-data-table table-stack w-full caption-bottom text-sm", className)}
+          {...props}
+        />
       </div>
     );
   },

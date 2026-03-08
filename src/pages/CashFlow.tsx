@@ -23,6 +23,13 @@ import { Textarea } from '@/components/ui/textarea';
 import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
+import {
+  buildCashForecastSeries,
+  buildCashForecastSummary,
+  buildExpenseAlertSummary,
+  type ForecastPeriod,
+} from '@/lib/finance';
 import { buildPeriodSeries, loadReports, type CashTransaction, type ReportFilters } from '@/services/reports';
 import {
   createManualCashEntry,
@@ -33,7 +40,15 @@ import {
   type ManualCashEntryPayload,
 } from '@/services/cashFlow';
 import { exportToCsv, openPdfPreview, printPdf, type ExportRow } from '@/lib/report-export';
-import type { FinancialEntryOrigin, FinancialEntryType, PaymentMethod } from '@/types/database';
+import type {
+  Expense,
+  FinancialEntry,
+  FinancialEntryOrigin,
+  FinancialEntryType,
+  Order,
+  PaymentMethod,
+  Sale,
+} from '@/types/database';
 
 type SortBy = 'date' | 'amount' | 'type';
 type SortOrder = 'asc' | 'desc';
@@ -160,6 +175,13 @@ export default function CashFlow() {
   const [entryDialogOpen, setEntryDialogOpen] = useState(false);
   const [entrySaving, setEntrySaving] = useState(false);
   const [entryForm, setEntryForm] = useState<EntryFormState>(defaultForm());
+  const [forecastPeriod, setForecastPeriod] = useState<ForecastPeriod>('month');
+  const [forecastOrders, setForecastOrders] = useState<Order[]>([]);
+  const [forecastSales, setForecastSales] = useState<Sale[]>([]);
+  const [forecastEntries, setForecastEntries] = useState<FinancialEntry[]>([]);
+  const [forecastExpenses, setForecastExpenses] = useState<Expense[]>([]);
+
+  const activeCompanyId = isSuperAdmin ? filters.companyId ?? null : profile?.company_id ?? null;
 
   const loadCash = async (nextFilters: ReportFilters) => {
     setReportLoading(true);
@@ -174,6 +196,55 @@ export default function CashFlow() {
       });
     } finally {
       setReportLoading(false);
+    }
+  };
+
+  const loadForecastData = async (companyId?: string | null) => {
+    if (!companyId) {
+      setForecastOrders([]);
+      setForecastSales([]);
+      setForecastEntries([]);
+      setForecastExpenses([]);
+      return;
+    }
+
+    try {
+      const [ordersResult, salesResult, entriesResult, expensesResult] = await Promise.all([
+        supabase
+          .from('orders')
+          .select('id, status, total, amount_paid, created_at, estimated_delivery_date')
+          .eq('company_id', companyId)
+          .order('created_at', { ascending: false })
+          .limit(500),
+        supabase
+          .from('sales')
+          .select('id, total, amount_paid, created_at')
+          .eq('company_id', companyId)
+          .order('created_at', { ascending: false })
+          .limit(500),
+        supabase
+          .from('financial_entries')
+          .select('*')
+          .eq('company_id', companyId)
+          .order('occurred_at', { ascending: false })
+          .limit(500),
+        supabase
+          .from('expenses')
+          .select('*')
+          .eq('company_id', companyId)
+          .order('created_at', { ascending: false }),
+      ]);
+
+      setForecastOrders((ordersResult.data as Order[]) || []);
+      setForecastSales((salesResult.data as Sale[]) || []);
+      setForecastEntries((entriesResult.data as FinancialEntry[]) || []);
+      setForecastExpenses((expensesResult.data as Expense[]) || []);
+    } catch (error: any) {
+      toast({
+        title: 'Erro ao carregar previsão de caixa',
+        description: error?.message || 'Falha ao buscar dados previstos',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -209,6 +280,10 @@ export default function CashFlow() {
     void loadCash(filters);
   }, [filters]);
 
+  useEffect(() => {
+    void loadForecastData(activeCompanyId);
+  }, [activeCompanyId]);
+
   const lineSeries = useMemo(() => {
     if (!cashData) return [];
     return buildPeriodSeries(cashData.transactions, period);
@@ -224,6 +299,32 @@ export default function CashFlow() {
   );
 
   const monthlyBars = useMemo(() => cashData?.monthlyComparison || [], [cashData]);
+
+  const forecastSummary = useMemo(
+    () =>
+      buildCashForecastSummary({
+        orders: forecastOrders,
+        sales: forecastSales,
+        entries: forecastEntries,
+        expenses: forecastExpenses,
+        period: forecastPeriod,
+      }),
+    [forecastEntries, forecastExpenses, forecastOrders, forecastPeriod, forecastSales],
+  );
+
+  const forecastSeries = useMemo(
+    () =>
+      buildCashForecastSeries({
+        orders: forecastOrders,
+        sales: forecastSales,
+        entries: forecastEntries,
+        expenses: forecastExpenses,
+        period: forecastPeriod,
+      }),
+    [forecastEntries, forecastExpenses, forecastOrders, forecastPeriod, forecastSales],
+  );
+
+  const forecastAlerts = useMemo(() => buildExpenseAlertSummary(forecastExpenses), [forecastExpenses]);
 
   const balancesById = useMemo(() => {
     if (!cashData) return {} as Record<string, number>;
@@ -519,6 +620,96 @@ export default function CashFlow() {
               </Button>
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <CardTitle>Previsão de fluxo de caixa</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Entradas e saídas previstas com base em pedidos, vendas, lançamentos e despesas futuras.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant={forecastPeriod === 'today' ? 'default' : 'outline'}
+              onClick={() => setForecastPeriod('today')}
+            >
+              Hoje
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={forecastPeriod === 'week' ? 'default' : 'outline'}
+              onClick={() => setForecastPeriod('week')}
+            >
+              Semana
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={forecastPeriod === 'month' ? 'default' : 'outline'}
+              onClick={() => setForecastPeriod('month')}
+            >
+              Mês
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <div className="rounded-xl border border-border bg-background p-4">
+              <p className="text-sm text-muted-foreground">Saldo atual</p>
+              <p className="mt-2 text-2xl font-semibold text-foreground">
+                {currency(forecastSummary.currentBalance)}
+              </p>
+            </div>
+            <div className="rounded-xl border border-border bg-background p-4">
+              <p className="text-sm text-muted-foreground">Entradas previstas</p>
+              <p className="mt-2 text-2xl font-semibold text-emerald-600">
+                {currency(forecastSummary.incoming)}
+              </p>
+            </div>
+            <div className="rounded-xl border border-border bg-background p-4">
+              <p className="text-sm text-muted-foreground">Saídas previstas</p>
+              <p className="mt-2 text-2xl font-semibold text-amber-600">
+                {currency(forecastSummary.outgoing)}
+              </p>
+            </div>
+            <div className="rounded-xl border border-border bg-background p-4">
+              <p className="text-sm text-muted-foreground">Saldo projetado</p>
+              <p className="mt-2 text-2xl font-semibold text-foreground">
+                {currency(forecastSummary.projectedBalance)}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {forecastAlerts.overdue > 0 || forecastAlerts.dueSoon > 0
+                  ? `${forecastAlerts.overdue} vencida(s) • ${forecastAlerts.dueSoon} vencendo`
+                  : 'Sem contas em alerta no período'}
+              </p>
+            </div>
+          </div>
+
+          <ChartContainer
+            className="h-[280px]"
+            config={{
+              incoming: { label: 'Entradas previstas', color: '#16a34a' },
+              outgoing: { label: 'Saídas previstas', color: '#f59e0b' },
+              net: { label: 'Saldo líquido', color: '#2563eb' },
+            }}
+          >
+            <LineChart data={forecastSeries}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="label" />
+              <YAxis />
+              <ChartTooltip content={<ChartTooltipContent />} />
+              <ChartLegend content={<ChartLegendContent />} />
+              <Line dataKey="incoming" type="monotone" stroke="var(--color-incoming)" strokeWidth={2} />
+              <Line dataKey="outgoing" type="monotone" stroke="var(--color-outgoing)" strokeWidth={2} />
+              <Line dataKey="net" type="monotone" stroke="var(--color-net)" strokeWidth={2} />
+            </LineChart>
+          </ChartContainer>
         </CardContent>
       </Card>
 

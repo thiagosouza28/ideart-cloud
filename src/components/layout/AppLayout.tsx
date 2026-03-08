@@ -4,6 +4,7 @@ import { SidebarProvider, SidebarTrigger, SidebarInset } from '@/components/ui/s
 import { AppSidebar } from './AppSidebar';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useOrderNotifications } from '@/hooks/useOrderNotifications';
+import { useExpenseAlerts } from '@/hooks/useExpenseAlerts';
 import { useAuth } from '@/contexts/AuthContext';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -82,6 +83,9 @@ export function AppLayout({ children }: AppLayoutProps) {
     markUnreadOrdersAsRead,
     clearNotifications,
   } = useOrderNotifications();
+  const { summary: expenseAlertsSummary, loading: loadingExpenseAlerts, refreshExpenseAlerts } =
+    useExpenseAlerts();
+  const totalHeaderAlerts = unreadOrdersCount + expenseAlertsSummary.total;
 
   useEffect(() => {
     refreshCompany();
@@ -109,6 +113,7 @@ export function AppLayout({ children }: AppLayoutProps) {
     setIsNotificationsOpen(open);
     if (!open) return;
     void refreshNotifications();
+    void refreshExpenseAlerts();
   };
 
   const handleThemeToggle = async () => {
@@ -277,20 +282,20 @@ export function AppLayout({ children }: AppLayoutProps) {
                     type="button"
                     className="relative hidden h-9 w-9 items-center justify-center rounded-full border border-border bg-card text-muted-foreground transition-colors hover:text-foreground sm:flex"
                     aria-label={
-                      unreadOrdersCount > 0
-                        ? `${unreadOrdersCount} pedido(s) novo(s)`
-                        : 'Notificações'
+                      totalHeaderAlerts > 0
+                        ? `${totalHeaderAlerts} alerta(s) ativo(s)`
+                        : 'Notificacoes'
                     }
                     title={
-                      unreadOrdersCount > 0
-                        ? `${unreadOrdersCount} pedido(s) novo(s)`
-                        : 'Sem novos pedidos'
+                      totalHeaderAlerts > 0
+                        ? `${totalHeaderAlerts} alerta(s) ativo(s)`
+                        : 'Sem alertas'
                     }
                   >
                     <Bell className="h-4 w-4" />
-                    {unreadOrdersCount > 0 && (
+                    {totalHeaderAlerts > 0 && (
                       <span className="absolute -right-1 -top-1 inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-semibold leading-none text-destructive-foreground">
-                        {unreadOrdersCount > 99 ? '99+' : unreadOrdersCount}
+                        {totalHeaderAlerts > 99 ? '99+' : totalHeaderAlerts}
                       </span>
                     )}
                   </button>
@@ -300,11 +305,11 @@ export function AppLayout({ children }: AppLayoutProps) {
                     <div className="border-b border-border px-4 py-3">
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <p className="text-sm font-semibold text-foreground">Notificações de pedidos</p>
-                          <p className="text-xs text-muted-foreground">Clique em uma notificação para abrir o pedido.</p>
+                          <p className="text-sm font-semibold text-foreground">Alertas e notificacoes</p>
+                          <p className="text-xs text-muted-foreground">Acompanhe pedidos e despesas que exigem atencao.</p>
                         </div>
                         <span className="rounded-full border border-border bg-muted/50 px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
-                          {notifications.length}
+                          {totalHeaderAlerts}
                         </span>
                       </div>
                       <div className="mt-3 flex flex-wrap gap-2">
@@ -340,17 +345,73 @@ export function AppLayout({ children }: AppLayoutProps) {
                       </div>
                     </div>
                     <ScrollArea className="min-h-0 flex-1">
-                      {isLoadingNotifications ? (
+                      {loadingExpenseAlerts || isLoadingNotifications ? (
                         <div className="flex items-center gap-2 px-4 py-6 text-sm text-muted-foreground">
                           <Loader2 className="h-4 w-4 animate-spin" />
-                          Carregando notificações...
-                        </div>
-                      ) : notifications.length === 0 ? (
-                        <div className="px-4 py-6 text-sm text-muted-foreground">
-                          Nenhuma notificação de pedido.
+                          Carregando alertas...
                         </div>
                       ) : (
                         <div className="divide-y divide-border">
+                          <div className="px-4 py-3">
+                            <div className="mb-2 flex items-center justify-between gap-2">
+                              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                Financeiro
+                              </p>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 px-2 text-xs"
+                                onClick={() => {
+                                  setIsNotificationsOpen(false);
+                                  navigate('/financeiro/despesas');
+                                }}
+                              >
+                                Ver despesas
+                              </Button>
+                            </div>
+                            {expenseAlertsSummary.total === 0 ? (
+                              <p className="text-sm text-muted-foreground">Nenhuma conta em alerta.</p>
+                            ) : (
+                              <div className="space-y-2">
+                                {expenseAlertsSummary.items.slice(0, 5).map((item) => (
+                                  <button
+                                    key={item.id}
+                                    type="button"
+                                    className="w-full rounded-xl border border-border px-3 py-2 text-left transition hover:bg-muted/50"
+                                    onClick={() => {
+                                      setIsNotificationsOpen(false);
+                                      navigate('/financeiro/despesas');
+                                    }}
+                                  >
+                                    <div className="flex items-center justify-between gap-3">
+                                      <div>
+                                        <p className="text-sm font-medium text-foreground">{item.title}</p>
+                                        <p className="text-xs text-muted-foreground">
+                                          {item.dueStatus === 'vencida' ? 'Conta vencida' : 'Vence em ate 5 dias'}
+                                          {item.dueDate ? ` • ${new Date(`${item.dueDate}T00:00:00`).toLocaleDateString('pt-BR')}` : ''}
+                                        </p>
+                                      </div>
+                                      <span className="text-xs font-semibold text-foreground">
+                                        {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.amount)}
+                                      </span>
+                                    </div>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="px-4 py-3">
+                            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                              Pedidos
+                            </p>
+                            {notifications.length === 0 ? (
+                              <div className="text-sm text-muted-foreground">
+                                Nenhuma notificacao de pedido.
+                              </div>
+                            ) : (
+                              <div className="divide-y divide-border rounded-xl border border-border">
                           {notifications.map((notification) => (
                             <button
                               key={notification.id}
@@ -385,6 +446,9 @@ export function AppLayout({ children }: AppLayoutProps) {
                               </div>
                             </button>
                           ))}
+                              </div>
+                            )}
+                          </div>
                         </div>
                       )}
                     </ScrollArea>

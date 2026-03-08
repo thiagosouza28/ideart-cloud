@@ -15,6 +15,13 @@ import { normalizeDigits } from '@/components/ui/masked-input';
 import { useUnsavedChanges } from '@/hooks/use-unsaved-changes';
 import { ensurePublicStorageUrl } from '@/lib/storage';
 import { buildOrderDetailsPath } from '@/lib/orderRouting';
+import { fetchCompanyPaymentMethods } from '@/services/companyPaymentMethods';
+import {
+  defaultCompanyPaymentMethods,
+  getActiveCompanyPaymentMethods,
+  getPaymentMethodDisplayName,
+  type CompanyPaymentMethodConfig,
+} from '@/lib/paymentMethods';
 import {
   AlertCircle,
   ArrowLeft,
@@ -81,6 +88,17 @@ const paymentMethodOptions: Array<{
   { id: 'boleto', label: 'Boleto', icon: CalendarDays },
 ];
 
+const paymentMethodIcons: Record<PaymentMethod, ComponentType<{ className?: string }>> = {
+  dinheiro: Wallet,
+  cartao: CreditCard,
+  credito: CreditCard,
+  debito: CreditCard,
+  transferencia: Wallet,
+  pix: QrCode,
+  boleto: CalendarDays,
+  outro: Wallet,
+};
+
 const deliveryMethods = [
   { value: 'retirada', label: 'Retirada na loja' },
   { value: 'entrega', label: 'Entrega' },
@@ -101,7 +119,7 @@ const steps = ['Tipo', 'Detalhes', 'Revisão', 'Confirmação'];
 export default function OrderForm() {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { user, profile } = useAuth();
+  const { user, profile, company } = useAuth();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -126,6 +144,9 @@ export default function OrderForm() {
   const [freight, setFreight] = useState(0);
   const [paymentCondition, setPaymentCondition] = useState('avista');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('pix');
+  const [companyPaymentMethods, setCompanyPaymentMethods] = useState<CompanyPaymentMethodConfig[]>(
+    getActiveCompanyPaymentMethods(defaultCompanyPaymentMethods),
+  );
   const [priority, setPriorityLevel] = useState<PriorityLevel>('normal');
   const [responsibleId, setResponsibleId] = useState('');
 
@@ -318,6 +339,38 @@ export default function OrderForm() {
 
     fetchData();
   }, [profile?.company_id, toast, user.id]);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadPaymentMethods = async () => {
+      try {
+        const result = await fetchCompanyPaymentMethods({
+          companyId: profile?.company_id || company?.id || null,
+          activeOnly: true,
+        });
+        if (!active) return;
+        setCompanyPaymentMethods(
+          result.length > 0 ? result : getActiveCompanyPaymentMethods(defaultCompanyPaymentMethods),
+        );
+      } catch (error) {
+        console.error(error);
+        if (!active) return;
+        setCompanyPaymentMethods(getActiveCompanyPaymentMethods(defaultCompanyPaymentMethods));
+      }
+    };
+
+    void loadPaymentMethods();
+
+    return () => {
+      active = false;
+    };
+  }, [company?.id, profile?.company_id]);
+
+  useEffect(() => {
+    if (companyPaymentMethods.some((method) => method.type === paymentMethod)) return;
+    setPaymentMethod(companyPaymentMethods[0]?.type || 'pix');
+  }, [companyPaymentMethods, paymentMethod]);
 
   useEffect(() => {
     if (loading || draftRestoredRef.current) return;
@@ -1336,18 +1389,18 @@ export default function OrderForm() {
                 </div>
 
                 <div className="order-payment-grid">
-                  {paymentMethodOptions.map((option) => {
-                    const Icon = option.icon;
-                    const active = paymentMethod === option.id;
+                  {companyPaymentMethods.map((option) => {
+                    const Icon = paymentMethodIcons[option.type] || Wallet;
+                    const active = paymentMethod === option.type;
                     return (
                       <button
-                        key={option.id}
+                        key={option.type}
                         type="button"
                         className={`order-payment-btn ${active ? 'is-active' : ''}`}
-                        onClick={() => selectPayment(option.id)}
+                        onClick={() => selectPayment(option.type)}
                       >
                         <Icon className="h-4 w-4" />
-                        <span>{option.label}</span>
+                        <span>{getPaymentMethodDisplayName(option.type, companyPaymentMethods)}</span>
                       </button>
                     );
                   })}

@@ -23,6 +23,8 @@
   Image as ImageIcon,
   Gift,
   FileText,
+  Calculator,
+  HandCoins,
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -55,6 +57,7 @@ const primaryMenu: MenuItem[] = [
   { title: 'Pedidos', url: '/pedidos', icon: ClipboardList, roles: ['admin', 'atendente', 'caixa'], moduleKey: 'pedidos' },
   { title: 'Produção', url: '/producao', icon: Factory, roles: ['admin', 'producao'], moduleKey: 'producao' },
   { title: 'Fluxo de Caixa', url: '/financeiro/fluxo-caixa', icon: CreditCard, roles: ['admin', 'financeiro', 'atendente', 'producao'], moduleKey: 'fluxo_caixa' },
+  { title: 'Despesas', url: '/financeiro/despesas', icon: HandCoins, roles: ['admin', 'financeiro'], moduleKey: 'fluxo_caixa' },
   { title: 'Relatórios', url: '/financeiro/relatorios', icon: BarChart3, roles: ['admin', 'financeiro', 'atendente', 'producao'], moduleKey: 'relatorios' },
 ];
 
@@ -64,6 +67,7 @@ const secondaryMenu: MenuItem[] = [
   { title: 'Kanban de Pedidos', url: '/pedidos/kanban', icon: Kanban, roles: ['admin', 'atendente', 'caixa', 'producao'], moduleKey: 'kanban_pedidos' },
   { title: 'Catálogo', url: '/catalogo-admin', icon: LayoutGrid, roles: ['admin'], moduleKey: 'catalogo' },
   { title: 'Produtos', url: '/produtos', icon: Package, roles: ['admin', 'atendente'], moduleKey: 'produtos' },
+  { title: 'Simulador de Preço', url: '/produtos/simulador-preco', icon: Calculator, roles: ['admin', 'atendente'], moduleKey: 'produtos' },
   { title: 'Etiquetas', url: '/produtos/etiquetas', icon: Barcode, roles: ['admin', 'atendente'], moduleKey: 'etiquetas' },
   { title: 'Categorias', url: '/categorias', icon: FolderTree, roles: ['admin', 'atendente'], moduleKey: 'categorias' },
   { title: 'Insumos', url: '/insumos', icon: Layers, roles: ['admin', 'atendente'], moduleKey: 'insumos' },
@@ -72,7 +76,7 @@ const secondaryMenu: MenuItem[] = [
   { title: 'Clientes', url: '/clientes', icon: Users, roles: ['admin', 'atendente'], moduleKey: 'clientes' },
   { title: 'Aniversariantes do Mês', url: '/clientes/aniversariantes', icon: Gift, roles: ['admin', 'atendente'], moduleKey: 'aniversariantes' },
   { title: 'Empresas', url: '/empresas', icon: Building2, roles: ['admin'], moduleKey: 'empresas' },
-  { title: 'Pagamentos PIX', url: '/configuracoes/pagamentos/pix', icon: CreditCard, roles: ['admin'], moduleKey: 'pagamentos_pix' },
+  { title: 'Pagamentos', url: '/configuracoes/pagamentos', icon: CreditCard, roles: ['admin'], moduleKey: 'pagamentos_pix' },
   { title: 'Banners', url: '/banners', icon: ImageIcon, roles: ['admin'], moduleKey: 'banners' },
   { title: 'Usuários', url: '/usuarios', icon: User, roles: ['admin'], moduleKey: 'usuarios' },
   { title: 'Assinatura', url: '/assinatura', icon: Crown, roles: ['admin', 'financeiro'], moduleKey: 'assinatura' },

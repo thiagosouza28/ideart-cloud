@@ -23,6 +23,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -86,7 +87,6 @@ export default function BannerManagement() {
     const [uploading, setUploading] = useState(false);
     const [initialBannerSnapshot, setInitialBannerSnapshot] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const formRef = useRef<HTMLDivElement>(null);
     const confirm = useConfirm();
 
     const currentSnapshot = useMemo(() => JSON.stringify(currentBanner), [currentBanner]);
@@ -127,14 +127,12 @@ export default function BannerManagement() {
         setCurrentBanner(nextBanner);
         setInitialBannerSnapshot(JSON.stringify(nextBanner));
         setIsDialogOpen(true);
-        setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0);
     };
 
     const handleOpenEdit = (banner: Banner) => {
         setCurrentBanner(banner);
         setInitialBannerSnapshot(JSON.stringify(banner));
         setIsDialogOpen(true);
-        setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0);
     };
 
     const handleDelete = async (id: string) => {
@@ -272,26 +270,15 @@ export default function BannerManagement() {
                 </Button>
             </div>
 
-            {isDialogOpen && (
-                <Card ref={formRef} className="mb-6 border border-muted-foreground/10">
-                    <CardHeader>
-                        <div className="flex items-start justify-between gap-4">
-                            <div>
-                                <CardTitle>{currentBanner.id ? 'Editar Banner' : 'Novo Banner'}</CardTitle>
-                                <CardDescription>
-                                    Preencha os dados abaixo para configurar o banner.
-                                </CardDescription>
-                            </div>
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => setIsDialogOpen(false)}
-                            >
-                                Fechar
-                            </Button>
-                        </div>
-                    </CardHeader>
-                    <CardContent className="grid gap-6">
+            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
+                    <DialogHeader>
+                        <DialogTitle>{currentBanner.id ? 'Editar Banner' : 'Novo Banner'}</DialogTitle>
+                        <DialogDescription>
+                            Preencha os dados abaixo para configurar o banner.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-6">
                         <div className="grid gap-2">
                             <Label>Imagem do Banner *</Label>
                             <div
@@ -416,7 +403,7 @@ export default function BannerManagement() {
                             </p>
                         </div>
 
-                        <div className="flex items-center justify-end gap-2">
+                        <DialogFooter>
                             <Button variant="outline" onClick={() => setIsDialogOpen(false)} disabled={saving}>
                                 Cancelar
                             </Button>
@@ -424,10 +411,10 @@ export default function BannerManagement() {
                                 {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                                 {currentBanner.id ? 'Salvar Alterações' : 'Criar Banner'}
                             </Button>
-                        </div>
-                    </CardContent>
-                </Card>
-            )}
+                        </DialogFooter>
+                    </div>
+                </DialogContent>
+            </Dialog>
 
             <div className="flex flex-col md:flex-row gap-4 mb-6">
                 <div className="relative flex-1">

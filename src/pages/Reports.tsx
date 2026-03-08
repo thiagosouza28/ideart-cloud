@@ -149,7 +149,10 @@ const buildExportRows = (tab: ReportTab, data: ReportBundle | null): ExportRow[]
   }
   return data.products.marginByProduct.map((row) => ({
     Produto: row.name,
-    Margem: currency(row.margin),
+    'Preço médio': currency(row.salePrice),
+    'Qtd. vendida': row.soldUnits,
+    'Custo total': currency(row.totalCost),
+    Lucro: currency(row.profit),
     Percentual: percent(row.marginPct),
   }));
 };
@@ -932,14 +935,16 @@ export default function Reports() {
             </Card>
             <Card>
               <CardHeader>
-                <CardTitle>Margem por produto</CardTitle>
+                <CardTitle>Lucro real por produto</CardTitle>
               </CardHeader>
               <CardContent>
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Produto</TableHead>
-                      <TableHead className="text-right">Margem</TableHead>
+                      <TableHead className="text-right">Preço médio</TableHead>
+                      <TableHead className="text-right">Custo total</TableHead>
+                      <TableHead className="text-right">Lucro</TableHead>
                       <TableHead className="text-right">%</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -947,7 +952,9 @@ export default function Reports() {
                     {reportData?.products.marginByProduct.map((row) => (
                       <TableRow key={row.id}>
                         <TableCell>{row.name}</TableCell>
-                        <TableCell className="text-right">{currency(row.margin)}</TableCell>
+                        <TableCell className="text-right">{currency(row.salePrice)}</TableCell>
+                        <TableCell className="text-right">{currency(row.totalCost)}</TableCell>
+                        <TableCell className="text-right">{currency(row.profit)}</TableCell>
                         <TableCell className="text-right">{percent(row.marginPct)}</TableCell>
                       </TableRow>
                     ))}

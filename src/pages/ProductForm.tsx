@@ -1,5 +1,5 @@
 ﻿import React, { useMemo, useState, useEffect, useRef } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { z } from 'zod';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,7 +14,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Category, Supply, Attribute, AttributeValue, ProductColor, ProductType } from '@/types/database';
+import { Attribute, AttributeValue, Category, Expense, OrderItem, Product, ProductColor, ProductSupply, ProductType, SaleItem, Supply } from '@/types/database';
 import { ArrowLeft, Plus, Trash2, Calculator, Save, Loader2, Upload, Image, Globe, Package, FolderPlus, Tag, CopyPlus, ShieldAlert } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useAuth } from '@/contexts/AuthContext';
@@ -22,6 +22,14 @@ import { generateProductDescription } from '@/services/ai';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { ensurePublicStorageUrl, getStoragePathFromUrl } from '@/lib/storage';
 import { BarcodeSvg } from '@/components/BarcodeSvg';
+import { buildProductProfitabilityRows, buildSoldUnitsMap } from '@/lib/finance';
+import {
+  buildPriceSimulation,
+  calculateEstimatedProfit,
+  calculatePriceByMultiplier,
+  calculateRealMargin,
+  resolveProductBasePrice,
+} from '@/lib/pricing';
 import {
   detectBarcodeFormat,
   generateCode128,
@@ -45,6 +53,7 @@ const productSchema = z
     is_active: z.boolean(),
     base_cost: z.number().min(0, 'Custo base deve ser positivo'),
     labor_cost: z.number().min(0, 'Custo de mão de obra deve ser positivo'),
+    expense_percentage: z.number().min(0).max(1000, 'Despesas devem ser entre 0 e 1000%'),
     waste_percentage: z.number().min(0).max(100, 'Desperdício deve ser entre 0 e 100%'),
     profit_margin: z.number().min(0).max(1000, 'Margem deve ser entre 0 e 1000%'),
     final_price: z.number().min(0, 'Preço final deve ser positivo'),
@@ -144,10 +153,32 @@ interface ProductSupplyItem {
   quantity: number;
 }
 
+type ReferenceProduct = Product & {
+  product_supplies?: Array<{
+    quantity: number;
+    supply?: { cost_per_unit: number | null } | null;
+  }>;
+};
+
 interface PriceTierItem {
   min_quantity: number;
   max_quantity: number | null;
   price: number;
+}
+
+interface ServiceItemDraft {
+  id?: string;
+  name: string;
+  description: string;
+  item_kind: 'item' | 'adicional';
+  base_price: number;
+}
+
+interface ServiceProductDraft {
+  id?: string;
+  product_id: string;
+  quantity: number;
+  notes: string;
 }
 
 interface ProductAttributeItem {
@@ -164,6 +195,7 @@ type CopyAttributeSource = {
 
 export default function ProductForm() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { id } = useParams<{ id: string }>();
   const isEditing = !!id && id !== 'novo';
   const { toast } = useToast();
@@ -199,10 +231,14 @@ export default function ProductForm() {
   const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [baseCost, setBaseCost] = useState(0);
   const [laborCost, setLaborCost] = useState(0);
+  const [expensePercentage, setExpensePercentage] = useState(0);
   const [wastePercentage, setWastePercentage] = useState(0);
   const [profitMargin, setProfitMargin] = useState(30);
   const [finalPrice, setFinalPrice] = useState(0);
   const [finalPriceTouched, setFinalPriceTouched] = useState(false);
+  const [pricingMethod, setPricingMethod] = useState<'margin' | 'multiplier'>('margin');
+  const [pricingMultiplier, setPricingMultiplier] = useState(2);
+  const [serviceBasePrice, setServiceBasePrice] = useState(0);
   const [stockQuantity, setStockQuantity] = useState(0);
   const [minStock, setMinStock] = useState(0);
   const [minOrderQuantity, setMinOrderQuantity] = useState(1);
@@ -221,6 +257,10 @@ export default function ProductForm() {
   const [supplies, setSupplies] = useState<Supply[]>([]);
   const [attributes, setAttributes] = useState<Attribute[]>([]);
   const [attributeValues, setAttributeValues] = useState<AttributeValue[]>([]);
+  const [availableProducts, setAvailableProducts] = useState<ReferenceProduct[]>([]);
+  const [companyExpenses, setCompanyExpenses] = useState<Expense[]>([]);
+  const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
+  const [saleItems, setSaleItems] = useState<SaleItem[]>([]);
 
   // Category dialog
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
@@ -232,8 +272,12 @@ export default function ProductForm() {
   const [productSupplies, setProductSupplies] = useState<ProductSupplyItem[]>([]);
   const [priceTiers, setPriceTiers] = useState<PriceTierItem[]>([]);
   const [productAttributes, setProductAttributes] = useState<ProductAttributeItem[]>([]);
+  const [serviceItems, setServiceItems] = useState<ServiceItemDraft[]>([]);
+  const [serviceProducts, setServiceProducts] = useState<ServiceProductDraft[]>([]);
   const [initialSnapshot, setInitialSnapshot] = useState<string | null>(null);
   const [draftReady, setDraftReady] = useState(false);
+  const queryPrefillAppliedRef = useRef(false);
+  const draftCreatedAtRef = useRef(new Date().toISOString());
 
   const [errors, setErrors] = useState<Record<string, string>>();
   const currentUserId = profile?.id || null;
@@ -300,6 +344,34 @@ export default function ProductForm() {
     return categoryOptions;
   }, [categoryOptions]);
 
+  const selectableServiceProducts = useMemo(
+    () => availableProducts.filter((product) => product.id !== id),
+    [availableProducts, id],
+  );
+
+  const getReferenceProductById = (productId: string) =>
+    availableProducts.find((product) => product.id === productId);
+
+  const getReferenceProductSupplyCost = (product?: ReferenceProduct | null) =>
+    (product?.product_supplies || []).reduce((acc, item) => {
+      const unitCost = Number(item.supply?.cost_per_unit || 0);
+      return acc + unitCost * Number(item.quantity || 0);
+    }, 0);
+
+  const getReferenceProductCost = (product?: ReferenceProduct | null) => {
+    if (!product) return 0;
+    return (
+      Number(product.base_cost || 0) +
+      Number(product.labor_cost || 0) +
+      getReferenceProductSupplyCost(product)
+    );
+  };
+
+  const getReferenceProductPrice = (product?: ReferenceProduct | null) => {
+    if (!product) return 0;
+    return resolveProductBasePrice(product, 1, [], getReferenceProductSupplyCost(product));
+  };
+
   useEffect(() => {
     fetchData();
   }, [id]);
@@ -317,11 +389,31 @@ export default function ProductForm() {
 
   const fetchData = async () => {
     setLoading(true);
-    const [catResult, supResult, attrResult, attrValResult] = await Promise.all([
+    const companyId = company?.id || profile?.company_id || null;
+    const [catResult, supResult, attrResult, attrValResult, productsResult, expensesResult, ordersResult, salesResult] = await Promise.all([
       supabase.from('categories').select('*').order('name'),
       supabase.from('supplies').select('*').order('name'),
       supabase.from('attributes').select('*').order('name'),
       supabase.from('attribute_values').select('*, attribute:attributes(name)').order('value'),
+      (companyId
+        ? supabase
+            .from('products')
+            .select('*, product_supplies(quantity, supply:supplies(cost_per_unit))')
+            .eq('company_id', companyId)
+            .order('name')
+        : supabase
+            .from('products')
+            .select('*, product_supplies(quantity, supply:supplies(cost_per_unit))')
+            .order('name')),
+      companyId
+        ? supabase.from('expenses').select('*').eq('company_id', companyId).order('created_at', { ascending: false })
+        : Promise.resolve({ data: [] }),
+      companyId
+        ? supabase.from('orders').select('id, status').eq('company_id', companyId).order('created_at', { ascending: false }).limit(500)
+        : Promise.resolve({ data: [] }),
+      companyId
+        ? supabase.from('sales').select('id').eq('company_id', companyId).order('created_at', { ascending: false }).limit(500)
+        : Promise.resolve({ data: [] }),
     ]);
 
     setCategories(catResult.data as Category[] || []);
@@ -332,6 +424,37 @@ export default function ProductForm() {
     setSupplies(mappedSupplies);
     setAttributes(attrResult.data as Attribute[] || []);
     setAttributeValues(attrValResult.data as AttributeValue[] || []);
+    setAvailableProducts(
+      (productsResult.data as ReferenceProduct[] || []).map((product) => ({
+        ...product,
+        image_url: ensurePublicStorageUrl('product-images', product.image_url),
+        image_urls: normalizeProductImages(product.image_urls, product.image_url),
+      })),
+    );
+    setCompanyExpenses((expensesResult.data as Expense[]) || []);
+
+    const validOrderIds = ((ordersResult.data as Array<{ id: string; status: string }>) || [])
+      .filter((order) => !['orcamento', 'pendente', 'cancelado'].includes(order.status))
+      .map((order) => order.id);
+    const saleIds = ((salesResult.data as Array<{ id: string }>) || []).map((sale) => sale.id);
+
+    const [orderItemsResult, saleItemsResult] = await Promise.all([
+      validOrderIds.length
+        ? supabase
+            .from('order_items')
+            .select('id, order_id, product_id, product_name, quantity, unit_price, discount, total, attributes, notes, created_at')
+            .in('order_id', validOrderIds)
+        : Promise.resolve({ data: [] }),
+      saleIds.length
+        ? supabase
+            .from('sale_items')
+            .select('id, sale_id, product_id, product_name, quantity, unit_price, discount, total, attributes, created_at')
+            .in('sale_id', saleIds)
+        : Promise.resolve({ data: [] }),
+    ]);
+
+    setOrderItems((orderItemsResult.data as OrderItem[]) || []);
+    setSaleItems((saleItemsResult.data as SaleItem[]) || []);
 
     // Initialize product attributes structure
     const attrs = attrResult.data as Attribute[] || [];
@@ -379,6 +502,7 @@ export default function ProductForm() {
       setCatalogLongDescription(product.catalog_long_description || '');
       setProductColors(normalizeProductColors(product.product_colors));
       setPersonalizationEnabled(product.personalization_enabled ?? false);
+      setServiceBasePrice(Number((product as any).service_base_price || 0));
       setProductionTimeDays(
         product.production_time_days !== null && product.production_time_days !== undefined
           ? Math.max(0, Math.trunc(Number(product.production_time_days)))
@@ -388,6 +512,7 @@ export default function ProductForm() {
       setImageUrls(normalizeProductImages(product.image_urls, normalizedPrimaryImage));
       setBaseCost(Number(product.base_cost));
       setLaborCost(Number(product.labor_cost));
+      setExpensePercentage(Number((product as any).expense_percentage || 0));
       setWastePercentage(Number(product.waste_percentage));
       setProfitMargin(Number(product.profit_margin));
       if (product.final_price !== null && product.final_price !== undefined) {
@@ -457,6 +582,37 @@ export default function ProductForm() {
           }),
         }));
       }
+
+      const [{ data: existingServiceItems }, { data: existingServiceProducts }] = await Promise.all([
+        supabase
+          .from('service_items')
+          .select('*')
+          .eq('service_product_id', id)
+          .order('sort_order'),
+        supabase
+          .from('service_products')
+          .select('*')
+          .eq('service_product_id', id)
+          .order('sort_order'),
+      ]);
+
+      setServiceItems(
+        (existingServiceItems || []).map((item) => ({
+          id: item.id,
+          name: item.name,
+          description: item.description || '',
+          item_kind: item.item_kind as 'item' | 'adicional',
+          base_price: Number(item.base_price || 0),
+        })),
+      );
+      setServiceProducts(
+        (existingServiceProducts || []).map((item) => ({
+          id: item.id,
+          product_id: item.product_id,
+          quantity: Number(item.quantity || 1),
+          notes: item.notes || '',
+        })),
+      );
     } else {
       setProductColors([]);
       setPersonalizationEnabled(false);
@@ -465,6 +621,9 @@ export default function ProductForm() {
       setIsCopyProduct(false);
       setOriginalProductId(null);
       setProductOwnerId(currentUserId);
+      setServiceBasePrice(0);
+      setServiceItems([]);
+      setServiceProducts([]);
     }
 
     setProductAttributes(productAttrSelection);
@@ -578,12 +737,192 @@ export default function ProductForm() {
     return acc + (supply ? Number(supply.cost_per_unit) * ps.quantity : 0);
   }, 0);
 
-  const totalCost = baseCost + suppliesCost + laborCost;
+  const serviceLinkedProductsCost = serviceProducts.reduce((acc, item) => {
+    const product = getReferenceProductById(item.product_id);
+    return acc + getReferenceProductCost(product) * Number(item.quantity || 0);
+  }, 0);
+
+  const serviceLinkedProductsValue = serviceProducts.reduce((acc, item) => {
+    const product = getReferenceProductById(item.product_id);
+    return acc + getReferenceProductPrice(product) * Number(item.quantity || 0);
+  }, 0);
+
+  const serviceItemsValue = serviceItems.reduce(
+    (acc, item) => acc + Number(item.base_price || 0),
+    0,
+  );
+  const serviceCompositionValue = serviceBasePrice + serviceItemsValue + serviceLinkedProductsValue;
+  const totalCost =
+    baseCost +
+    suppliesCost +
+    laborCost +
+    (productType === 'servico' ? serviceLinkedProductsCost : 0);
   const costWithWaste = totalCost * (1 + wastePercentage / 100);
   const suggestedPrice = costWithWaste * (1 + profitMargin / 100);
+  const markupSimulation = buildPriceSimulation({
+    cost: costWithWaste,
+    expensePercentage,
+    desiredMarginPercentage: profitMargin,
+  });
+  const multiplierPrice = calculatePriceByMultiplier(costWithWaste, pricingMultiplier);
   const minPrice = costWithWaste * 1.1; // 10% margin minimum
-  const defaultUnitPrice = finalPriceTouched ? finalPrice : suggestedPrice;
-  const defaultPriceLabel = finalPriceTouched ? 'preço final' : 'preço sugerido';
+  const autoCalculatedPrice = pricingMethod === 'multiplier' ? multiplierPrice : suggestedPrice;
+  const defaultUnitPrice = finalPriceTouched
+    ? finalPrice
+    : productType === 'servico'
+      ? Math.max(autoCalculatedPrice, serviceCompositionValue)
+      : autoCalculatedPrice;
+  const defaultPriceLabel = finalPriceTouched
+    ? 'preço final'
+    : productType === 'servico' && serviceCompositionValue > autoCalculatedPrice
+      ? 'preço composto do serviço'
+      : pricingMethod === 'multiplier'
+        ? 'preço por multiplicador'
+        : 'preço sugerido';
+  const estimatedProfit = calculateEstimatedProfit(costWithWaste, finalPrice);
+  const realMargin = calculateRealMargin(costWithWaste, finalPrice);
+  const profitabilityProductId = id || '__draft_product__';
+  const currentProductRecord = useMemo<Product>(
+    () => ({
+      id: profitabilityProductId,
+      name: name || 'Produto em edição',
+      sku: sku || null,
+      barcode: barcode || null,
+      description: description || null,
+      product_type: productType,
+      category_id: categoryId || null,
+      company_id: company?.id || profile?.company_id || null,
+      owner_id: productOwnerId,
+      is_public: isPublicProduct,
+      is_copy: isCopyProduct,
+      original_product_id: originalProductId,
+      image_url: imageUrls[0] || null,
+      image_urls: imageUrls,
+      unit,
+      is_active: isActive,
+      show_in_catalog: showInCatalog,
+      catalog_enabled: showInCatalog,
+      catalog_featured: catalogFeatured,
+      catalog_min_order: minOrderQuantity,
+      catalog_price: catalogPrice,
+      catalog_short_description: catalogShortDescription || null,
+      catalog_long_description: catalogLongDescription || null,
+      slug: productSlug || null,
+      product_colors: productColors,
+      personalization_enabled: personalizationEnabled,
+      production_time_days: productionTimeDays,
+      service_base_price: serviceBasePrice,
+      base_cost: baseCost,
+      labor_cost: laborCost,
+      expense_percentage: expensePercentage,
+      waste_percentage: wastePercentage,
+      profit_margin: profitMargin,
+      promo_price: promoPrice,
+      promo_start_at: promoStartAt || null,
+      promo_end_at: promoEndAt || null,
+      final_price: finalPrice,
+      stock_quantity: stockQuantity,
+      min_stock: minStock,
+      min_order_quantity: minOrderQuantity,
+      track_stock: trackStock,
+      created_at: draftCreatedAtRef.current,
+      updated_at: draftCreatedAtRef.current,
+    }),
+    [
+      profitabilityProductId,
+      name,
+      sku,
+      barcode,
+      description,
+      productType,
+      categoryId,
+      company?.id,
+      profile?.company_id,
+      productOwnerId,
+      isPublicProduct,
+      isCopyProduct,
+      originalProductId,
+      imageUrls,
+      unit,
+      isActive,
+      showInCatalog,
+      catalogFeatured,
+      minOrderQuantity,
+      catalogPrice,
+      catalogShortDescription,
+      catalogLongDescription,
+      productSlug,
+      productColors,
+      personalizationEnabled,
+      productionTimeDays,
+      serviceBasePrice,
+      baseCost,
+      laborCost,
+      expensePercentage,
+      wastePercentage,
+      profitMargin,
+      promoPrice,
+      promoStartAt,
+      promoEndAt,
+      finalPrice,
+      stockQuantity,
+      minStock,
+      trackStock,
+    ],
+  );
+
+  const profitabilityProducts = useMemo(
+    () => [
+      ...availableProducts.filter((product) => product.id !== profitabilityProductId),
+      currentProductRecord,
+    ],
+    [availableProducts, currentProductRecord, profitabilityProductId],
+  );
+
+  const profitabilitySupplies = useMemo<ProductSupply[]>(() => {
+    const otherSupplies = availableProducts
+      .filter((product) => product.id !== profitabilityProductId)
+      .flatMap((product) =>
+        (product.product_supplies || []).map((item, index) => ({
+          id: `${product.id}-${index}`,
+          product_id: product.id,
+          supply_id: `supply-${index}`,
+          quantity: Number(item.quantity || 0),
+          created_at: draftCreatedAtRef.current,
+          supply: item.supply || undefined,
+        })),
+      );
+
+    const currentSupplies = productSupplies.map((item, index) => ({
+      id: `${profitabilityProductId}-current-${index}`,
+      product_id: profitabilityProductId,
+      supply_id: item.supply_id || `current-supply-${index}`,
+      quantity: Number(item.quantity || 0),
+      created_at: draftCreatedAtRef.current,
+      supply: item.supply,
+    }));
+
+    return [...otherSupplies, ...currentSupplies];
+  }, [availableProducts, productSupplies, profitabilityProductId]);
+
+  const currentProfitability = useMemo(() => {
+    const soldUnitsByProduct = buildSoldUnitsMap({ orderItems, saleItems });
+    const rows = buildProductProfitabilityRows({
+      products: profitabilityProducts,
+      productSupplies: profitabilitySupplies,
+      expenses: companyExpenses,
+      soldUnitsByProduct,
+    });
+
+    return rows.find((row) => row.id === profitabilityProductId) ?? null;
+  }, [
+    companyExpenses,
+    orderItems,
+    profitabilityProductId,
+    profitabilityProducts,
+    profitabilitySupplies,
+    saleItems,
+  ]);
 
   const formSnapshot = useMemo(() => ({
     name,
@@ -603,9 +942,13 @@ export default function ProductForm() {
     imageUrls,
     baseCost,
     laborCost,
+    expensePercentage,
     wastePercentage,
     profitMargin,
     finalPrice,
+    pricingMethod,
+    pricingMultiplier,
+    serviceBasePrice,
     stockQuantity,
     minStock,
     minOrderQuantity,
@@ -623,6 +966,17 @@ export default function ProductForm() {
     productSupplies: productSupplies.map((ps) => ({
       supply_id: ps.supply_id,
       quantity: ps.quantity,
+    })),
+    serviceItems: serviceItems.map((item) => ({
+      name: item.name,
+      description: item.description,
+      item_kind: item.item_kind,
+      base_price: item.base_price,
+    })),
+    serviceProducts: serviceProducts.map((item) => ({
+      product_id: item.product_id,
+      quantity: item.quantity,
+      notes: item.notes,
     })),
     priceTiers,
     productAttributes: productAttributes.map((attr) => ({
@@ -651,9 +1005,13 @@ export default function ProductForm() {
     imageUrls,
     baseCost,
     laborCost,
+    expensePercentage,
     wastePercentage,
     profitMargin,
     finalPrice,
+    pricingMethod,
+    pricingMultiplier,
+    serviceBasePrice,
     stockQuantity,
     minStock,
     minOrderQuantity,
@@ -669,6 +1027,8 @@ export default function ProductForm() {
     personalizationEnabled,
     productionTimeDays,
     productSupplies,
+    serviceItems,
+    serviceProducts,
     priceTiers,
     productAttributes,
   ]);
@@ -734,9 +1094,13 @@ export default function ProductForm() {
       setImageUrls(normalizeProductImages(draftData.imageUrls));
       setBaseCost(Number(draftData.baseCost ?? 0));
       setLaborCost(Number(draftData.laborCost ?? 0));
+      setExpensePercentage(Number(draftData.expensePercentage ?? 0));
       setWastePercentage(Number(draftData.wastePercentage ?? 0));
       setProfitMargin(Number(draftData.profitMargin ?? 0));
       setFinalPrice(Number(draftData.finalPrice ?? 0));
+      setPricingMethod(draftData.pricingMethod === 'multiplier' ? 'multiplier' : 'margin');
+      setPricingMultiplier(Number(draftData.pricingMultiplier ?? 2));
+      setServiceBasePrice(Number((draftData as any).serviceBasePrice ?? 0));
       setStockQuantity(Number(draftData.stockQuantity ?? 0));
       setMinStock(Number(draftData.minStock ?? 0));
       setMinOrderQuantity(Number(draftData.minOrderQuantity ?? 1));
@@ -763,6 +1127,27 @@ export default function ProductForm() {
             quantity: Number(ps.quantity ?? 1),
             supply: supplies.find((s) => s.id === ps.supply_id),
           }))
+        );
+      }
+
+      if (Array.isArray((draftData as any).serviceItems)) {
+        setServiceItems(
+          (draftData as any).serviceItems.map((item: any) => ({
+            name: String(item.name || ''),
+            description: String(item.description || ''),
+            item_kind: item.item_kind === 'adicional' ? 'adicional' : 'item',
+            base_price: Number(item.base_price || 0),
+          })),
+        );
+      }
+
+      if (Array.isArray((draftData as any).serviceProducts)) {
+        setServiceProducts(
+          (draftData as any).serviceProducts.map((item: any) => ({
+            product_id: String(item.product_id || ''),
+            quantity: Number(item.quantity || 1),
+            notes: String(item.notes || ''),
+          })),
         );
       }
 
@@ -800,6 +1185,31 @@ export default function ProductForm() {
   useUnsavedChanges(isDirty && !saving);
 
   useEffect(() => {
+    if (isEditing || queryPrefillAppliedRef.current) return;
+
+    const searchParams = new URLSearchParams(location.search);
+    if (!searchParams.toString()) {
+      queryPrefillAppliedRef.current = true;
+      return;
+    }
+
+    const nextBaseCost = searchParams.get('baseCost');
+    const nextExpensePercentage = searchParams.get('expensePercentage');
+    const nextProfitMargin = searchParams.get('profitMargin');
+    const nextFinalPrice = searchParams.get('finalPrice');
+
+    if (nextBaseCost !== null) setBaseCost(Number(nextBaseCost || 0));
+    if (nextExpensePercentage !== null) setExpensePercentage(Number(nextExpensePercentage || 0));
+    if (nextProfitMargin !== null) setProfitMargin(Number(nextProfitMargin || 0));
+    if (nextFinalPrice !== null) {
+      setFinalPrice(Number(nextFinalPrice || 0));
+      setFinalPriceTouched(true);
+    }
+
+    queryPrefillAppliedRef.current = true;
+  }, [isEditing, location.search]);
+
+  useEffect(() => {
     if (!draftReady || typeof window === 'undefined') return;
     const payload = {
       productId: isEditing ? id : null,
@@ -826,9 +1236,9 @@ export default function ProductForm() {
 
   useEffect(() => {
     if (!finalPriceTouched) {
-      setFinalPrice(suggestedPrice);
+      setFinalPrice(defaultUnitPrice);
     }
-  }, [finalPriceTouched, suggestedPrice]);
+  }, [defaultUnitPrice, finalPriceTouched]);
 
   // Supplies management
   const addSupply = () => {
@@ -848,6 +1258,62 @@ export default function ProductForm() {
 
   const removeSupply = (index: number) => {
     setProductSupplies(productSupplies.filter((_, i) => i !== index));
+  };
+
+  const addServiceItem = (kind: 'item' | 'adicional' = 'item') => {
+    setServiceItems((prev) => [
+      ...prev,
+      { name: '', description: '', item_kind: kind, base_price: 0 },
+    ]);
+  };
+
+  const updateServiceItem = (
+    index: number,
+    field: keyof ServiceItemDraft,
+    value: string | number,
+  ) => {
+    setServiceItems((prev) =>
+      prev.map((item, itemIndex) =>
+        itemIndex === index
+          ? {
+              ...item,
+              [field]:
+                field === 'base_price'
+                  ? Number(value || 0)
+                  : value,
+            }
+          : item,
+      ),
+    );
+  };
+
+  const removeServiceItem = (index: number) => {
+    setServiceItems((prev) => prev.filter((_, itemIndex) => itemIndex !== index));
+  };
+
+  const addServiceProduct = () => {
+    setServiceProducts((prev) => [...prev, { product_id: '', quantity: 1, notes: '' }]);
+  };
+
+  const updateServiceProduct = (
+    index: number,
+    field: keyof ServiceProductDraft,
+    value: string | number,
+  ) => {
+    setServiceProducts((prev) =>
+      prev.map((item, itemIndex) =>
+        itemIndex === index
+          ? {
+              ...item,
+              [field]: field === 'quantity' ? Number(value || 0) : value,
+            }
+          : item,
+      ),
+    );
+  };
+
+  const removeServiceProduct = (index: number) => {
+    setServiceProducts((prev) => prev.filter((_, itemIndex) => itemIndex !== index));
   };
 
   // Price tiers management
@@ -1328,6 +1794,7 @@ export default function ProductForm() {
         is_active: Boolean(sourceProduct.is_active),
         base_cost: Number(sourceProduct.base_cost || 0),
         labor_cost: Number(sourceProduct.labor_cost || 0),
+        expense_percentage: Number((sourceProduct as any).expense_percentage || 0),
         waste_percentage: Number(sourceProduct.waste_percentage || 0),
         profit_margin: Number(sourceProduct.profit_margin || 0),
         final_price: sourceProduct.final_price !== null ? Number(sourceProduct.final_price) : null,
@@ -1485,6 +1952,8 @@ export default function ProductForm() {
       is_active: isActive,
       base_cost: baseCost,
       labor_cost: laborCost,
+      service_base_price: productType === 'servico' ? serviceBasePrice : 0,
+      expense_percentage: expensePercentage,
       waste_percentage: wastePercentage,
       profit_margin: profitMargin,
       final_price: finalPrice,
@@ -1567,6 +2036,8 @@ export default function ProductForm() {
         supabase.from('product_supplies').delete().eq('product_id', id),
         supabase.from('price_tiers').delete().eq('product_id', id),
         supabase.from('product_attributes').delete().eq('product_id', id),
+        supabase.from('service_items').delete().eq('service_product_id', id),
+        supabase.from('service_products').delete().eq('service_product_id', id),
       ]);
     } else {
       // Insert product
@@ -1629,6 +2100,39 @@ export default function ProductForm() {
 
     if (selectedAttrs.length > 0) {
       await supabase.from('product_attributes').insert(selectedAttrs);
+    }
+
+    if (productType === 'servico' && productId && profile?.company_id) {
+      const normalizedServiceItems = serviceItems
+        .map((item, index) => ({
+          company_id: profile.company_id,
+          service_product_id: productId,
+          name: item.name.trim(),
+          description: item.description.trim() || null,
+          item_kind: item.item_kind,
+          base_price: Number(item.base_price || 0),
+          sort_order: index,
+        }))
+        .filter((item) => item.name);
+
+      const normalizedServiceProducts = serviceProducts
+        .map((item, index) => ({
+          company_id: profile.company_id,
+          service_product_id: productId,
+          product_id: item.product_id,
+          quantity: Math.max(Number(item.quantity || 0), 0),
+          notes: item.notes.trim() || null,
+          sort_order: index,
+        }))
+        .filter((item) => item.product_id && item.quantity > 0);
+
+      if (normalizedServiceItems.length > 0) {
+        await supabase.from('service_items').insert(normalizedServiceItems);
+      }
+
+      if (normalizedServiceProducts.length > 0) {
+        await supabase.from('service_products').insert(normalizedServiceProducts);
+      }
     }
 
     toast({ title: isEditing ? 'Produto atualizado com sucesso!' : 'Produto cadastrado com sucesso!' });
@@ -1810,13 +2314,15 @@ export default function ProductForm() {
                   EAN-13: 13 dígitos. Code 128: ASCII 32-126.
                 </p>
                 {normalizedBarcodePreview ? (
-                  <div className="flex flex-col gap-1 rounded-md border bg-muted/40 p-2">
+                  <div className="flex flex-col items-center gap-2 rounded-lg border bg-white px-4 py-3">
                     <BarcodeSvg
                       value={normalizedBarcodePreview}
                       format={resolvedBarcodeFormat}
-                      className="w-full"
+                      height={72}
+                      moduleWidth={resolvedBarcodeFormat === 'ean13' ? 1.35 : 1.1}
+                      className="mx-auto w-full max-w-[320px]"
                     />
-                    <span className="text-xs text-muted-foreground tracking-widest">
+                    <span className="text-xs font-medium text-foreground tracking-[0.22em]">
                       {normalizedBarcodePreview}
                     </span>
                   </div>
@@ -2205,7 +2711,7 @@ export default function ProductForm() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            <div className="grid gap-4 md:grid-cols-4">
+            <div className="grid gap-4 md:grid-cols-5">
               <div className="space-y-2">
                 <Label htmlFor="baseCost">Custo Base (R$)</Label>
                 <CurrencyInput
@@ -2221,6 +2727,18 @@ export default function ProductForm() {
                   id="laborCost"
                   value={laborCost}
                   onChange={setLaborCost}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="expensePercentage">Despesas aplicadas (%)</Label>
+                <Input
+                  id="expensePercentage"
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  value={expensePercentage}
+                  onChange={(e) => setExpensePercentage(parseFloat(e.target.value) || 0)}
                 />
               </div>
 
@@ -2249,6 +2767,294 @@ export default function ProductForm() {
                 />
               </div>
             </div>
+
+            <div className="grid gap-4 rounded-lg border border-border bg-muted/20 p-4 md:grid-cols-[minmax(0,1fr)_220px]">
+              <div className="space-y-3">
+                <div>
+                  <Label className="text-base">Método de precificação</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Escolha entre margem tradicional ou multiplicador, sem perder o preço manual.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant={pricingMethod === 'margin' ? 'default' : 'outline'}
+                    onClick={() => {
+                      setPricingMethod('margin');
+                      setFinalPriceTouched(false);
+                    }}
+                  >
+                    Margem %
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={pricingMethod === 'multiplier' ? 'default' : 'outline'}
+                    onClick={() => {
+                      setPricingMethod('multiplier');
+                      setFinalPriceTouched(false);
+                    }}
+                  >
+                    Multiplicador
+                  </Button>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="pricingMultiplier">Multiplicador</Label>
+                <Input
+                  id="pricingMultiplier"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={pricingMultiplier}
+                  onChange={(e) => setPricingMultiplier(parseFloat(e.target.value) || 0)}
+                  disabled={pricingMethod !== 'multiplier'}
+                />
+              </div>
+            </div>
+
+            {productType === 'servico' && (
+              <>
+                <Separator />
+                <Card className="border-primary/20 bg-primary/5">
+                  <CardHeader>
+                    <CardTitle>Composição do serviço</CardTitle>
+                    <CardDescription>
+                      Monte o valor do serviço com valor base, produtos utilizados e itens adicionais.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    <div className="grid gap-4 md:grid-cols-[220px_minmax(0,1fr)]">
+                      <div className="space-y-2">
+                        <Label htmlFor="serviceBasePrice">Valor base do serviço</Label>
+                        <CurrencyInput
+                          id="serviceBasePrice"
+                          value={serviceBasePrice}
+                          onChange={(value) => setServiceBasePrice(value)}
+                        />
+                      </div>
+                      <div className="rounded-lg border bg-background/80 p-4">
+                        <p className="text-sm font-medium">Como o total é calculado</p>
+                        <p className="mt-2 text-sm text-muted-foreground">
+                          O sistema soma o valor base do serviço, os produtos vinculados e os itens adicionais.
+                          Se a precificação por custo resultar em um valor maior, ele será usado como referência.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <Label className="text-base">Produtos utilizados</Label>
+                          <p className="text-sm text-muted-foreground">
+                            Produtos da loja que entram no serviço composto.
+                          </p>
+                        </div>
+                        <Button type="button" variant="outline" size="sm" onClick={addServiceProduct}>
+                          <Plus className="mr-1 h-4 w-4" />
+                          Adicionar produto
+                        </Button>
+                      </div>
+
+                      {serviceProducts.length > 0 ? (
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Produto</TableHead>
+                              <TableHead className="w-24">Qtd.</TableHead>
+                              <TableHead className="w-32">Valor ref.</TableHead>
+                              <TableHead className="w-32">Subtotal</TableHead>
+                              <TableHead>Observações</TableHead>
+                              <TableHead className="w-16" />
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {serviceProducts.map((item, index) => {
+                              const linkedProduct = getReferenceProductById(item.product_id);
+                              const unitValue = getReferenceProductPrice(linkedProduct);
+                              const subtotal = unitValue * Number(item.quantity || 0);
+
+                              return (
+                                <TableRow key={`${item.product_id}-${index}`}>
+                                  <TableCell>
+                                    <Select
+                                      value={item.product_id}
+                                      onValueChange={(value) => updateServiceProduct(index, 'product_id', value)}
+                                    >
+                                      <SelectTrigger>
+                                        <SelectValue placeholder="Selecione um produto..." />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {selectableServiceProducts.map((product) => (
+                                          <SelectItem key={product.id} value={product.id}>
+                                            {product.name}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  </TableCell>
+                                  <TableCell>
+                                    <Input
+                                      type="number"
+                                      min="0.01"
+                                      step="0.01"
+                                      value={item.quantity}
+                                      onChange={(event) =>
+                                        updateServiceProduct(index, 'quantity', event.target.value)
+                                      }
+                                    />
+                                  </TableCell>
+                                  <TableCell className="text-muted-foreground">
+                                    {linkedProduct ? formatCurrency(unitValue) : '-'}
+                                  </TableCell>
+                                  <TableCell className="font-medium text-primary">
+                                    {formatCurrency(subtotal)}
+                                  </TableCell>
+                                  <TableCell>
+                                    <Input
+                                      value={item.notes}
+                                      onChange={(event) =>
+                                        updateServiceProduct(index, 'notes', event.target.value)
+                                      }
+                                      placeholder="Opcional"
+                                    />
+                                  </TableCell>
+                                  <TableCell>
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={() => removeServiceProduct(index)}
+                                    >
+                                      <Trash2 className="h-4 w-4 text-destructive" />
+                                    </Button>
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })}
+                          </TableBody>
+                        </Table>
+                      ) : (
+                        <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                          Nenhum produto vinculado ao serviço.
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <Label className="text-base">Itens e serviços adicionais</Label>
+                          <p className="text-sm text-muted-foreground">
+                            Exemplo: logo, cartão, capa para redes sociais, revisão extra.
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Button type="button" variant="outline" size="sm" onClick={() => addServiceItem('item')}>
+                            <Plus className="mr-1 h-4 w-4" />
+                            Adicionar item
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => addServiceItem('adicional')}
+                          >
+                            <Plus className="mr-1 h-4 w-4" />
+                            Adicional
+                          </Button>
+                        </div>
+                      </div>
+
+                      {serviceItems.length > 0 ? (
+                        <div className="space-y-3">
+                          {serviceItems.map((item, index) => (
+                            <div key={`${item.name}-${index}`} className="grid gap-3 rounded-lg border bg-background/80 p-4 md:grid-cols-[180px_minmax(0,1fr)_180px_48px]">
+                              <div className="space-y-2">
+                                <Label>Tipo</Label>
+                                <Select
+                                  value={item.item_kind}
+                                  onValueChange={(value) =>
+                                    updateServiceItem(index, 'item_kind', value as 'item' | 'adicional')
+                                  }
+                                >
+                                  <SelectTrigger>
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="item">Item incluso</SelectItem>
+                                    <SelectItem value="adicional">Serviço adicional</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div className="space-y-2">
+                                <Label>Nome</Label>
+                                <Input
+                                  value={item.name}
+                                  onChange={(event) => updateServiceItem(index, 'name', event.target.value)}
+                                  placeholder="Ex.: Cartão de visita"
+                                />
+                                <Textarea
+                                  value={item.description}
+                                  onChange={(event) =>
+                                    updateServiceItem(index, 'description', event.target.value)
+                                  }
+                                  placeholder="Descrição opcional"
+                                  rows={2}
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label>Valor</Label>
+                                <CurrencyInput
+                                  value={item.base_price}
+                                  onChange={(value) => updateServiceItem(index, 'base_price', value)}
+                                />
+                              </div>
+                              <div className="flex items-end">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => removeServiceItem(index)}
+                                >
+                                  <Trash2 className="h-4 w-4 text-destructive" />
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                          Nenhum item adicional configurado.
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="grid gap-3 md:grid-cols-4">
+                      <div className="rounded-lg border bg-background p-4">
+                        <p className="text-xs uppercase tracking-wide text-muted-foreground">Valor base</p>
+                        <p className="mt-2 text-lg font-semibold">{formatCurrency(serviceBasePrice)}</p>
+                      </div>
+                      <div className="rounded-lg border bg-background p-4">
+                        <p className="text-xs uppercase tracking-wide text-muted-foreground">Produtos vinculados</p>
+                        <p className="mt-2 text-lg font-semibold">{formatCurrency(serviceLinkedProductsValue)}</p>
+                      </div>
+                      <div className="rounded-lg border bg-background p-4">
+                        <p className="text-xs uppercase tracking-wide text-muted-foreground">Itens adicionais</p>
+                        <p className="mt-2 text-lg font-semibold">{formatCurrency(serviceItemsValue)}</p>
+                      </div>
+                      <div className="rounded-lg border border-primary/30 bg-primary/10 p-4">
+                        <p className="text-xs uppercase tracking-wide text-muted-foreground">Total composto</p>
+                        <p className="mt-2 text-lg font-semibold text-primary">
+                          {formatCurrency(serviceCompositionValue)}
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </>
+            )}
 
             {/* Supplies section - available for all product types */}
             <Separator />
@@ -2358,7 +3164,7 @@ export default function ProductForm() {
             {/* Cost Summary */}
             <div className="bg-muted/50 rounded-lg p-4">
               <h4 className="font-medium mb-3">Resumo de Custos</h4>
-              <div className="grid gap-3 text-sm md:grid-cols-2 lg:grid-cols-5">
+              <div className="grid gap-3 text-sm md:grid-cols-2 lg:grid-cols-6">
                 <div className="p-2 rounded bg-background">
                   <span className="text-muted-foreground text-xs block">Custo Base</span>
                   <span className="font-medium">{formatCurrency(baseCost)}</span>
@@ -2371,6 +3177,12 @@ export default function ProductForm() {
                   <span className="text-muted-foreground text-xs block">Mão de Obra</span>
                   <span className="font-medium">{formatCurrency(laborCost)}</span>
                 </div>
+                {productType === 'servico' && (
+                  <div className="p-2 rounded bg-background">
+                    <span className="text-muted-foreground text-xs block">Produtos do serviço</span>
+                    <span className="font-medium">{formatCurrency(serviceLinkedProductsCost)}</span>
+                  </div>
+                )}
                 <div className="p-2 rounded bg-background">
                   <span className="text-muted-foreground text-xs block">Custo Total</span>
                   <span className="font-medium">{formatCurrency(totalCost)}</span>
@@ -2381,22 +3193,38 @@ export default function ProductForm() {
                 </div>
               </div>
               <Separator className="my-3" />
-              <div className="flex items-center justify-between">
-                <div>
-                  <span className="text-muted-foreground">Preço Mínimo (10%):</span>
-                  <span className="ml-2 font-medium text-chart-4">{formatCurrency(minPrice)}</span>
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <div className="rounded bg-background p-3">
+                  <span className="text-xs text-muted-foreground">Preço mínimo (10%)</span>
+                  <p className="mt-2 font-semibold text-chart-4">{formatCurrency(minPrice)}</p>
                 </div>
-                <div className="text-lg">
-                  <span className="text-muted-foreground">Preço Sugerido ({profitMargin}%):</span>
-                  <span className="ml-2 font-bold text-chart-2">{formatCurrency(suggestedPrice)}</span>
+                <div className="rounded bg-background p-3">
+                  <span className="text-xs text-muted-foreground">Preço por margem</span>
+                  <p className="mt-2 font-semibold text-chart-2">{formatCurrency(suggestedPrice)}</p>
                 </div>
+                <div className="rounded bg-background p-3">
+                  <span className="text-xs text-muted-foreground">Markup sugerido</span>
+                  <p className="mt-2 font-semibold">{markupSimulation.markupSuggested.toFixed(2)}x</p>
+                </div>
+                <div className="rounded bg-background p-3">
+                  <span className="text-xs text-muted-foreground">Preço por multiplicador</span>
+                  <p className="mt-2 font-semibold">{formatCurrency(multiplierPrice)}</p>
+                </div>
+                {productType === 'servico' && (
+                  <div className="rounded bg-background p-3">
+                    <span className="text-xs text-muted-foreground">Total composto do serviço</span>
+                    <p className="mt-2 font-semibold text-primary">
+                      {formatCurrency(serviceCompositionValue)}
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
             <div className="mt-4 grid gap-2 sm:grid-cols-[1fr_200px] items-end">
               <div>
                 <Label htmlFor="final-price">Preço final do produto</Label>
                 <p className="text-xs text-muted-foreground">
-                  Usado nos pedidos e no catálogo. Você pode alterar.
+                  Usado nos pedidos e no catálogo. Você pode alterar manualmente a qualquer momento.
                 </p>
               </div>
               <CurrencyInput
@@ -2407,6 +3235,81 @@ export default function ProductForm() {
                   setFinalPriceTouched(true);
                 }}
               />
+            </div>
+            <div className="grid gap-3 md:grid-cols-3">
+              <div className="rounded-lg border bg-background p-4">
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">Lucro estimado</p>
+                <p className="mt-2 text-lg font-semibold">{formatCurrency(estimatedProfit)}</p>
+              </div>
+              <div className="rounded-lg border bg-background p-4">
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">Margem real</p>
+                <p className="mt-2 text-lg font-semibold">{realMargin.toFixed(2)}%</p>
+              </div>
+              <div className="rounded-lg border bg-background p-4">
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">Método ativo</p>
+                <p className="mt-2 text-lg font-semibold">
+                  {pricingMethod === 'multiplier' ? 'Multiplicador' : 'Margem %'}
+                </p>
+              </div>
+            </div>
+            <Separator className="my-4" />
+            <div className="space-y-3">
+              <div>
+                <h4 className="text-sm font-semibold text-foreground">Lucro real e rateio de despesas</h4>
+                <p className="text-xs text-muted-foreground">
+                  Considera custo de insumos, despesas variáveis e rateio automático das despesas fixas da empresa.
+                </p>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <div className="rounded-lg border bg-background p-4">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Custo direto</p>
+                  <p className="mt-2 text-lg font-semibold">
+                    {formatCurrency(currentProfitability?.directCost ?? costWithWaste)}
+                  </p>
+                </div>
+                <div className="rounded-lg border bg-background p-4">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Rateio despesas fixas</p>
+                  <p className="mt-2 text-lg font-semibold">
+                    {formatCurrency(currentProfitability?.fixedAllocation ?? 0)}
+                  </p>
+                </div>
+                <div className="rounded-lg border bg-background p-4">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Despesas variáveis</p>
+                  <p className="mt-2 text-lg font-semibold">
+                    {formatCurrency(currentProfitability?.variableShare ?? 0)}
+                  </p>
+                </div>
+                <div className="rounded-lg border bg-background p-4">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Custo total real</p>
+                  <p className="mt-2 text-lg font-semibold">
+                    {formatCurrency(currentProfitability?.totalRealCost ?? costWithWaste)}
+                  </p>
+                </div>
+                <div className="rounded-lg border bg-background p-4">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Lucro por unidade</p>
+                  <p className="mt-2 text-lg font-semibold">
+                    {formatCurrency(currentProfitability?.profitPerUnit ?? estimatedProfit)}
+                  </p>
+                </div>
+                <div className="rounded-lg border bg-background p-4">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Margem de lucro real</p>
+                  <p className="mt-2 text-lg font-semibold">
+                    {(currentProfitability?.marginPct ?? realMargin).toFixed(2)}%
+                  </p>
+                </div>
+                <div className="rounded-lg border bg-background p-4">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Qtd. vendida usada no rateio</p>
+                  <p className="mt-2 text-lg font-semibold">
+                    {Math.round(currentProfitability?.soldUnits ?? 0)}
+                  </p>
+                </div>
+                <div className="rounded-lg border bg-background p-4">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Preço considerado</p>
+                  <p className="mt-2 text-lg font-semibold">
+                    {formatCurrency(currentProfitability?.salePrice ?? finalPrice)}
+                  </p>
+                </div>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -2606,7 +3509,7 @@ export default function ProductForm() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="minOrderQuantity">Quantidade mínima para pedido</Label>
+                  <Label htmlFor="minOrderQuantity">Quantidade mínima para pedido no catálogo</Label>
                   <Input
                     id="minOrderQuantity"
                     type="number"

@@ -1,7 +1,21 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Package, Search, Plus, Pencil, Trash2, Upload, Image as ImageIcon, ArrowLeft, Printer } from 'lucide-react';
+import {
+  Package,
+  Search,
+  Plus,
+  Pencil,
+  Trash2,
+  Upload,
+  Image as ImageIcon,
+  ArrowLeft,
+  Printer,
+  ArrowDown,
+  ArrowUp,
+  RefreshCw,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { CurrencyInput } from '@/components/ui/currency-input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -11,20 +25,40 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import type { Supply } from '@/types/database';
+import type { StockMovementType, Supply, SupplyStockMovement } from '@/types/database';
 import { ensurePublicStorageUrl } from '@/lib/storage';
 import { useUnsavedChanges } from '@/hooks/use-unsaved-changes';
+import { useAuth } from '@/contexts/AuthContext';
+import { cn } from '@/lib/utils';
 
 const units = ['un', 'kg', 'g', 'm', 'cm', 'ml', 'L', 'folha', 'rolo', 'pacote', 'caixa'];
+const movementTypeLabels: Record<StockMovementType, string> = {
+  entrada: 'Entrada',
+  saida: 'Saida',
+  ajuste: 'Ajuste',
+};
+const movementTypeColors: Record<StockMovementType, string> = {
+  entrada: 'bg-chart-2/10 text-chart-2 border-chart-2/20',
+  saida: 'bg-destructive/10 text-destructive border-destructive/20',
+  ajuste: 'bg-primary/10 text-primary border-primary/20',
+};
+
+type SupplyMovementRow = SupplyStockMovement & {
+  supply?: Pick<Supply, 'id' | 'name' | 'unit'> | null;
+};
 
 export default function Supplies() {
+  const { user, profile } = useAuth();
   const [supplies, setSupplies] = useState<Supply[]>([]);
+  const [movements, setMovements] = useState<SupplyMovementRow[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [movementDialogOpen, setMovementDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedSupply, setSelectedSupply] = useState<Supply | null>(null);
   const [saving, setSaving] = useState(false);
+  const [savingMovement, setSavingMovement] = useState(false);
   const [initialFormSnapshot, setInitialFormSnapshot] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -38,33 +72,77 @@ export default function Supplies() {
     min_stock: 0,
     image_url: '',
   });
+  const [movementForm, setMovementForm] = useState({
+    supply_id: '',
+    movement_type: 'entrada' as StockMovementType,
+    quantity: '',
+    reason: '',
+  });
 
   useEffect(() => {
-    loadSupplies();
-  }, []);
+    void loadData();
+  }, [profile?.company_id]);
 
-  const loadSupplies = async () => {
-    const { data, error } = await supabase
+  const loadData = async () => {
+    setLoading(true);
+
+    let suppliesQuery = supabase
       .from('supplies')
       .select('*')
       .order('name');
 
-    if (error) {
+    if (profile?.company_id) {
+      suppliesQuery = suppliesQuery.eq('company_id', profile.company_id);
+    }
+
+    let movementsQuery = supabase
+      .from('supply_stock_movements')
+      .select('*, supply:supplies(id, name, unit)')
+      .order('created_at', { ascending: false })
+      .limit(50);
+
+    if (profile?.company_id) {
+      movementsQuery = movementsQuery.eq('company_id', profile.company_id);
+    }
+
+    const [suppliesResult, movementsResult] = await Promise.all([
+      suppliesQuery,
+      movementsQuery,
+    ]);
+
+    if (suppliesResult.error || movementsResult.error) {
       toast.error('Erro ao carregar insumos');
+      setLoading(false);
       return;
     }
 
-    const mapped = (data || []).map((supply) => ({
+    const mappedSupplies = (suppliesResult.data || []).map((supply) => ({
       ...(supply as Supply),
       image_url: ensurePublicStorageUrl('product-images', supply.image_url),
     }));
-    setSupplies(mapped as Supply[]);
+
+    setSupplies(mappedSupplies as Supply[]);
+    setMovements((movementsResult.data as SupplyMovementRow[]) || []);
     setLoading(false);
   };
 
   const filtered = supplies.filter(s =>
     s.name.toLowerCase().includes(search.toLowerCase())
   );
+  const filteredMovements = movements.filter((movement) => {
+    const normalizedSearch = search.trim().toLowerCase();
+    if (!normalizedSearch) return true;
+
+    return [
+      movement.supply?.name || '',
+      movement.reason || '',
+      movementTypeLabels[movement.movement_type] || '',
+    ]
+      .join(' ')
+      .toLowerCase()
+      .includes(normalizedSearch);
+  });
+  const selectedMovementSupply = supplies.find((supply) => supply.id === movementForm.supply_id);
 
   const openCreateDialog = () => {
     setSelectedSupply(null);
@@ -79,6 +157,16 @@ export default function Supplies() {
     });
     setInitialFormSnapshot(JSON.stringify({ name: '', unit: 'un', cost_per_unit: 0, sale_price: 0, stock_quantity: 0, min_stock: 0, image_url: '' }));
     setDialogOpen(true);
+  };
+
+  const openMovementDialog = (movementType?: StockMovementType, supply?: Supply | null) => {
+    setMovementForm({
+      supply_id: supply?.id || '',
+      movement_type: movementType || 'entrada',
+      quantity: '',
+      reason: '',
+    });
+    setMovementDialogOpen(true);
   };
 
   const openEditDialog = (supply: Supply) => {
@@ -217,7 +305,7 @@ export default function Supplies() {
 
     setDialogOpen(false);
     setSaving(false);
-    loadSupplies();
+    void loadData();
   };
 
   const handleDelete = async () => {
@@ -235,12 +323,101 @@ export default function Supplies() {
 
     toast.success('Insumo excluído com sucesso');
     setDeleteDialogOpen(false);
-    loadSupplies();
+    void loadData();
+  };
+
+  const handleSaveMovement = async () => {
+    if (!profile?.company_id) {
+      toast.error('Empresa nao encontrada na sessao');
+      return;
+    }
+
+    if (!movementForm.supply_id || !movementForm.quantity) {
+      toast.error('Preencha os campos obrigatorios');
+      return;
+    }
+
+    const quantity = parseFloat(movementForm.quantity);
+    if (Number.isNaN(quantity) || quantity <= 0) {
+      toast.error('Quantidade deve ser maior que zero');
+      return;
+    }
+
+    const supply = supplies.find((item) => item.id === movementForm.supply_id);
+    if (!supply) {
+      toast.error('Selecione um insumo valido');
+      return;
+    }
+
+    if (movementForm.movement_type === 'saida' && quantity > Number(supply.stock_quantity || 0)) {
+      toast.error('Quantidade maior que o estoque disponivel');
+      return;
+    }
+
+    setSavingMovement(true);
+
+    const movementPayload = {
+      company_id: profile.company_id,
+      supply_id: supply.id,
+      movement_type: movementForm.movement_type,
+      quantity,
+      reason: movementForm.reason.trim() || null,
+      user_id: user?.id || null,
+      origin: movementForm.movement_type === 'ajuste' ? 'ajuste' : 'manual',
+    };
+
+    const { data: insertedMovement, error: movementError } = await supabase
+      .from('supply_stock_movements')
+      .insert(movementPayload)
+      .select('id')
+      .single();
+
+    if (movementError) {
+      toast.error('Erro ao registrar movimentacao de insumo');
+      setSavingMovement(false);
+      return;
+    }
+
+    let nextStock = Number(supply.stock_quantity || 0);
+    if (movementForm.movement_type === 'entrada') {
+      nextStock += quantity;
+    } else if (movementForm.movement_type === 'saida') {
+      nextStock -= quantity;
+    } else {
+      nextStock = quantity;
+    }
+
+    const { error: updateError } = await supabase
+      .from('supplies')
+      .update({ stock_quantity: nextStock })
+      .eq('id', supply.id);
+
+    if (updateError) {
+      if (insertedMovement?.id) {
+        await supabase.from('supply_stock_movements').delete().eq('id', insertedMovement.id);
+      }
+      toast.error('Erro ao atualizar estoque do insumo');
+      setSavingMovement(false);
+      return;
+    }
+
+    toast.success('Movimentacao registrada com sucesso');
+    setMovementDialogOpen(false);
+    setSavingMovement(false);
+    setMovementForm({
+      supply_id: '',
+      movement_type: 'entrada',
+      quantity: '',
+      reason: '',
+    });
+    void loadData();
   };
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
   };
+
+  const formatDate = (value: string) => new Date(value).toLocaleString('pt-BR');
 
   const calculateMargin = (cost: number, sale: number) => {
     if (cost === 0) return 0;
@@ -452,6 +629,10 @@ export default function Supplies() {
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
+              <Button variant="outline" onClick={() => openMovementDialog('ajuste')}>
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Ajustar estoque
+              </Button>
               <Button onClick={openCreateDialog}>
                 <Plus className="h-4 w-4 mr-2" />
                 Novo Insumo
@@ -498,7 +679,7 @@ export default function Supplies() {
                     <TableHead>Margem</TableHead>
                     <TableHead>Estoque</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead className="w-[100px]"></TableHead>
+                    <TableHead className="w-[180px]"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -552,6 +733,9 @@ export default function Supplies() {
                       </TableCell>
                       <TableCell>
                         <div className="flex gap-1">
+                          <Button variant="outline" size="sm" onClick={() => openMovementDialog('ajuste', supply)}>
+                            Estoque
+                          </Button>
                           <Button variant="ghost" size="icon" onClick={() => openEditDialog(supply)}>
                             <Pencil className="h-4 w-4" />
                           </Button>
@@ -566,8 +750,242 @@ export default function Supplies() {
               </Table>
             </CardContent>
           </Card>
+
+          <Card>
+            <CardHeader>
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <CardTitle>Movimentacoes de estoque</CardTitle>
+                  <CardDescription>
+                    Historico recente de entradas, saidas e ajustes dos insumos.
+                  </CardDescription>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" size="sm" onClick={() => openMovementDialog('entrada')}>
+                    <ArrowDown className="h-4 w-4 mr-2" />
+                    Entrada
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => openMovementDialog('saida')}>
+                    <ArrowUp className="h-4 w-4 mr-2" />
+                    Saida
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => openMovementDialog('ajuste')}>
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Ajuste
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Insumo</TableHead>
+                    <TableHead>Tipo</TableHead>
+                    <TableHead>Quantidade</TableHead>
+                    <TableHead>Motivo</TableHead>
+                    <TableHead>Data</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {loading ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="py-8 text-center">
+                        Carregando...
+                      </TableCell>
+                    </TableRow>
+                  ) : filteredMovements.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
+                        Nenhuma movimentacao registrada para os insumos.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    filteredMovements.map((movement) => (
+                      <TableRow key={movement.id}>
+                        <TableCell className="font-medium">
+                          {movement.supply?.name || 'Insumo'}
+                        </TableCell>
+                        <TableCell>
+                          <Badge className={movementTypeColors[movement.movement_type]}>
+                            {movementTypeLabels[movement.movement_type]}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {movement.quantity} {movement.supply?.unit || ''}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {movement.reason || '-'}
+                        </TableCell>
+                        <TableCell>{formatDate(movement.created_at)}</TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
         </>
       )}
+
+      <Dialog
+        open={movementDialogOpen}
+        onOpenChange={(open) => {
+          setMovementDialogOpen(open);
+          if (!open) {
+            setMovementForm({
+              supply_id: '',
+              movement_type: 'entrada',
+              quantity: '',
+              reason: '',
+            });
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {movementForm.movement_type === 'entrada' && <ArrowDown className="h-5 w-5 text-chart-2" />}
+              {movementForm.movement_type === 'saida' && <ArrowUp className="h-5 w-5 text-destructive" />}
+              {movementForm.movement_type === 'ajuste' && <RefreshCw className="h-5 w-5 text-primary" />}
+              Movimentar estoque de insumo
+            </DialogTitle>
+            <DialogDescription>
+              Registre entrada, saida ou ajuste do estoque de materias-primas.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-6">
+            <div className="space-y-2">
+              <Label>Tipo de movimentacao</Label>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={cn(
+                    'flex-1',
+                    movementForm.movement_type === 'entrada'
+                      ? 'bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700'
+                      : 'border-emerald-200 text-emerald-600 hover:bg-emerald-50',
+                  )}
+                  onClick={() => setMovementForm((prev) => ({ ...prev, movement_type: 'entrada' }))}
+                >
+                  <ArrowDown className="h-4 w-4 mr-2" />
+                  Entrada
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={cn(
+                    'flex-1',
+                    movementForm.movement_type === 'saida'
+                      ? 'bg-destructive text-white border-destructive hover:bg-destructive/90'
+                      : 'border-destructive/20 text-destructive hover:bg-destructive/10',
+                  )}
+                  onClick={() => setMovementForm((prev) => ({ ...prev, movement_type: 'saida' }))}
+                >
+                  <ArrowUp className="h-4 w-4 mr-2" />
+                  Saida
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={cn(
+                    'flex-1',
+                    movementForm.movement_type === 'ajuste'
+                      ? 'bg-primary text-white border-primary hover:bg-primary/90'
+                      : 'border-primary/20 text-primary hover:bg-primary/10',
+                  )}
+                  onClick={() => setMovementForm((prev) => ({ ...prev, movement_type: 'ajuste' }))}
+                >
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Ajuste
+                </Button>
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Insumo</Label>
+                <Select
+                  value={movementForm.supply_id}
+                  onValueChange={(value) => setMovementForm((prev) => ({ ...prev, supply_id: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o insumo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {supplies.map((supply) => (
+                      <SelectItem key={supply.id} value={supply.id}>
+                        {supply.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>{movementForm.movement_type === 'ajuste' ? 'Novo estoque' : 'Quantidade'}</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={movementForm.quantity}
+                  onChange={(event) => setMovementForm((prev) => ({ ...prev, quantity: event.target.value }))}
+                  placeholder={movementForm.movement_type === 'ajuste' ? 'Estoque total' : 'Quantidade'}
+                />
+              </div>
+            </div>
+
+            {selectedMovementSupply && (
+              <div className="grid gap-4 rounded-lg border bg-muted/40 p-4 text-sm md:grid-cols-2">
+                <div>
+                  <p className="mb-1 text-muted-foreground">Estoque atual</p>
+                  <p className="text-lg font-bold">
+                    {selectedMovementSupply.stock_quantity} {selectedMovementSupply.unit}
+                  </p>
+                </div>
+                {movementForm.movement_type === 'ajuste' && movementForm.quantity && (
+                  <div>
+                    <p className="mb-1 text-muted-foreground">Diferenca</p>
+                    <p
+                      className={cn(
+                        'text-lg font-bold',
+                        parseFloat(movementForm.quantity) - selectedMovementSupply.stock_quantity >= 0
+                          ? 'text-chart-2'
+                          : 'text-destructive',
+                      )}
+                    >
+                      {parseFloat(movementForm.quantity) - selectedMovementSupply.stock_quantity > 0 ? '+' : ''}
+                      {(parseFloat(movementForm.quantity) - selectedMovementSupply.stock_quantity).toFixed(2)}{' '}
+                      {selectedMovementSupply.unit}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <Label>Motivo / observacao</Label>
+              <Textarea
+                rows={4}
+                value={movementForm.reason}
+                onChange={(event) => setMovementForm((prev) => ({ ...prev, reason: event.target.value }))}
+                placeholder="Ex.: compra de fornecedor, ajuste de inventario, perda de material..."
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setMovementDialogOpen(false)} disabled={savingMovement}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSaveMovement} disabled={savingMovement}>
+              {savingMovement ? 'Salvando...' : 'Confirmar movimentacao'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <DialogContent>

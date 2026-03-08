@@ -19,6 +19,7 @@ const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Products = lazy(() => import("./pages/Products"));
 const ProductForm = lazy(() => import("./pages/ProductForm"));
+const PriceSimulator = lazy(() => import("./pages/PriceSimulator"));
 const ProductLabels = lazy(() => import("./pages/ProductLabels"));
 const Customers = lazy(() => import("./pages/Customers"));
 const CustomerForm = lazy(() => import("./pages/CustomerForm"));
@@ -63,6 +64,7 @@ const SuperAdminImpersonate = lazy(() => import("./pages/SuperAdminImpersonate")
 const Profile = lazy(() => import("./pages/Profile"));
 const Reports = lazy(() => import("./pages/Reports"));
 const CashFlow = lazy(() => import("./pages/CashFlow"));
+const Expenses = lazy(() => import("./pages/Expenses"));
 const Receipts = lazy(() => import("./pages/Receipts"));
 const BannerManagement = lazy(() => import("./pages/BannerManagement"));
 const CatalogManager = lazy(() => import("./pages/CatalogManager"));
@@ -230,6 +232,15 @@ const App = () => (
               />
 
               <Route
+                path="/produtos/simulador-preco"
+                element={(
+                  <ProtectedRoute allowedRoles={["admin", "atendente"]} moduleKey="produtos">
+                    <AppLayout>{withSuspense(<PriceSimulator />)}</AppLayout>
+                  </ProtectedRoute>
+                )}
+              />
+
+              <Route
                 path="/catalogo-admin"
                 element={(
                   <ProtectedRoute allowedRoles={["admin"]} moduleKey="catalogo">
@@ -338,6 +349,15 @@ const App = () => (
               />
 
               <Route
+                path="/financeiro/despesas"
+                element={(
+                  <ProtectedRoute allowedRoles={["admin", "financeiro"]} moduleKey="fluxo_caixa">
+                    <AppLayout>{withSuspense(<Expenses />)}</AppLayout>
+                  </ProtectedRoute>
+                )}
+              />
+
+              <Route
                 path="/financeiro/relatorios"
                 element={(
                   <ProtectedRoute allowedRoles={["admin", "financeiro", "atendente", "producao"]} moduleKey="relatorios">
@@ -405,6 +425,15 @@ const App = () => (
                 element={(
                   <ProtectedRoute allowedRoles={["admin"]} moduleKey="configuracoes">
                     <AppLayout>{withSuspense(<Settings />)}</AppLayout>
+                  </ProtectedRoute>
+                )}
+              />
+
+              <Route
+                path="/configuracoes/pagamentos"
+                element={(
+                  <ProtectedRoute allowedRoles={["admin"]} moduleKey="pagamentos_pix">
+                    <AppLayout>{withSuspense(<PaymentSettings />)}</AppLayout>
                   </ProtectedRoute>
                 )}
               />

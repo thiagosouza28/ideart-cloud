@@ -31,6 +31,10 @@ export type PixGateway = 'MercadoPago' | 'PagSeguro' | 'PixManual';
 export type PixKeyType = 'CPF' | 'CNPJ' | 'Email' | 'Telefone' | 'ChaveAleatoria';
 export type FinancialEntryType = 'receita' | 'despesa';
 export type FinancialEntryStatus = 'pendente' | 'pago' | 'atrasado';
+export type ExpenseType = 'recorrente' | 'nao_recorrente';
+export type ExpenseStatus = 'ativo' | 'inativo' | 'pendente' | 'pago';
+export type ExpenseAllocationMethod = 'percentual_custo' | 'quantidade_vendas';
+export type ExpenseDueStatus = 'a_vencer' | 'vencendo' | 'vencida' | 'pago' | 'sem_vencimento';
 export type FinancialEntryOrigin =
   | 'venda'
   | 'assinatura'
@@ -48,6 +52,7 @@ export type BillingPeriod = 'monthly' | 'yearly';
 export type CompanyThemeMode = 'light' | 'dark' | 'system';
 export type CompanyThemeButtonStyle = 'soft' | 'modern' | 'solid' | 'outline';
 export type CompanyThemeBorderRadius = 'small' | 'medium' | 'large';
+export type CompanyThemeBorderSize = 'thin' | 'normal' | 'thick';
 export type CompanyThemeLayoutDensity = 'compact' | 'normal' | 'spacious';
 export type CompanyThemeFontFamily = 'Inter' | 'Roboto' | 'Poppins' | 'Open Sans';
 export type CompanyThemePaletteMode = 'light' | 'dark';
@@ -56,6 +61,8 @@ export interface CompanyThemePalette {
   primary_color: string;
   secondary_color: string;
   background_color: string;
+  card_color: string;
+  border_color: string;
   text_color: string;
   button_color: string;
   button_hover_color: string;
@@ -112,11 +119,14 @@ export interface CompanyTheme {
   primary_color: string;
   secondary_color: string;
   background_color: string;
+  card_color: string;
+  border_color: string;
   text_color: string;
   button_color: string;
   button_hover_color: string;
   menu_hover_color: string;
   border_radius: CompanyThemeBorderRadius;
+  border_size: CompanyThemeBorderSize;
   button_style: CompanyThemeButtonStyle;
   layout_density: CompanyThemeLayoutDensity;
   font_family: CompanyThemeFontFamily;
@@ -316,8 +326,10 @@ export interface Product {
   product_colors?: ProductColor[] | null;
   personalization_enabled?: boolean | null;
   production_time_days?: number | null;
+  service_base_price?: number;
   base_cost: number;
   labor_cost: number;
+  expense_percentage?: number;
   waste_percentage: number;
   profit_margin: number;
   promo_price: number | null;
@@ -332,6 +344,29 @@ export interface Product {
   updated_at: string;
   category?: Category;
   company?: Company;
+}
+
+export interface Expense {
+  id: string;
+  company_id: string;
+  expense_type: ExpenseType;
+  name: string;
+  category: string | null;
+  monthly_amount: number | null;
+  amount: number | null;
+  expense_date: string | null;
+  due_date?: string | null;
+  due_day?: number | null;
+  description: string | null;
+  status: ExpenseStatus;
+  apply_to_product_cost: boolean;
+  allocation_method?: ExpenseAllocationMethod;
+  paid_amount?: number | null;
+  paid_at?: string | null;
+  payment_method?: PaymentMethod | null;
+  payment_notes?: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface ProductReview {
@@ -367,6 +402,62 @@ export interface ProductSupply {
   quantity: number;
   created_at: string;
   supply?: Supply;
+}
+
+export interface SupplyStockMovement {
+  id: string;
+  company_id: string;
+  supply_id: string;
+  product_id: string | null;
+  order_id?: string | null;
+  sale_id?: string | null;
+  movement_type: StockMovementType;
+  origin: 'venda_produto' | 'manual' | 'ajuste';
+  quantity: number;
+  reason: string | null;
+  user_id: string | null;
+  created_at: string;
+  supply?: Supply;
+  product?: Product | null;
+}
+
+export interface CompanyPaymentMethod {
+  id: string;
+  company_id: string;
+  name: string;
+  type: PaymentMethod;
+  fee_percentage: number;
+  is_active: boolean;
+  description: string | null;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ServiceItem {
+  id: string;
+  company_id: string;
+  service_product_id: string;
+  name: string;
+  description: string | null;
+  item_kind: 'item' | 'adicional';
+  base_price: number;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ServiceProduct {
+  id: string;
+  company_id: string;
+  service_product_id: string;
+  product_id: string;
+  quantity: number;
+  notes: string | null;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+  product?: Product;
 }
 
 export interface PriceTier {
@@ -666,6 +757,7 @@ export interface OrderFinalPhoto {
 export interface OrderArtFile {
   id: string;
   order_id: string;
+  customer_id?: string | null;
   storage_path: string;
   file_name: string;
   file_type: string | null;

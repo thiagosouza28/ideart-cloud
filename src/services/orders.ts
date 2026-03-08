@@ -4,6 +4,8 @@ import { generateAndUploadPaymentReceipt } from '@/services/paymentReceipts';
 import { ensurePublicStorageUrl } from '@/lib/storage';
 import { formatOrderNumber } from '@/lib/utils';
 import { stripPendingCustomerInfoNotes } from '@/lib/orderMetadata';
+import { sanitizeDisplayFileName } from '@/lib/orderFiles';
+import { consumeProductSupplies } from '@/lib/supplyConsumption';
 import type {
   AppRole,
   Order,
@@ -797,6 +799,28 @@ export const updateOrderStatus = async ({
     throw historyError;
   }
 
+  if (order.company_id && order.status !== 'finalizado' && status === 'finalizado') {
+    const { data: orderItems, error: orderItemsError } = await supabase
+      .from('order_items')
+      .select('product_id, product_name, quantity')
+      .eq('order_id', orderId);
+
+    if (orderItemsError) {
+      throw orderItemsError;
+    }
+
+    await consumeProductSupplies({
+      companyId: order.company_id,
+      orderId,
+      userId: userId || null,
+      items: (orderItems || []).map((item) => ({
+        product_id: item.product_id,
+        product_name: item.product_name,
+        quantity: Number(item.quantity || 0),
+      })),
+    });
+  }
+
   if (entrada && entrada > 0) {
     const resolvedMethod = paymentMethod || (updatedOrder.payment_method as PaymentMethod | null) || 'dinheiro';
     await createOrderPayment({
@@ -1094,9 +1118,18 @@ export const uploadOrderFinalPhoto = async (
 export const uploadOrderArtFile = async (
   orderId: string,
   file: File,
-  userId?: string | null
+  userId?: string | null,
+  options?: {
+    customerId?: string | null;
+    displayFileName?: string | null;
+  },
 ) => {
-  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const displayFileName = sanitizeDisplayFileName(
+    options?.displayFileName?.trim() || file.name || 'referencia',
+    file.name,
+    'referencia',
+  );
+  const safeName = displayFileName.replace(/[^a-zA-Z0-9._-]/g, '_');
   const fileExt = safeName.split('.').pop();
   const fileName = `${orderId}/${generateFileId()}-${fileExt ? safeName : `${safeName}.bin`}`;
 
@@ -1112,8 +1145,9 @@ export const uploadOrderArtFile = async (
     .from('order_art_files' as any)
     .insert({
       order_id: orderId,
+      customer_id: options?.customerId || null,
       storage_path: fileName,
-      file_name: file.name || safeName,
+      file_name: displayFileName,
       file_type: file.type || null,
       created_by: userId || null,
     })

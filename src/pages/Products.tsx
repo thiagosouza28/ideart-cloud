@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Plus, Search, Edit, Trash2, Filter, Upload, Download, FileSpreadsheet, Loader2, X, CheckCircle2, AlertCircle, Tag } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -10,9 +10,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { supabase } from '@/integrations/supabase/client';
-import { Product, Category, ProductType } from '@/types/database';
+import { Category, Expense, OrderItem, Product, ProductSupply, ProductType, SaleItem } from '@/types/database';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
+import { buildProductProfitabilityRows, buildSoldUnitsMap } from '@/lib/finance';
 import { isPromotionActive } from '@/lib/pricing';
 import { isValidCode128, isValidEan13, normalizeBarcode } from '@/lib/barcode';
 import { ensurePublicStorageUrl } from '@/lib/storage';
@@ -64,6 +65,9 @@ export default function Products() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [products, setProducts] = useState<ProductWithSupplies[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
+  const [saleItems, setSaleItems] = useState<SaleItem[]>([]);
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
@@ -82,18 +86,66 @@ export default function Products() {
   }, [profile?.company_id]);
 
   const fetchData = async () => {
-    const productsQuery = supabase
+    let productsQuery = supabase
       .from('products')
       .select('*, category:categories(name), product_supplies(quantity, supply:supplies(cost_per_unit))')
       .order('name');
+    let categoriesQuery = supabase.from('categories').select('*').order('name');
+    let expensesQuery = supabase.from('expenses').select('*').order('created_at', { ascending: false });
+    let ordersQuery = supabase
+      .from('orders')
+      .select('id, status')
+      .order('created_at', { ascending: false })
+      .limit(500);
+    let salesQuery = supabase
+      .from('sales')
+      .select('id')
+      .order('created_at', { ascending: false })
+      .limit(500);
 
-    const [productsResult, categoriesResult] = await Promise.all([
+    if (profile?.company_id) {
+      productsQuery = productsQuery.eq('company_id', profile.company_id);
+      categoriesQuery = categoriesQuery.eq('company_id', profile.company_id);
+      expensesQuery = expensesQuery.eq('company_id', profile.company_id);
+      ordersQuery = ordersQuery.eq('company_id', profile.company_id);
+      salesQuery = salesQuery.eq('company_id', profile.company_id);
+    }
+
+    const [productsResult, categoriesResult, expensesResult, ordersResult, salesResult] = await Promise.all([
       productsQuery,
-      supabase.from('categories').select('*').order('name'),
+      categoriesQuery,
+      expensesQuery,
+      ordersQuery,
+      salesQuery,
     ]);
 
-    setProducts(productsResult.data as ProductWithSupplies[] || []);
-    setCategories(categoriesResult.data as Category[] || []);
+    const nextProducts = (productsResult.data as ProductWithSupplies[]) || [];
+    setProducts(nextProducts);
+    setCategories((categoriesResult.data as Category[]) || []);
+    setExpenses((expensesResult.data as Expense[]) || []);
+
+    const validOrderIds = ((ordersResult.data as Array<{ id: string; status: string }>) || [])
+      .filter((order) => !['orcamento', 'pendente', 'cancelado'].includes(order.status))
+      .map((order) => order.id);
+    const saleIds = ((salesResult.data as Array<{ id: string }>) || []).map((sale) => sale.id);
+
+    const [orderItemsResult, saleItemsResult] = await Promise.all([
+      validOrderIds.length
+        ? supabase
+            .from('order_items')
+            .select('id, order_id, product_id, product_name, quantity, unit_price, discount, total, attributes, notes, created_at')
+            .in('order_id', validOrderIds)
+        : Promise.resolve({ data: [] }),
+      saleIds.length
+        ? supabase
+            .from('sale_items')
+            .select('id, sale_id, product_id, product_name, quantity, unit_price, discount, total, attributes, created_at')
+            .in('sale_id', saleIds)
+        : Promise.resolve({ data: [] }),
+    ]);
+
+    setOrderItems((orderItemsResult.data as OrderItem[]) || []);
+    setSaleItems((saleItemsResult.data as SaleItem[]) || []);
     setLoading(false);
   };
 
@@ -136,6 +188,36 @@ export default function Products() {
 
     return Number(product.base_cost || 0) + Number(product.labor_cost || 0) + suppliesCost;
   };
+
+  const productSupplies = useMemo<ProductSupply[]>(
+    () =>
+      products.flatMap((product) =>
+        (product.product_supplies || []).map((item, index) => ({
+          id: `${product.id}-${index}`,
+          product_id: product.id,
+          supply_id: `supply-${index}`,
+          quantity: Number(item.quantity || 0),
+          created_at: product.created_at,
+          supply: item.supply || undefined,
+        })),
+      ),
+    [products],
+  );
+
+  const profitabilityByProduct = useMemo(() => {
+    const soldUnitsByProduct = buildSoldUnitsMap({ orderItems, saleItems });
+    const rows = buildProductProfitabilityRows({
+      products,
+      productSupplies,
+      expenses,
+      soldUnitsByProduct,
+    });
+
+    return rows.reduce((acc, row) => {
+      acc[row.id] = row;
+      return acc;
+    }, {} as Record<string, (typeof rows)[number]>);
+  }, [expenses, orderItems, productSupplies, products, saleItems]);
 
   const getTypeLabel = (type: string) => {
     const labels: Record<string, string> = { produto: 'Produto', confeccionado: 'Confeccionado', servico: 'Serviço' };
@@ -401,6 +483,10 @@ export default function Products() {
       <div className="page-header">
         <h1 className="page-title">Produtos</h1>
         <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => navigate('/produtos/simulador-preco')}>
+            <Tag className="mr-2 h-4 w-4" />
+            Simulador de Preço
+          </Button>
           <Button variant="outline" onClick={exportToCSV}>
             <Download className="mr-2 h-4 w-4" />
             Exportar CSV
@@ -464,7 +550,9 @@ export default function Products() {
                 <TableHead>SKU</TableHead>
                 <TableHead>Tipo</TableHead>
                 <TableHead>Categoria</TableHead>
-                <TableHead className="text-right">Custo</TableHead>
+                <TableHead className="text-right">Preço</TableHead>
+                <TableHead className="text-right">Custo real</TableHead>
+                <TableHead className="text-right">Lucro real</TableHead>
                 <TableHead>Estoque</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="w-[100px]">Ações</TableHead>
@@ -473,11 +561,11 @@ export default function Products() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-8">Carregando...</TableCell>
+                  <TableCell colSpan={11} className="text-center py-8">Carregando...</TableCell>
                 </TableRow>
               ) : filteredProducts.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
                     Nenhum produto encontrado
                   </TableCell>
                 </TableRow>
@@ -526,7 +614,25 @@ export default function Products() {
                       </span>
                     </TableCell>
                     <TableCell>{(product as any).category?.name || '-'}</TableCell>
-                    <TableCell className="text-right">{formatCurrency(getProductCost(product))}</TableCell>
+                    <TableCell className="text-right">
+                      {formatCurrency(Number(product.final_price ?? product.catalog_price ?? 0))}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="space-y-1">
+                        <p>{formatCurrency(profitabilityByProduct[product.id]?.totalRealCost ?? getProductCost(product))}</p>
+                        <p className="text-xs text-muted-foreground">
+                          Direto {formatCurrency(profitabilityByProduct[product.id]?.directCost ?? getProductCost(product))}
+                        </p>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="space-y-1">
+                        <p>{formatCurrency(profitabilityByProduct[product.id]?.profitPerUnit ?? 0)}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {(profitabilityByProduct[product.id]?.marginPct ?? 0).toFixed(1)}%
+                        </p>
+                      </div>
+                    </TableCell>
                     <TableCell className={product.track_stock && product.stock_quantity <= product.min_stock ? 'text-destructive font-medium' : ''}>
                       {product.track_stock ? (
                         `${product.stock_quantity} ${product.unit}`

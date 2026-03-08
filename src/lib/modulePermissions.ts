@@ -71,7 +71,7 @@ export const moduleDefinitions: ModuleDefinition[] = [
   { key: 'clientes', label: 'Clientes', description: 'Cadastro e histórico de clientes.', defaultRoles: ['admin', 'atendente'] },
   { key: 'aniversariantes', label: 'Aniversariantes', description: 'Aniversariantes do mês.', defaultRoles: ['admin', 'atendente'] },
   { key: 'empresas', label: 'Empresas', description: 'Dados da empresa.', defaultRoles: ['admin'] },
-  { key: 'pagamentos_pix', label: 'Pagamentos PIX', description: 'Configuração de PIX.', defaultRoles: ['admin'] },
+  { key: 'pagamentos_pix', label: 'Pagamentos', description: 'Configuração de pagamentos e PIX.', defaultRoles: ['admin'] },
   { key: 'banners', label: 'Banners', description: 'Gestão de banners.', defaultRoles: ['admin'] },
   { key: 'usuarios', label: 'Usuários', description: 'Gestão de usuários e cargos.', defaultRoles: ['admin'] },
   { key: 'assinatura', label: 'Assinatura', description: 'Plano e assinatura.', defaultRoles: ['admin', 'financeiro'] },

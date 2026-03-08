@@ -1,6 +1,7 @@
 import type {
   CompanyTheme,
   CompanyThemeBorderRadius,
+  CompanyThemeBorderSize,
   CompanyThemeFontFamily,
   CompanyThemeLayoutDensity,
   CompanyThemeMode,
@@ -21,6 +22,7 @@ const THEME_CSS_VARIABLES = [
   '--app-button-soft-hover',
   '--app-button-outline-border',
   '--app-menu-hover',
+  '--app-border-width',
   '--app-card-radius',
   '--app-control-radius',
   '--app-button-radius',
@@ -126,6 +128,12 @@ const RADIUS_PRESETS: Record<
   },
 };
 
+const BORDER_WIDTH_PRESETS: Record<CompanyThemeBorderSize, string> = {
+  thin: '1px',
+  normal: '1.5px',
+  thick: '2px',
+};
+
 const DENSITY_PRESETS: Record<
   CompanyThemeLayoutDensity,
   {
@@ -218,6 +226,7 @@ const DENSITY_PRESETS: Record<
 const defaultThemeValues = {
   theme_mode: 'light' as CompanyThemeMode,
   border_radius: 'medium' as CompanyThemeBorderRadius,
+  border_size: 'normal' as CompanyThemeBorderSize,
   button_style: 'modern' as CompanyTheme['button_style'],
   layout_density: 'normal' as CompanyThemeLayoutDensity,
   font_family: 'Inter' as CompanyThemeFontFamily,
@@ -227,6 +236,8 @@ const defaultLightPalette: CompanyThemePalette = {
   primary_color: '#2563eb',
   secondary_color: '#1e293b',
   background_color: '#f8fafc',
+  card_color: '#ffffff',
+  border_color: '#d9e2ec',
   text_color: '#0f172a',
   button_color: '#2563eb',
   button_hover_color: '#1d4ed8',
@@ -237,10 +248,99 @@ const defaultDarkPalette: CompanyThemePalette = {
   primary_color: '#60a5fa',
   secondary_color: '#0f172a',
   background_color: '#020617',
+  card_color: '#111b2e',
+  border_color: '#22314a',
   text_color: '#f8fafc',
   button_color: '#60a5fa',
   button_hover_color: '#3b82f6',
   menu_hover_color: '#1e293b',
+};
+
+export type CompanyThemeTemplateId = 'blue' | 'green' | 'purple' | 'logo';
+
+export const companyThemeTemplateLabels: Record<CompanyThemeTemplateId, string> = {
+  blue: 'Azul profissional',
+  green: 'Verde moderno',
+  purple: 'Roxo SaaS',
+  logo: 'Baseado na logo',
+};
+
+const COMPANY_THEME_TEMPLATES: Record<
+  Exclude<CompanyThemeTemplateId, 'logo'>,
+  Record<CompanyThemePaletteMode, CompanyThemePalette>
+> = {
+  blue: {
+    light: {
+      primary_color: '#2563eb',
+      secondary_color: '#0f172a',
+      background_color: '#f8fafc',
+      card_color: '#ffffff',
+      border_color: '#dbeafe',
+      text_color: '#0f172a',
+      button_color: '#2563eb',
+      button_hover_color: '#1d4ed8',
+      menu_hover_color: '#dbeafe',
+    },
+    dark: {
+      primary_color: '#60a5fa',
+      secondary_color: '#0f172a',
+      background_color: '#020617',
+      card_color: '#111b2e',
+      border_color: '#1e3a8a',
+      text_color: '#f8fafc',
+      button_color: '#3b82f6',
+      button_hover_color: '#2563eb',
+      menu_hover_color: '#1e3a8a',
+    },
+  },
+  green: {
+    light: {
+      primary_color: '#059669',
+      secondary_color: '#064e3b',
+      background_color: '#f6fffb',
+      card_color: '#ffffff',
+      border_color: '#bbf7d0',
+      text_color: '#052e16',
+      button_color: '#059669',
+      button_hover_color: '#047857',
+      menu_hover_color: '#d1fae5',
+    },
+    dark: {
+      primary_color: '#34d399',
+      secondary_color: '#052e2b',
+      background_color: '#031712',
+      card_color: '#0b221c',
+      border_color: '#14532d',
+      text_color: '#ecfdf5',
+      button_color: '#10b981',
+      button_hover_color: '#059669',
+      menu_hover_color: '#064e3b',
+    },
+  },
+  purple: {
+    light: {
+      primary_color: '#7c3aed',
+      secondary_color: '#312e81',
+      background_color: '#f7f5ff',
+      card_color: '#ffffff',
+      border_color: '#ddd6fe',
+      text_color: '#221a44',
+      button_color: '#7c3aed',
+      button_hover_color: '#6d28d9',
+      menu_hover_color: '#ede9fe',
+    },
+    dark: {
+      primary_color: '#a78bfa',
+      secondary_color: '#1e1b4b',
+      background_color: '#110d22',
+      card_color: '#1b1536',
+      border_color: '#4c1d95',
+      text_color: '#f5f3ff',
+      button_color: '#8b5cf6',
+      button_hover_color: '#7c3aed',
+      menu_hover_color: '#312e81',
+    },
+  },
 };
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
@@ -355,6 +455,8 @@ const buildLegacyPalette = (
     primary_color: normalizeHexColor(source.primary_color, fallback.primary_color),
     secondary_color: normalizeHexColor(source.secondary_color, fallback.secondary_color),
     background_color: normalizeHexColor(source.background_color, fallback.background_color),
+    card_color: normalizeHexColor(source.card_color, fallback.card_color),
+    border_color: normalizeHexColor(source.border_color, fallback.border_color),
     text_color: normalizeHexColor(source.text_color, fallback.text_color),
     button_color: normalizeHexColor(source.button_color, source.primary_color || fallback.button_color),
     button_hover_color: normalizeHexColor(
@@ -375,6 +477,8 @@ export const normalizeCompanyThemePalette = (
     primary_color: normalizeHexColor(source.primary_color, fallbackPalette.primary_color),
     secondary_color: normalizeHexColor(source.secondary_color, fallbackPalette.secondary_color),
     background_color: normalizeHexColor(source.background_color, fallbackPalette.background_color),
+    card_color: normalizeHexColor(source.card_color, fallbackPalette.card_color),
+    border_color: normalizeHexColor(source.border_color, fallbackPalette.border_color),
     text_color: normalizeHexColor(source.text_color, fallbackPalette.text_color),
     button_color: normalizeHexColor(source.button_color, source.primary_color || fallbackPalette.button_color),
     button_hover_color: normalizeHexColor(
@@ -412,6 +516,8 @@ export const setCompanyThemePalette = (
     primary_color: lightPalette.primary_color,
     secondary_color: lightPalette.secondary_color,
     background_color: lightPalette.background_color,
+    card_color: lightPalette.card_color,
+    border_color: lightPalette.border_color,
     text_color: lightPalette.text_color,
     button_color: lightPalette.button_color,
     button_hover_color: lightPalette.button_hover_color,
@@ -429,6 +535,8 @@ export const defaultCompanyTheme = (storeId = ''): CompanyTheme => ({
       primary_color: defaultLightPalette.primary_color,
       secondary_color: defaultLightPalette.secondary_color,
       background_color: defaultLightPalette.background_color,
+      card_color: defaultLightPalette.card_color,
+      border_color: defaultLightPalette.border_color,
       text_color: defaultLightPalette.text_color,
       button_color: defaultLightPalette.button_color,
       button_hover_color: defaultLightPalette.button_hover_color,
@@ -450,6 +558,10 @@ export const normalizeCompanyTheme = (
     source.border_radius === 'small' || source.border_radius === 'large'
       ? source.border_radius
       : 'medium';
+  const borderSize: CompanyThemeBorderSize =
+    source.border_size === 'thin' || source.border_size === 'thick'
+      ? source.border_size
+      : 'normal';
   const buttonStyle: CompanyTheme['button_style'] =
     source.button_style === 'soft' ||
     source.button_style === 'solid' ||
@@ -478,11 +590,14 @@ export const normalizeCompanyTheme = (
     primary_color: lightPalette.primary_color,
     secondary_color: lightPalette.secondary_color,
     background_color: lightPalette.background_color,
+    card_color: lightPalette.card_color,
+    border_color: lightPalette.border_color,
     text_color: lightPalette.text_color,
     button_color: lightPalette.button_color,
     button_hover_color: lightPalette.button_hover_color,
     menu_hover_color: lightPalette.menu_hover_color,
     border_radius: borderRadius,
+    border_size: borderSize,
     button_style: buttonStyle,
     layout_density: layoutDensity,
     font_family: fontFamily,
@@ -504,6 +619,7 @@ export const getCompanyThemeCssVariables = (
   resolvedMode = resolveThemeMode(theme.theme_mode),
 ) => {
   const radius = RADIUS_PRESETS[theme.border_radius];
+  const borderWidth = BORDER_WIDTH_PRESETS[theme.border_size];
   const density = DENSITY_PRESETS[theme.layout_density];
   const isDark = resolvedMode === 'dark';
   const palette = getCompanyThemePalette(theme, resolvedMode);
@@ -519,14 +635,20 @@ export const getCompanyThemeCssVariables = (
     isDark ? mixColors(secondary, '#ffffff', 0.14) : mixColors(primary, '#ffffff', 0.82),
   );
 
-  const card = isDark ? mixColors(background, '#ffffff', 0.08) : mixColors(background, '#ffffff', 0.82);
+  const card = normalizeHexColor(
+    palette.card_color,
+    isDark ? mixColors(background, '#ffffff', 0.08) : mixColors(background, '#ffffff', 0.82),
+  );
   const popover = isDark ? mixColors(background, '#ffffff', 0.06) : mixColors(background, '#ffffff', 0.92);
   const secondarySurface = isDark
     ? mixColors(secondary, background, 0.5)
     : mixColors(secondary, '#ffffff', 0.76);
   const muted = isDark ? mixColors(background, '#ffffff', 0.12) : mixColors(background, '#0f172a', 0.03);
   const mutedForeground = isDark ? mixColors(text, '#ffffff', 0.22) : mixColors(text, '#64748b', 0.38);
-  const border = isDark ? mixColors(background, '#ffffff', 0.18) : mixColors(background, text, 0.12);
+  const border = normalizeHexColor(
+    palette.border_color,
+    isDark ? mixColors(background, '#ffffff', 0.18) : mixColors(background, text, 0.12),
+  );
   const input = isDark ? mixColors(background, '#ffffff', 0.16) : mixColors(background, text, 0.08);
   const accent = normalizeHexColor(theme.menu_hover_color, menuHover);
   const sidebarBackground = isDark
@@ -545,6 +667,7 @@ export const getCompanyThemeCssVariables = (
     '--app-button-soft-hover': isDark ? mixColors(button, background, 0.62) : mixColors(button, '#ffffff', 0.72),
     '--app-button-outline-border': button,
     '--app-menu-hover': menuHover,
+    '--app-border-width': borderWidth,
     '--app-card-radius': radius.card,
     '--app-control-radius': radius.control,
     '--app-button-radius': radius.button,
@@ -659,6 +782,12 @@ export const suggestThemeFromLogoColor = (
     secondary_color: isDark
       ? mixColors(normalizedBase, '#020617', 0.64)
       : mixColors(normalizedBase, '#0f172a', 0.22),
+    card_color: isDark
+      ? mixColors(normalizedBase, '#020617', 0.86)
+      : mixColors(normalizedBase, '#ffffff', 0.93),
+    border_color: isDark
+      ? mixColors(normalizedBase, '#ffffff', 0.14)
+      : mixColors(normalizedBase, '#0f172a', 0.18),
     button_color: normalizedBase,
     button_hover_color: mixColors(normalizedBase, '#000000', 0.12),
     menu_hover_color: isDark
@@ -667,15 +796,64 @@ export const suggestThemeFromLogoColor = (
   };
 };
 
-export const extractDominantColorFromFile = async (file: File) => {
-  const url = URL.createObjectURL(file);
+export const getCompanyThemeTemplatePalette = (
+  templateId: CompanyThemeTemplateId,
+  paletteMode: CompanyThemePaletteMode,
+  options?: {
+    logoBaseColor?: string | null;
+    currentPalette?: Partial<CompanyThemePalette> | null;
+  },
+): CompanyThemePalette => {
+  if (templateId === 'logo') {
+    return suggestThemeFromLogoColor(
+      normalizeHexColor(options?.logoBaseColor, getDefaultPalette(paletteMode).primary_color),
+      paletteMode,
+      options?.currentPalette,
+    );
+  }
+
+  return normalizeCompanyThemePalette(
+    COMPANY_THEME_TEMPLATES[templateId][paletteMode],
+    getDefaultPalette(paletteMode),
+  );
+};
+
+export const applyCompanyThemeTemplate = (
+  theme: CompanyTheme,
+  templateId: CompanyThemeTemplateId,
+  options?: { logoBaseColor?: string | null },
+) => {
+  const normalizedTheme = normalizeCompanyTheme(theme, theme.store_id);
+  const nextLightPalette = getCompanyThemeTemplatePalette(templateId, 'light', {
+    logoBaseColor: options?.logoBaseColor,
+    currentPalette: getCompanyThemePalette(normalizedTheme, 'light'),
+  });
+  const nextDarkPalette = getCompanyThemeTemplatePalette(templateId, 'dark', {
+    logoBaseColor: options?.logoBaseColor,
+    currentPalette: getCompanyThemePalette(normalizedTheme, 'dark'),
+  });
+
+  return setCompanyThemePalette(
+    setCompanyThemePalette(normalizedTheme, 'light', nextLightPalette),
+    'dark',
+    nextDarkPalette,
+  );
+};
+
+const extractDominantColorFromImageSource = async (source: string) => {
+  if (typeof document === 'undefined') {
+    return defaultLightPalette.primary_color;
+  }
 
   try {
     const image = await new Promise<HTMLImageElement>((resolve, reject) => {
       const element = new Image();
       element.onload = () => resolve(element);
       element.onerror = () => reject(new Error('Falha ao carregar a imagem da logo.'));
-      element.src = url;
+      if (/^https?:/i.test(source)) {
+        element.crossOrigin = 'anonymous';
+      }
+      element.src = source;
     });
 
     const canvas = document.createElement('canvas');
@@ -724,6 +902,25 @@ export const extractDominantColorFromFile = async (file: File) => {
       g: green / totalWeight,
       b: blue / totalWeight,
     });
+  } catch (error) {
+    console.error('Erro ao extrair cor dominante da imagem:', error);
+    return defaultLightPalette.primary_color;
+  }
+};
+
+export const extractDominantColorFromImageUrl = async (imageUrl: string) => {
+  if (!imageUrl) {
+    return defaultLightPalette.primary_color;
+  }
+
+  return extractDominantColorFromImageSource(imageUrl);
+};
+
+export const extractDominantColorFromFile = async (file: File) => {
+  const url = URL.createObjectURL(file);
+
+  try {
+    return await extractDominantColorFromImageSource(url);
   } finally {
     URL.revokeObjectURL(url);
   }

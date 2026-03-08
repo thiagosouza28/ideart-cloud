@@ -1,7 +1,9 @@
 import { supabase } from '@/integrations/supabase/client';
 import { formatOrderNumber } from '@/lib/utils';
+import { buildProductProfitabilityRows, buildSoldUnitsMap } from '@/lib/finance';
 import type {
   Customer,
+  Expense,
   ExpenseCategory,
   FinancialEntryOrigin,
   FinancialEntry,
@@ -95,7 +97,15 @@ export type ProductReport = {
   mostSold: Array<{ id: string; name: string; quantity: number; total: number }>;
   leastSold: Array<{ id: string; name: string; quantity: number; total: number }>;
   revenueByProduct: Array<{ id: string; name: string; total: number }>;
-  marginByProduct: Array<{ id: string; name: string; margin: number; marginPct: number }>;
+  marginByProduct: Array<{
+    id: string;
+    name: string;
+    soldUnits: number;
+    salePrice: number;
+    totalCost: number;
+    profit: number;
+    marginPct: number;
+  }>;
   lowTurnover: Array<{ id: string; name: string; quantity: number }>;
 };
 
@@ -116,6 +126,7 @@ type ReportSources = {
   customers: Customer[];
   products: Product[];
   productSupplies: ProductSupply[];
+  expenses: Expense[];
   financialEntries: FinancialEntry[];
   expenseCategories: ExpenseCategory[];
   orderRefsById: Record<string, Pick<Order, 'id' | 'order_number' | 'customer_name'>>;
@@ -775,13 +786,6 @@ const buildCustomerReport = (sources: ReportSources): CustomerReport => {
 };
 
 const buildProductReport = (sources: ReportSources): ProductReport => {
-  const suppliesCostMap = sources.productSupplies.reduce((acc, entry) => {
-    const quantity = Number(entry.quantity || 0);
-    const cost = Number((entry.supply as any)?.cost_per_unit || 0);
-    acc[entry.product_id] = (acc[entry.product_id] || 0) + quantity * cost;
-    return acc;
-  }, {} as Record<string, number>);
-
   const paidOrderIds = new Set(
     sources.orders
       .filter((order) => order.status !== 'orcamento' && order.status !== 'pendente' && order.payment_status === 'pago')
@@ -794,7 +798,15 @@ const buildProductReport = (sources: ReportSources): ProductReport => {
       name: item.product_name,
       quantity: Number(item.quantity),
       total: Number(item.total),
-    }));
+    }))
+    .concat(
+      sources.saleItems.map((item) => ({
+        id: item.product_id || item.product_name,
+        name: item.product_name,
+        quantity: Number(item.quantity),
+        total: Number(item.total),
+      })),
+    );
 
   const grouped = groupBy(items, (row) => row.id as string);
   const productRows = Object.values(grouped).map((rows) => ({
@@ -808,25 +820,38 @@ const buildProductReport = (sources: ReportSources): ProductReport => {
   const leastSold = [...productRows].sort((a, b) => a.quantity - b.quantity).slice(0, 5);
   const revenueByProduct = [...productRows].sort((a, b) => b.total - a.total).slice(0, 10);
 
-  const productMap = sources.products.reduce((acc, product) => {
-    acc[product.id] = product;
+  const profitabilityRows = buildProductProfitabilityRows({
+    products: sources.products,
+    productSupplies: sources.productSupplies,
+    expenses: sources.expenses,
+    soldUnitsByProduct: buildSoldUnitsMap({
+      orderItems: sources.orderItems.filter((item) => paidOrderIds.has(item.order_id)),
+      saleItems: sources.saleItems,
+    }),
+  });
+
+  const profitabilityByProduct = profitabilityRows.reduce((acc, row) => {
+    acc[row.id] = row;
     return acc;
-  }, {} as Record<string, Product>);
+  }, {} as Record<string, (typeof profitabilityRows)[number]>);
 
   const marginByProduct = productRows.map((row) => {
-    const product = productMap[row.id];
-    const baseCost = Number(product?.base_cost || 0) + Number(product?.labor_cost || 0);
-    const wastePct = Number(product?.waste_percentage || 0);
-    const suppliesCost = suppliesCostMap[row.id] || 0;
-    const costWithWaste = (baseCost + suppliesCost) * (1 + wastePct / 100);
-    const costTotal = costWithWaste * row.quantity;
-    const marginValue = row.total - costTotal;
-    const marginPct = row.total > 0 ? (marginValue / row.total) * 100 : 0;
+    const profitability = profitabilityByProduct[row.id];
+    const safeSalePrice = row.quantity > 0 ? row.total / row.quantity : profitability?.salePrice || 0;
+    const safeTotalCost = profitability
+      ? profitability.totalRealCost * row.quantity
+      : 0;
+    const safeProfit = row.total - safeTotalCost;
+    const safeMarginPct = row.total > 0 ? (safeProfit / row.total) * 100 : 0;
+
     return {
       id: row.id,
       name: row.name,
-      margin: marginValue,
-      marginPct,
+      soldUnits: row.quantity,
+      salePrice: safeSalePrice,
+      totalCost: safeTotalCost,
+      profit: safeProfit,
+      marginPct: profitability?.marginPct ?? safeMarginPct,
     };
   });
 
@@ -894,10 +919,11 @@ const loadSources = async (filters: ReportFilters): Promise<ReportSources> => {
     startDate,
     endDate,
   );
+  let expensesQuery = supabase.from('expenses').select('*');
   let categoriesQuery = supabase.from('expense_categories').select('*');
   let productsQuery = supabase
     .from('products')
-    .select('id, name, base_cost, labor_cost, waste_percentage, profit_margin');
+    .select('id, name, base_cost, labor_cost, waste_percentage, profit_margin, expense_percentage, final_price, catalog_price');
 
   const cashPaymentMethod = filters.cashPaymentMethod && filters.cashPaymentMethod !== 'all'
     ? filters.cashPaymentMethod
@@ -916,6 +942,7 @@ const loadSources = async (filters: ReportFilters): Promise<ReportSources> => {
     paymentsQuery = paymentsQuery.eq('company_id', companyId);
     salesQuery = salesQuery.eq('company_id', companyId);
     entriesQuery = entriesQuery.eq('company_id', companyId);
+    expensesQuery = expensesQuery.eq('company_id', companyId);
     categoriesQuery = categoriesQuery.eq('company_id', companyId);
     productsQuery = productsQuery.eq('company_id', companyId);
   }
@@ -940,7 +967,7 @@ const loadSources = async (filters: ReportFilters): Promise<ReportSources> => {
     entriesQuery = entriesQuery.eq('origin', cashOrigin);
   }
 
-  const [orderItemsResult, paymentsResult, salesResult, entriesResult, categoriesResult, productsResult] =
+  const [orderItemsResult, paymentsResult, salesResult, entriesResult, categoriesResult, productsResult, expensesResult] =
     await Promise.all([
       orderIds.length
         ? supabase.from('order_items').select('*').in('order_id', orderIds)
@@ -948,6 +975,7 @@ const loadSources = async (filters: ReportFilters): Promise<ReportSources> => {
       paymentsQuery,
       salesQuery,
       entriesQuery,
+      expensesQuery,
       categoriesQuery,
       productsQuery,
     ]);
@@ -1014,6 +1042,7 @@ const loadSources = async (filters: ReportFilters): Promise<ReportSources> => {
     customers: (customersResult.data as Customer[]) || [],
     products,
     productSupplies: (suppliesResult.data as ProductSupply[]) || [],
+    expenses: (expensesResult.data as Expense[]) || [],
     financialEntries,
     expenseCategories: (categoriesResult.data as ExpenseCategory[]) || [],
     orderRefsById,

@@ -122,6 +122,52 @@ const stripPendingCustomerInfoNotes = (notes?: string | null) => {
   return remainingLines.length > 0 ? remainingLines.join("\n") : null;
 };
 
+const consumeOrderSupplies = async ({
+  supabase,
+  companyId,
+  orderId,
+  userId,
+}: {
+  supabase: ReturnType<typeof getSupabaseClient>;
+  companyId: string;
+  orderId: string;
+  userId: string;
+}) => {
+  const { data: orderItems, error: orderItemsError } = await supabase
+    .from("order_items")
+    .select("product_id, product_name, quantity")
+    .eq("order_id", orderId);
+
+  if (orderItemsError) {
+    throw orderItemsError;
+  }
+
+  const items = (orderItems || [])
+    .map((item) => ({
+      product_id: item.product_id,
+      product_name: item.product_name,
+      quantity: Number(item.quantity || 0),
+    }))
+    .filter((item) => item.product_id && item.quantity > 0);
+
+  if (items.length === 0) {
+    return;
+  }
+
+  const { error: consumeError } = await supabase.rpc("consume_product_supplies", {
+    p_company_id: companyId,
+    p_items: items,
+    p_order_id: orderId,
+    p_sale_id: null,
+    p_user_id: userId,
+    p_origin: "venda_produto",
+  });
+
+  if (consumeError) {
+    throw consumeError;
+  }
+};
+
 const formatStatusLabel = (value: string) => {
   const normalized = value.replace(/_/g, " ");
   return normalized.charAt(0).toUpperCase() + normalized.slice(1);
@@ -481,6 +527,22 @@ Deno.serve(async (req) => {
       return jsonResponse(corsHeaders, 400, {
         error: historyError.message || "Falha ao registrar histórico",
       });
+    }
+
+    if (order.company_id && order.status !== "finalizado" && status === "finalizado") {
+      try {
+        await consumeOrderSupplies({
+          supabase,
+          companyId: order.company_id,
+          orderId,
+          userId,
+        });
+      } catch (consumeError) {
+        const message = consumeError instanceof Error ? consumeError.message : String(consumeError);
+        return jsonResponse(corsHeaders, 400, {
+          error: message || "Falha ao baixar insumos do pedido",
+        });
+      }
     }
 
     if (order.company_id) {
