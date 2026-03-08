@@ -15,7 +15,6 @@
   Layers,
   Crown,
   Building2,
-  LayoutGrid,
   FolderTree,
   Tags,
   Barcode,
@@ -61,24 +60,30 @@ const primaryMenu: MenuItem[] = [
   { title: 'Relatórios', url: '/financeiro/relatorios', icon: BarChart3, roles: ['admin', 'financeiro', 'atendente', 'producao'], moduleKey: 'relatorios' },
 ];
 
-const secondaryMenu: MenuItem[] = [
+const operationsMenu: MenuItem[] = [
   { title: 'PDV', url: '/pdv', icon: ShoppingCart, roles: ['admin', 'caixa'], moduleKey: 'pdv' },
   { title: 'Comprovantes', url: '/comprovantes', icon: FileText, roles: ['admin', 'atendente', 'caixa'], moduleKey: 'comprovantes' },
   { title: 'Kanban de Pedidos', url: '/pedidos/kanban', icon: Kanban, roles: ['admin', 'atendente', 'caixa', 'producao'], moduleKey: 'kanban_pedidos' },
-  { title: 'Catálogo', url: '/catalogo-admin', icon: LayoutGrid, roles: ['admin'], moduleKey: 'catalogo' },
-  { title: 'Produtos', url: '/produtos', icon: Package, roles: ['admin', 'atendente'], moduleKey: 'produtos' },
-  { title: 'Simulador de Preço', url: '/produtos/simulador-preco', icon: Calculator, roles: ['admin', 'atendente'], moduleKey: 'produtos' },
-  { title: 'Etiquetas', url: '/produtos/etiquetas', icon: Barcode, roles: ['admin', 'atendente'], moduleKey: 'etiquetas' },
-  { title: 'Categorias', url: '/categorias', icon: FolderTree, roles: ['admin', 'atendente'], moduleKey: 'categorias' },
   { title: 'Insumos', url: '/insumos', icon: Layers, roles: ['admin', 'atendente'], moduleKey: 'insumos' },
-  { title: 'Atributos', url: '/atributos', icon: Tags, roles: ['admin', 'atendente'], moduleKey: 'atributos' },
   { title: 'Estoque', url: '/estoque', icon: Boxes, roles: ['admin', 'atendente'], moduleKey: 'estoque' },
   { title: 'Clientes', url: '/clientes', icon: Users, roles: ['admin', 'atendente'], moduleKey: 'clientes' },
   { title: 'Aniversariantes do Mês', url: '/clientes/aniversariantes', icon: Gift, roles: ['admin', 'atendente'], moduleKey: 'aniversariantes' },
-  { title: 'Empresas', url: '/empresas', icon: Building2, roles: ['admin'], moduleKey: 'empresas' },
-  { title: 'Pagamentos', url: '/configuracoes/pagamentos', icon: CreditCard, roles: ['admin'], moduleKey: 'pagamentos_pix' },
+  { title: 'Simulador de Preço', url: '/produtos/simulador-preco', icon: Calculator, roles: ['admin', 'atendente'], moduleKey: 'produtos' },
+  { title: 'Etiquetas', url: '/produtos/etiquetas', icon: Barcode, roles: ['admin', 'atendente'], moduleKey: 'etiquetas' },
+];
+
+const catalogMenu: MenuItem[] = [
+  { title: 'Produtos', url: '/produtos', icon: Package, roles: ['admin', 'atendente'], moduleKey: 'produtos' },
+  { title: 'Categorias', url: '/categorias', icon: FolderTree, roles: ['admin', 'atendente'], moduleKey: 'categorias' },
   { title: 'Banners', url: '/banners', icon: ImageIcon, roles: ['admin'], moduleKey: 'banners' },
+  { title: 'Atributos', url: '/atributos', icon: Tags, roles: ['admin', 'atendente'], moduleKey: 'atributos' },
+  { title: 'Configurações do Catálogo', url: '/catalogo/configuracoes', icon: Settings, roles: ['admin'], moduleKey: 'catalogo' },
+];
+
+const settingsMenu: MenuItem[] = [
+  { title: 'Empresa', url: '/configuracoes/empresa', icon: Building2, roles: ['admin'], moduleKey: 'configuracoes' },
   { title: 'Usuários', url: '/usuarios', icon: User, roles: ['admin'], moduleKey: 'usuarios' },
+  { title: 'Pagamentos', url: '/configuracoes/pagamentos', icon: CreditCard, roles: ['admin'], moduleKey: 'pagamentos_pix' },
   { title: 'Assinatura', url: '/assinatura', icon: Crown, roles: ['admin', 'financeiro'], moduleKey: 'assinatura' },
 ];
 
@@ -100,7 +105,9 @@ export function AppSidebar() {
     items.filter((item) => hasPermission(item.roles) && hasModulePermission(item.moduleKey));
   const isSuperAdmin = role === 'super_admin';
   const primaryItems = isSuperAdmin ? [] : filterByRole(primaryMenu);
-  const secondaryItems = isSuperAdmin ? [] : filterByRole(secondaryMenu);
+  const operationItems = isSuperAdmin ? [] : filterByRole(operationsMenu);
+  const catalogItems = isSuperAdmin ? [] : filterByRole(catalogMenu);
+  const settingsItems = isSuperAdmin ? [] : filterByRole(settingsMenu);
   const superAdminItems = filterByRole(superAdminMenu);
 
   const handleSignOut = async () => {
@@ -112,6 +119,8 @@ export function AppSidebar() {
     'min-h-11 h-auto text-sm font-medium text-sidebar-foreground/80 hover:bg-sidebar-accent/70 hover:text-sidebar-foreground data-[active=true]:bg-sidebar-primary data-[active=true]:text-sidebar-primary-foreground [&>span:last-child]:whitespace-normal [&>span:last-child]:overflow-visible [&>span:last-child]:text-clip [&>span:last-child]:leading-tight';
   const neutralNavButtonClass =
     'min-h-11 h-auto text-sm font-medium text-sidebar-foreground/80 hover:bg-sidebar-accent/70 hover:text-sidebar-foreground [&>span:last-child]:whitespace-normal [&>span:last-child]:overflow-visible [&>span:last-child]:text-clip [&>span:last-child]:leading-tight';
+  const isItemActive = (url: string) =>
+    location.pathname === url || location.pathname.startsWith(`${url}/`);
 
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border bg-sidebar">
@@ -142,7 +151,7 @@ export function AppSidebar() {
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton
                     asChild
-                    isActive={location.pathname === item.url}
+                    isActive={isItemActive(item.url)}
                     tooltip={item.title}
                     className={navButtonClass}
                   >
@@ -163,7 +172,42 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {secondaryItems.length > 0 && !isSuperAdmin && (
+        {catalogItems.length > 0 && !isSuperAdmin && (
+          <SidebarGroup className="pt-2">
+            {!collapsed && (
+              <SidebarGroupLabel className="text-[11px] font-semibold tracking-wide text-sidebar-muted">
+                CATÁLOGO
+              </SidebarGroupLabel>
+            )}
+            <SidebarGroupContent>
+              <SidebarMenu className={collapsed ? 'gap-1' : ''}>
+                {catalogItems.map((item) => (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={isItemActive(item.url)}
+                      tooltip={item.title}
+                      className={navButtonClass}
+                    >
+                      <a
+                        href={item.url}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          navigate(item.url);
+                        }}
+                      >
+                        <item.icon className="h-5 w-5" />
+                        {!collapsed && <span>{item.title}</span>}
+                      </a>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
+        {operationItems.length > 0 && !isSuperAdmin && (
           <SidebarGroup className="pt-2">
             {!collapsed && (
               <SidebarGroupLabel className="text-[11px] font-semibold tracking-wide text-sidebar-muted">
@@ -172,11 +216,46 @@ export function AppSidebar() {
             )}
             <SidebarGroupContent>
               <SidebarMenu className={collapsed ? 'gap-1' : ''}>
-                {secondaryItems.map((item) => (
+                {operationItems.map((item) => (
                   <SidebarMenuItem key={item.title}>
                     <SidebarMenuButton
                       asChild
-                      isActive={location.pathname === item.url}
+                      isActive={isItemActive(item.url)}
+                      tooltip={item.title}
+                      className={navButtonClass}
+                    >
+                      <a
+                        href={item.url}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          navigate(item.url);
+                        }}
+                      >
+                        <item.icon className="h-5 w-5" />
+                        {!collapsed && <span>{item.title}</span>}
+                      </a>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
+        {settingsItems.length > 0 && !isSuperAdmin && (
+          <SidebarGroup className="pt-2">
+            {!collapsed && (
+              <SidebarGroupLabel className="text-[11px] font-semibold tracking-wide text-sidebar-muted">
+                CONFIGURAÇÕES
+              </SidebarGroupLabel>
+            )}
+            <SidebarGroupContent>
+              <SidebarMenu className={collapsed ? 'gap-1' : ''}>
+                {settingsItems.map((item) => (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={isItemActive(item.url)}
                       tooltip={item.title}
                       className={navButtonClass}
                     >
@@ -236,27 +315,6 @@ export function AppSidebar() {
 
       <SidebarFooter className="border-t border-sidebar-border px-4 py-4">
         <SidebarMenu className={collapsed ? 'gap-1' : ''}>
-          {!isSuperAdmin && hasModulePermission('configuracoes') && (
-            <SidebarMenuItem>
-              <SidebarMenuButton
-                asChild
-                tooltip="Configurações"
-                className={navButtonClass}
-                isActive={location.pathname === '/configuracoes'}
-              >
-                <a
-                  href="/configuracoes"
-                  onClick={(event) => {
-                    event.preventDefault();
-                    navigate('/configuracoes');
-                  }}
-                >
-                  <Settings className="h-5 w-5" />
-                  {!collapsed && <span>Configurações</span>}
-                </a>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          )}
           <SidebarMenuItem>
             <SidebarMenuButton
               onClick={handleSignOut}

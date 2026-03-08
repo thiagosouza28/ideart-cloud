@@ -141,6 +141,14 @@ const formatCurrency = (value: number | null | undefined) => {
   }).format(value);
 };
 
+const generateCatalogSlug = (value: string) =>
+  value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+
 const isCatalogVisible = (product: CatalogProduct) =>
   Boolean(product.catalog_enabled ?? product.show_in_catalog);
 
@@ -166,9 +174,9 @@ const badgeBaseClass =
   "inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold leading-none";
 
 export default function CatalogManager() {
-  const { profile, company } = useAuth();
+  const { profile, company, refreshCompany } = useAuth();
 
-  const [activeTab, setActiveTab] = useState<TabMode>("products");
+  const activeTab: TabMode = "personalization";
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [filter, setFilter] = useState<ProductFilter>("all");
   const [search, setSearch] = useState("");
@@ -179,12 +187,18 @@ export default function CatalogManager() {
 
   const [settings, setSettings] = useState<CatalogSettingsData>(buildDefaultCatalogSettings());
   const [savingSettings, setSavingSettings] = useState(false);
+  const [catalogSlug, setCatalogSlug] = useState("");
+  const [catalogStatus, setCatalogStatus] = useState(true);
+  const [slugCheckState, setSlugCheckState] = useState<"idle" | "checking" | "available" | "conflict">("idle");
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkRunning, setBulkRunning] = useState(false);
 
   const companyId = profile?.company_id ?? null;
-  const publicCatalogUrl = company?.slug ? `/catalogo/${company.slug}` : null;
+  const normalizedCatalogSlug = generateCatalogSlug(catalogSlug);
+  const publicCatalogUrl = normalizedCatalogSlug ? `/catalogo/${normalizedCatalogSlug}` : null;
+  const publicCatalogAbsoluteUrl =
+    typeof window !== "undefined" && publicCatalogUrl ? `${window.location.origin}${publicCatalogUrl}` : publicCatalogUrl;
 
   const loadProducts = useCallback(async () => {
     if (!companyId) {
@@ -230,6 +244,53 @@ export default function CatalogManager() {
 
     setLoadingSettings(false);
   }, [companyId]);
+
+  useEffect(() => {
+    setCatalogSlug(company?.slug || "");
+    setCatalogStatus(Boolean(company?.is_active));
+  }, [company?.slug, company?.is_active]);
+
+  useEffect(() => {
+    if (!companyId) {
+      setSlugCheckState("idle");
+      return;
+    }
+
+    if (!normalizedCatalogSlug) {
+      setSlugCheckState("idle");
+      return;
+    }
+
+    if (normalizedCatalogSlug === company?.slug) {
+      setSlugCheckState("available");
+      return;
+    }
+
+    let cancelled = false;
+    setSlugCheckState("checking");
+    const timeoutId = window.setTimeout(async () => {
+      const { data, error } = await supabase
+        .from("companies")
+        .select("id")
+        .eq("slug", normalizedCatalogSlug)
+        .neq("id", companyId)
+        .maybeSingle();
+
+      if (cancelled) return;
+
+      if (error) {
+        setSlugCheckState("idle");
+        return;
+      }
+
+      setSlugCheckState(data ? "conflict" : "available");
+    }, 350);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeoutId);
+    };
+  }, [company?.slug, companyId, normalizedCatalogSlug]);
 
   useEffect(() => {
     void loadProducts();
@@ -347,7 +408,44 @@ export default function CatalogManager() {
   const saveSettings = async () => {
     if (!companyId) return;
 
+    const nextSlug = generateCatalogSlug(catalogSlug);
+    if (!nextSlug) {
+      toast.error("Defina uma URL válida para o catálogo.");
+      return;
+    }
+
+    if (slugCheckState === "checking") {
+      toast.error("Aguarde a validação da URL do catálogo.");
+      return;
+    }
+
+    if (slugCheckState === "conflict") {
+      toast.error("Essa URL do catálogo já está em uso.");
+      return;
+    }
+
     setSavingSettings(true);
+
+    if (company?.slug !== nextSlug) {
+      const { data: conflict, error: conflictError } = await supabase
+        .from("companies")
+        .select("id")
+        .eq("slug", nextSlug)
+        .neq("id", companyId)
+        .maybeSingle();
+
+      if (conflictError) {
+        toast.error("Não foi possível validar a URL do catálogo.");
+        setSavingSettings(false);
+        return;
+      }
+
+      if (conflict) {
+        toast.error("Essa URL do catálogo já está em uso.");
+        setSavingSettings(false);
+        return;
+      }
+    }
 
     const payload = normalizeCatalogSettings(
       {
@@ -367,8 +465,24 @@ export default function CatalogManager() {
       return;
     }
 
+    const { error: companyError } = await supabase
+      .from("companies")
+      .update({
+        slug: nextSlug,
+        is_active: catalogStatus,
+      })
+      .eq("id", companyId);
+
+    if (companyError) {
+      toast.error("As configurações do catálogo foram salvas, mas a URL não pôde ser atualizada.");
+      setSavingSettings(false);
+      return;
+    }
+
     setSettings(payload);
-    toast.success("Personalização salva.");
+    setCatalogSlug(nextSlug);
+    await refreshCompany();
+    toast.success("Configurações do catálogo salvas.");
     setSavingSettings(false);
   };
 
@@ -443,8 +557,8 @@ export default function CatalogManager() {
     <div className="page-container text-foreground">
       <div className="page-header">
         <div>
-          <h1 className="page-title">Catálogo</h1>
-          <p className="text-sm text-muted-foreground">Gestão visual dos produtos</p>
+          <h1 className="page-title">Configurações do Catálogo</h1>
+          <p className="text-sm text-muted-foreground">Defina link público, layout, vitrine e apresentação do catálogo.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {publicCatalogUrl && (
@@ -460,31 +574,11 @@ export default function CatalogManager() {
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-card p-1">
-        <button
-          type="button"
-          onClick={() => setActiveTab("products")}
-          className={cn(
-            "rounded-xl px-4 py-2 text-sm font-bold transition-colors",
-            activeTab === "products"
-              ? "bg-primary text-white"
-              : "text-muted-foreground hover:bg-muted/30"
-          )}
-        >
-          Produtos
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab("personalization")}
-          className={cn(
-            "rounded-xl px-4 py-2 text-sm font-bold transition-colors",
-            activeTab === "personalization"
-              ? "bg-primary text-white"
-              : "text-muted-foreground hover:bg-muted/30"
-          )}
-        >
-          Personalização
-        </button>
+      <div className="rounded-2xl border border-border bg-card p-4">
+        <p className="text-sm font-semibold text-foreground">Estrutura separada por contexto</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Dados institucionais ficam em <span className="font-medium text-foreground">Configurações &gt; Empresa</span>. Produtos, categorias, banners e atributos ficam nos módulos próprios do menu lateral. Aqui ficam apenas as configurações públicas do catálogo.
+        </p>
       </div>
 
       {activeTab === "products" && (
@@ -918,6 +1012,85 @@ export default function CatalogManager() {
             </p>
           </div>
 
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_420px] xl:items-start">
+            <div className="space-y-4 rounded-2xl border border-border bg-card p-4">
+              <div>
+                <h3 className="text-lg font-semibold">URL e status do catálogo</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Configure o endereço público e controle se o catálogo da loja fica visível para clientes.
+                </p>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_220px]">
+                <div className="max-w-[720px] space-y-2">
+                  <Label htmlFor="catalog-slug">Slug do catálogo</Label>
+                  <Input
+                    id="catalog-slug"
+                    value={catalogSlug}
+                    onChange={(event) => setCatalogSlug(generateCatalogSlug(event.target.value))}
+                    className="border-border"
+                    placeholder="ex: ideart"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Endereço final: <span className="font-medium text-foreground">/catalogo/{normalizedCatalogSlug || "slug"}</span>
+                  </p>
+                  {slugCheckState === "checking" && (
+                    <p className="text-xs text-muted-foreground">Verificando disponibilidade da URL...</p>
+                  )}
+                  {slugCheckState === "available" && normalizedCatalogSlug && (
+                    <p className="text-xs text-emerald-600">URL do catálogo disponível.</p>
+                  )}
+                  {slugCheckState === "conflict" && (
+                    <p className="text-xs text-destructive">Essa URL do catálogo já está em uso por outra loja.</p>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between rounded-xl border border-border p-3">
+                  <div>
+                    <p className="text-sm font-semibold">Catálogo ativo</p>
+                    <p className="text-xs text-muted-foreground">
+                      {catalogStatus ? "Visível para clientes." : "Oculto para clientes."}
+                    </p>
+                  </div>
+                  <Switch checked={catalogStatus} onCheckedChange={setCatalogStatus} />
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3 rounded-2xl border border-border bg-card p-4">
+              <div>
+                <p className="text-sm font-semibold">Link público do catálogo</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Compartilhe esse endereço com seus clientes.
+                </p>
+              </div>
+              <div className="overflow-x-auto rounded-xl border border-border bg-background p-3">
+                <code className="block whitespace-nowrap text-sm">
+                  {publicCatalogAbsoluteUrl || `${typeof window !== "undefined" ? window.location.origin : ""}/catalogo/slug`}
+                </code>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={!publicCatalogAbsoluteUrl}
+                  onClick={async () => {
+                    if (!publicCatalogAbsoluteUrl) return;
+                    await navigator.clipboard.writeText(publicCatalogAbsoluteUrl);
+                    toast.success("Link do catálogo copiado.");
+                  }}
+                >
+                  Copiar link
+                </Button>
+                {publicCatalogUrl && (
+                  <Button type="button" variant="outline" onClick={() => window.open(publicCatalogUrl, "_blank")}>
+                    Ver catálogo
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+
           <div className="grid gap-4 xl:grid-cols-2">
             <div className="space-y-3 rounded-2xl border border-border bg-card p-4">
               <Label>Título do catálogo</Label>
@@ -1063,7 +1236,16 @@ export default function CatalogManager() {
               />
 
               <div className="flex justify-end pt-2">
-                <Button onClick={saveSettings} disabled={savingSettings || loadingSettings}>
+                <Button
+                  onClick={saveSettings}
+                  disabled={
+                    savingSettings ||
+                    loadingSettings ||
+                    !normalizedCatalogSlug ||
+                    slugCheckState === "checking" ||
+                    slugCheckState === "conflict"
+                  }
+                >
                   {savingSettings ? "Salvando..." : "Salvar personalização"}
                 </Button>
               </div>

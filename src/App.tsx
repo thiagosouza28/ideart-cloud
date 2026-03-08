@@ -40,8 +40,6 @@ const GraphPOSConfirmacao = lazy(() => import("./pages/GraphPOSConfirmacao"));
 const Settings = lazy(() => import("./pages/Settings"));
 const PaymentSettings = lazy(() => import("./pages/PaymentSettings"));
 const UserManagement = lazy(() => import("./pages/UserManagement"));
-const Companies = lazy(() => import("./pages/Companies"));
-const CompanyForm = lazy(() => import("./pages/CompanyForm"));
 const PublicCatalog = lazy(() => import("./pages/PublicCatalog"));
 const PublicStoreExplorer = lazy(() => import("./pages/PublicStoreExplorer"));
 const PublicProductDetails = lazy(() => import("./pages/PublicProductDetails"));
@@ -242,6 +240,11 @@ const App = () => (
 
               <Route
                 path="/catalogo-admin"
+                element={<Navigate to="/catalogo/configuracoes" replace />}
+              />
+
+              <Route
+                path="/catalogo/configuracoes"
                 element={(
                   <ProtectedRoute allowedRoles={["admin"]} moduleKey="catalogo">
                     <AppLayout>{withSuspense(<CatalogManager />)}</AppLayout>
@@ -396,8 +399,8 @@ const App = () => (
               <Route
                 path="/empresas"
                 element={(
-                  <ProtectedRoute allowedRoles={["admin"]} moduleKey="empresas">
-                    <AppLayout>{withSuspense(<Companies />)}</AppLayout>
+                  <ProtectedRoute allowedRoles={["admin"]} moduleKey="configuracoes">
+                    <Navigate to="/configuracoes/empresa" replace />
                   </ProtectedRoute>
                 )}
               />
@@ -405,8 +408,8 @@ const App = () => (
               <Route
                 path="/empresas/nova"
                 element={(
-                  <ProtectedRoute allowedRoles={["admin"]} moduleKey="empresas">
-                    <AppLayout>{withSuspense(<CompanyForm />)}</AppLayout>
+                  <ProtectedRoute allowedRoles={["admin"]} moduleKey="configuracoes">
+                    <Navigate to="/configuracoes/empresa" replace />
                   </ProtectedRoute>
                 )}
               />
@@ -414,14 +417,28 @@ const App = () => (
               <Route
                 path="/empresas/:id/editar"
                 element={(
-                  <ProtectedRoute allowedRoles={["admin"]} moduleKey="empresas">
-                    <AppLayout>{withSuspense(<CompanyForm />)}</AppLayout>
+                  <ProtectedRoute allowedRoles={["admin"]} moduleKey="configuracoes">
+                    <Navigate to="/configuracoes/empresa" replace />
                   </ProtectedRoute>
                 )}
               />
 
               <Route
                 path="/configuracoes"
+                element={<Navigate to="/configuracoes/empresa" replace />}
+              />
+
+              <Route
+                path="/configuracoes/empresa"
+                element={(
+                  <ProtectedRoute allowedRoles={["admin"]} moduleKey="configuracoes">
+                    <AppLayout>{withSuspense(<Settings />)}</AppLayout>
+                  </ProtectedRoute>
+                )}
+              />
+
+              <Route
+                path="/configuracoes/tema"
                 element={(
                   <ProtectedRoute allowedRoles={["admin"]} moduleKey="configuracoes">
                     <AppLayout>{withSuspense(<Settings />)}</AppLayout>

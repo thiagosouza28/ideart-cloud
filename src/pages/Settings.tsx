@@ -1,5 +1,5 @@
 ﻿import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useLayoutEffect } from 'react';
 import {
   Plus,
@@ -12,7 +12,6 @@ import {
   Phone,
   Mail,
   Globe,
-  ExternalLink,
   Copy,
   Check,
   Palette,
@@ -248,6 +247,7 @@ export default function Settings() {
   const { profile, user, hasPermission, refreshCompany } = useAuth();
   const { companyTheme, loadingCompanyTheme, refreshCompanyTheme, setCompanyThemeLocally } = useCompanyTheme();
   const navigate = useNavigate();
+  const location = useLocation();
   const [categories, setCategories] = useState<Category[]>([]);
   const [supplies, setSupplies] = useState<Supply[]>([]);
   const [attributes, setAttributes] = useState<Attribute[]>([]);
@@ -259,8 +259,6 @@ export default function Settings() {
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [signatureFile, setSignatureFile] = useState<File | null>(null);
   const [signaturePreview, setSignaturePreview] = useState<string | null>(null);
-  const [catalogPreviewVisible, setCatalogPreviewVisible] = useState(false);
-  const [catalogPreviewKey, setCatalogPreviewKey] = useState(0);
   const [companyForm, setCompanyForm] = useState({
     name: "",
     description: "",
@@ -324,7 +322,7 @@ export default function Settings() {
   const [savingTheme, setSavingTheme] = useState(false);
   const themeCompanyRef = useRef<string | null>(null);
   // Controla a aba por estado para evitar reload e manter o estado dos formulários.
-  const [activeTab, setActiveTab] = useState<'company' | 'catalog' | 'theme'>('company');
+  const [activeTab, setActiveTab] = useState<'company' | 'theme'>('company');
   const [companySettingsTab, setCompanySettingsTab] = useState<'geral' | 'contato' | 'mensagens' | 'permissoes'>('geral');
 
   // Dialogs
@@ -666,10 +664,12 @@ export default function Settings() {
   }, [hasPendingChanges]);
 
   useEffect(() => {
-    if (activeTab === 'catalog' && hasChanges) {
-      setCatalogPreviewVisible(false);
+    if (location.pathname.includes('/configuracoes/tema')) {
+      setActiveTab('theme');
+      return;
     }
-  }, [activeTab, hasChanges]);
+    setActiveTab('company');
+  }, [location.pathname]);
 
   const autoResizeTextarea = useCallback((textarea: HTMLTextAreaElement | null) => {
     if (!textarea) return;
@@ -874,10 +874,6 @@ export default function Settings() {
         order_status_customization: normalizedStatusCustomization,
         role_module_permissions: normalizedRoleModulePermissions,
       });
-      if (activeTab === 'catalog') {
-        setCatalogPreviewVisible(true);
-        setCatalogPreviewKey((prev) => prev + 1);
-      }
     } catch (error) {
       console.error("Erro:", error);
       toast({ title: "Erro ao salvar", variant: "destructive" });
@@ -1122,11 +1118,10 @@ export default function Settings() {
         <h1 className="page-title">Configurações</h1>
       </div>
 
-      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'company' | 'catalog' | 'theme')}>
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'company' | 'theme')}>
 
         <TabsList>
-          <TabsTrigger value="company" type="button">Dados da Empresa</TabsTrigger>
-          <TabsTrigger value="catalog" type="button">Personalização do Sistema</TabsTrigger>
+          <TabsTrigger value="company" type="button">Empresa</TabsTrigger>
           <TabsTrigger value="theme" type="button">Tema da Empresa</TabsTrigger>
         </TabsList>
 
@@ -1743,54 +1738,6 @@ export default function Settings() {
             </CardContent>
           </Card>
 
-        </TabsContent>
-        <TabsContent value="catalog">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Palette className="h-5 w-5" />
-                Personalização do Sistema
-              </CardTitle>
-              <CardDescription>
-                A personalização do catálogo foi centralizada no módulo Catálogo para não depender mais das configurações gerais da loja.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="rounded-lg border bg-muted/30 p-4">
-                <p className="text-sm font-medium">Gerencie em um único lugar:</p>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  título, descrição, botão principal, contato, exibição de preços, exibição de contato, cores, layout e formas de pagamento do checkout público.
-                </p>
-              </div>
-
-              {company?.slug && (
-                <div className="rounded-lg border bg-background p-4">
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Catálogo público</p>
-                  <code className="mt-2 block truncate text-sm">
-                    {window.location.origin}/catalogo/{company.slug}
-                  </code>
-                </div>
-              )}
-
-              <div className="flex flex-col gap-3 sm:flex-row">
-                <Button type="button" className="gap-2" onClick={() => navigate('/catalogo-admin')}>
-                  <SettingsIcon className="h-4 w-4" />
-                  Abrir módulo Catálogo
-                </Button>
-                {company?.slug && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="gap-2"
-                    onClick={() => window.open(`/catalogo/${company.slug}`, '_blank')}
-                  >
-                    <ExternalLink className="h-4 w-4" />
-                    Ver catálogo público
-                  </Button>
-                )}
-              </div>
-            </CardContent>
-          </Card>
         </TabsContent>
         <TabsContent value="theme">
           <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)]">
