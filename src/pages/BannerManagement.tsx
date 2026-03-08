@@ -40,6 +40,11 @@ import {
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
+import {
+    CATALOG_BANNER_ASPECT_RATIO_CSS,
+    getBannerUploadHint,
+    validateBannerImageFile,
+} from '@/lib/bannerLayout';
 import { ensurePublicStorageUrl } from '@/lib/storage';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -179,6 +184,13 @@ export default function BannerManagement() {
 
         setUploading(true);
         try {
+            const bannerPosition = currentBanner.position || 'catalog';
+            const validationError = await validateBannerImageFile(file, bannerPosition);
+            if (validationError) {
+                toast.error(validationError);
+                return;
+            }
+
             const fileExt = file.name.split('.').pop();
             const fileName = `banners/${profile?.company_id}/${Math.random()}.${fileExt}`;
 
@@ -282,7 +294,8 @@ export default function BannerManagement() {
                         <div className="grid gap-2">
                             <Label>Imagem do Banner *</Label>
                             <div
-                                className="relative aspect-[21/9] border-2 border-dashed rounded-lg overflow-hidden cursor-pointer hover:border-primary/50 transition-colors flex items-center justify-center bg-muted/20"
+                                className="relative cursor-pointer overflow-hidden rounded-lg border-2 border-dashed bg-muted/20 transition-colors hover:border-primary/50"
+                                style={{ aspectRatio: CATALOG_BANNER_ASPECT_RATIO_CSS }}
                                 onClick={() => fileInputRef.current?.click()}
                             >
                                 {currentBanner.image_url ? (
@@ -306,7 +319,7 @@ export default function BannerManagement() {
                                             <>
                                                 <ImageIcon className="h-10 w-10 text-muted-foreground mx-auto mb-2" />
                                                 <p className="text-sm text-muted-foreground">Clique para selecionar</p>
-                                                <p className="text-[10px] text-muted-foreground mt-1">Recomendado: 1200x500px</p>
+                                                <p className="mt-1 text-[10px] text-muted-foreground">Recomendado: 1600x400px</p>
                                             </>
                                         )}
                                     </div>
@@ -320,6 +333,9 @@ export default function BannerManagement() {
                                     disabled={uploading}
                                 />
                             </div>
+                            <p className="text-xs text-muted-foreground">
+                                {getBannerUploadHint(currentBanner.position || 'catalog')}
+                            </p>
                         </div>
 
                         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -469,7 +485,10 @@ export default function BannerManagement() {
                 <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
                     {filteredBanners.map((banner) => (
                         <Card key={banner.id} className="overflow-hidden group">
-                            <div className="relative aspect-[21/9] bg-muted overflow-hidden">
+                            <div
+                                className="relative overflow-hidden bg-muted"
+                                style={{ aspectRatio: CATALOG_BANNER_ASPECT_RATIO_CSS }}
+                            >
                                 <img
                                     src={ensurePublicStorageUrl('product-images', banner.image_url) || ''}
                                     alt={banner.title || 'Banner'}
@@ -537,7 +556,10 @@ export default function BannerManagement() {
                             {filteredBanners.map((banner) => (
                                 <tr key={banner.id} className="border-b last:border-0 hover:bg-muted/30">
                                     <td className="py-3 px-4">
-                                        <div className="w-20 aspect-video rounded overflow-hidden bg-muted">
+                                        <div
+                                            className="w-24 rounded overflow-hidden bg-muted"
+                                            style={{ aspectRatio: CATALOG_BANNER_ASPECT_RATIO_CSS }}
+                                        >
                                             <img
                                                 src={ensurePublicStorageUrl('product-images', banner.image_url) || ''}
                                                 className="w-full h-full object-cover"

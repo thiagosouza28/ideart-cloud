@@ -114,7 +114,7 @@ export default function GraphPOSConfirmacao() {
     const screenWidth = window.screen.availWidth || 1440;
     const screenHeight = window.screen.availHeight || 900;
     const printContent = receiptNode.outerHTML;
-    const features = `popup=yes,noopener=yes,noreferrer=yes,resizable=yes,scrollbars=yes,left=0,top=0,width=${screenWidth},height=${screenHeight}`;
+    const features = `popup=yes,resizable=yes,scrollbars=yes,left=0,top=0,width=${screenWidth},height=${screenHeight}`;
     const printWindow = window.open('', '_blank', features);
     if (!printWindow) return;
 
@@ -122,8 +122,44 @@ export default function GraphPOSConfirmacao() {
       .map((node) => node.outerHTML)
       .join('\n');
 
+    const waitForAssets = () =>
+      Promise.all(
+        Array.from(printWindow.document.images).map(
+          (image) =>
+            new Promise<void>((resolve) => {
+              if (image.complete) {
+                resolve();
+                return;
+              }
+
+              image.addEventListener('load', () => resolve(), { once: true });
+              image.addEventListener('error', () => resolve(), { once: true });
+            }),
+        ),
+      );
+
+    let printTriggered = false;
+
+    const runPrint = async () => {
+      if (printTriggered) return;
+      printTriggered = true;
+
+      try {
+        await waitForAssets();
+        await new Promise((resolve) => window.setTimeout(resolve, 180));
+        printWindow.focus();
+        printWindow.print();
+      } finally {
+        window.setTimeout(() => {
+          printWindow.close();
+        }, 150);
+      }
+    };
+
+    printWindow.document.open();
     printWindow.document.write(`
-      <html>
+      <!doctype html>
+      <html lang="pt-BR">
         <head>
           <title>${config.title}</title>
           ${styles}
@@ -133,6 +169,7 @@ export default function GraphPOSConfirmacao() {
       </html>
     `);
     printWindow.document.close();
+
     printWindow.onload = () => {
       try {
         printWindow.moveTo(0, 0);
@@ -140,10 +177,15 @@ export default function GraphPOSConfirmacao() {
       } catch {
         // Browsers may block move/resize on some environments.
       }
-      printWindow.focus();
-      printWindow.print();
+      void runPrint();
+    };
+    printWindow.onafterprint = () => {
       printWindow.close();
     };
+
+    window.setTimeout(() => {
+      void runPrint();
+    }, 500);
   };
 
   return (

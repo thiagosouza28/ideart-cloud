@@ -568,7 +568,7 @@ export default function OrderForm() {
 
   const filteredProducts = useMemo(() => {
     const text = productSearchTerm.trim().toLowerCase();
-    if (!text) return products.slice(0, 5);
+    if (!text) return [];
     return products
       .filter((product) => {
         const byName = product.name.toLowerCase().includes(text);
@@ -577,6 +577,7 @@ export default function OrderForm() {
       })
       .slice(0, 5);
   }, [productSearchTerm, products]);
+  const shouldShowProductDropdown = productDropdownOpen && productSearchTerm.trim().length > 0;
 
   const stepStates = useMemo(() => {
     const detailsDone = Boolean((customerId || customerName.trim()) && items.length > 0);
@@ -1100,14 +1101,15 @@ export default function OrderForm() {
                       id="product-search"
                       value={productSearchTerm}
                       onChange={(event) => {
-                        setProductSearchTerm(event.target.value);
-                        setProductDropdownOpen(true);
+                        const nextValue = event.target.value;
+                        setProductSearchTerm(nextValue);
+                        setProductDropdownOpen(nextValue.trim().length > 0);
                       }}
                       onFocus={() => {
                         if (productBlurTimerRef.current) {
                           window.clearTimeout(productBlurTimerRef.current);
                         }
-                        setProductDropdownOpen(true);
+                        setProductDropdownOpen(productSearchTerm.trim().length > 0);
                       }}
                       onBlur={() => {
                         productBlurTimerRef.current = window.setTimeout(() => {
@@ -1119,7 +1121,7 @@ export default function OrderForm() {
                     />
                   </div>
 
-                  {productDropdownOpen ? (
+                  {shouldShowProductDropdown ? (
                     <div className="order-dropdown">
                       {filteredProducts.length === 0 ? (
                         <div className="order-dropdown-empty">Nenhum produto encontrado</div>
@@ -1422,21 +1424,21 @@ export default function OrderForm() {
                     className={`order-priority-btn priority-low ${priority === 'baixa' ? 'is-active' : ''}`}
                     onClick={() => setPriority('baixa')}
                   >
-                    ? Baixa
+                    Baixa
                   </button>
                   <button
                     type="button"
                     className={`order-priority-btn priority-normal ${priority === 'normal' ? 'is-active' : ''}`}
                     onClick={() => setPriority('normal')}
                   >
-                    ? Normal
+                    Normal
                   </button>
                   <button
                     type="button"
                     className={`order-priority-btn priority-high ${priority === 'alta' ? 'is-active' : ''}`}
                     onClick={() => setPriority('alta')}
                   >
-                    ? Alta
+                    Alta
                   </button>
                 </div>
               </div>

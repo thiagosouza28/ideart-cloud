@@ -24,18 +24,11 @@ import { useNavigate } from 'react-router-dom';
 import { useConfirm } from '@/components/ui/confirm-dialog';
 import { buildOrderDetailsPath } from '@/lib/orderRouting';
 import { isPendingCustomerInfoOrder, isPublicCatalogPersonalizedOrder } from '@/lib/orderMetadata';
+import {
+  configurableOrderStatuses,
+} from '@/lib/orderStatusConfig';
 
-const statusOrder: OrderStatus[] = [
-  'orcamento',
-  'pendente',
-  'produzindo_arte',
-  'arte_aprovada',
-  'em_producao',
-  'finalizado',
-  'aguardando_retirada',
-  'entregue',
-  'cancelado',
-];
+const statusOrder: OrderStatus[] = [...configurableOrderStatuses];
 
 const statusLabels: Record<OrderStatus, string> = {
   orcamento: 'Orçamento',

@@ -3,6 +3,7 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
   Line,
   LineChart,
   Pie,
@@ -20,7 +21,15 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
-import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
+import { CurrencyInput } from '@/components/ui/currency-input';
+import {
+  ChartContainer,
+  ChartLegend,
+  ChartLegendContent,
+  ChartTooltip,
+  ChartTooltipContent,
+  type ChartConfig,
+} from '@/components/ui/chart';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -97,6 +106,17 @@ const manualOriginOptions: Array<{ value: FinancialEntryOrigin; label: string }>
   { value: 'venda', label: 'Venda' },
   { value: 'assinatura', label: 'Assinatura' },
   { value: 'pdv', label: 'PDV' },
+];
+
+const paymentMethodChartPalette = [
+  '#2563eb',
+  '#16a34a',
+  '#f59e0b',
+  '#7c3aed',
+  '#ef4444',
+  '#06b6d4',
+  '#ec4899',
+  '#84cc16',
 ];
 
 const toDateInput = (date: Date) => date.toISOString().slice(0, 10);
@@ -291,11 +311,24 @@ export default function CashFlow() {
 
   const methodPie = useMemo(
     () =>
-      Object.entries(cashData?.revenueByMethod || {}).map(([name, value]) => ({
+      Object.entries(cashData?.revenueByMethod || {}).map(([name, value], index) => ({
         name,
         value,
+        fill: paymentMethodChartPalette[index % paymentMethodChartPalette.length],
       })),
     [cashData],
+  );
+
+  const paymentMethodChartConfig = useMemo<ChartConfig>(
+    () =>
+      methodPie.reduce((config, item) => {
+        config[item.name] = {
+          label: item.name,
+          color: item.fill,
+        };
+        return config;
+      }, {} as ChartConfig),
+    [methodPie],
   );
 
   const monthlyBars = useMemo(() => cashData?.monthlyComparison || [], [cashData]);
@@ -370,12 +403,20 @@ export default function CashFlow() {
       toast({ title: 'Valor inválido', description: 'Informe um valor maior que zero.', variant: 'destructive' });
       return;
     }
+    if (entryForm.payment_method === 'none') {
+      toast({
+        title: 'Forma de pagamento obrigatória',
+        description: 'Selecione a forma de pagamento do lançamento.',
+        variant: 'destructive',
+      });
+      return;
+    }
 
     const payload: ManualCashEntryPayload = {
       type: entryForm.type,
       origin: entryForm.origin,
       amount,
-      payment_method: entryForm.payment_method === 'none' ? null : entryForm.payment_method,
+      payment_method: entryForm.payment_method,
       description: entryForm.description || null,
       notes: entryForm.notes || null,
       occurred_at: fromDateTimeLocal(entryForm.occurred_at),
@@ -600,7 +641,7 @@ export default function CashFlow() {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Direcao</Label>
+              <Label>Direção</Label>
               <Select
                 value={filters.cashSortOrder || 'desc'}
                 onValueChange={(value) => setFilters((prev) => ({ ...prev, cashSortOrder: value as SortOrder }))}
@@ -722,7 +763,7 @@ export default function CashFlow() {
         </Card>
         <Card>
           <CardContent className="pt-6">
-            <p className="text-sm text-slate-500">Total saidas</p>
+            <p className="text-sm text-slate-500">Total saídas</p>
             <p className="text-2xl font-semibold">{currency(cashData?.summary.totalOut || 0)}</p>
           </CardContent>
         </Card>
@@ -743,13 +784,13 @@ export default function CashFlow() {
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <CardTitle>Evolucao receita vs despesa</CardTitle>
+            <CardTitle>Evolução receita vs despesa</CardTitle>
             <Select value={period} onValueChange={(value) => setPeriod(value as typeof period)}>
               <SelectTrigger className="w-full sm:w-40">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="daily">Diario</SelectItem>
+                <SelectItem value="daily">Diário</SelectItem>
                 <SelectItem value="weekly">Semanal</SelectItem>
                 <SelectItem value="monthly">Mensal</SelectItem>
                 <SelectItem value="annual">Anual</SelectItem>
@@ -785,11 +826,15 @@ export default function CashFlow() {
             <CardTitle>Receita por forma de pagamento</CardTitle>
           </CardHeader>
           <CardContent>
-            <ChartContainer className="h-[280px]" config={{ value: { label: 'Receita', color: '#3b82f6' } }}>
+            <ChartContainer className="h-[280px]" config={paymentMethodChartConfig}>
               <PieChart>
-                <Pie data={methodPie} dataKey="value" nameKey="name" outerRadius={95} innerRadius={45} label />
+                <Pie data={methodPie} dataKey="value" nameKey="name" outerRadius={95} innerRadius={45} label>
+                  {methodPie.map((entry) => (
+                    <Cell key={entry.name} fill={entry.fill} />
+                  ))}
+                </Pie>
                 <ChartTooltip content={<ChartTooltipContent />} />
-                <ChartLegend content={<ChartLegendContent />} />
+                <ChartLegend content={<ChartLegendContent nameKey="name" />} />
               </PieChart>
             </ChartContainer>
           </CardContent>
@@ -948,12 +993,9 @@ export default function CashFlow() {
             </div>
             <div className="space-y-2">
               <Label>Valor</Label>
-              <Input
-                type="number"
-                min="0"
-                step="0.01"
-                value={entryForm.amount}
-                onChange={(e) => setEntryForm((prev) => ({ ...prev, amount: e.target.value }))}
+              <CurrencyInput
+                value={Number(entryForm.amount || 0)}
+                onChange={(value) => setEntryForm((prev) => ({ ...prev, amount: String(value) }))}
                 placeholder="0,00"
               />
             </div>
@@ -964,11 +1006,14 @@ export default function CashFlow() {
                 onValueChange={(value) => setEntryForm((prev) => ({ ...prev, payment_method: value as EntryFormState['payment_method'] }))}
               >
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue placeholder="Selecione" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="none" disabled>
+                    Selecione
+                  </SelectItem>
                   {paymentMethods
-                    .filter((option) => option.value !== 'all')
+                    .filter((option) => option.value !== 'all' && option.value !== 'none')
                     .map((option) => (
                       <SelectItem key={option.value} value={option.value}>
                         {option.label}

@@ -403,6 +403,10 @@ export default function GraphPOSPagamento() {
                       })),
                     });
 
+                    await supabase.rpc('recalculate_product_sales_counts', {
+                      p_company_id: companyId,
+                    });
+
                     setGraphPOSCheckoutState({
                       ...checkout,
                       paymentMethod,

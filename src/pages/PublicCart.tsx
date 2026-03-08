@@ -46,6 +46,7 @@ import {
   type CheckoutPaymentMethodOption,
 } from '@/lib/paymentMethods';
 import { buildSuggestedOrderFileName, sanitizeDisplayFileName } from '@/lib/orderFiles';
+import { trackCatalogEvent } from '@/lib/catalogAnalytics';
 
 const asCurrency = (value: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
@@ -871,6 +872,20 @@ export default function PublicCart() {
       if (!valid) return;
     }
 
+    if (company?.id && currentStep === 0 && targetStep > 0 && cartItems.length > 0) {
+      void trackCatalogEvent({
+        client: user ? customerSupabase : publicSupabase,
+        companyId: company.id,
+        userId: user?.id || null,
+        eventType: 'start_order',
+        metadata: {
+          step: CHECKOUT_STEPS[targetStep]?.key || 'customer',
+          items: cartItems.length,
+          total: orderTotal,
+        },
+      });
+    }
+
     setCurrentStep(targetStep);
   };
 
@@ -1029,6 +1044,19 @@ export default function PublicCart() {
 
     clearPublicCart(company.id);
     setCurrentStep(3);
+    void trackCatalogEvent({
+      client: user ? customerSupabase : publicSupabase,
+      companyId: company.id,
+      userId: user?.id || null,
+      eventType: 'purchase_completed',
+      metadata: {
+        order_id: orderId || null,
+        order_number: resolvedOrderNumber,
+        payment_method: selectedPaymentMethod,
+        total: orderTotal,
+        items: cartItems.length,
+      },
+    });
     toast({
       title: 'Pedido enviado com sucesso',
       description: resolvedOrderNumber ? `Pedido #${resolvedOrderNumber} registrado.` : 'Pedido registrado.',

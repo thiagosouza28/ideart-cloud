@@ -57,6 +57,11 @@ import {
   getSelectableCompanyPaymentMethods,
   type CompanyPaymentMethodConfig,
 } from '@/lib/paymentMethods';
+import {
+  buildOrderStatusCustomization,
+  getOrderStatusBadgeStyle,
+  getOrderStatusLabel,
+} from '@/lib/orderStatusConfig';
 
 const statusConfig: Record<OrderStatus, { label: string; icon: React.ComponentType<any>; color: string; next: OrderStatus[] }> = {
   orcamento: {
@@ -186,6 +191,7 @@ export default function OrderDetails() {
   const [selectedPhoto, setSelectedPhoto] = useState<{ url: string; created_at: string } | null>(null);
   const receiptRef = useRef<HTMLDivElement>(null);
   const paymentReceiptRef = useRef<HTMLDivElement>(null);
+  const autoLinkRequestOrderIdRef = useRef<string | null>(null);
 
   // Status change dialog
   const [statusDialogOpen, setStatusDialogOpen] = useState(false);
@@ -280,6 +286,10 @@ export default function OrderDetails() {
   const companyStatusMessages = useMemo(
     () => resolveOrderStatusMessageTemplates(order?.company?.order_status_message_templates),
     [order?.company?.order_status_message_templates],
+  );
+  const orderStatusCustomization = useMemo(
+    () => buildOrderStatusCustomization(order?.company?.order_status_customization),
+    [order?.company?.order_status_customization],
   );
 
   const getStatusCustomerMessage = (status: OrderStatus) =>
@@ -389,7 +399,7 @@ export default function OrderDetails() {
   };
 
   const getPaymentMethodLabel = (method?: PaymentMethod | null) =>
-    method ? paymentReceiptMethodLabels[method] || String(method) : 'NÃ£o informado';
+    method ? paymentReceiptMethodLabels[method] || String(method) : 'Não informado';
 
   const selectablePaymentMethods = useMemo(
     () =>
@@ -1117,7 +1127,7 @@ const sendWhatsAppMessage = (message: string) => {
     if (!printableOrder || printableOrder.status !== 'entregue') {
       toast({
         title: 'Comprovante indisponível',
-        description: 'O comprovante de entrega so pode ser reimpresso apos o pedido ser entregue.',
+        description: 'O comprovante de entrega só pode ser reimpresso após o pedido ser entregue.',
         variant: 'destructive',
       });
       return;
@@ -1125,8 +1135,8 @@ const sendWhatsAppMessage = (message: string) => {
 
     if (!printableOrder.delivered_at) {
       toast({
-        title: 'Data da entrega indisponÃ­vel',
-        description: 'Nao foi possivel localizar a data registrada da entrega para reimpressao.',
+        title: 'Data da entrega indisponível',
+        description: 'Não foi possível localizar a data registrada da entrega para reimpressão.',
         variant: 'destructive',
       });
       return;
@@ -1171,7 +1181,7 @@ const sendWhatsAppMessage = (message: string) => {
           amount: Number(deliveryPaymentAmount),
           method: deliveryPaymentMethod as PaymentMethod,
           status: 'pago',
-          notes: 'Pagamento registrado na confirmaÃ§Ã£o da entrega.',
+          notes: 'Pagamento registrado na confirmação da entrega.',
           createdBy: user?.id ?? null,
         });
 
@@ -1276,6 +1286,107 @@ const sendWhatsAppMessage = (message: string) => {
     setNotesDraft(orderVisibleNotes);
     setShowNotesOnPdf(order?.show_notes_on_pdf !== false);
   }, [order?.id, order?.show_notes_on_pdf, orderVisibleNotes]);
+
+  useEffect(() => {
+    if (!order?.id) {
+      autoLinkRequestOrderIdRef.current = null;
+      return;
+    }
+
+    if (
+      publicLinkToken ||
+      linkLoading ||
+      autoLinkRequestOrderIdRef.current === order.id
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+    autoLinkRequestOrderIdRef.current = order.id;
+
+    const generatePublicLink = async () => {
+      setLinkLoading(true);
+      try {
+        const token = await getOrCreatePublicLink(order.id);
+        if (!cancelled) {
+          setPublicLinkToken(token);
+        }
+      } catch (error: any) {
+        if (!cancelled) {
+          toast({
+            title: 'Erro ao gerar link do cliente',
+            description: error?.message,
+            variant: 'destructive',
+          });
+        }
+      } finally {
+        if (!cancelled) {
+          setLinkLoading(false);
+        }
+      }
+    };
+
+    void generatePublicLink();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [linkLoading, order?.id, publicLinkToken, toast]);
+
+  useEffect(() => {
+    if (!order?.id) return;
+
+    let cancelled = false;
+
+    const syncPublicLinkToken = async () => {
+      const { data, error } = await supabase
+        .from('order_public_links')
+        .select('token')
+        .eq('order_id', order.id)
+        .maybeSingle();
+
+      if (!cancelled && !error && data?.token) {
+        setPublicLinkToken(data.token);
+        setLinkLoading(false);
+      }
+    };
+
+    const channel = supabase
+      .channel(`order-public-link-${order.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'order_public_links',
+          filter: `order_id=eq.${order.id}`,
+        },
+        (payload) => {
+          const nextToken =
+            (payload.new as { token?: string | null } | null)?.token ||
+            (payload.old as { token?: string | null } | null)?.token ||
+            null;
+
+          if (nextToken) {
+            setPublicLinkToken(nextToken);
+            setLinkLoading(false);
+            return;
+          }
+
+          void syncPublicLinkToken();
+        },
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          void syncPublicLinkToken();
+        }
+      });
+
+    return () => {
+      cancelled = true;
+      supabase.removeChannel(channel);
+    };
+  }, [order?.id]);
 
   const fetchOrder = async (targetOrderId: string | null = orderId) => {
     if (!targetOrderId) return;
@@ -1409,6 +1520,7 @@ const sendWhatsAppMessage = (message: string) => {
   const ensurePublicLink = async () => {
     if (!order) return null;
     if (publicLinkToken) return publicLinkToken;
+    autoLinkRequestOrderIdRef.current = order.id;
     setLinkLoading(true);
     try {
       const token = await getOrCreatePublicLink(order.id);
@@ -1882,7 +1994,7 @@ const sendWhatsAppMessage = (message: string) => {
     setPaymentActionType('delete');
     try {
       await deleteOrderPayment(order.id, paymentId);
-      toast({ title: 'Pagamento excluido' });
+      toast({ title: 'Pagamento excluído' });
       fetchOrder();
     } catch (error: any) {
       toast({ title: 'Erro ao excluir pagamento', description: error?.message, variant: 'destructive' });
@@ -1950,6 +2062,8 @@ const sendWhatsAppMessage = (message: string) => {
 
   const config = statusConfig[order.status];
   const StatusIcon = config.icon;
+  const currentStatusLabel = getOrderStatusLabel(order.status, orderStatusCustomization);
+  const currentStatusBadgeStyle = getOrderStatusBadgeStyle(order.status, orderStatusCustomization);
   const canSendWhatsApp = Boolean(order?.customer?.phone);
   const canManageDelivery =
     ['pronto', 'finalizado', 'aguardando_retirada', 'entregue'].includes(order.status) &&
@@ -1977,7 +2091,7 @@ const sendWhatsAppMessage = (message: string) => {
       ? copiedLink === 'public'
         ? 'Copiado'
         : 'Copiar'
-      : 'Gerar link';
+      : 'Tentar novamente';
   const messageLabel = linkLoading
     ? 'Gerando...'
     : copiedLink === 'message'
@@ -2031,9 +2145,9 @@ const sendWhatsAppMessage = (message: string) => {
           <div>
             <h1 className="page-title flex flex-wrap items-center gap-2 sm:gap-3">
               Pedido #{formatOrderNumber(order.order_number)}
-              <span className={`status-badge ${config.color}`}>
+              <span className="status-badge" style={currentStatusBadgeStyle}>
                 <StatusIcon className="h-4 w-4 mr-1" />
-                {config.label}
+                {currentStatusLabel}
               </span>
               {artIndicator && (
                 <span className={`status-badge ${artIndicator.color}`}>
@@ -2042,7 +2156,7 @@ const sendWhatsAppMessage = (message: string) => {
               )}
               {pendingCustomerInfo && (
                 <span className="status-badge bg-slate-100 text-slate-700">
-                  Aguardando informacoes do cliente
+                  Aguardando informações do cliente
                 </span>
               )}
               {personalizedOrder && (
@@ -2115,7 +2229,7 @@ const sendWhatsAppMessage = (message: string) => {
               <Input
                 readOnly
                 value={publicLink}
-                placeholder="Clique em gerar para criar o link"
+                placeholder={linkLoading ? 'Gerando link automaticamente...' : 'Link indisponível no momento'}
               />
               <Button
                 variant="outline"
@@ -2223,7 +2337,7 @@ const sendWhatsAppMessage = (message: string) => {
                   </Button>
                   <Button size="sm" onClick={handleSaveItems} disabled={savingItems} className="w-full sm:w-auto">
                     {savingItems && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Salvar altera??es
+                    Salvar alterações
                   </Button>
                 </div>
               )}
@@ -2235,7 +2349,7 @@ const sendWhatsAppMessage = (message: string) => {
                   <TableRow>
                     <TableHead>Produto</TableHead>
                     <TableHead className="text-center">Qtd</TableHead>
-                    <TableHead className="text-right">Pre??o Unit.</TableHead>
+                    <TableHead className="text-right">Preço Unit.</TableHead>
                     <TableHead className="text-right">Total</TableHead>
                     {isEditingItems && <TableHead className="text-right">Açãoes</TableHead>}
                   </TableRow>
@@ -2637,13 +2751,19 @@ const sendWhatsAppMessage = (message: string) => {
                   {history.map((h, index) => {
                     const statusConf = statusConfig[h.status];
                     const Icon = statusConf.icon;
+                    const historyStatusBadgeStyle = getOrderStatusBadgeStyle(h.status, orderStatusCustomization);
                     return (
                       <div key={h.id} className="relative flex gap-4">
-                        <div className={`relative z-10 flex h-7 w-7 items-center justify-center rounded-full ${statusConf.color}`}>
+                        <div
+                          className="relative z-10 flex h-7 w-7 items-center justify-center rounded-full border"
+                          style={historyStatusBadgeStyle}
+                        >
                           <Icon className="h-4 w-4" />
                         </div>
                         <div className="flex-1 pb-4">
-                          <p className="font-medium text-sm">{statusConf.label}</p>
+                          <p className="font-medium text-sm">
+                            {getOrderStatusLabel(h.status, orderStatusCustomization)}
+                          </p>
                           <p className="text-xs text-muted-foreground">
                             {formatDate(h.created_at)}
                           </p>
@@ -3108,7 +3228,7 @@ const sendWhatsAppMessage = (message: string) => {
                             const Icon = statusConfig[status].icon;
                             return <Icon className="h-4 w-4" />;
                           })()}
-                          {statusConfig[status].label}
+                          {getOrderStatusLabel(status, orderStatusCustomization)}
                         </div>
                       </SelectItem>
                     ))}

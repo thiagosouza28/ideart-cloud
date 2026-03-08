@@ -73,7 +73,7 @@ export function AppLayout({ children }: AppLayoutProps) {
     .toUpperCase();
 
   const {
-    unreadOrdersCount,
+    unreadNotificationsCount,
     notifications,
     isLoadingNotifications,
     isUpdatingNotifications,
@@ -85,7 +85,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   } = useOrderNotifications();
   const { summary: expenseAlertsSummary, loading: loadingExpenseAlerts, refreshExpenseAlerts } =
     useExpenseAlerts();
-  const totalHeaderAlerts = unreadOrdersCount + expenseAlertsSummary.total;
+  const totalHeaderAlerts = unreadNotificationsCount + expenseAlertsSummary.total;
 
   useEffect(() => {
     refreshCompany();
@@ -300,9 +300,9 @@ export function AppLayout({ children }: AppLayoutProps) {
                     )}
                   </button>
                 </PopoverTrigger>
-                <PopoverContent align="end" className="w-[min(92vw,420px)] p-0">
-                  <div className="flex max-h-[min(78vh,34rem)] flex-col">
-                    <div className="border-b border-border px-4 py-3">
+                <PopoverContent align="end" className="w-[min(92vw,420px)] overflow-hidden p-0">
+                  <div className="flex h-[min(78vh,34rem)] max-h-[min(78vh,34rem)] flex-col overflow-hidden">
+                    <div className="shrink-0 border-b border-border px-4 py-3">
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <p className="text-sm font-semibold text-foreground">Alertas e notificacoes</p>
@@ -317,7 +317,7 @@ export function AppLayout({ children }: AppLayoutProps) {
                           type="button"
                           variant="outline"
                           size="sm"
-                          disabled={unreadOrdersCount === 0 || isUpdatingNotifications}
+                          disabled={unreadNotificationsCount === 0 || isUpdatingNotifications}
                           onClick={() => void markUnreadOrdersAsRead()}
                         >
                           {isUpdatingNotifications ? (

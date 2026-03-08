@@ -31,7 +31,7 @@ export interface CatalogChromeCompany {
 }
 
 const getInitials = (value?: string | null) => {
-  const safe = (value || 'Catalogo').trim();
+  const safe = (value || 'Catálogo').trim();
   if (!safe) return 'C';
   const parts = safe.split(/\s+/).filter(Boolean);
   if (parts.length === 1) return parts[0].slice(0, 1).toUpperCase();
@@ -150,9 +150,9 @@ export function CatalogTopNav({
   accountLabel = 'Minha conta',
   showContact = false,
 }: CatalogTopNavProps) {
-  const brandName = company?.name || 'Catalogo';
+  const brandName = company?.name || 'Catálogo';
   const brandLogoUrl = resolveLogoUrl(company?.logo_url);
-  const brandSub = subtitle || [company?.city, company?.state].filter(Boolean).join(', ') || 'Catalogo publico';
+  const brandSub = subtitle || [company?.city, company?.state].filter(Boolean).join(', ') || 'Catálogo público';
   const hasContact = Boolean(company?.catalog_contact_url || company?.whatsapp);
   const theme = resolveCatalogTheme(company);
   const headerStyle: CSSProperties = {
@@ -317,9 +317,9 @@ export function CatalogFooter({
   accountHref = '/minha-conta/pedidos',
   accountLabel = 'Minha conta',
 }: CatalogFooterProps) {
-  const brandName = company?.name || 'Catalogo';
+  const brandName = company?.name || 'Catálogo';
   const brandLogoUrl = resolveLogoUrl(company?.logo_url);
-  const brandSub = [company?.city, company?.state].filter(Boolean).join(', ') || 'Catalogo publico';
+  const brandSub = [company?.city, company?.state].filter(Boolean).join(', ') || 'Catálogo público';
   const hasContact = Boolean(company?.catalog_contact_url || company?.whatsapp);
   const catalogPath = resolveCatalogPath(company);
   const theme = resolveCatalogTheme(company);

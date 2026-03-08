@@ -337,7 +337,7 @@ Deno.serve(async (req) => {
 
       const { data: order, error: orderError } = await supabase
         .from("orders")
-        .select("id, status, payment_status, deleted_at, notes")
+        .select("id, order_number, company_id, status, payment_status, deleted_at, notes")
         .eq("id", orderId)
         .single();
 
@@ -395,6 +395,24 @@ Deno.serve(async (req) => {
         return jsonResponse(corsHeaders, 400, {
           error: historyError.message || "Falha ao registrar histórico",
         });
+      }
+
+      if (order.company_id) {
+        const { error: notifyError } = await supabase
+          .from("order_notifications")
+          .insert({
+            company_id: order.company_id,
+            order_id: orderId,
+            type: "status_change",
+            title: `Pedido #${order.order_number}`,
+            body: "Status alterado para: Cancelado",
+          });
+
+        if (notifyError) {
+          return jsonResponse(corsHeaders, 400, {
+            error: notifyError.message || "Falha ao notificar cancelamento",
+          });
+        }
       }
 
       return jsonResponse(corsHeaders, 200, { order: updatedOrder });

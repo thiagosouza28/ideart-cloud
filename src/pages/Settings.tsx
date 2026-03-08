@@ -86,6 +86,7 @@ import {
   buildOrderStatusCustomization,
   configurableOrderStatuses,
   defaultOrderStatusLabels,
+  getOrderStatusBadgeStyle,
 } from '@/lib/orderStatusConfig';
 import {
   AppModuleKey,
@@ -1558,6 +1559,42 @@ export default function Settings() {
                             }
                             placeholder={defaultOrderStatusLabels[status]}
                           />
+                          <div className="grid gap-2 sm:grid-cols-[96px,1fr]">
+                            <div className="space-y-1">
+                              <Label htmlFor={`status-color-${status}`} className="text-xs text-muted-foreground">
+                                Cor
+                              </Label>
+                              <input
+                                id={`status-color-${status}`}
+                                type="color"
+                                value={companyForm.order_status_customization.colors[status]}
+                                onChange={(event) =>
+                                  setCompanyForm((prev) => ({
+                                    ...prev,
+                                    order_status_customization: {
+                                      ...prev.order_status_customization,
+                                      colors: {
+                                        ...prev.order_status_customization.colors,
+                                        [status]: event.target.value,
+                                      },
+                                    },
+                                  }))
+                                }
+                                className="h-10 w-full cursor-pointer rounded-md border border-border bg-background p-1"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs text-muted-foreground">Preview</Label>
+                              <div className="flex min-h-10 items-center">
+                                <span
+                                  className="status-badge"
+                                  style={getOrderStatusBadgeStyle(status, companyForm.order_status_customization)}
+                                >
+                                  {companyForm.order_status_customization.labels[status] || defaultOrderStatusLabels[status]}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
                         </div>
                       );
                     })}

@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
+import { CurrencyInput } from '@/components/ui/currency-input';
 import {
   buildExpenseAlertSummary,
   getExpenseAmount,
@@ -80,7 +81,7 @@ const currency = (value: number) =>
 
 const typeLabels: Record<ExpenseType, string> = {
   recorrente: 'Recorrente',
-  nao_recorrente: 'Nao recorrente',
+  nao_recorrente: 'Não recorrente',
 };
 
 const dueStatusLabels: Record<ExpenseDueStatus, string> = {
@@ -163,7 +164,7 @@ export default function Expenses() {
     } catch (error: any) {
       toast({
         title: 'Erro ao carregar despesas',
-        description: error?.message || 'Nao foi possivel carregar as despesas.',
+        description: error?.message || 'Não foi possível carregar as despesas.',
         variant: 'destructive',
       });
     } finally {
@@ -314,7 +315,7 @@ export default function Expenses() {
     }
 
     if (form.expense_type === 'nao_recorrente' && (form.amount <= 0 || !form.expense_date)) {
-      toast({ title: 'Informe o valor e a data da despesa nao recorrente', variant: 'destructive' });
+      toast({ title: 'Informe o valor e a data da despesa não recorrente', variant: 'destructive' });
       return;
     }
 
@@ -351,7 +352,7 @@ export default function Expenses() {
     } catch (error: any) {
       toast({
         title: 'Erro ao salvar despesa',
-        description: error?.message || 'Nao foi possivel salvar a despesa.',
+        description: error?.message || 'Não foi possível salvar a despesa.',
         variant: 'destructive',
       });
     } finally {
@@ -368,7 +369,7 @@ export default function Expenses() {
     } catch (error: any) {
       toast({
         title: 'Erro ao remover despesa',
-        description: error?.message || 'Nao foi possivel remover a despesa.',
+        description: error?.message || 'Não foi possível remover a despesa.',
         variant: 'destructive',
       });
     }
@@ -404,7 +405,7 @@ export default function Expenses() {
     } catch (error: any) {
       toast({
         title: 'Erro ao pagar despesa',
-        description: error?.message || 'Nao foi possivel registrar o pagamento da despesa.',
+        description: error?.message || 'Não foi possível registrar o pagamento da despesa.',
         variant: 'destructive',
       });
     } finally {
@@ -418,7 +419,7 @@ export default function Expenses() {
         <div>
           <h1 className="page-title">Despesas</h1>
           <p className="text-muted-foreground">
-            Gerencie despesas recorrentes, variaveis, vencimentos e rateio no custo dos produtos.
+            Gerencie despesas recorrentes, variáveis, vencimentos e rateio no custo dos produtos.
           </p>
         </div>
         <Button onClick={openCreateDialog}>
@@ -436,9 +437,9 @@ export default function Expenses() {
                 <span className="text-sm font-semibold">Alertas financeiros ativos</span>
               </div>
               <p className="text-sm text-amber-800">
-                {alertSummary.dueSoon > 0 ? `${alertSummary.dueSoon} conta(s) vencendo nos proximos 5 dias.` : ''}
+                {alertSummary.dueSoon > 0 ? `${alertSummary.dueSoon} conta(s) vencendo nos próximos 5 dias.` : ''}
                 {alertSummary.dueSoon > 0 && alertSummary.overdue > 0 ? ' ' : ''}
-                {alertSummary.overdue > 0 ? `${alertSummary.overdue} conta(s) estao vencidas.` : ''}
+                {alertSummary.overdue > 0 ? `${alertSummary.overdue} conta(s) estão vencidas.` : ''}
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -469,9 +470,9 @@ export default function Expenses() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <Wallet className="h-4 w-4" />
-              Variaveis no mes
+              Variáveis no mês
             </CardTitle>
-            <CardDescription>Total lancado no mes atual.</CardDescription>
+            <CardDescription>Total lançado no mês atual.</CardDescription>
           </CardHeader>
           <CardContent className="text-2xl font-semibold">{currency(variableMonthTotal)}</CardContent>
         </Card>
@@ -479,7 +480,7 @@ export default function Expenses() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Aplicadas no custo</CardTitle>
-            <CardDescription>Despesas recorrentes marcadas para calculo de produto.</CardDescription>
+            <CardDescription>Despesas recorrentes marcadas para cálculo de produto.</CardDescription>
           </CardHeader>
           <CardContent className="text-2xl font-semibold">{appliedCostCount}</CardContent>
         </Card>
@@ -490,7 +491,7 @@ export default function Expenses() {
               <Clock3 className="h-4 w-4" />
               Vencendo
             </CardTitle>
-            <CardDescription>Contas que vencem em ate 5 dias.</CardDescription>
+            <CardDescription>Contas que vencem em até 5 dias.</CardDescription>
           </CardHeader>
           <CardContent className="text-2xl font-semibold text-amber-600">{alertSummary.dueSoon}</CardContent>
         </Card>
@@ -501,7 +502,7 @@ export default function Expenses() {
               <CheckCircle2 className="h-4 w-4" />
               Vencidas
             </CardTitle>
-            <CardDescription>Contas ja fora do prazo.</CardDescription>
+            <CardDescription>Contas já fora do prazo.</CardDescription>
           </CardHeader>
           <CardContent className="text-2xl font-semibold text-red-600">{alertSummary.overdue}</CardContent>
         </Card>
@@ -513,7 +514,7 @@ export default function Expenses() {
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-[minmax(0,1.4fr)_220px_220px]">
           <Input
-            placeholder="Buscar por nome, categoria ou descricao"
+            placeholder="Buscar por nome, categoria ou descrição"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
           />
@@ -524,7 +525,7 @@ export default function Expenses() {
             <SelectContent>
               <SelectItem value="all">Todos os tipos</SelectItem>
               <SelectItem value="recorrente">Recorrente</SelectItem>
-              <SelectItem value="nao_recorrente">Nao recorrente</SelectItem>
+              <SelectItem value="nao_recorrente">Não recorrente</SelectItem>
             </SelectContent>
           </Select>
           <Select value={filterStatus} onValueChange={(value) => setFilterStatus(value as 'all' | ExpenseStatus)}>
@@ -564,7 +565,7 @@ export default function Expenses() {
                   <TableHead>Vencimento</TableHead>
                   <TableHead>Alerta</TableHead>
                   <TableHead>Rateio</TableHead>
-                  <TableHead className="text-right">Acoes</TableHead>
+                  <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -588,7 +589,7 @@ export default function Expenses() {
                         <TableCell>{expense.category || '-'}</TableCell>
                         <TableCell>
                           {expense.expense_type === 'recorrente'
-                            ? `${currency(getExpenseAmount(expense))}/mes`
+                            ? `${currency(getExpenseAmount(expense))}/mês`
                             : currency(getExpenseAmount(expense))}
                         </TableCell>
                         <TableCell>
@@ -645,7 +646,7 @@ export default function Expenses() {
           <DialogHeader>
             <DialogTitle>{form.id ? 'Editar despesa' : 'Nova despesa'}</DialogTitle>
             <DialogDescription>
-              Configure despesas fixas e variaveis, com vencimento e rateio no custo.
+              Configure despesas fixas e variáveis, com vencimento e rateio no custo.
             </DialogDescription>
           </DialogHeader>
 
@@ -667,7 +668,7 @@ export default function Expenses() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="recorrente">Recorrente (fixa)</SelectItem>
-                  <SelectItem value="nao_recorrente">Nao recorrente (variavel)</SelectItem>
+                  <SelectItem value="nao_recorrente">Não recorrente (variável)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -710,12 +711,9 @@ export default function Expenses() {
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
                 <Label>Valor mensal (R$)</Label>
-                <Input
-                  type="number"
-                  min="0"
-                  step="0.01"
+                <CurrencyInput
                   value={form.monthly_amount}
-                  onChange={(event) => setForm((prev) => ({ ...prev, monthly_amount: Number(event.target.value || 0) }))}
+                  onChange={(value) => setForm((prev) => ({ ...prev, monthly_amount: value }))}
                 />
               </div>
               <div className="space-y-2">
@@ -733,7 +731,7 @@ export default function Expenses() {
                 <div>
                   <p className="text-sm font-medium">Participa do custo do produto</p>
                   <p className="text-xs text-muted-foreground">
-                    Use para despesas fixas que devem entrar nas analises de precificacao.
+                    Use para despesas fixas que devem entrar nas análises de precificação.
                   </p>
                 </div>
                 <Switch
@@ -744,7 +742,7 @@ export default function Expenses() {
 
               {form.apply_to_product_cost && (
                 <div className="space-y-2 md:col-span-2">
-                  <Label>Metodo de rateio</Label>
+                  <Label>Método de rateio</Label>
                   <Select
                     value={form.allocation_method}
                     onValueChange={(value) =>
@@ -766,16 +764,13 @@ export default function Expenses() {
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
                 <Label>Valor (R$)</Label>
-                <Input
-                  type="number"
-                  min="0"
-                  step="0.01"
+                <CurrencyInput
                   value={form.amount}
-                  onChange={(event) => setForm((prev) => ({ ...prev, amount: Number(event.target.value || 0) }))}
+                  onChange={(value) => setForm((prev) => ({ ...prev, amount: value }))}
                 />
               </div>
               <div className="space-y-2">
-                <Label>Data de lancamento</Label>
+                <Label>Data de lançamento</Label>
                 <Input
                   type="date"
                   value={form.expense_date}
@@ -794,7 +789,7 @@ export default function Expenses() {
           )}
 
           <div className="space-y-2">
-            <Label>Descricao</Label>
+            <Label>Descrição</Label>
             <Textarea
               rows={3}
               value={form.description}
@@ -826,7 +821,7 @@ export default function Expenses() {
           <DialogHeader>
             <DialogTitle>Pagar despesa</DialogTitle>
             <DialogDescription>
-              Registre o pagamento e lance a saida automaticamente no fluxo de caixa.
+              Registre o pagamento e lance a saída automaticamente no fluxo de caixa.
             </DialogDescription>
           </DialogHeader>
 
@@ -841,15 +836,12 @@ export default function Expenses() {
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
                 <Label>Valor pago</Label>
-                <Input
-                  type="number"
-                  min="0"
-                  step="0.01"
+                <CurrencyInput
                   value={paymentForm.amount}
-                  onChange={(event) =>
+                  onChange={(value) =>
                     setPaymentForm((prev) => ({
                       ...prev,
-                      amount: Number(event.target.value || 0),
+                      amount: value,
                     }))
                   }
                 />
@@ -895,7 +887,7 @@ export default function Expenses() {
             </div>
 
             <div className="space-y-2">
-              <Label>Observacao</Label>
+              <Label>Observação</Label>
               <Textarea
                 rows={3}
                 value={paymentForm.notes}

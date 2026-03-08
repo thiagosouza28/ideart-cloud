@@ -51,6 +51,38 @@ export const useExpenseAlerts = () => {
     void refreshExpenseAlerts();
   }, [refreshExpenseAlerts]);
 
+  useEffect(() => {
+    if (!profile?.company_id) {
+      setExpenses([]);
+      setSummary({ total: 0, dueSoon: 0, overdue: 0, items: [] });
+      return;
+    }
+
+    const channel = supabase
+      .channel(`expense-alerts-${profile.company_id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'expenses',
+          filter: `company_id=eq.${profile.company_id}`,
+        },
+        () => {
+          void refreshExpenseAlerts();
+        },
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          void refreshExpenseAlerts();
+        }
+      });
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [profile?.company_id, refreshExpenseAlerts]);
+
   return {
     expenses,
     summary,

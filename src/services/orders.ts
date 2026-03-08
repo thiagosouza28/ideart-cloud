@@ -57,6 +57,30 @@ const formatOrderReference = (orderNumber: number | string | null | undefined) =
   return `#${formatted || '00000'}`;
 };
 
+const createOrderNotification = async ({
+  companyId,
+  orderId,
+  type,
+  title,
+  body,
+}: {
+  companyId?: string | null;
+  orderId: string;
+  type: string;
+  title: string;
+  body: string;
+}) => {
+  if (!companyId) return;
+
+  await supabase.from('order_notifications').insert({
+    company_id: companyId,
+    order_id: orderId,
+    type,
+    title,
+    body,
+  });
+};
+
 const fetchUserRole = async (userId?: string | null) => {
   let resolvedUserId = userId || null;
 
@@ -819,6 +843,10 @@ export const updateOrderStatus = async ({
         quantity: Number(item.quantity || 0),
       })),
     });
+
+    await supabase.rpc('recalculate_product_sales_counts', {
+      p_company_id: order.company_id,
+    });
   }
 
   if (entrada && entrada > 0) {
@@ -832,15 +860,13 @@ export const updateOrderStatus = async ({
     });
   }
 
-  if (order.company_id) {
-    await supabase.from('order_notifications').insert({
-      company_id: order.company_id,
-      order_id: orderId,
-      type: 'status_change',
-      title: `Pedido ${formatOrderReference(order.order_number)}`,
-      body: `Status alterado para: ${statusLabels[status]}`,
-    });
-  }
+  await createOrderNotification({
+    companyId: order.company_id,
+    orderId,
+    type: 'status_change',
+    title: `Pedido ${formatOrderReference(order.order_number)}`,
+    body: `Status alterado para: ${statusLabels[status]}`,
+  });
 
   return updatedOrder || null;
 };
@@ -866,7 +892,7 @@ export const cancelOrder = async ({
 
   const { data: existingOrder, error: existingOrderError } = await supabase
     .from('orders')
-    .select('status, notes')
+    .select('id, order_number, company_id, status, notes')
     .eq('id', orderId)
     .single();
 
@@ -892,6 +918,29 @@ export const cancelOrder = async ({
   if (error || !data) {
     throw error || new Error('Falha ao cancelar pedido');
   }
+
+  const historyNotes = motivo ? `Cancelado: ${motivo}` : 'Cancelado';
+
+  const { error: historyError } = await supabase
+    .from('order_status_history')
+    .insert({
+      order_id: orderId,
+      status: 'cancelado',
+      user_id: null,
+      notes: historyNotes,
+    });
+
+  if (historyError) {
+    throw historyError;
+  }
+
+  await createOrderNotification({
+    companyId: existingOrder.company_id,
+    orderId,
+    type: 'status_change',
+    title: `Pedido ${formatOrderReference(existingOrder.order_number)}`,
+    body: 'Status alterado para: Cancelado',
+  });
 
   return data as Order;
 };

@@ -63,32 +63,99 @@ export type Database = {
       }
       categories: {
         Row: {
+          company_id: string | null
           created_at: string
           id: string
+          icon_name: string | null
+          icon_url: string | null
           name: string
+          order_position: number
           parent_id: string | null
           updated_at: string
         }
         Insert: {
+          company_id?: string | null
           created_at?: string
           id?: string
+          icon_name?: string | null
+          icon_url?: string | null
           name: string
+          order_position?: number
           parent_id?: string | null
           updated_at?: string
         }
         Update: {
+          company_id?: string | null
           created_at?: string
           id?: string
+          icon_name?: string | null
+          icon_url?: string | null
           name?: string
+          order_position?: number
           parent_id?: string | null
           updated_at?: string
         }
         Relationships: [
           {
+            foreignKeyName: "categories_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "categories_parent_id_fkey"
             columns: ["parent_id"]
             isOneToOne: false
             referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      catalog_event_logs: {
+        Row: {
+          company_id: string
+          created_at: string
+          event_type: string
+          id: string
+          metadata: Json
+          product_id: string | null
+          session_key: string | null
+          user_id: string | null
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          event_type: string
+          id?: string
+          metadata?: Json
+          product_id?: string | null
+          session_key?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          event_type?: string
+          id?: string
+          metadata?: Json
+          product_id?: string | null
+          session_key?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "catalog_event_logs_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "catalog_event_logs_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
             referencedColumns: ["id"]
           },
         ]
@@ -1502,6 +1569,7 @@ export type Database = {
           promo_end_at: string | null
           promo_price: number | null
           promo_start_at: string | null
+          sales_count: number
           service_base_price: number
           show_in_catalog: boolean
           sku: string | null
@@ -1509,6 +1577,7 @@ export type Database = {
           track_stock: boolean
           unit: string
           updated_at: string
+          view_count: number
           waste_percentage: number
           yampi_sku_id: string | null
         }
@@ -1541,6 +1610,7 @@ export type Database = {
           promo_end_at?: string | null
           promo_price?: number | null
           promo_start_at?: string | null
+          sales_count?: number
           service_base_price?: number
           show_in_catalog?: boolean
           sku?: string | null
@@ -1548,6 +1618,7 @@ export type Database = {
           track_stock?: boolean
           unit?: string
           updated_at?: string
+          view_count?: number
           waste_percentage?: number
           yampi_sku_id?: string | null
         }
@@ -1580,6 +1651,7 @@ export type Database = {
           promo_end_at?: string | null
           promo_price?: number | null
           promo_start_at?: string | null
+          sales_count?: number
           service_base_price?: number
           show_in_catalog?: boolean
           sku?: string | null
@@ -1587,6 +1659,7 @@ export type Database = {
           track_stock?: boolean
           unit?: string
           updated_at?: string
+          view_count?: number
           waste_percentage?: number
           yampi_sku_id?: string | null
         }
@@ -1608,6 +1681,48 @@ export type Database = {
           {
             foreignKeyName: "products_original_product_id_fkey"
             columns: ["original_product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      product_view_history: {
+        Row: {
+          company_id: string
+          id: string
+          product_id: string
+          session_key: string | null
+          user_id: string | null
+          viewed_at: string
+        }
+        Insert: {
+          company_id: string
+          id?: string
+          product_id: string
+          session_key?: string | null
+          user_id?: string | null
+          viewed_at?: string
+        }
+        Update: {
+          company_id?: string
+          id?: string
+          product_id?: string
+          session_key?: string | null
+          user_id?: string | null
+          viewed_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_view_history_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_view_history_product_id_fkey"
+            columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "products"
             referencedColumns: ["id"]
@@ -2352,6 +2467,10 @@ export type Database = {
           p_token: string
         }
         Returns: Json
+      }
+      recalculate_product_sales_counts: {
+        Args: { p_company_id?: string | null }
+        Returns: undefined
       }
     }
     Enums: {

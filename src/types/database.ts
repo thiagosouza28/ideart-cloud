@@ -15,6 +15,7 @@ export type ConfigurableOrderStatus = Exclude<OrderStatus, 'pronto'>;
 export interface OrderStatusCustomization {
   labels?: Partial<Record<OrderStatus, string>> | null;
   enabled_statuses?: ConfigurableOrderStatus[] | null;
+  colors?: Partial<Record<OrderStatus, string>> | null;
 }
 export type StockMovementType = 'entrada' | 'saida' | 'ajuste';
 export type PaymentMethod =
@@ -240,8 +241,12 @@ export interface UserRole {
 
 export interface Category {
   id: string;
+  company_id?: string | null;
   name: string;
   parent_id: string | null;
+  icon_name?: string | null;
+  icon_url?: string | null;
+  order_position?: number;
   created_at: string;
   updated_at: string;
 }
@@ -339,6 +344,8 @@ export interface Product {
   stock_quantity: number;
   min_stock: number;
   min_order_quantity: number;
+  sales_count?: number;
+  view_count?: number;
   yampi_sku_id?: string | null;
   created_at: string;
   updated_at: string;
@@ -384,6 +391,28 @@ export interface ProductReview {
   updated_at: string;
   product?: Product;
   company?: Company;
+}
+
+export interface ProductViewHistory {
+  id: string;
+  company_id: string;
+  product_id: string;
+  user_id?: string | null;
+  session_key?: string | null;
+  viewed_at: string;
+  product?: Product;
+}
+
+export interface CatalogEventLog {
+  id: string;
+  company_id: string;
+  product_id?: string | null;
+  user_id?: string | null;
+  session_key?: string | null;
+  event_type: 'view_product' | 'add_to_cart' | 'start_order' | 'purchase_completed';
+  metadata?: Record<string, unknown> | null;
+  created_at: string;
+  product?: Product | null;
 }
 
 export interface ProductAttribute {

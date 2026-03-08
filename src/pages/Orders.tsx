@@ -18,49 +18,11 @@ import { isPendingCustomerInfoOrder, isPublicCatalogPersonalizedOrder } from '@/
 import {
   buildOrderStatusCustomization,
   configurableOrderStatuses,
-  defaultOrderStatusLabels,
+  getOrderStatusBadgeStyle,
+  getOrderStatusLabel,
+  getOrderStatusTabStyle,
   type ConfigurableOrderStatus,
 } from '@/lib/orderStatusConfig';
-
-const getStatusLabel = (
-  status: OrderStatus,
-  labels: Record<OrderStatus, string>,
-) => {
-  if (status === 'pronto') {
-    return labels.finalizado || defaultOrderStatusLabels.finalizado;
-  }
-
-  return labels[status] || defaultOrderStatusLabels[status];
-};
-
-const statusColors: Record<OrderStatus, string> = {
-  orcamento: 'bg-blue-100 text-blue-800',
-  pendente: 'bg-orange-100 text-orange-800',
-  produzindo_arte: 'bg-indigo-100 text-indigo-800',
-  arte_aprovada: 'bg-emerald-100 text-emerald-800',
-  em_producao: 'bg-yellow-100 text-yellow-800',
-  finalizado: 'bg-green-100 text-green-800',
-  pronto: 'bg-green-100 text-green-800',
-  aguardando_retirada: 'bg-sky-100 text-sky-800',
-  entregue: 'bg-gray-100 text-gray-800',
-  cancelado: 'bg-red-100 text-red-800',
-};
-
-const tabTitleColors: Record<
-  'all' | 'orcamento' | 'pendente' | 'produzindo_arte' | 'arte_aprovada' | 'em_producao' | 'finalizado' | 'aguardando_retirada' | 'entregue' | 'cancelado',
-  string
-> = {
-  all: 'text-slate-700 hover:text-slate-800 data-[state=active]:bg-slate-100 data-[state=active]:text-slate-900',
-  orcamento: 'text-blue-700 hover:text-blue-800 data-[state=active]:bg-blue-50 data-[state=active]:text-blue-800',
-  pendente: 'text-orange-700 hover:text-orange-800 data-[state=active]:bg-orange-50 data-[state=active]:text-orange-800',
-  produzindo_arte: 'text-indigo-700 hover:text-indigo-800 data-[state=active]:bg-indigo-50 data-[state=active]:text-indigo-800',
-  arte_aprovada: 'text-emerald-700 hover:text-emerald-800 data-[state=active]:bg-emerald-50 data-[state=active]:text-emerald-800',
-  em_producao: 'text-amber-700 hover:text-amber-800 data-[state=active]:bg-amber-50 data-[state=active]:text-amber-800',
-  finalizado: 'text-green-700 hover:text-green-800 data-[state=active]:bg-green-50 data-[state=active]:text-green-800',
-  aguardando_retirada: 'text-sky-700 hover:text-sky-800 data-[state=active]:bg-sky-50 data-[state=active]:text-sky-800',
-  entregue: 'text-zinc-700 hover:text-zinc-800 data-[state=active]:bg-zinc-100 data-[state=active]:text-zinc-800',
-  cancelado: 'text-red-700 hover:text-red-800 data-[state=active]:bg-red-50 data-[state=active]:text-red-800',
-};
 
 export default function Orders() {
   const { company } = useAuth();
@@ -211,16 +173,20 @@ export default function Orders() {
       <Tabs value={statusFilter} onValueChange={setStatusFilter} className="mb-4">
         <div className="overflow-x-auto pb-1">
           <TabsList className="h-auto w-max min-w-full justify-start">
-            <TabsTrigger value="all" className={`shrink-0 ${tabTitleColors.all} data-[state=active]:font-semibold`}>
+            <TabsTrigger
+              value="all"
+              className="shrink-0 text-slate-700 hover:text-slate-800 data-[state=active]:bg-slate-100 data-[state=active]:font-semibold data-[state=active]:text-slate-900"
+            >
               Todos <span className="ml-1 text-xs opacity-70">({counts.all || 0})</span>
             </TabsTrigger>
             {visibleStatusTabs.map((status) => (
               <TabsTrigger
                 key={status}
                 value={status}
-                className={`shrink-0 ${tabTitleColors[status]} data-[state=active]:font-semibold`}
+                className="shrink-0 transition-colors data-[state=active]:font-semibold"
+                style={getOrderStatusTabStyle(status, statusCustomization, statusFilter === status)}
               >
-                {getStatusLabel(status, statusCustomization.labels)}{' '}
+                {getOrderStatusLabel(status, statusCustomization)}{' '}
                 <span className="ml-1 text-xs opacity-70">({counts[status] || 0})</span>
               </TabsTrigger>
             ))}
@@ -259,8 +225,11 @@ export default function Orders() {
                       <p className="text-xs text-muted-foreground">{formatDate(order.created_at)}</p>
                     </div>
                     <div className="flex flex-col items-end gap-1">
-                      <span className={`status-badge shrink-0 ${statusColors[order.status]}`}>
-                        {getStatusLabel(order.status, statusCustomization.labels)}
+                      <span
+                        className="status-badge shrink-0"
+                        style={getOrderStatusBadgeStyle(order.status, statusCustomization)}
+                      >
+                        {getOrderStatusLabel(order.status, statusCustomization)}
                       </span>
                       {getPendingDetailLabel(order) && (
                         <span className="text-[11px] text-muted-foreground">{getPendingDetailLabel(order)}</span>
@@ -369,8 +338,11 @@ export default function Orders() {
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-col gap-1">
-                          <span className={`status-badge ${statusColors[order.status]}`}>
-                            {getStatusLabel(order.status, statusCustomization.labels)}
+                          <span
+                            className="status-badge"
+                            style={getOrderStatusBadgeStyle(order.status, statusCustomization)}
+                          >
+                            {getOrderStatusLabel(order.status, statusCustomization)}
                           </span>
                           {getPendingDetailLabel(order) && (
                             <span className="text-[11px] text-muted-foreground">

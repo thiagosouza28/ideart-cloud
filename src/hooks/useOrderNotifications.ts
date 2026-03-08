@@ -4,23 +4,21 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import type { Database } from '@/integrations/supabase/types';
 
-const NEW_ORDER_NOTIFICATION_TYPE = 'new_order';
-
 type OrderNotification = Database['public']['Tables']['order_notifications']['Row'];
 
 export const useOrderNotifications = () => {
   const { toast } = useToast();
   const { profile } = useAuth();
   const handledRef = useRef<Set<string>>(new Set());
-  const [unreadOrdersCount, setUnreadOrdersCount] = useState(0);
+  const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
   const [notifications, setNotifications] = useState<OrderNotification[]>([]);
   const [isLoadingNotifications, setIsLoadingNotifications] = useState(false);
   const [isUpdatingNotifications, setIsUpdatingNotifications] = useState(false);
   const [isClearingNotifications, setIsClearingNotifications] = useState(false);
 
-  const refreshUnreadOrdersCount = useCallback(async () => {
+  const refreshUnreadNotificationsCount = useCallback(async () => {
     if (!profile?.company_id) {
-      setUnreadOrdersCount(0);
+      setUnreadNotificationsCount(0);
       return;
     }
 
@@ -28,11 +26,10 @@ export const useOrderNotifications = () => {
       .from('order_notifications')
       .select('id', { head: true, count: 'exact' })
       .eq('company_id', profile.company_id)
-      .eq('type', NEW_ORDER_NOTIFICATION_TYPE)
       .is('read_at', null);
 
     if (!error) {
-      setUnreadOrdersCount(count ?? 0);
+      setUnreadNotificationsCount(count ?? 0);
     }
   }, [profile?.company_id]);
 
@@ -48,7 +45,6 @@ export const useOrderNotifications = () => {
       .from('order_notifications')
       .select('*')
       .eq('company_id', profile.company_id)
-      .eq('type', NEW_ORDER_NOTIFICATION_TYPE)
       .order('created_at', { ascending: false });
 
     if (!error) {
@@ -57,6 +53,10 @@ export const useOrderNotifications = () => {
 
     setIsLoadingNotifications(false);
   }, [profile?.company_id]);
+
+  const syncNotifications = useCallback(async () => {
+    await Promise.all([refreshUnreadNotificationsCount(), refreshNotifications()]);
+  }, [refreshNotifications, refreshUnreadNotificationsCount]);
 
   const markNotificationAsRead = useCallback(
     async (notificationId: string) => {
@@ -75,7 +75,7 @@ export const useOrderNotifications = () => {
         .is('read_at', null);
 
       if (!error) {
-        setUnreadOrdersCount((prev) => Math.max(prev - 1, 0));
+        setUnreadNotificationsCount((prev) => Math.max(prev - 1, 0));
         setNotifications((prev) =>
           prev.map((notification) =>
             notification.id === notificationId
@@ -93,7 +93,7 @@ export const useOrderNotifications = () => {
 
   const markUnreadOrdersAsRead = useCallback(async () => {
     if (!profile?.company_id) return;
-    if (unreadOrdersCount === 0) return;
+    if (unreadNotificationsCount === 0) return;
 
     setIsUpdatingNotifications(true);
     const nowIso = new Date().toISOString();
@@ -102,11 +102,10 @@ export const useOrderNotifications = () => {
       .from('order_notifications')
       .update({ read_at: nowIso })
       .eq('company_id', profile.company_id)
-      .eq('type', NEW_ORDER_NOTIFICATION_TYPE)
       .is('read_at', null);
 
     if (!error) {
-      setUnreadOrdersCount(0);
+      setUnreadNotificationsCount(0);
       setNotifications((prev) =>
         prev.map((notification) =>
           notification.read_at
@@ -114,8 +113,8 @@ export const useOrderNotifications = () => {
             : {
                 ...notification,
                 read_at: nowIso,
-              }
-        )
+              },
+        ),
       );
     } else {
       toast({
@@ -124,7 +123,7 @@ export const useOrderNotifications = () => {
       });
     }
     setIsUpdatingNotifications(false);
-  }, [profile?.company_id, toast, unreadOrdersCount]);
+  }, [profile?.company_id, toast, unreadNotificationsCount]);
 
   const clearNotifications = useCallback(async () => {
     if (!profile?.company_id) return;
@@ -135,12 +134,11 @@ export const useOrderNotifications = () => {
     const { error } = await supabase
       .from('order_notifications')
       .delete()
-      .eq('company_id', profile.company_id)
-      .eq('type', NEW_ORDER_NOTIFICATION_TYPE);
+      .eq('company_id', profile.company_id);
 
     if (!error) {
       setNotifications([]);
-      setUnreadOrdersCount(0);
+      setUnreadNotificationsCount(0);
       handledRef.current.clear();
       toast({ title: 'Notificações removidas' });
     } else {
@@ -155,12 +153,12 @@ export const useOrderNotifications = () => {
 
   useEffect(() => {
     handledRef.current.clear();
-    void Promise.all([refreshUnreadOrdersCount(), refreshNotifications()]);
-  }, [profile?.company_id, refreshNotifications, refreshUnreadOrdersCount]);
+    void syncNotifications();
+  }, [profile?.company_id, syncNotifications]);
 
   useEffect(() => {
     if (!profile?.company_id) {
-      setUnreadOrdersCount(0);
+      setUnreadNotificationsCount(0);
       setNotifications([]);
       return;
     }
@@ -194,23 +192,48 @@ export const useOrderNotifications = () => {
             // ignore
           }
 
-          if (notification.type === NEW_ORDER_NOTIFICATION_TYPE) {
-            setUnreadOrdersCount((prev) => prev + 1);
-            setNotifications((prev) =>
-              [notification, ...prev.filter((item) => item.id !== notification.id)]
-            );
-          }
-        }
+          setUnreadNotificationsCount((prev) => prev + 1);
+          setNotifications((prev) => [notification, ...prev.filter((item) => item.id !== notification.id)]);
+          void syncNotifications();
+        },
       )
-      .subscribe();
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'order_notifications',
+          filter: `company_id=eq.${profile.company_id}`,
+        },
+        () => {
+          void syncNotifications();
+        },
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'order_notifications',
+          filter: `company_id=eq.${profile.company_id}`,
+        },
+        () => {
+          void syncNotifications();
+        },
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          void syncNotifications();
+        }
+      });
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [profile?.company_id, toast]);
+  }, [profile?.company_id, syncNotifications, toast]);
 
   return {
-    unreadOrdersCount,
+    unreadNotificationsCount,
     notifications,
     isLoadingNotifications,
     isUpdatingNotifications,

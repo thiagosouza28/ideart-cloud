@@ -1,5 +1,5 @@
 import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
   Check,
@@ -42,6 +42,7 @@ import { isPromotionActive, resolveProductBasePrice, resolveProductPrice } from 
 import { useToast } from '@/hooks/use-toast';
 import { loadPublicCatalogCompany } from '@/lib/publicCatalogCompany';
 import { Company, Product, ProductColor, ProductReview } from '@/types/database';
+import { pushRecentlyViewedProduct, trackCatalogEvent, trackProductView } from '@/lib/catalogAnalytics';
 
 interface CompanyWithColors extends Company {
   catalog_primary_color?: string;
@@ -108,6 +109,7 @@ const initials = (value?: string | null) => {
 
 export default function PublicProductDetails() {
   const { slug, productSlug } = useParams<{ slug?: string; productSlug?: string }>();
+  const location = useLocation();
   const navigate = useNavigate();
   const { user } = useCustomerAuth();
   const [company, setCompany] = useState<CompanyWithColors | null>(null);
@@ -139,6 +141,10 @@ export default function PublicProductDetails() {
   const [reviewFiles, setReviewFiles] = useState<File[]>([]);
   const [reviewImagePreviews, setReviewImagePreviews] = useState<string[]>([]);
   const reviewImagePreviewsRef = useRef<string[]>([]);
+  const reviewTabRequested = useMemo(
+    () => new URLSearchParams(location.search).get('tab') === 'avaliacoes',
+    [location.search],
+  );
   const isUuid = (value: string) =>
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 
@@ -202,35 +208,53 @@ export default function PublicProductDetails() {
 
       const normalizedPrimaryImage = ensurePublicStorageUrl('product-images', productData.image_url);
       const normalizedImages = normalizeProductImages(productData.image_urls, normalizedPrimaryImage);
-      setProduct({
+      const normalizedProduct = {
         ...(productData as ProductWithCategory),
         image_url: normalizedImages[0] ?? normalizedPrimaryImage,
         image_urls: normalizedImages,
+      };
+      setProduct(normalizedProduct);
+      pushRecentlyViewedProduct(companyData.id, productData.id);
+      void trackProductView({
+        client: user ? customerSupabase : publicSupabase,
+        companyId: companyData.id,
+        productId: productData.id,
+        userId: user?.id || null,
       });
 
-      if (productData.category_id) {
-        const { data: relatedData } = await publicSupabase
-          .from('products')
-          .select('*')
-          .eq('company_id', companyData.id)
-          .eq('category_id', productData.category_id)
-          .or('catalog_enabled.is.true,show_in_catalog.is.true')
-          .eq('is_active', true)
-          .neq('id', productData.id)
-          .limit(4);
+      const { data: relatedData } = await publicSupabase
+        .from('products')
+        .select('*')
+        .eq('company_id', companyData.id)
+        .or('catalog_enabled.is.true,show_in_catalog.is.true')
+        .eq('is_active', true)
+        .neq('id', productData.id)
+        .limit(12);
 
-        const mappedRelated = (relatedData as Product[] || []).map((related) => ({
+      const mappedRelated = ((relatedData as Product[]) || [])
+        .map((related) => ({
           ...related,
           image_url: ensurePublicStorageUrl('product-images', related.image_url),
-        }));
-        setRelatedProducts(mappedRelated);
-      }
+        }))
+        .sort((a, b) => {
+          const sameCategoryA = a.category_id === productData.category_id ? 1 : 0;
+          const sameCategoryB = b.category_id === productData.category_id ? 1 : 0;
+          if (sameCategoryA !== sameCategoryB) return sameCategoryB - sameCategoryA;
+          const featuredDiff = Number(b.catalog_featured || false) - Number(a.catalog_featured || false);
+          if (featuredDiff !== 0) return featuredDiff;
+          const salesDiff = Number(b.sales_count || 0) - Number(a.sales_count || 0);
+          if (salesDiff !== 0) return salesDiff;
+          return Number(b.view_count || 0) - Number(a.view_count || 0);
+        })
+        .slice(0, 8);
+
+      setRelatedProducts(mappedRelated);
 
       setLoading(false);
     };
 
     loadProduct();
-  }, [slug, productSlug]);
+  }, [slug, productSlug, user]);
 
   useEffect(() => {
     if (!product) return;
@@ -239,6 +263,12 @@ export default function PublicProductDetails() {
       prev.quantity < minimumQuantity ? { ...prev, quantity: minimumQuantity } : prev
     );
   }, [product]);
+
+  useEffect(() => {
+    if (reviewTabRequested) {
+      setActiveTab('avaliacoes');
+    }
+  }, [product?.id, reviewTabRequested]);
 
   useEffect(() => {
     if (!product || !company) return;
@@ -479,6 +509,17 @@ export default function PublicProductDetails() {
       title: 'Produto adicionado',
       description: `${product.name} foi adicionado ao carrinho.`,
     });
+    void trackCatalogEvent({
+      client: user ? customerSupabase : publicSupabase,
+      companyId: company.id,
+      productId: product.id,
+      userId: user?.id || null,
+      eventType: 'add_to_cart',
+      metadata: {
+        quantity,
+        mode,
+      },
+    });
     return true;
   };
 
@@ -604,17 +645,17 @@ export default function PublicProductDetails() {
         rating: reviewForm.rating,
         comment: comment || null,
         review_image_urls: uploadedImageUrls,
-        user_id: user.id || null,
+        user_id: user?.id || null,
       })
       .select('*')
       .single();
 
     if (error) {
       setReviewSubmitting(false);
-      setReviewError('Não foi possível enviar sua avaliação agora. Tente novamente.');
+      setReviewError('Não foi possível enviar sua avaliaçãovamente.');
       toast({
         title: 'Erro ao enviar avaliação',
-        description: 'Não foi possível enviar sua avaliação agora.',
+        description: 'Não foi possível enviar sua avaliaçãora.',
         variant: 'destructive',
       });
       return;
@@ -1314,9 +1355,9 @@ export default function PublicProductDetails() {
                   ))}
                 </div>
                 {reviewCount > 0 ? (
-                  <span>{averageRating.toFixed(1)} ({reviewCount} {reviewCount === 1 ? 'avaliação' : 'avaliações'})</span>
+                  <span>{averageRating.toFixed(1)} ({reviewCount} {reviewCount === 1 ? 'avaliação' : 'avaliacoes'})</span>
                 ) : (
-                  <span>Sem avaliacoes</span>
+                  <span>Sem avaliações</span>
                 )}
                 <Badge variant="secondary">Em estoque</Badge>
               </div>
@@ -1341,7 +1382,7 @@ export default function PublicProductDetails() {
                   </div>
                 )
               ) : (
-                <div className="text-sm text-slate-500">Preco sob consulta</div>
+                <div className="text-sm text-slate-500">Preço sob consulta</div>
               )}
 
               {estimatedDeliveryInfo && (
@@ -1476,9 +1517,9 @@ export default function PublicProductDetails() {
           <div className="flex flex-wrap border-b border-slate-200 text-sm">
             {[
               { id: 'descricao', label: 'Descrição detalhada' },
-              { id: 'especificacoes', label: 'Especificacoes tecnicas' },
+              { id: 'especificacoes', label: 'Especificações técnicas' },
               { id: 'envio', label: 'Envio e prazos' },
-              { id: 'avaliacoes', label: `Avaliacoes (${reviewCount})` },
+              { id: 'avaliacoes', label: `Avaliações (${reviewCount})` },
             ].map((tab) => (
               <button
                 key={tab.id}
@@ -1498,11 +1539,11 @@ export default function PublicProductDetails() {
                 <div className="grid md:grid-cols-2 gap-4">
                   <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
                     <h4 className="font-semibold text-slate-800 mb-2">Sustentabilidade</h4>
-                    <p className="text-xs text-slate-500">Papel de fontes responsaveis e materiais duraveis para uso diario.</p>
+                    <p className="text-xs text-slate-500">Papel de fontes responsáveis e materiais duráveis para uso diário.</p>
                   </div>
                   <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-                    <h4 className="font-semibold text-slate-800 mb-2">Personalizacao</h4>
-                    <p className="text-xs text-slate-500">Gravacao com qualidade premium para destacar sua marca.</p>
+                    <h4 className="font-semibold text-slate-800 mb-2">Personalização</h4>
+                    <p className="text-xs text-slate-500">Gravação com qualidade premium para destacar sua marca.</p>
                   </div>
                 </div>
               </div>
@@ -1538,7 +1579,7 @@ export default function PublicProductDetails() {
                 <form onSubmit={handleReviewSubmit} className="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-3">
                   <div>
                     <h4 className="font-semibold text-slate-800">Deixe sua avaliação</h4>
-                    <p className="text-xs text-slate-500 mt-1">Compartilhe sua experiencia com este produto.</p>
+                    <p className="text-xs text-slate-500 mt-1">Compartilhe sua experiência com este produto.</p>
                   </div>
 
                   <div className="grid gap-3 sm:grid-cols-2">
@@ -1593,7 +1634,7 @@ export default function PublicProductDetails() {
                     </div>
 
                     <div className="sm:col-span-2">
-                      <Label htmlFor="review-comment">Comentario (opcional)</Label>
+                      <Label htmlFor="review-comment">Comentário (opcional)</Label>
                       <Textarea
                         id="review-comment"
                         className="mt-2 !min-h-0"
@@ -1606,7 +1647,7 @@ export default function PublicProductDetails() {
                     </div>
 
                     <div className="sm:col-span-2">
-                      <Label htmlFor="review-images">Imagens (ate 3)</Label>
+                      <Label htmlFor="review-images">Imagens (até 3)</Label>
                       <Input
                         id="review-images"
                         type="file"
@@ -1650,7 +1691,7 @@ export default function PublicProductDetails() {
                 </form>
 
                 {reviewsLoading ? (
-                  <p className="text-sm text-slate-500">Carregando avaliacoes...</p>
+                  <p className="text-sm text-slate-500">Carregando avaliações...</p>
                 ) : reviewCount === 0 ? (
                   <div className="text-sm text-slate-600">Ainda não há avaliações para este produto.</div>
                 ) : (
@@ -1708,7 +1749,10 @@ export default function PublicProductDetails() {
             <Separator className="my-12" />
             <div className="catalog-detail-related">
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold">Compre junto</h2>
+                <div>
+                  <h2 className="text-xl font-bold">Produtos relacionados</h2>
+                  <p className="text-sm text-slate-500">Sugestões da mesma categoria e itens complementares para comprar junto.</p>
+                </div>
                 <Link to={catalogHref} className="text-xs text-primary">Ver catálogo completo</Link>
               </div>
               <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
@@ -1761,7 +1805,7 @@ export default function PublicProductDetails() {
                             </span>
                           )
                         ) : (
-                          <span className="text-xs text-slate-500">Preco sob consulta</span>
+                          <span className="text-xs text-slate-500">Preço sob consulta</span>
                         )}
                       </CardContent>
                     </Card>

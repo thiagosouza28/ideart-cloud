@@ -8,6 +8,7 @@ import {
   CarouselNext,
   CarouselPrevious,
 } from '@/components/ui/carousel';
+import { CATALOG_BANNER_ASPECT_RATIO_CSS } from '@/lib/bannerLayout';
 import { ensurePublicStorageUrl } from '@/lib/storage';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -91,13 +92,21 @@ export function BannerCarousel({ companyId, position, className }: BannerCarouse
   );
 
   if (loading) {
-    return <Skeleton className={`w-full rounded-2xl aspect-[21/8] ${className || ''}`.trim()} />;
+    return (
+      <Skeleton
+        className={`w-full rounded-2xl ${className || ''}`.trim()}
+        style={{ aspectRatio: CATALOG_BANNER_ASPECT_RATIO_CSS }}
+      />
+    );
   }
 
   if (banners.length === 0) return null;
 
   const BannerCard = ({ banner }: { banner: Banner }) => (
-    <div className="relative aspect-[21/8] w-full overflow-hidden rounded-2xl border border-[var(--pc-card-border,#e2e8f0)] bg-[var(--pc-card-bg,#fff)] shadow-sm">
+    <div
+      className="relative w-full overflow-hidden rounded-2xl border border-[var(--pc-card-border,#e2e8f0)] bg-[var(--pc-card-bg,#fff)] shadow-sm"
+      style={{ aspectRatio: CATALOG_BANNER_ASPECT_RATIO_CSS }}
+    >
       <img
         src={ensurePublicStorageUrl('product-images', banner.image_url) || ''}
         alt={banner.title || 'Banner'}
@@ -105,7 +114,7 @@ export function BannerCarousel({ companyId, position, className }: BannerCarouse
         className="h-full w-full object-cover"
       />
       {banner.title && (
-        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/65 via-black/30 to-transparent px-5 py-4">
+        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/65 via-black/30 to-transparent px-4 py-3 sm:px-5 sm:py-4">
           <p className="text-sm font-semibold text-white sm:text-base">{banner.title}</p>
         </div>
       )}

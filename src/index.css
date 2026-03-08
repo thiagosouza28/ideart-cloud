@@ -912,23 +912,50 @@
 
 @layer components {
   .order-new-page {
-    --order-navy: #0f1b3d;
-    --order-blue: #1a3a8f;
-    --order-accent: #3d8bef;
-    --order-gold: #c9a84c;
+    --order-navy: #0f172a;
+    --order-blue: #2563eb;
+    --order-accent: #38bdf8;
+    --order-gold: #d97706;
     --order-green: #16a34a;
     --order-red: #dc2626;
-    --order-light: #f4f6fb;
+    --order-light: #f3f6fb;
     --order-white: #ffffff;
-    --order-muted: #7a8299;
-    --order-border: #e2e7f5;
-    --order-surface: #f9fafd;
+    --order-muted: #667085;
+    --order-border: #dbe4f0;
+    --order-surface: #f8fafc;
+    --order-text: #334155;
+    --order-heading: #0f172a;
+    --order-shadow-soft: 0 12px 26px rgba(15, 23, 42, 0.08);
+    --order-shadow-strong: 0 -10px 26px rgba(15, 23, 42, 0.08);
     position: relative;
     min-height: 100%;
-    background: var(--order-light);
-    color: #121a34;
+    background:
+      radial-gradient(circle at top right, rgba(37, 99, 235, 0.1), transparent 24%),
+      linear-gradient(180deg, #f8fbff 0%, #eef3fa 100%);
+    color: var(--order-text);
     font-family: var(--app-font-family);
     margin: 0;
+  }
+
+  .dark .order-new-page {
+    --order-navy: #081125;
+    --order-blue: #2563eb;
+    --order-accent: #38bdf8;
+    --order-gold: #f59e0b;
+    --order-green: #22c55e;
+    --order-red: #ef4444;
+    --order-light: #050b18;
+    --order-white: #0f172a;
+    --order-muted: #94a3b8;
+    --order-border: #22314d;
+    --order-surface: #111c32;
+    --order-text: #dbe7fb;
+    --order-heading: #f8fbff;
+    --order-shadow-soft: 0 12px 26px rgba(2, 6, 23, 0.28);
+    --order-shadow-strong: 0 -12px 24px rgba(2, 6, 23, 0.42);
+    background:
+      radial-gradient(circle at top right, rgba(37, 99, 235, 0.16), transparent 24%),
+      linear-gradient(180deg, #07111f 0%, #040915 100%);
   }
 
   .order-fade-up {
@@ -953,13 +980,13 @@
 
   .order-page-shell {
     width: 100%;
-    max-width: 1400px;
-    margin: 0 auto;
-    padding: 0 24px 124px;
+    max-width: none;
+    margin: 0;
+    padding: 0 0 124px;
   }
 
   .order-page-header {
-    padding-top: 28px;
+    padding-top: 0;
     display: flex;
     align-items: center;
     gap: 14px;
@@ -971,7 +998,7 @@
     border-radius: 10px;
     border: 1px solid var(--order-border);
     background: var(--order-white);
-    color: #233059;
+    color: var(--order-heading);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -987,7 +1014,7 @@
     font-size: clamp(1.8rem, 2.5vw, 2.5rem);
     font-weight: 700;
     line-height: 1.1;
-    color: #0f1b3d;
+    color: var(--order-heading);
   }
 
   .order-page-subtitle {
@@ -1094,7 +1121,7 @@
     margin: 0;
     font-size: 1rem;
     font-weight: 700;
-    color: #0f1b3d;
+    color: var(--order-heading);
     display: inline-flex;
     align-items: center;
     gap: 8px;
@@ -1117,7 +1144,7 @@
     padding: 5px 10px;
     font-size: 11px;
     font-weight: 600;
-    color: #243057;
+    color: var(--order-text);
   }
 
   .order-form-grid-2 {
@@ -1148,7 +1175,7 @@
     border: 1.5px solid var(--order-border);
     border-radius: 10px;
     background: var(--order-surface);
-    color: #122046;
+    color: var(--order-heading);
     font-size: 0.92rem;
     padding: 10px 14px;
     outline: none;
@@ -1223,7 +1250,7 @@
     border-radius: 50px;
     border: 1px solid var(--order-border);
     background: var(--order-white);
-    color: var(--order-muted);
+    color: var(--order-text);
     font-size: 10px;
     font-weight: 600;
   }
@@ -1237,7 +1264,7 @@
     border-radius: 14px;
     border: 1px solid var(--order-border);
     background: var(--order-white);
-    box-shadow: 0 12px 26px rgba(15, 27, 61, 0.08);
+    box-shadow: var(--order-shadow-soft);
     overflow: hidden;
   }
 
@@ -1272,7 +1299,7 @@
     display: block;
     font-size: 0.88rem;
     font-weight: 600;
-    color: #122046;
+    color: var(--order-heading);
   }
 
   .order-dropdown-main span {
@@ -1376,7 +1403,7 @@
     display: block;
     font-size: 0.87rem;
     font-weight: 600;
-    color: #122046;
+    color: var(--order-heading);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -1394,7 +1421,7 @@
     gap: 10px;
     font-size: 0.85rem;
     font-weight: 600;
-    color: #1b2f63;
+    color: var(--order-heading);
   }
 
   .order-add-btn {
@@ -1439,7 +1466,7 @@
     margin: 0;
     font-size: 0.96rem;
     font-weight: 600;
-    color: #1a274e;
+    color: var(--order-heading);
   }
 
   .order-empty-state p {
@@ -1475,7 +1502,7 @@
     border-top: 1px solid var(--order-border);
     padding: 10px 12px;
     font-size: 0.88rem;
-    color: #1a274e;
+    color: var(--order-text);
   }
 
   .order-items-table tbody tr:hover {
@@ -1510,7 +1537,7 @@
     height: 30px;
     border: 0;
     background: var(--order-white);
-    color: #22335f;
+    color: var(--order-heading);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -1533,7 +1560,8 @@
     text-align: center;
     height: 30px;
     font-size: 0.84rem;
-    background: #fff;
+    background: var(--order-white);
+    color: var(--order-heading);
     outline: none;
   }
 
@@ -1543,7 +1571,7 @@
     border-radius: 10px;
     border: 1px solid var(--order-border);
     background: var(--order-white);
-    color: #23335e;
+    color: var(--order-text);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -1588,7 +1616,7 @@
     gap: 10px;
     margin-bottom: 10px;
     font-size: 0.9rem;
-    color: #1a274e;
+    color: var(--order-text);
   }
 
   .order-summary-edit {
@@ -1619,7 +1647,7 @@
   .order-total-row span {
     font-size: 1.05rem;
     font-weight: 700;
-    color: #0f1b3d;
+    color: var(--order-heading);
   }
 
   .order-total-row strong {
@@ -1654,14 +1682,14 @@
     margin: 0;
     font-size: 0.86rem;
     font-weight: 600;
-    color: #1b2a52;
+    color: var(--order-heading);
   }
 
   .order-status-block small {
     display: block;
     margin-top: 1px;
     font-size: 0.78rem;
-    color: #5e6988;
+    color: var(--order-muted);
   }
 
   .order-payment-grid {
@@ -1675,7 +1703,7 @@
     border: 1px solid var(--order-border);
     border-radius: 12px;
     background: var(--order-white);
-    color: #20315c;
+    color: var(--order-text);
     font-size: 0.86rem;
     font-weight: 600;
     display: inline-flex;
@@ -1707,7 +1735,7 @@
     border: 1px solid var(--order-border);
     border-radius: 10px;
     background: var(--order-white);
-    color: #243057;
+    color: var(--order-text);
     min-height: 38px;
     font-size: 0.8rem;
     font-weight: 600;
@@ -1744,7 +1772,7 @@
     z-index: 25;
     border-top: 1px solid var(--order-border);
     background: var(--order-white);
-    box-shadow: 0 -8px 20px rgba(15, 27, 61, 0.06);
+    box-shadow: var(--order-shadow-strong);
     padding: 10px 20px;
     display: flex;
     align-items: center;
@@ -1776,7 +1804,7 @@
   .order-bottom-stat strong {
     font-size: 0.94rem;
     font-weight: 600;
-    color: #1c2f5f;
+    color: var(--order-heading);
   }
 
   .order-bottom-stat.is-total strong {
@@ -1822,7 +1850,7 @@
   .order-btn-ghost {
     border-color: var(--order-border);
     background: var(--order-white);
-    color: #22315a;
+    color: var(--order-text);
   }
 
   .order-btn-outline {
@@ -1845,14 +1873,14 @@
     border: 1px solid var(--order-border);
     border-radius: 50px;
     background: var(--order-white);
-    color: #1f2f59;
+    color: var(--order-heading);
     font-size: 0.83rem;
     font-weight: 500;
     display: inline-flex;
     align-items: center;
     gap: 8px;
     padding: 8px 12px;
-    box-shadow: 0 10px 16px rgba(15, 27, 61, 0.06);
+    box-shadow: var(--order-shadow-soft);
   }
 
   .order-loading-card {
@@ -1862,7 +1890,7 @@
     border: 1px solid var(--order-border);
     border-radius: 16px;
     background: var(--order-white);
-    color: #1b2b54;
+    color: var(--order-heading);
     font-size: 0.9rem;
     padding: 22px;
     display: inline-flex;
@@ -1872,11 +1900,11 @@
 
   @media (max-width: 900px) {
     .order-page-shell {
-      padding: 0 16px 104px;
+      padding: 0 0 104px;
     }
 
     .order-page-header {
-      padding-top: 16px;
+      padding-top: 0;
     }
 
     .order-card-header {

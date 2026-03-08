@@ -71,9 +71,9 @@ export function CatalogManagerPreview({
 
   return (
     <div className="rounded-xl border border-border bg-muted/30 p-4">
-      <p className="text-sm font-semibold">Preview do catalogo</p>
+      <p className="text-sm font-semibold">Preview do catálogo</p>
       <p className="mt-1 text-xs text-muted-foreground">
-        Modelo do catalogo publico para visualizar topo, hero, filtros, card e rodape.
+        Modelo do catálogo público para visualizar topo, hero, filtros, card e rodapé.
       </p>
 
       <div className="mt-4 overflow-hidden rounded-[24px] border border-border bg-[#d9dce3] shadow-sm">
@@ -181,14 +181,14 @@ export function CatalogManagerPreview({
                   color: settings.badge_text_color,
                 }}
               >
-                Catalogo de produtos
+                Catálogo de produtos
               </span>
               <h3 className="mt-4 text-[42px] font-extrabold leading-none">
-                {settings.catalog_title || "Catalogo"}
+                {settings.catalog_title || "Catálogo"}
               </h3>
               <p className="mt-4 max-w-3xl text-sm" style={{ color: headerSubtle }}>
                 {settings.catalog_description ||
-                  "Explore os itens disponiveis, filtre por categoria e encontre o produto ideal para seu pedido."}
+                  "Explore os itens disponíveis, filtre por categoria e encontre o produto ideal para seu pedido."}
               </p>
 
               <div
@@ -205,7 +205,7 @@ export function CatalogManagerPreview({
                 </span>
                 <span className="inline-flex items-center gap-2">
                   <MapPin className="h-4 w-4" />
-                  {company?.address || "Endereco principal da loja"}
+                  {company?.address || "Endereço principal da loja"}
                 </span>
               </div>
             </div>
@@ -336,16 +336,16 @@ export function CatalogManagerPreview({
                       {product?.name || "Produto exemplo"}
                     </p>
                     <p className="mt-2 text-sm leading-6" style={{ color: cardTextMuted }}>
-                      Item de demonstracao para mostrar como o produto vai aparecer no catalogo publico.
+                      Item de demonstração para mostrar como o produto vai aparecer no catálogo público.
                     </p>
                   </div>
 
                   <div className="space-y-2">
                     <p className="text-sm" style={{ color: cardTextMuted }}>
-                      Tempo de producao: 3 dias
+                      Tempo de produção: 3 dias
                     </p>
                     <p className="text-[30px] font-bold" style={{ color: settings.price_color }}>
-                      {settings.show_prices ? formatCurrency(product?.catalog_price ?? 3.5) : "Preco sob consulta"}
+                      {settings.show_prices ? formatCurrency(product?.catalog_price ?? 3.5) : "Preço sob consulta"}
                     </p>
                   </div>
                 </div>

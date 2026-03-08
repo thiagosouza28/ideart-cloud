@@ -7,8 +7,10 @@ import {
   BadgeDollarSign,
   BarChart2,
   ClipboardCheck,
+  Eye,
   Plus,
   ShoppingBag,
+  ShoppingCart,
   Users,
   Wallet,
 } from 'lucide-react';
@@ -41,6 +43,7 @@ import type {
   ProductSupply,
   Sale,
   SaleItem,
+  CatalogEventLog,
 } from '@/types/database';
 import { buildOrderDetailsPath } from '@/lib/orderRouting';
 
@@ -79,6 +82,7 @@ export default function Dashboard() {
   const [productSupplies, setProductSupplies] = useState<ProductSupply[]>([]);
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
   const [saleItems, setSaleItems] = useState<SaleItem[]>([]);
+  const [catalogEvents, setCatalogEvents] = useState<CatalogEventLog[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -92,13 +96,14 @@ export default function Dashboard() {
         setProductSupplies([]);
         setOrderItems([]);
         setSaleItems([]);
+        setCatalogEvents([]);
         setLoading(false);
         return;
       }
 
       setLoading(true);
 
-      const [ordersResult, salesResult, expensesResult, entriesResult, productsResult] = await Promise.all([
+      const [ordersResult, salesResult, expensesResult, entriesResult, productsResult, catalogEventsResult] = await Promise.all([
         supabase
           .from('orders')
           .select('id, order_number, customer_name, status, total, amount_paid, created_at, payment_method, payment_status, estimated_delivery_date')
@@ -127,6 +132,12 @@ export default function Dashboard() {
           .select('*, product_supplies(id, product_id, supply_id, quantity, supply:supplies(cost_per_unit))')
           .eq('company_id', profile.company_id)
           .order('name'),
+        supabase
+          .from('catalog_event_logs')
+          .select('id, company_id, product_id, user_id, session_key, event_type, metadata, created_at')
+          .eq('company_id', profile.company_id)
+          .order('created_at', { ascending: false })
+          .limit(2000),
       ]);
 
       const nextOrders = (ordersResult.data as Order[]) || [];
@@ -140,6 +151,7 @@ export default function Dashboard() {
       setExpenses(nextExpenses);
       setEntries(nextEntries);
       setProducts(nextProducts);
+      setCatalogEvents((catalogEventsResult.data as CatalogEventLog[]) || []);
       setProductSupplies(
         nextProducts.flatMap((product) =>
           (product.product_supplies || []).map((entry) => ({
@@ -308,6 +320,48 @@ export default function Dashboard() {
     };
   }, [profitabilityRows]);
 
+  const lowStockProducts = useMemo(
+    () =>
+      products
+        .filter(
+          (product) =>
+            Boolean(product.track_stock) &&
+            Number(product.stock_quantity || 0) <= Number(product.min_stock || 0),
+        )
+        .sort(
+          (a, b) =>
+            Number(a.stock_quantity || 0) - Number(b.stock_quantity || 0) ||
+            a.name.localeCompare(b.name, 'pt-BR'),
+        ),
+    [products],
+  );
+
+  const catalogFunnel = useMemo(() => {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 30);
+
+    const relevantEvents = catalogEvents.filter((event) => new Date(event.created_at) >= cutoff);
+    const counts = {
+      view_product: 0,
+      add_to_cart: 0,
+      start_order: 0,
+      purchase_completed: 0,
+    };
+
+    relevantEvents.forEach((event) => {
+      counts[event.event_type] += 1;
+    });
+
+    return {
+      ...counts,
+      addToCartRate: counts.view_product > 0 ? (counts.add_to_cart / counts.view_product) * 100 : 0,
+      startOrderRate: counts.add_to_cart > 0 ? (counts.start_order / counts.add_to_cart) * 100 : 0,
+      purchaseRate: counts.start_order > 0 ? (counts.purchase_completed / counts.start_order) * 100 : 0,
+      overallConversion:
+        counts.view_product > 0 ? (counts.purchase_completed / counts.view_product) * 100 : 0,
+    };
+  }, [catalogEvents]);
+
   const kpiCards = useMemo(
     () => [
       {
@@ -383,8 +437,23 @@ export default function Dashboard() {
         icon: <BadgeDollarSign className="h-5 w-5" />,
         tone: profitabilitySummary.averageProfit >= 0 ? 'text-emerald-600' : 'text-destructive',
       },
+      {
+        title: 'Estoque baixo',
+        value: lowStockProducts.length.toString(),
+        subtitle:
+          lowStockProducts.length > 0 ? 'Produtos abaixo do mínimo' : 'Nenhum alerta de estoque',
+        icon: <AlertTriangle className="h-5 w-5" />,
+        tone: lowStockProducts.length > 0 ? 'text-amber-600' : 'text-emerald-600',
+      },
     ],
-    [cashForecast.currentBalance, expenseAlerts, monthlyExpenseCommitment, monthlyFinancialSummary, profitabilitySummary],
+    [
+      cashForecast.currentBalance,
+      expenseAlerts,
+      lowStockProducts.length,
+      monthlyExpenseCommitment,
+      monthlyFinancialSummary,
+      profitabilitySummary,
+    ],
   );
 
   const summaryCards = useMemo(
@@ -479,7 +548,7 @@ export default function Dashboard() {
         ))}
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
         {financialCards.map((card) => (
           <Card key={card.title}>
             <CardContent className="flex items-start justify-between gap-4 pt-6">
@@ -692,6 +761,121 @@ export default function Dashboard() {
               <div className="rounded-2xl border border-dashed border-border px-4 py-6 text-sm text-muted-foreground">
                 Cadastre preços e vendas para visualizar a rentabilidade real dos produtos.
               </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(340px,0.8fr)]">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between gap-4">
+            <div>
+              <CardTitle>Funil do Catálogo</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Visualizações, carrinhos, pedidos iniciados e compras concluídas nos últimos 30 dias.
+              </p>
+            </div>
+            <span className="rounded-full border border-border bg-muted/30 px-3 py-1 text-xs font-semibold text-muted-foreground">
+              Conversão total {catalogFunnel.overallConversion.toFixed(1)}%
+            </span>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="rounded-2xl border border-border bg-muted/20 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Visualizações</p>
+                  <Eye className="h-4 w-4 text-primary" />
+                </div>
+                <p className="mt-3 text-2xl font-semibold text-foreground">{catalogFunnel.view_product}</p>
+              </div>
+              <div className="rounded-2xl border border-border bg-muted/20 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Carrinho</p>
+                  <ShoppingCart className="h-4 w-4 text-primary" />
+                </div>
+                <p className="mt-3 text-2xl font-semibold text-foreground">{catalogFunnel.add_to_cart}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{catalogFunnel.addToCartRate.toFixed(1)}% das visualizações</p>
+              </div>
+              <div className="rounded-2xl border border-border bg-muted/20 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Pedidos iniciados</p>
+                  <ClipboardCheck className="h-4 w-4 text-primary" />
+                </div>
+                <p className="mt-3 text-2xl font-semibold text-foreground">{catalogFunnel.start_order}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{catalogFunnel.startOrderRate.toFixed(1)}% de avanço</p>
+              </div>
+              <div className="rounded-2xl border border-border bg-muted/20 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Compras concluídas</p>
+                  <BadgeDollarSign className="h-4 w-4 text-primary" />
+                </div>
+                <p className="mt-3 text-2xl font-semibold text-foreground">{catalogFunnel.purchase_completed}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{catalogFunnel.purchaseRate.toFixed(1)}% dos pedidos iniciados</p>
+              </div>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-4">
+              {[
+                { label: 'Visualização', value: catalogFunnel.view_product, tone: 'bg-slate-500' },
+                { label: 'Carrinho', value: catalogFunnel.add_to_cart, tone: 'bg-sky-500' },
+                { label: 'Pedido', value: catalogFunnel.start_order, tone: 'bg-amber-500' },
+                { label: 'Compra', value: catalogFunnel.purchase_completed, tone: 'bg-emerald-500' },
+              ].map((step) => {
+                const width =
+                  catalogFunnel.view_product > 0
+                    ? Math.max(6, (step.value / Math.max(catalogFunnel.view_product, 1)) * 100)
+                    : 6;
+
+                return (
+                  <div key={step.label} className="space-y-2">
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <span>{step.label}</span>
+                      <span>{step.value}</span>
+                    </div>
+                    <div className="h-2 rounded-full bg-muted/40">
+                      <div className={`h-2 rounded-full ${step.tone}`} style={{ width: `${width}%` }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between gap-4">
+            <div>
+              <CardTitle>Estoque baixo</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Produtos com estoque atual menor ou igual ao estoque mínimo configurado.
+              </p>
+            </div>
+            <Button variant="outline" onClick={() => navigate('/produtos')}>
+              Ver produtos
+            </Button>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {lowStockProducts.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-border px-4 py-6 text-sm text-muted-foreground">
+                Nenhum produto com alerta de estoque baixo no momento.
+              </div>
+            ) : (
+              lowStockProducts.slice(0, 6).map((product) => (
+                <div
+                  key={product.id}
+                  className="flex items-center justify-between gap-4 rounded-2xl border border-border px-4 py-3"
+                >
+                  <div>
+                    <p className="font-medium text-foreground">{product.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Atual {product.stock_quantity} {product.unit} • Mínimo {product.min_stock} {product.unit}
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700 dark:bg-amber-500/20 dark:text-amber-300">
+                    Estoque baixo
+                  </span>
+                </div>
+              ))
             )}
           </CardContent>
         </Card>

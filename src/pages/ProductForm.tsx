@@ -89,6 +89,13 @@ const productSchema = z
 
 const MAX_PRODUCT_IMAGES = 5;
 const ALLOWED_IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+const GENERATED_DESCRIPTION_GENERIC_MARKERS = [
+  'com acabamento de qualidade e foco em praticidade',
+  'excelente custo-benefício e qualidade',
+  'foi pensado para quem busca qualidade, durabilidade e bom acabamento',
+  'produto pronto para venda e divulgação no catálogo',
+  'da categoria',
+];
 
 function generateSlug(name: string): string {
   return name
@@ -98,6 +105,175 @@ function generateSlug(name: string): string {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '');
 }
+
+const truncateAtWord = (value: string, maxLength: number) => {
+  const normalized = value.trim();
+  if (normalized.length <= maxLength) return normalized;
+  const slice = normalized.slice(0, maxLength + 1);
+  const lastSpace = slice.lastIndexOf(' ');
+  const trimmed = (lastSpace > Math.floor(maxLength * 0.6) ? slice.slice(0, lastSpace) : slice.slice(0, maxLength))
+    .trim()
+    .replace(/[,:;\-–\s]+$/g, '');
+  return trimmed;
+};
+
+const normalizeGeneratedCopy = (value: string | null | undefined) =>
+  String(value || '')
+    .replace(/\((produto|servico|serviço|confeccionado)\)/gi, '')
+    .replace(/\s+/g, ' ')
+    .replace(/\s+([,.;:!?])/g, '$1')
+    .trim();
+
+const ensureSentenceEnding = (value: string) => {
+  const normalized = normalizeGeneratedCopy(value);
+  if (!normalized) return '';
+  const sentence = normalized.charAt(0).toUpperCase() + normalized.slice(1);
+  return /[.!?…]$/.test(sentence) ? sentence : `${sentence}.`;
+};
+
+const toCopyUnitLabel = (value?: string | null) => {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (!normalized) return '';
+  if (normalized === 'un') return 'unidade';
+  if (normalized === 'm') return 'metro';
+  if (normalized === 'm2' || normalized === 'm²') return 'metro quadrado';
+  if (normalized === 'kg') return 'quilo';
+  if (normalized === 'g') return 'grama';
+  if (normalized === 'cx') return 'caixa';
+  return normalized;
+};
+
+const formatLongDescriptionParagraphs = (value: string) => {
+  const paragraphs = value
+    .split(/\n{2,}/)
+    .map((paragraph) => ensureSentenceEnding(paragraph))
+    .filter(Boolean);
+
+  if (paragraphs.length >= 2) {
+    return paragraphs.join('\n\n');
+  }
+
+  const sentences = ensureSentenceEnding(value)
+    .match(/[^.!?]+[.!?]+/g)
+    ?.map((sentence) => sentence.trim())
+    .filter(Boolean) || [];
+
+  if (sentences.length <= 2) {
+    return sentences.join(' ') || ensureSentenceEnding(value);
+  }
+
+  const grouped: string[] = [];
+  for (let index = 0; index < sentences.length; index += 2) {
+    grouped.push(sentences.slice(index, index + 2).join(' '));
+  }
+  return grouped.join('\n\n');
+};
+
+const buildElegantDescriptions = ({
+  name,
+  category,
+  productType,
+  unit,
+  personalizationEnabled,
+}: {
+  name: string;
+  category?: string;
+  productType?: ProductType;
+  unit?: string;
+  personalizationEnabled?: boolean;
+}) => {
+  const trimmedName = name.trim() || 'Produto';
+  const categoryText = category?.trim() ? ` na categoria ${category.trim()}` : '';
+  const productLabel =
+    productType === 'servico'
+      ? 'um serviço'
+      : productType === 'confeccionado'
+        ? 'um item produzido sob demanda'
+        : 'um produto';
+  const unitLabel = toCopyUnitLabel(unit);
+  const unitLine = unitLabel ? ` A venda acontece por ${unitLabel}, o que facilita a organização comercial e a apresentação da oferta.` : '';
+  const personalizationLine = personalizationEnabled
+    ? ' A possibilidade de personalização amplia o apelo comercial e torna a oferta mais versátil para diferentes pedidos.'
+    : '';
+
+  const description = truncateAtWord(
+    ensureSentenceEnding(
+      `${trimmedName} é ${productLabel}${categoryText} que combina boa apresentação, acabamento caprichado e praticidade no uso. Ideal para quem busca qualidade, ótimo custo-benefício e mais valor percebido na entrega final.${personalizationLine}`,
+    ),
+    320,
+  );
+
+  const shortDescription = truncateAtWord(
+    ensureSentenceEnding(
+      `${trimmedName} com acabamento caprichado, ótima apresentação e excelente custo-benefício.`,
+    ),
+    140,
+  );
+
+  const longDescription = [
+    `${trimmedName}${categoryText} foi pensado para oferecer uma apresentação mais profissional, acabamento caprichado e uma experiência de uso prática no dia a dia.`,
+    `É uma escolha versátil para quem deseja unir qualidade, boa percepção de valor e um visual mais atrativo para exposição, venda ou revenda.${unitLine}`,
+    personalizationEnabled
+      ? 'Com opção de personalização, o produto ganha ainda mais flexibilidade para campanhas, temas e pedidos sob medida, reforçando seu diferencial no catálogo.'
+      : 'Sua proposta valoriza o catálogo com uma descrição mais clara, comercial e agradável de ler, destacando os principais benefícios do item.',
+  ]
+    .map((paragraph) => ensureSentenceEnding(paragraph))
+    .join('\n\n');
+
+  return { description, shortDescription, longDescription };
+};
+
+const refineGeneratedDescriptions = ({
+  name,
+  category,
+  productType,
+  unit,
+  personalizationEnabled,
+  description,
+  shortDescription,
+  longDescription,
+}: {
+  name: string;
+  category?: string;
+  productType?: ProductType;
+  unit?: string;
+  personalizationEnabled?: boolean;
+  description?: string | null;
+  shortDescription?: string | null;
+  longDescription?: string | null;
+}) => {
+  const normalizedDescription = normalizeGeneratedCopy(description);
+  const normalizedShort = normalizeGeneratedCopy(shortDescription);
+  const normalizedLong = String(longDescription || '')
+    .split(/\n+/)
+    .map((paragraph) => normalizeGeneratedCopy(paragraph))
+    .filter(Boolean)
+    .join('\n\n');
+
+  const combinedText = [normalizedDescription, normalizedShort, normalizedLong].join(' ').toLowerCase();
+  const shouldUseElegantTemplate =
+    !normalizedDescription ||
+    GENERATED_DESCRIPTION_GENERIC_MARKERS.some((marker) => combinedText.includes(marker));
+
+  if (shouldUseElegantTemplate) {
+    return buildElegantDescriptions({
+      name,
+      category,
+      productType,
+      unit,
+      personalizationEnabled,
+    });
+  }
+
+  return {
+    description: truncateAtWord(ensureSentenceEnding(normalizedDescription), 320),
+    shortDescription: truncateAtWord(
+      ensureSentenceEnding(normalizedShort || normalizedDescription),
+      140,
+    ),
+    longDescription: formatLongDescriptionParagraphs(normalizedLong || normalizedDescription),
+  };
+};
 
 const normalizeProductColors = (value: unknown): ProductColor[] => {
   if (!Array.isArray(value)) return [];
@@ -1375,9 +1551,20 @@ export default function ProductForm() {
         existingDescription: description.trim() || undefined,
       });
 
-      setDescription(resp.description || '');
-      setCatalogShortDescription(resp.shortDescription || '');
-      setCatalogLongDescription(resp.longDescription || '');
+      const refined = refineGeneratedDescriptions({
+        name: trimmedName,
+        category: selectedCategory,
+        productType,
+        unit,
+        personalizationEnabled,
+        description: resp.description,
+        shortDescription: resp.shortDescription,
+        longDescription: resp.longDescription,
+      });
+
+      setDescription(refined.description);
+      setCatalogShortDescription(refined.shortDescription);
+      setCatalogLongDescription(refined.longDescription);
       toast({ title: 'Descrições geradas com sucesso' });
     } catch (error: any) {
       const status = Number(error?.status || 0);
@@ -2314,11 +2501,11 @@ export default function ProductForm() {
                   EAN-13: 13 dígitos. Code 128: ASCII 32-126.
                 </p>
                 {normalizedBarcodePreview ? (
-                  <div className="flex flex-col items-center gap-2 rounded-lg border bg-white px-4 py-3">
+                  <div className="flex flex-col items-center gap-0.5 rounded-lg border bg-white px-4 py-1.5">
                     <BarcodeSvg
                       value={normalizedBarcodePreview}
                       format={resolvedBarcodeFormat}
-                      height={72}
+                      height={30}
                       moduleWidth={resolvedBarcodeFormat === 'ean13' ? 1.35 : 1.1}
                       className="mx-auto w-full max-w-[320px]"
                     />

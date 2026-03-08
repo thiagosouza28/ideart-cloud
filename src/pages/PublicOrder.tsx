@@ -262,7 +262,7 @@ export default function PublicOrder() {
           title="Acompanhar pedido"
           description="Visualize status, itens e pagamentos em tempo real."
         />
-        <div className="mx-auto flex w-[min(980px,calc(100%-24px))] items-center justify-center py-10">
+        <div className="mx-auto flex w-full max-w-[1400px] items-center justify-center px-4 py-10 sm:px-6 lg:px-8">
           <div className="text-sm text-slate-500">Carregando...</div>
         </div>
         <CatalogFooter />
@@ -279,7 +279,7 @@ export default function PublicOrder() {
           title="Acompanhar pedido"
           description="Visualize status, itens e pagamentos em tempo real."
         />
-        <div className="mx-auto w-[min(980px,calc(100%-24px))] py-10">
+        <div className="mx-auto w-full max-w-[1400px] px-4 py-10 sm:px-6 lg:px-8">
           <Card className="mx-auto w-full max-w-md">
             <CardHeader>
               <CardTitle>Pedido</CardTitle>
@@ -358,7 +358,7 @@ export default function PublicOrder() {
         description="Acompanhe status, pagamento e detalhes do seu pedido."
       />
 
-      <div className="page-container mx-auto max-w-5xl py-6">
+      <div className="page-container mx-auto w-full max-w-[1400px] px-4 py-6 sm:px-6 lg:px-8">
         <div className="space-y-2">
           <div className="flex items-center gap-3">
             {companyLogoUrl && (
