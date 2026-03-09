@@ -172,10 +172,10 @@ export function CatalogTopNav({
 
   return (
     <header
-      className={`${sticky ? 'sticky top-0' : ''} z-40 h-[68px] border-b`}
+      className={`${sticky ? 'sticky top-0' : ''} z-40 min-h-[68px] py-2 md:py-0 border-b`}
       style={headerStyle}
     >
-      <div className="mx-auto flex h-full w-full max-w-[1400px] items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
+      <div className="mx-auto flex h-full min-h-[60px] w-full max-w-[1400px] flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 sm:px-6 lg:px-8">
         <div className="flex min-w-0 items-center gap-3">
           {showBack && (
             <button
@@ -184,7 +184,7 @@ export function CatalogTopNav({
               onClick={onBack}
             >
               <ArrowLeft size={16} />
-              {backLabel}
+              <span className="hidden sm:inline">{backLabel}</span>
             </button>
           )}
           <div className="flex min-w-0 items-center gap-3">
@@ -204,43 +204,47 @@ export function CatalogTopNav({
             )}
             <div className="min-w-0">
               <p className="truncate text-sm font-bold">{brandName}</p>
-              <p className="truncate text-xs" style={{ color: theme.headerSubtle }}>{brandSub}</p>
+              <p className="hidden truncate text-[11px] sm:block opacity-80" style={{ color: theme.headerSubtle }}>{brandSub}</p>
             </div>
           </div>
         </div>
 
-        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+        <div className="flex shrink-0 items-center justify-end gap-1.5 sm:gap-2">
           {typeof cartCount === 'number' && onCartClick && (
             <button
               type="button"
-              className="inline-flex h-9 items-center gap-2 rounded-full border px-4 text-sm font-medium"
+              className="inline-flex h-9 items-center gap-2 rounded-full border px-3 sm:px-4 text-sm font-medium"
               style={headerOutlineStyle}
               onClick={onCartClick}
             >
               <ShoppingCart size={14} />
-              {cartCount} {cartCount === 1 ? 'item' : 'itens'}
+              <span className="flex items-center gap-1">
+                {cartCount} <span className="hidden xs:inline">{cartCount === 1 ? 'item' : 'itens'}</span>
+              </span>
             </button>
           )}
 
           {showAccount && (
             <Link
               to={accountHref}
-              className="inline-flex h-9 items-center rounded-xl border px-4 text-sm font-semibold hover:opacity-90"
+              className="inline-flex h-9 items-center rounded-xl border px-3 sm:px-4 text-xs sm:text-sm font-semibold hover:opacity-90"
               style={headerOutlineStyle}
             >
-              {accountLabel}
+              <span className="hidden xs:inline">{accountLabel}</span>
+              <span className="xs:hidden">Conta</span>
             </Link>
           )}
 
           {showContact && hasContact && (
             <button
               type="button"
-              className="inline-flex h-9 items-center gap-2 rounded-xl px-4 text-sm font-semibold hover:opacity-90"
+              className="inline-flex h-9 items-center gap-2 rounded-xl px-3 sm:px-4 text-xs sm:text-sm font-semibold hover:opacity-90"
               style={primaryStyle}
               onClick={() => openCatalogContact(company)}
             >
               <MessageCircle size={14} />
-              Falar no WhatsApp
+              <span className="hidden xs:inline">Falar no WhatsApp</span>
+              <span className="xs:hidden">WhatsApp</span>
             </button>
           )}
         </div>

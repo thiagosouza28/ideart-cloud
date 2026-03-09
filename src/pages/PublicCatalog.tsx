@@ -198,7 +198,7 @@ function ProductMiniShelf({
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {products.map((product) => {
           const productIdentifier = product.slug?.trim() ? product.slug : product.id;
           const href = company?.slug
@@ -216,29 +216,29 @@ function ProductMiniShelf({
               }}
             >
               <div className="mb-3 overflow-hidden rounded-xl border border-[var(--pc-card-border)] bg-[var(--pc-card-bg)]">
-                <div className="flex h-[180px] items-center justify-center bg-[var(--pc-page-bg)]">
+                <div className="flex h-[130px] sm:h-[180px] items-center justify-center bg-[var(--pc-page-bg)]">
                   {product.image_url ? (
                     <img
                       src={product.image_url}
                       alt={product.name}
-                      className="h-full w-full object-contain p-4 transition duration-300 group-hover:scale-[1.03]"
+                      className="h-full w-full object-contain p-2 sm:p-4 transition duration-300 group-hover:scale-[1.03]"
                     />
                   ) : (
-                    <Package className="h-10 w-10 text-[var(--pc-muted)]" />
+                    <Package className="h-8 w-8 sm:h-10 sm:w-10 text-[var(--pc-muted)]" />
                   )}
                 </div>
               </div>
-              <p className="line-clamp-1 text-sm text-[var(--pc-muted)]">{product.category?.name || 'Produto'}</p>
-              <h3 className="mt-1 line-clamp-2 text-base font-semibold text-[var(--pc-text)]">{product.name}</h3>
+              <p className="line-clamp-1 text-[10px] sm:text-sm text-[var(--pc-muted)]">{product.category?.name || 'Produto'}</p>
+              <h3 className="mt-1 line-clamp-2 text-xs sm:text-base font-semibold text-[var(--pc-text)]">{product.name}</h3>
               <div className="mt-2 flex items-center gap-2 text-xs text-[var(--pc-muted)]">
                 <Star className="h-3.5 w-3.5 text-amber-500" />
                 <span>{metrics?.averageRating ? metrics.averageRating.toFixed(1) : 'Sem nota'}</span>
                 <span>•</span>
                 <span>{Number(product.sales_count || 0)} vendas</span>
               </div>
-              <div className="mt-3">
-                <p className="text-sm font-bold text-[var(--pc-price)]">{asCurrency(getProductPrice(product))}</p>
-                <p className="text-[11px] text-[var(--pc-muted)]">{getProductSaleUnitPriceSuffix(product.unit_type)}</p>
+              <div className="mt-2.5">
+                <p className="text-xs sm:text-sm font-bold text-[var(--pc-price)]">{asCurrency(getProductPrice(product))}</p>
+                <p className="text-[10px] sm:text-[11px] text-[var(--pc-muted)]">{getProductSaleUnitPriceSuffix(product.unit_type)}</p>
               </div>
             </Link>
           );
@@ -435,11 +435,11 @@ function ProductListCard({
     >
       <Link
         to={href}
-        className="grid min-h-[216px] md:grid-cols-[240px_1fr]"
+        className="flex flex-col md:grid md:grid-cols-[240px_1fr] md:min-h-[216px]"
         onClick={handleProductOpen}
       >
         <div className="relative overflow-hidden border-b border-[var(--pc-card-border)] bg-[var(--pc-page-bg)] md:border-b-0 md:border-r">
-          <div className="flex h-full min-h-[216px] items-center justify-center">
+          <div className="flex h-[180px] md:h-full md:min-h-[216px] items-center justify-center">
             {product.image_url ? (
               <img
                 src={product.image_url}
@@ -448,7 +448,7 @@ function ProductListCard({
                 className="h-full w-full object-contain p-4 transition duration-300 group-hover:scale-[1.03]"
               />
             ) : (
-              <Package className="h-12 w-12 text-[var(--pc-muted)]" />
+              <Package className="h-10 w-10 md:h-12 md:w-12 text-[var(--pc-muted)]" />
             )}
           </div>
 
@@ -514,7 +514,7 @@ function ProductListCard({
             </span>
           </div>
 
-          <div className="mt-auto flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div className="mt-auto flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             {showPrices ? (
               <div>
                 {inPromotion ? (
@@ -594,16 +594,16 @@ function ProductGridCard({
     >
       <Link to={href} className="flex flex-1 flex-col" onClick={handleProductOpen}>
         <div className="relative overflow-hidden border-b border-[var(--pc-card-border)] bg-[var(--pc-page-bg)]">
-          <div className="flex h-[188px] items-center justify-center sm:h-[208px]">
+          <div className="flex h-[140px] sm:h-[208px] items-center justify-center">
             {product.image_url ? (
               <img
                 src={product.image_url}
                 alt={product.name}
                 loading="lazy"
-                className="h-full w-full object-contain p-4 transition duration-300 group-hover:scale-[1.03]"
+                className="h-full w-full object-contain p-2 sm:p-4 transition duration-300 group-hover:scale-[1.03]"
               />
             ) : (
-              <Package className="h-12 w-12 text-[var(--pc-muted)]" />
+              <Package className="h-8 w-8 sm:h-12 sm:w-12 text-[var(--pc-muted)]" />
             )}
           </div>
 
@@ -630,9 +630,9 @@ function ProductGridCard({
           ) : null}
         </div>
 
-        <div className="flex min-w-0 flex-1 flex-col gap-3 p-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm text-[var(--pc-muted)]">{product.category?.name || 'Produto'}</span>
+        <div className="flex min-w-0 flex-1 flex-col gap-2 sm:gap-3 p-3 sm:p-4">
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+            <span className="truncate text-[10px] sm:text-sm text-[var(--pc-muted)]">{product.category?.name || 'Produto'}</span>
             {product.personalization_enabled ? (
               <span className="rounded-full border border-[var(--pc-badge-bg)]/30 bg-[var(--pc-badge-bg)]/10 px-2.5 py-1 text-[11px] font-semibold text-[var(--pc-badge-text)]">
                 Personalizado
@@ -646,9 +646,9 @@ function ProductGridCard({
             ) : null}
           </div>
 
-          <div className="space-y-2">
-            <h3 className="text-[1.02rem] font-bold leading-tight text-[var(--pc-text)]">{product.name}</h3>
-            <p className="line-clamp-2 text-sm leading-6 text-[var(--pc-muted)]">
+          <div className="space-y-1 sm:space-y-2">
+            <h3 className="line-clamp-2 text-sm sm:text-[1.02rem] font-bold leading-tight text-[var(--pc-text)]">{product.name}</h3>
+            <p className="hidden sm:line-clamp-2 text-sm leading-6 text-[var(--pc-muted)]">
               {product.catalog_short_description || product.description || 'Produto disponível no catálogo.'}
             </p>
           </div>
@@ -671,27 +671,27 @@ function ProductGridCard({
         </div>
       </Link>
 
-      <div className="mt-auto flex flex-col gap-3 px-4 pb-4">
-        <div className="flex items-end justify-between gap-3">
+      <div className="mt-auto flex flex-col gap-2 sm:gap-3 px-3 sm:px-4 pb-3 sm:px-4">
+        <div className="flex flex-wrap items-end justify-between gap-2 sm:gap-3">
           {showPrices ? (
-            <div>
+            <div className="min-w-0 flex-1">
               {inPromotion ? (
-                <p className="text-sm text-[var(--pc-muted)] line-through">
+                <p className="truncate text-[10px] sm:text-sm text-[var(--pc-muted)] line-through">
                   {asCurrency(getPromotionBasePrice(product))}
                 </p>
               ) : null}
-              <p className="text-xl font-extrabold text-[var(--pc-price)]">
+              <p className="truncate text-base sm:text-xl font-extrabold text-[var(--pc-price)]">
                 {asCurrency(getProductPrice(product))}
               </p>
             </div>
           ) : (
-            <p className="text-base font-semibold text-[var(--pc-price)]">Preço sob consulta</p>
+            <p className="text-[11px] sm:text-base font-semibold text-[var(--pc-price)]">Preço sob consulta</p>
           )}
 
           <Link
             to={href}
             onClick={handleProductOpen}
-            className="inline-flex min-h-[42px] items-center justify-center rounded-2xl px-4 py-2 text-sm font-semibold"
+            className="inline-flex min-h-[36px] sm:min-h-[42px] items-center justify-center rounded-xl sm:rounded-2xl px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-semibold"
             style={{
               backgroundColor: 'var(--pc-button-bg)',
               color: 'var(--pc-button-text)',
@@ -703,10 +703,10 @@ function ProductGridCard({
 
         <Link
           to={reviewHref}
-          className="inline-flex min-h-[42px] w-full items-center justify-center rounded-2xl border border-[var(--pc-card-border)] bg-[var(--pc-card-bg)] px-4 py-2 text-sm font-semibold text-[var(--pc-text)] transition hover:border-[var(--pc-filter-bg)] hover:text-[var(--pc-filter-bg)]"
+          className="inline-flex min-h-[36px] sm:min-h-[42px] w-full items-center justify-center rounded-xl sm:rounded-2xl border border-[var(--pc-card-border)] bg-[var(--pc-card-bg)] px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-semibold text-[var(--pc-text)] transition hover:border-[var(--pc-filter-bg)] hover:text-[var(--pc-filter-bg)]"
           onClick={handleProductOpen}
         >
-          Avaliar produto
+          Avaliar
         </Link>
       </div>
     </div>
@@ -1709,7 +1709,8 @@ export default function PublicCatalog() {
                     viewMode === 'list'
                       ? undefined
                       : {
-                        gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 250px), 1fr))',
+                        gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 160px), 1fr))',
+                        gap: 'clamp(0.5rem, 2vw, 1.25rem)',
                         justifyContent: 'center',
                       }
                   }
@@ -1723,7 +1724,7 @@ export default function PublicCatalog() {
                     return (
                       <div
                         key={product.id}
-                        className={viewMode === 'list' ? 'space-y-3' : 'mx-auto h-full w-full max-w-[290px] xl:mx-0'}
+                        className={viewMode === 'list' ? 'space-y-3' : 'h-full'}
                       >
                         {viewMode === 'grid' ? (
                           <ProductGridCard
