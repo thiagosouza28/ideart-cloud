@@ -9,6 +9,7 @@ export interface PublicCartItem {
   notes?: string | null;
   isPersonalized?: boolean;
   productionTimeDays?: number | null;
+  unit?: string | null;
   referenceFilePath?: string | null;
   referenceFileName?: string | null;
   referenceFileType?: string | null;
@@ -46,8 +47,8 @@ const sanitizeCartItem = (value: unknown): PublicCartItem | null => {
   const productId = typeof item.productId === 'string' ? item.productId.trim() : '';
   const name = typeof item.name === 'string' ? item.name.trim() : '';
   const unitPrice = toValidNumber(item.unitPrice, 0);
-  const quantity = Math.max(1, Math.floor(toValidNumber(item.quantity, 1)));
-  const minOrderQuantity = Math.max(1, Math.floor(toValidNumber(item.minOrderQuantity, 1)));
+  const quantity = Math.max(0.0001, toValidNumber(item.quantity, 1));
+  const minOrderQuantity = Math.max(0.0001, toValidNumber(item.minOrderQuantity, 1));
 
   if (!productId || !name || unitPrice < 0) return null;
 
@@ -62,6 +63,7 @@ const sanitizeCartItem = (value: unknown): PublicCartItem | null => {
     notes: typeof item.notes === 'string' ? item.notes : null,
     isPersonalized: Boolean(item.isPersonalized),
     productionTimeDays: toValidOptionalInteger(item.productionTimeDays),
+    unit: typeof item.unit === 'string' ? item.unit : null,
     referenceFilePath:
       typeof item.referenceFilePath === 'string' ? item.referenceFilePath : null,
     referenceFileName:
@@ -117,10 +119,10 @@ export const setPublicCartItemQuantity = (
 
   const nextItems = getPublicCart(companyId).map((item) => {
     if (item.productId !== productId) return item;
-    const minimum = Math.max(1, item.minOrderQuantity || 1);
+    const minimum = Math.max(0.0001, item.minOrderQuantity || 0);
     return {
       ...item,
-      quantity: Math.max(minimum, Math.floor(quantity || minimum)),
+      quantity: Math.max(minimum, quantity || minimum),
     };
   });
 
@@ -136,8 +138,8 @@ export const upsertPublicCartItem = (
 
   const current = getPublicCart(companyId);
   const existingIndex = current.findIndex((item) => item.productId === incomingItem.productId);
-  const minimum = Math.max(1, incomingItem.minOrderQuantity || 1);
-  const quantity = Math.max(minimum, Math.floor(incomingItem.quantity || minimum));
+  const minimum = Math.max(0.0001, incomingItem.minOrderQuantity || 0);
+  const quantity = Math.max(minimum, incomingItem.quantity || minimum);
   const normalizedIncoming = {
     ...incomingItem,
     quantity,
@@ -167,4 +169,4 @@ export const upsertPublicCartItem = (
 };
 
 export const getPublicCartItemsCount = (companyId: string) =>
-  getPublicCart(companyId).reduce((total, item) => total + item.quantity, 0);
+  getPublicCart(companyId).length;

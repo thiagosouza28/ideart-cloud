@@ -16,7 +16,7 @@ import { supabase } from '@/integrations/supabase/client';
 import type { PostgrestError } from '@supabase/supabase-js';
 import { useToast } from '@/hooks/use-toast';
 import { Attribute, AttributeValue, Category, Expense, OrderItem, Product, ProductColor, ProductSupply, ProductType, SaleItem, Supply } from '@/types/database';
-import { ArrowLeft, Plus, Trash2, Calculator, Save, Loader2, Upload, Image, Globe, Package, FolderPlus, Tag, CopyPlus, ShieldAlert } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Calculator, Save, Loader2, Upload, Image, Globe, Package, FolderPlus, Tag, CopyPlus, ShieldAlert, ExternalLink } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useAuth } from '@/contexts/AuthContext';
 import { generateProductDescription } from '@/services/ai';
@@ -2638,6 +2638,20 @@ export default function ProductForm() {
             </div>
           </div>
         </div>
+        {isEditing && (
+          <Button
+            variant="outline"
+            onClick={() => {
+              const url = company?.slug
+                ? `/catalogo/${company.slug}/produto/${productSlug || id}`
+                : `/catalogo/produto/${productSlug || id}`;
+              window.open(url, '_blank');
+            }}
+          >
+            <ExternalLink className="mr-2 h-4 w-4" />
+            Ver no Catálogo
+          </Button>
+        )}
       </div>
 
       {isReadOnlyPublicProduct && (

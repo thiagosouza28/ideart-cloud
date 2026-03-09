@@ -41,6 +41,7 @@ import { loadPublicCatalogCompany } from '@/lib/publicCatalogCompany';
 import { buildSystemStorageViewerUrl, ensurePublicStorageUrl } from '@/lib/storage';
 import { createPublicPixPayment, type PublicPixPaymentResult } from '@/services/payments';
 import { Company, PaymentMethod } from '@/types/database';
+import { formatAreaM2, isAreaUnit } from '@/lib/measurements';
 import {
   normalizeCheckoutPaymentOptions,
   type CheckoutPaymentMethodOption,
@@ -937,14 +938,14 @@ export default function PublicCart() {
       p_payment_method: form.paymentMethod as PaymentMethod,
       p_order_notes: orderNotes || null,
       p_items: cartItems.map((item) => ({
-          product_id: item.productId,
-          quantity: item.quantity,
-          notes: item.notes || null,
-          reference_file_path: item.referenceFilePath || null,
-          reference_file_name: item.referenceFileName || null,
-          reference_file_type: item.referenceFileType || null,
-          is_personalized: item.isPersonalized === true,
-        })),
+        product_id: item.productId,
+        quantity: item.quantity,
+        notes: item.notes || null,
+        reference_file_path: item.referenceFilePath || null,
+        reference_file_name: item.referenceFileName || null,
+        reference_file_type: item.referenceFileType || null,
+        is_personalized: item.isPersonalized === true,
+      })),
     });
 
     if (error) {
@@ -1089,12 +1090,12 @@ export default function PublicCart() {
   const reviewItems: OrderResultItem[] = orderResult
     ? orderResult.items
     : cartItems.map((item) => ({
-        name: item.name,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        total: item.unitPrice * item.quantity,
-        notes: item.notes || null,
-      }));
+      name: item.name,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      total: item.unitPrice * item.quantity,
+      notes: item.notes || null,
+    }));
 
   const reviewTotal = orderResult?.total ?? orderTotal;
   const reviewProductionTimeDays = orderResult?.productionTimeDaysUsed ?? productionTimeDaysUsed;
@@ -1104,8 +1105,8 @@ export default function PublicCart() {
   );
   const selectedPaymentLabel = form.paymentMethod
     ? availablePaymentMethods.find((method) => method.type === form.paymentMethod)?.name ||
-      paymentMethodLabels[form.paymentMethod as PaymentMethod] ||
-      form.paymentMethod
+    paymentMethodLabels[form.paymentMethod as PaymentMethod] ||
+    form.paymentMethod
     : '-';
   const personalizedItemsCount = cartItems.filter((item) => item.isPersonalized).length;
   const personalizedItemsWithReference = cartItems.filter((item) => item.isPersonalized && Boolean(item.referenceFilePath)).length;
@@ -1178,13 +1179,12 @@ export default function PublicCart() {
                 <button
                   key={step.key}
                   type="button"
-                  className={`rounded-lg border px-3 py-2 text-left transition ${
-                    isActive
-                      ? ''
-                      : isDone
-                        ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
-                        : 'border-slate-200 bg-slate-50 text-slate-500'
-                  }`}
+                  className={`rounded-lg border px-3 py-2 text-left transition ${isActive
+                    ? ''
+                    : isDone
+                      ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                      : 'border-slate-200 bg-slate-50 text-slate-500'
+                    }`}
                   style={isActive ? catalogActiveStepStyle : undefined}
                   disabled={isDisabled}
                   onClick={() => goToStep(index)}
@@ -1200,171 +1200,179 @@ export default function PublicCart() {
         <div className={isReviewStep ? 'mx-auto max-w-2xl' : 'grid gap-6 lg:grid-cols-[1.6fr_1fr]'}>
           {!isReviewStep && (
             <Card className="border-slate-200" style={catalogCardStyle}>
-            <CardContent className="p-4 sm:p-6">
-              <div className="mb-4 flex items-center justify-between">
-                <h1 className="text-xl font-bold">Produtos no carrinho</h1>
-                <Badge variant="secondary">{cartItemsCount} itens</Badge>
-              </div>
-
-              {formErrors.cart && <p className="mb-3 text-xs text-destructive">{formErrors.cart}</p>}
-
-              {cartItems.length === 0 ? (
-                <div className="space-y-3 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-600">
-                  <p>Seu carrinho esta vazio.</p>
-                  <Button
-                    type="button"
-                    className="hover:opacity-90"
-                    style={catalogPrimaryButtonStyle}
-                    onClick={() => navigate(catalogHref)}
-                  >
-                    Adicionar produtos
-                  </Button>
+              <CardContent className="p-4 sm:p-6">
+                <div className="mb-4 flex items-center justify-between">
+                  <h1 className="text-xl font-bold">Produtos no carrinho</h1>
+                  <Badge variant="secondary">{cartItemsCount} {cartItemsCount === 1 ? 'item' : 'itens'}</Badge>
                 </div>
-              ) : (
-                <div className="space-y-3">
-                  {cartItems.map((item) => (
-                    <article
-                      key={item.productId}
-                      className="grid grid-cols-[84px_1fr] gap-3 rounded-lg border border-slate-200 bg-white p-3"
+
+                {formErrors.cart && <p className="mb-3 text-xs text-destructive">{formErrors.cart}</p>}
+
+                {cartItems.length === 0 ? (
+                  <div className="space-y-3 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-600">
+                    <p>Seu carrinho esta vazio.</p>
+                    <Button
+                      type="button"
+                      className="hover:opacity-90"
+                      style={catalogPrimaryButtonStyle}
+                      onClick={() => navigate(catalogHref)}
                     >
-                      <div className="h-20 w-20 overflow-hidden rounded-md border border-slate-200 bg-slate-50">
-                        {item.imageUrl ? (
-                          <img src={item.imageUrl} alt={item.name} className="h-full w-full object-contain p-1" />
-                        ) : (
-                          <div className="grid h-full w-full place-items-center text-xs text-slate-400">Sem imagem</div>
-                        )}
-                      </div>
+                      Adicionar produtos
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {cartItems.map((item) => (
+                      <article
+                        key={item.productId}
+                        className="grid grid-cols-[84px_1fr] gap-3 rounded-lg border border-slate-200 bg-white p-3"
+                      >
+                        <div className="h-20 w-20 overflow-hidden rounded-md border border-slate-200 bg-slate-50">
+                          {item.imageUrl ? (
+                            <img src={item.imageUrl} alt={item.name} className="h-full w-full object-contain p-1" />
+                          ) : (
+                            <div className="grid h-full w-full place-items-center text-xs text-slate-400">Sem imagem</div>
+                          )}
+                        </div>
 
-                      <div className="min-w-0">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-semibold text-slate-800">{item.name}</p>
-                            <p className="text-xs text-slate-500">{asCurrency(item.unitPrice)} por unidade</p>
-                            {item.notes && <p className="mt-1 text-xs text-slate-500">Obs: {item.notes}</p>}
-                            {typeof item.productionTimeDays === 'number' && item.productionTimeDays >= 0 && (
-                              <p className="mt-1 text-xs text-sky-700">
-                                Tempo de produção: {item.productionTimeDays}{' '}
-                                {item.productionTimeDays === 1 ? 'dia' : 'dias'}
+                        <div className="min-w-0">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-semibold text-slate-800">{item.name}</p>
+                              <p className="text-xs text-slate-500">
+                                {asCurrency(item.unitPrice)} por {isAreaUnit(item.unit) ? 'm²' : 'unidade'}
                               </p>
-                            )}
-
-                            {isCustomerStep && item.isPersonalized && (
-                              <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 p-2">
-                                <p className="text-[11px] font-medium text-amber-800">
-                                  Produto personalizado: se desejar, anexe a arte/modelo de referência.
+                              {item.notes && <p className="mt-1 text-xs text-slate-500 border-l-2 border-slate-200 pl-2 py-0.5">Obs: {item.notes}</p>}
+                              {typeof item.productionTimeDays === 'number' && item.productionTimeDays >= 0 && (
+                                <p className="mt-1 text-xs text-sky-700">
+                                  Tempo de produção: {item.productionTimeDays}{' '}
+                                  {item.productionTimeDays === 1 ? 'dia' : 'dias'}
                                 </p>
-                                <div className="mt-2 flex flex-wrap items-center gap-2">
-                                  <label className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-amber-300 bg-white px-2 py-1 text-[11px] font-medium text-amber-900 hover:bg-amber-100">
-                                    {uploadingReferenceByProduct[item.productId] ? (
-                                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                    ) : (
-                                      <Upload className="h-3.5 w-3.5" />
+                              )}
+
+                              {isCustomerStep && item.isPersonalized && (
+                                <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 p-2">
+                                  <p className="text-[11px] font-medium text-amber-800">
+                                    Produto personalizado: se desejar, anexe a arte/modelo de referência.
+                                  </p>
+                                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                                    <label className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-amber-300 bg-white px-2 py-1 text-[11px] font-medium text-amber-900 hover:bg-amber-100">
+                                      {uploadingReferenceByProduct[item.productId] ? (
+                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                      ) : (
+                                        <Upload className="h-3.5 w-3.5" />
+                                      )}
+                                      {item.referenceFilePath ? 'Trocar arquivo' : 'Anexar arquivo'}
+                                      <input
+                                        type="file"
+                                        accept={PERSONALIZED_REFERENCE_ACCEPT}
+                                        className="hidden"
+                                        disabled={uploadingReferenceByProduct[item.productId]}
+                                        onChange={(event) => {
+                                          const file = event.target.files?.[0];
+                                          event.currentTarget.value = '';
+                                          if (file) openReferenceUploadDialog(item, file);
+                                        }}
+                                      />
+                                    </label>
+                                    {item.referenceFilePath && (
+                                      <button
+                                        type="button"
+                                        className="inline-flex items-center gap-1 rounded-md border border-amber-300 bg-white px-2 py-1 text-[11px] font-medium text-amber-900 hover:bg-amber-100"
+                                        onClick={() => clearReferenceFile(item)}
+                                      >
+                                        <X className="h-3.5 w-3.5" />
+                                        Remover
+                                      </button>
                                     )}
-                                    {item.referenceFilePath ? 'Trocar arquivo' : 'Anexar arquivo'}
-                                    <input
-                                      type="file"
-                                      accept={PERSONALIZED_REFERENCE_ACCEPT}
-                                      className="hidden"
-                                      disabled={uploadingReferenceByProduct[item.productId]}
-                                      onChange={(event) => {
-                                        const file = event.target.files?.[0];
-                                        event.currentTarget.value = '';
-                                        if (file) openReferenceUploadDialog(item, file);
-                                      }}
-                                    />
-                                  </label>
-                                  {item.referenceFilePath && (
-                                    <button
-                                      type="button"
-                                      className="inline-flex items-center gap-1 rounded-md border border-amber-300 bg-white px-2 py-1 text-[11px] font-medium text-amber-900 hover:bg-amber-100"
-                                      onClick={() => clearReferenceFile(item)}
+                                  </div>
+                                  {item.referenceFilePath ? (
+                                    <a
+                                      href={buildSystemStorageViewerUrl('order-art-files', item.referenceFilePath) || '#'}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="mt-2 inline-flex items-center gap-1 text-[11px] font-medium text-amber-900 underline"
                                     >
-                                      <X className="h-3.5 w-3.5" />
-                                      Remover
-                                    </button>
+                                      <ExternalLink className="h-3.5 w-3.5" />
+                                      {item.referenceFileName || 'Ver referência anexada'}
+                                    </a>
+                                  ) : (
+                                    <p className="mt-2 text-[11px] text-amber-700">Nenhum arquivo anexado ainda.</p>
                                   )}
                                 </div>
-                                {item.referenceFilePath ? (
-                                  <a
-                                    href={buildSystemStorageViewerUrl('order-art-files', item.referenceFilePath) || '#'}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="mt-2 inline-flex items-center gap-1 text-[11px] font-medium text-amber-900 underline"
-                                  >
-                                    <ExternalLink className="h-3.5 w-3.5" />
-                                    {item.referenceFileName || 'Ver referência anexada'}
-                                  </a>
-                                ) : (
-                                  <p className="mt-2 text-[11px] text-amber-700">Nenhum arquivo anexado ainda.</p>
-                                )}
-                              </div>
+                              )}
+                            </div>
+
+                            {canEditCart && (
+                              <button
+                                type="button"
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:text-red-600"
+                                onClick={() => removeItem(item.productId)}
+                                aria-label={`Remover ${item.name}`}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
                             )}
                           </div>
 
-                          {canEditCart && (
-                            <button
-                              type="button"
-                              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:text-red-600"
-                              onClick={() => removeItem(item.productId)}
-                              aria-label={`Remover ${item.name}`}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
+                          <div className="mt-3 flex items-center justify-between gap-3">
+                            {canEditCart && !isAreaUnit(item.unit) ? (
+                              <div className="inline-flex h-9 items-center rounded-lg border border-slate-200 bg-white">
+                                <button
+                                  type="button"
+                                  className="grid h-full w-8 place-items-center text-slate-400 hover:text-slate-700"
+                                  onClick={() =>
+                                    updateItemQuantity(
+                                      item.productId,
+                                      item.quantity - 1,
+                                      Math.max(1, item.minOrderQuantity),
+                                    )
+                                  }
+                                  aria-label="Diminuir quantidade"
+                                >
+                                  <Minus className="h-4 w-4" />
+                                </button>
+                                <span className="w-10 text-center text-sm font-medium">{item.quantity}</span>
+                                <button
+                                  type="button"
+                                  className="grid h-full w-8 place-items-center text-slate-400 hover:text-slate-700"
+                                  onClick={() =>
+                                    updateItemQuantity(
+                                      item.productId,
+                                      item.quantity + 1,
+                                      Math.max(1, item.minOrderQuantity),
+                                    )
+                                  }
+                                  aria-label="Aumentar quantidade"
+                                >
+                                  <Plus className="h-4 w-4" />
+                                </button>
+                              </div>
+                            ) : (
+                              <p className="text-xs text-slate-500">
+                                {isAreaUnit(item.unit) ? (
+                                  <span className="font-semibold text-primary">Área: {formatAreaM2(item.quantity)} m²</span>
+                                ) : (
+                                  <>Quantidade: {item.quantity}</>
+                                )}
+                              </p>
+                            )}
+
+                            <p className="text-sm font-semibold text-slate-800">
+                              {asCurrency(item.unitPrice * item.quantity)}
+                            </p>
+                          </div>
+                          {Math.max(1, item.minOrderQuantity) > 1 && (
+                            <p className="mt-2 text-xs font-medium text-amber-700">
+                              Pedido mínimo: {Math.max(1, item.minOrderQuantity)} unidades
+                            </p>
                           )}
                         </div>
-
-                        <div className="mt-3 flex items-center justify-between gap-3">
-                          {canEditCart ? (
-                            <div className="inline-flex h-9 items-center rounded-lg border border-slate-200 bg-white">
-                              <button
-                                type="button"
-                                className="grid h-full w-8 place-items-center text-slate-400 hover:text-slate-700"
-                                onClick={() =>
-                                  updateItemQuantity(
-                                    item.productId,
-                                    item.quantity - 1,
-                                    Math.max(1, item.minOrderQuantity),
-                                  )
-                                }
-                                aria-label="Diminuir quantidade"
-                              >
-                                <Minus className="h-4 w-4" />
-                              </button>
-                              <span className="w-10 text-center text-sm font-medium">{item.quantity}</span>
-                              <button
-                                type="button"
-                                className="grid h-full w-8 place-items-center text-slate-400 hover:text-slate-700"
-                                onClick={() =>
-                                  updateItemQuantity(
-                                    item.productId,
-                                    item.quantity + 1,
-                                    Math.max(1, item.minOrderQuantity),
-                                  )
-                                }
-                                aria-label="Aumentar quantidade"
-                              >
-                                <Plus className="h-4 w-4" />
-                              </button>
-                            </div>
-                          ) : (
-                            <p className="text-xs text-slate-500">Quantidade: {item.quantity}</p>
-                          )}
-
-                          <p className="text-sm font-semibold text-slate-800">
-                            {asCurrency(item.unitPrice * item.quantity)}
-                          </p>
-                        </div>
-                        {Math.max(1, item.minOrderQuantity) > 1 && (
-                          <p className="mt-2 text-xs font-medium text-amber-700">
-                            Pedido mínimo: {Math.max(1, item.minOrderQuantity)} unidades
-                          </p>
-                        )}
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              )}
-            </CardContent>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
             </Card>
           )}
 
@@ -2010,13 +2018,13 @@ export default function PublicCart() {
                     setPendingReferenceUpload((prev) =>
                       prev
                         ? {
-                            ...prev,
-                            displayName: sanitizeDisplayFileName(
-                              event.target.value,
-                              prev.file.name,
-                              'referencia',
-                            ),
-                          }
+                          ...prev,
+                          displayName: sanitizeDisplayFileName(
+                            event.target.value,
+                            prev.file.name,
+                            'referencia',
+                          ),
+                        }
                         : prev,
                     )
                   }

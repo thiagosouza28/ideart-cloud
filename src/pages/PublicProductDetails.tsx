@@ -44,6 +44,7 @@ import { useToast } from '@/hooks/use-toast';
 import { loadPublicCatalogCompany } from '@/lib/publicCatalogCompany';
 import { Company, Product, ProductColor, ProductReview } from '@/types/database';
 import { pushRecentlyViewedProduct, trackCatalogEvent, trackProductView } from '@/lib/catalogAnalytics';
+import { calculateAreaM2, formatAreaM2, isAreaUnit, parseMeasurementInput } from '@/lib/measurements';
 
 interface CompanyWithColors extends Company {
   catalog_primary_color?: string;
@@ -127,6 +128,8 @@ export default function PublicProductDetails() {
   const [orderForm, setOrderForm] = useState({
     customization: '',
     quantity: 1,
+    width: '',
+    height: '',
   });
   const [reviews, setReviews] = useState<ProductReview[]>([]);
   const [reviewsLoading, setReviewsLoading] = useState(false);
@@ -210,7 +213,7 @@ export default function PublicProductDetails() {
       const normalizedPrimaryImage = ensurePublicStorageUrl('product-images', productData.image_url);
       const normalizedImages = normalizeProductImages(productData.image_urls, normalizedPrimaryImage);
       const normalizedProduct = {
-        ...(productData as ProductWithCategory),
+        ...(productData as unknown as ProductWithCategory),
         image_url: normalizedImages[0] ?? normalizedPrimaryImage,
         image_urls: normalizedImages,
       };
@@ -232,7 +235,7 @@ export default function PublicProductDetails() {
         .neq('id', productData.id)
         .limit(12);
 
-      const mappedRelated = ((relatedData as Product[]) || [])
+      const mappedRelated = ((relatedData as unknown as Product[]) || [])
         .map((related) => ({
           ...related,
           image_url: ensurePublicStorageUrl('product-images', related.image_url),
@@ -484,9 +487,32 @@ export default function PublicProductDetails() {
     if (!company || !product) return;
     if (!validateMinimumOrderQuantity()) return false;
 
-    const minimumQuantity = Math.max(1, Number(product.catalog_min_order ?? product.min_order_quantity ?? 1));
-    const quantity = Math.max(minimumQuantity, Number(orderForm.quantity || minimumQuantity));
-    const notes = isPersonalizationAllowed ? orderForm.customization.trim() : '';
+    const isM2 = isAreaUnit(product.unit);
+    let quantity = Math.max(minimumOrderQuantity, Number(orderForm.quantity || minimumOrderQuantity));
+    let notes = isPersonalizationAllowed ? orderForm.customization.trim() : '';
+
+    if (isM2) {
+      const w = parseMeasurementInput(orderForm.width);
+      const h = parseMeasurementInput(orderForm.height);
+
+      if (!w || !h || w <= 0 || h <= 0) {
+        toast({
+          title: 'Dimensões necessárias',
+          description: 'Por favor, informe a largura e altura do produto.',
+          variant: 'destructive',
+        });
+        return false;
+      }
+
+      const area = calculateAreaM2(w, h);
+      const totalArea = area * Math.max(1, Number(orderForm.quantity || 1));
+      quantity = totalArea;
+
+      const dimensionNotes = orderForm.quantity > 1
+        ? `Tamanho: ${w}cm x ${h}cm (${formatAreaM2(area)} m²) x ${orderForm.quantity} un = ${formatAreaM2(totalArea)} m²`
+        : `Tamanho: ${w}cm x ${h}cm (${formatAreaM2(area)} m²)`;
+      notes = notes ? `${dimensionNotes}\n${notes}` : dimensionNotes;
+    }
 
     upsertPublicCartItem(
       company.id,
@@ -497,10 +523,11 @@ export default function PublicProductDetails() {
         imageUrl: product.image_url,
         unitPrice,
         quantity,
-        minOrderQuantity: minimumQuantity,
+        minOrderQuantity: isM2 ? 0.0001 : minimumOrderQuantity,
         notes: notes || null,
         isPersonalized: isPersonalizationAllowed,
         productionTimeDays,
+        unit: product.unit,
       },
       mode,
     );
@@ -1408,11 +1435,10 @@ export default function PublicProductDetails() {
                     {availableColors.map((color, index) => (
                       <button
                         key={`${color.name}-${color.hex}`}
-                        className={`h-8 rounded-full border px-3 text-xs font-medium ${
-                          index === selectedColorIndex
-                            ? 'border-primary bg-primary text-white'
-                            : 'border-slate-200 bg-white text-slate-600'
-                        }`}
+                        className={`h-8 rounded-full border px-3 text-xs font-medium ${index === selectedColorIndex
+                          ? 'border-primary bg-primary text-white'
+                          : 'border-slate-200 bg-white text-slate-600'
+                          }`}
                         aria-label={color.name}
                         onClick={() => setSelectedColorIndex(index)}
                       >
@@ -1441,6 +1467,63 @@ export default function PublicProductDetails() {
                   <p className="mt-1 text-xs text-slate-500">
                     Produto personalizado: no carrinho você pode anexar a arte/modelo (JPG, PNG, WEBP ou PDF).
                   </p>
+                </div>
+              )}
+              {isAreaUnit(product.unit) && (
+                <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                  <Label className="text-xs font-bold uppercase text-slate-500">Dimensões do Produto</Label>
+                  <div className="flex items-center gap-3">
+                    <div className="space-y-1">
+                      <Label htmlFor="width" className="text-[10px] uppercase text-slate-400">Largura (cm)</Label>
+                      <Input
+                        id="width"
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="0"
+                        className="h-9 w-24 text-center"
+                        value={orderForm.width}
+                        onChange={(e) => setOrderForm(prev => ({ ...prev, width: e.target.value.replace(',', '.') }))}
+                      />
+                    </div>
+                    <span className="mt-5 text-slate-400 font-bold">x</span>
+                    <div className="space-y-1">
+                      <Label htmlFor="height" className="text-[10px] uppercase text-slate-400">Altura (cm)</Label>
+                      <Input
+                        id="height"
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="0"
+                        className="h-9 w-24 text-center"
+                        value={orderForm.height}
+                        onChange={(e) => setOrderForm(prev => ({ ...prev, height: e.target.value.replace(',', '.') }))}
+                      />
+                    </div>
+                    {parseMeasurementInput(orderForm.width) && parseMeasurementInput(orderForm.height) ? (
+                      <div className="ml-auto mt-5 text-right">
+                        <div className="text-[10px] uppercase text-slate-400 font-bold">Área Total</div>
+                        <div className="text-sm font-bold text-primary">
+                          {formatAreaM2(calculateAreaM2(
+                            parseMeasurementInput(orderForm.width) || 0,
+                            parseMeasurementInput(orderForm.height) || 0
+                          ))} m²
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              )}
+              {showPrices && (
+                <div className="flex items-center justify-between rounded-lg border border-slate-100 bg-slate-50/50 p-3">
+                  <div className="text-sm font-medium text-slate-600">Total do Item</div>
+                  <div className="text-xl font-bold text-primary">
+                    {(() => {
+                      const qty = Math.max(1, Number(orderForm.quantity || 1));
+                      const area = isAreaUnit(product.unit)
+                        ? calculateAreaM2(parseMeasurementInput(orderForm.width) || 0, parseMeasurementInput(orderForm.height) || 0)
+                        : 1;
+                      return formatCurrency(unitPrice * area * qty);
+                    })()}
+                  </div>
                 </div>
               )}
               <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
@@ -1747,77 +1830,79 @@ export default function PublicProductDetails() {
           </div>
         </div>
 
-        {relatedProducts.length > 0 && (
-          <>
-            <Separator className="my-12" />
-            <div className="catalog-detail-related">
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <h2 className="text-xl font-bold">Produtos relacionados</h2>
-                  <p className="text-sm text-slate-500">Sugestões da mesma categoria e itens complementares para comprar junto.</p>
+        {
+          relatedProducts.length > 0 && (
+            <>
+              <Separator className="my-12" />
+              <div className="catalog-detail-related">
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <h2 className="text-xl font-bold">Produtos relacionados</h2>
+                    <p className="text-sm text-slate-500">Sugestões da mesma categoria e itens complementares para comprar junto.</p>
+                  </div>
+                  <Link to={catalogHref} className="text-xs text-primary">Ver catálogo completo</Link>
                 </div>
-                <Link to={catalogHref} className="text-xs text-primary">Ver catálogo completo</Link>
-              </div>
-              <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-                {relatedProducts.map((related) => (
-                  <Link
-                    key={related.id}
-                    to={
-                      company?.slug
-                        ? `/catalogo/${company.slug}/produto/${related.slug?.trim() ? related.slug : related.id}`
-                        : `/catalogo/produto/${related.id}`
-                    }
-                  >
-                    <Card className="overflow-hidden border border-slate-200 bg-white hover:shadow-md transition-shadow">
-                      <div className="aspect-square bg-slate-100 relative overflow-hidden">
-                        {isPromotionActive(related) && (
-                          <div className="absolute top-2 left-2 z-10">
-                            <Badge className="bg-amber-500 text-white border-none gap-1 py-1 px-2 font-bold shadow-sm">
-                              <Tag className="h-3 w-3" />
-                              OFERTA
-                            </Badge>
-                          </div>
-                        )}
-                        {related.image_url ? (
-                          <img
-                            src={related.image_url}
-                            alt={related.name}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center">
-                            <Package className="h-12 w-12 text-slate-300" />
-                          </div>
-                        )}
-                      </div>
-                      <CardContent className="p-4">
-                        <h3 className="font-semibold text-sm mb-1 truncate">{related.name}</h3>
-                        {showPrices ? (
-                          isPromotionActive(related) ? (
-                            <div className="flex flex-col gap-1">
-                              <span className="text-xs text-slate-400 line-through">
-                                De {formatCurrency(resolveProductBasePrice(related as Product, 1, [], 0))}
-                              </span>
-                              <span className="text-sm font-bold catalog-price">
-                                Por {formatCurrency(resolveProductPrice(related as Product, 1, [], 0))}
-                              </span>
+                <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+                  {relatedProducts.map((related) => (
+                    <Link
+                      key={related.id}
+                      to={
+                        company?.slug
+                          ? `/catalogo/${company.slug}/produto/${related.slug?.trim() ? related.slug : related.id}`
+                          : `/catalogo/produto/${related.id}`
+                      }
+                    >
+                      <Card className="overflow-hidden border border-slate-200 bg-white hover:shadow-md transition-shadow">
+                        <div className="aspect-square bg-slate-100 relative overflow-hidden">
+                          {isPromotionActive(related) && (
+                            <div className="absolute top-2 left-2 z-10">
+                              <Badge className="bg-amber-500 text-white border-none gap-1 py-1 px-2 font-bold shadow-sm">
+                                <Tag className="h-3 w-3" />
+                                OFERTA
+                              </Badge>
                             </div>
+                          )}
+                          {related.image_url ? (
+                            <img
+                              src={related.image_url}
+                              alt={related.name}
+                              className="w-full h-full object-cover"
+                            />
                           ) : (
-                            <span className="text-sm font-bold catalog-price">
-                              {formatCurrency(resolveProductPrice(related as Product, 1, [], 0))}
-                            </span>
-                          )
-                        ) : (
-                          <span className="text-xs text-slate-500">Preço sob consulta</span>
-                        )}
-                      </CardContent>
-                    </Card>
-                  </Link>
-                ))}
+                            <div className="w-full h-full flex items-center justify-center">
+                              <Package className="h-12 w-12 text-slate-300" />
+                            </div>
+                          )}
+                        </div>
+                        <CardContent className="p-4">
+                          <h3 className="font-semibold text-sm mb-1 truncate">{related.name}</h3>
+                          {showPrices ? (
+                            isPromotionActive(related) ? (
+                              <div className="flex flex-col gap-1">
+                                <span className="text-xs text-slate-400 line-through">
+                                  De {formatCurrency(resolveProductBasePrice(related as Product, 1, [], 0))}
+                                </span>
+                                <span className="text-sm font-bold catalog-price">
+                                  Por {formatCurrency(resolveProductPrice(related as Product, 1, [], 0))}
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-sm font-bold catalog-price">
+                                {formatCurrency(resolveProductPrice(related as Product, 1, [], 0))}
+                              </span>
+                            )
+                          ) : (
+                            <span className="text-xs text-slate-500">Preço sob consulta</span>
+                          )}
+                        </CardContent>
+                      </Card>
+                    </Link>
+                  ))}
+                </div>
               </div>
-            </div>
-          </>
-        )}
+            </>
+          )
+        }
 
         <Separator className="my-12" />
         <Card className="catalog-detail-company catalog-card border">
@@ -1867,7 +1952,7 @@ export default function PublicProductDetails() {
             </div>
           </CardContent>
         </Card>
-      </main>
+      </main >
 
       <footer className="pc-footer">
         <div className="pc-container">
@@ -1910,33 +1995,35 @@ export default function PublicProductDetails() {
         </div>
       </footer>
 
-      {selectedReviewImage && (
-        <div
-          className="fixed inset-0 z-[90] flex items-center justify-center bg-black/80 p-4"
-          onClick={closeReviewImage}
-          role="dialog"
-          aria-modal="true"
-          aria-label="Visualização de imagem da avaliação"
-        >
+      {
+        selectedReviewImage && (
           <div
-            className="relative flex max-h-[92vh] w-full max-w-5xl items-center justify-center rounded-lg bg-slate-900 p-3"
-            onClick={(event) => event.stopPropagation()}
+            className="fixed inset-0 z-[90] flex items-center justify-center bg-black/80 p-4"
+            onClick={closeReviewImage}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Visualização de imagem da avaliação"
           >
-            <button
-              type="button"
-              className="absolute right-2 top-2 rounded-md bg-black/70 px-3 py-1 text-xs font-medium text-white hover:bg-black/85"
-              onClick={closeReviewImage}
+            <div
+              className="relative flex max-h-[92vh] w-full max-w-5xl items-center justify-center rounded-lg bg-slate-900 p-3"
+              onClick={(event) => event.stopPropagation()}
             >
-              Fechar
-            </button>
-            <img
-              src={selectedReviewImage}
-              alt="Imagem ampliada da avaliação"
-              className="max-h-[86vh] w-full object-contain"
-            />
+              <button
+                type="button"
+                className="absolute right-2 top-2 rounded-md bg-black/70 px-3 py-1 text-xs font-medium text-white hover:bg-black/85"
+                onClick={closeReviewImage}
+              >
+                Fechar
+              </button>
+              <img
+                src={selectedReviewImage}
+                alt="Imagem ampliada da avaliação"
+                className="max-h-[86vh] w-full object-contain"
+              />
+            </div>
           </div>
-        </div>
-      )}
-    </div>
+        )
+      }
+    </div >
   );
 }

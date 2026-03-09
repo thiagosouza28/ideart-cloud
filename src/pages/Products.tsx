@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Plus, Search, Edit, Trash2, Filter, Upload, Download, FileSpreadsheet, Loader2, X, CheckCircle2, AlertCircle, Tag } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Filter, Upload, Download, FileSpreadsheet, Loader2, X, CheckCircle2, AlertCircle, Tag, ExternalLink, Eye, EyeOff } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -62,7 +62,7 @@ type ProductWithSupplies = Product & {
 export default function Products() {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { profile } = useAuth();
+  const { profile, company } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [products, setProducts] = useState<ProductWithSupplies[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -120,7 +120,7 @@ export default function Products() {
       salesQuery,
     ]);
 
-    const nextProducts = (productsResult.data as ProductWithSupplies[]) || [];
+    const nextProducts = (productsResult.data as unknown as ProductWithSupplies[]) || [];
     setProducts(nextProducts);
     setCategories((categoriesResult.data as Category[]) || []);
     setExpenses((expensesResult.data as Expense[]) || []);
@@ -148,6 +148,32 @@ export default function Products() {
     setOrderItems((orderItemsResult.data as OrderItem[]) || []);
     setSaleItems((saleItemsResult.data as SaleItem[]) || []);
     setLoading(false);
+  };
+
+  const toggleCatalogVisibility = async (productId: string, currentStatus: boolean) => {
+    try {
+      const { error } = await supabase
+        .from('products')
+        .update({ show_in_catalog: !currentStatus })
+        .eq('id', productId);
+
+      if (error) throw error;
+
+      setProducts((prev) =>
+        prev.map((p) => (p.id === productId ? { ...p, show_in_catalog: !currentStatus } : p))
+      );
+
+      toast({
+        title: !currentStatus ? 'Produto visível no catálogo' : 'Produto oculto no catálogo',
+        duration: 2000,
+      });
+    } catch (error) {
+      console.error('Error updating catalog visibility:', error);
+      toast({
+        title: 'Erro ao atualizar visibilidade',
+        variant: 'destructive',
+      });
+    }
   };
 
   const handleDelete = async () => {
@@ -222,7 +248,7 @@ export default function Products() {
           supply_id: `supply-${index}`,
           quantity: Number(item.quantity || 0),
           created_at: product.created_at,
-          supply: item.supply || undefined,
+          supply: item.supply as any,
         })),
       ),
     [products],
@@ -579,17 +605,18 @@ export default function Products() {
                 <TableHead className="text-right">Lucro real</TableHead>
                 <TableHead>Estoque</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Catálogo</TableHead>
                 <TableHead className="w-[100px]">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={11} className="text-center py-8">Carregando...</TableCell>
+                  <TableCell colSpan={12} className="text-center py-8">Carregando...</TableCell>
                 </TableRow>
               ) : filteredProducts.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={12} className="text-center py-8 text-muted-foreground">
                     Nenhum produto encontrado
                   </TableCell>
                 </TableRow>
@@ -672,9 +699,37 @@ export default function Products() {
                       </Badge>
                     </TableCell>
                     <TableCell>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        title={product.show_in_catalog ? 'Ocultar no catálogo' : 'Mostrar no catálogo'}
+                        onClick={() => toggleCatalogVisibility(product.id, !!product.show_in_catalog)}
+                      >
+                        {product.show_in_catalog ? (
+                          <Eye className="h-4 w-4 text-emerald-500" />
+                        ) : (
+                          <EyeOff className="h-4 w-4 text-slate-400" />
+                        )}
+                      </Button>
+                    </TableCell>
+                    <TableCell>
                       <div className="flex gap-1">
                         <Button variant="ghost" size="icon" onClick={() => navigate(`/produtos/${product.id}`)}>
                           <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          title="Ver no catálogo"
+                          onClick={() => {
+                            const productSlug = product.slug || product.id;
+                            const url = company?.slug
+                              ? `/catalogo/${company.slug}/produto/${productSlug}`
+                              : `/catalogo/produto/${productSlug}`;
+                            window.open(url, '_blank');
+                          }}
+                        >
+                          <ExternalLink className="h-4 w-4 text-blue-500" />
                         </Button>
                         {product.owner_id === profile?.id && (
                           <Button variant="ghost" size="icon" onClick={() => setDeleteId(product.id)}>
