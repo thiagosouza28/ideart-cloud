@@ -288,13 +288,13 @@ export default function BannerManagement() {
         setLoading(true);
         try {
             const { data, error } = await supabase
-                .from('banners')
+                .from('banners' as any)
                 .select('*')
                 .eq('company_id', profile!.company_id)
                 .order('sort_order', { ascending: true });
 
             if (error) throw error;
-            setBanners(data || []);
+            setBanners((data as any) || []);
         } catch (error: any) {
             toast.error('Erro ao carregar banners: ' + error.message);
         } finally {
@@ -339,7 +339,7 @@ export default function BannerManagement() {
             }
 
             const { error } = await supabase
-                .from('banners')
+                .from('banners' as any)
                 .delete()
                 .eq('id', id);
 
@@ -354,7 +354,7 @@ export default function BannerManagement() {
     const handleToggleActive = async (banner: Banner) => {
         try {
             const { error } = await supabase
-                .from('banners')
+                .from('banners' as any)
                 .update({ is_active: !banner.is_active })
                 .eq('id', banner.id);
 
@@ -517,14 +517,14 @@ export default function BannerManagement() {
 
             if (currentBanner.id) {
                 const { error } = await supabase
-                    .from('banners')
+                    .from('banners' as any)
                     .update(payload)
                     .eq('id', currentBanner.id);
                 if (error) throw error;
                 toast.success('Banner atualizado com sucesso');
             } else {
                 const { error } = await supabase
-                    .from('banners')
+                    .from('banners' as any)
                     .insert(payload);
                 if (error) throw error;
                 toast.success('Banner criado com sucesso');
