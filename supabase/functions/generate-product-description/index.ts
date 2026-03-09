@@ -1,4 +1,5 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+/// <reference lib="deno.ns" />
+
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 
 // Manual auth so preflight requests are handled cleanly.
@@ -32,7 +33,7 @@ const getCorsHeaders = (req: Request) => {
     "Access-Control-Allow-Origin": allowOrigin,
     "Access-Control-Allow-Headers":
       requestHeaders ??
-        "authorization, x-client-info, apikey, content-type, x-supabase-authorization",
+      "authorization, x-client-info, apikey, content-type, x-supabase-authorization",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Access-Control-Max-Age": "86400",
     "Vary": "Origin",
@@ -76,7 +77,7 @@ const getAuthToken = (req: Request) => {
   // Prefer x-supabase-authorization because some gateways may rewrite Authorization.
   const xSupabaseAuth = extractToken(
     req.headers.get("x-supabase-authorization") ??
-      req.headers.get("X-Supabase-Authorization"),
+    req.headers.get("X-Supabase-Authorization"),
   );
   const authorization = extractToken(
     req.headers.get("authorization") ?? req.headers.get("Authorization"),
@@ -150,7 +151,7 @@ const buildFallbackDescriptions = (body: DescriptionRequest) => {
   return { description, shortDescription, longDescription };
 };
 
-serve(async (req) => {
+Deno.serve(async (req: Request) => {
   const corsHeaders = getCorsHeaders(req);
 
   if (req.method === "OPTIONS") {
@@ -253,19 +254,26 @@ serve(async (req) => {
     }
 
     const prompt = [
-      `Produto: ${name}`,
+      `Gere descrições comerciais persuasivas e profissionais para o produto abaixo:`,
+      `Nome do Produto: ${name}`,
       ...context,
       "",
-      "Gere um JSON com estas chaves obrigatorias:",
-      `- description: texto comercial principal entre 180 e 320 caracteres.`,
-      `- shortDescription: resumo com no maximo 140 caracteres.`,
-      `- longDescription: texto de catálogo em 2 ou 3 parágrafos curtos.`,
+      "Instruções Importantes:",
+      "1. A descrição deve ser natural e fluida, mencionando o nome do produto e seus principais benefícios de forma integrada.",
+      "2. Evite frases genéricas e clichês de preenchimento. Foque no que torna este item específico útil ou desejável para o cliente.",
+      "3. Use uma linguagem que pareça escrita por um especialista em vendas, sendo clara, direta e envolvente.",
+      "4. A 'shortDescription' deve ser um gancho rápido e impactante.",
+      "5. A 'longDescription' deve detalhar o uso, a qualidade e o diferencial prático do produto em parágrafos bem estruturados.",
+      "",
+      "Gere um JSON com estas chaves obrigatórias:",
+      `- description: texto comercial de destaque (180-320 caracteres).`,
+      `- shortDescription: resumo curto e impactante (máx. 140 caracteres).`,
+      `- longDescription: conteúdo detalhado para o catálogo (2 a 3 parágrafos).`,
       "",
       "Regras:",
-      "- Escreva em portugues do Brasil.",
-      "- Linguagem clara e objetiva.",
-      "- Não usar markdown, emojis ou listas numeradas.",
-      "- Entregue somente JSON válido.",
+      "- Use Português do Brasil (PT-BR).",
+      "- NÃO use markdown, emojis, asteriscos ou listas.",
+      "- Retorne APENAS o JSON válido para processamento imediato.",
     ].join("\n");
 
     const response = await fetch("https://api.openai.com/v1/chat/completions", {

@@ -1,4 +1,4 @@
-﻿import React, { useMemo, useState, useEffect, useRef } from 'react';
+﻿import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { z } from 'zod';
 import { Button } from '@/components/ui/button';
@@ -13,6 +13,7 @@ import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
+import type { PostgrestError } from '@supabase/supabase-js';
 import { useToast } from '@/hooks/use-toast';
 import { Attribute, AttributeValue, Category, Expense, OrderItem, Product, ProductColor, ProductSupply, ProductType, SaleItem, Supply } from '@/types/database';
 import { ArrowLeft, Plus, Trash2, Calculator, Save, Loader2, Upload, Image, Globe, Package, FolderPlus, Tag, CopyPlus, ShieldAlert } from 'lucide-react';
@@ -142,63 +143,77 @@ const PRODUCT_COPY_PATTERNS: Array<{
   useCase: string;
   shortFocus: string;
 }> = [
-  {
-    keywords: ['calendario', 'agenda', 'planner'],
-    lead: 'é ideal para destacar datas, organizar rotinas e manter a informação sempre visível',
-    support: 'Seu formato combina bem com ações promocionais, brindes, balcões e uso diário.',
-    useCase: 'É uma peça que ajuda na organização do dia a dia e ainda reforça a presença da marca em ambientes de trabalho, atendimento ou divulgação.',
-    shortFocus: 'organização visual, praticidade e boa apresentação',
-  },
-  {
-    keywords: ['banner', 'faixa', 'lona', 'painel', 'plotagem'],
-    lead: 'foi pensado para chamar atenção à distância e valorizar a comunicação visual da sua oferta',
-    support: 'A proposta funciona bem para promoções, campanhas, eventos, fachada e ambientação comercial.',
-    useCase: 'É uma escolha forte para destacar mensagens, preços, lançamentos e identidade visual com leitura clara e boa presença no ambiente.',
-    shortFocus: 'grande impacto visual, leitura clara e presença comercial',
-  },
-  {
-    keywords: ['cartao', 'cartão', 'cartoes', 'cartões'],
-    lead: 'valoriza a apresentação profissional e facilita o contato com clientes e parceiros',
-    support: 'É uma solução clássica para fortalecer identidade visual, networking e credibilidade da marca.',
-    useCase: 'Ajuda a transmitir profissionalismo em atendimentos, visitas, entregas e ações de relacionamento, com uma apresentação mais organizada.',
-    shortFocus: 'apresentação profissional, praticidade e fortalecimento da marca',
-  },
-  {
-    keywords: ['adesivo', 'etiqueta', 'rotulo', 'rótulo', 'selo'],
-    lead: 'é uma solução prática para identificação, personalização e acabamento visual do produto',
-    support: 'Funciona muito bem em embalagens, brindes, organização de itens e reforço de marca.',
-    useCase: 'Contribui para uma apresentação mais profissional, melhora a identificação e ajuda a destacar informações importantes no ponto de uso.',
-    shortFocus: 'identificação, personalização e acabamento visual',
-  },
-  {
-    keywords: ['caneca', 'copo', 'garrafa', 'squeeze'],
-    lead: 'combina utilidade no dia a dia com ótimo potencial para presentes, brindes e personalização',
-    support: 'É uma peça que entrega valor percebido tanto no uso pessoal quanto em ações promocionais.',
-    useCase: 'O produto funciona bem para lembranças, campanhas, ações de marca e vendas com apelo afetivo ou utilitário.',
-    shortFocus: 'uso diário, valor percebido e personalização',
-  },
-  {
-    keywords: ['camiseta', 'camisa', 'uniforme', 'boné', 'bone'],
-    lead: 'foi desenvolvido para unir identidade visual, conforto e presença de marca',
-    support: 'É indicado para equipes, eventos, ações promocionais e projetos personalizados.',
-    useCase: 'Ajuda a fortalecer a apresentação da marca, padronizar equipes e criar peças com mais impacto visual em campanhas e atendimento.',
-    shortFocus: 'identidade visual, presença de marca e personalização',
-  },
-  {
-    keywords: ['caixa', 'embalagem', 'sacola', 'sacolinha', 'pacote'],
-    lead: 'agrega valor à entrega e melhora a experiência de apresentação do produto',
-    support: 'É uma solução que combina proteção, organização e percepção de cuidado com a marca.',
-    useCase: 'Contribui para uma entrega mais profissional, reforça identidade visual e torna o produto final mais atraente para venda ou presente.',
-    shortFocus: 'apresentação, proteção e valorização da entrega',
-  },
-  {
-    keywords: ['flyer', 'folder', 'panfleto', 'catalogo', 'catálogo', 'folheto', 'convite'],
-    lead: 'foi pensado para apresentar informações de forma clara e atrativa',
-    support: 'É indicado para divulgação, campanhas promocionais, apresentações e materiais institucionais.',
-    useCase: 'Ajuda a comunicar melhor ofertas, serviços ou identidade da marca, com leitura objetiva e visual mais profissional.',
-    shortFocus: 'divulgação clara, apresentação atrativa e comunicação comercial',
-  },
-];
+    {
+      keywords: ['calendario', 'agenda', 'planner', 'caderno', 'blocos'],
+      lead: 'foi desenvolvido para organizar a rotina com elegância e manter informações importantes sempre ao alcance',
+      support: 'Com excelente acabamento e design funcional, é o item perfeito para uso diário ou para presentear.',
+      useCase: 'Facilita a organização visual do dia a dia, ajudando no planejamento e na produtividade de forma prática e duradoura.',
+      shortFocus: 'organização diária, praticidade e acabamento premium',
+    },
+    {
+      keywords: ['banner', 'faixa', 'lona', 'painel', 'plotagem', 'comunicacao'],
+      lead: 'entrega visibilidade máxima e impacto visual para destacar sua marca e suas ofertas à distância',
+      support: 'Produzido com materiais resistentes, garante leitura clara e cores vibrantes em qualquer ambiente.',
+      useCase: 'Ideal para fachadas, eventos, promoções e sinalização comercial, garantindo que sua mensagem seja vista por todos.',
+      shortFocus: 'alto impacto, visibilidade comercial e durabilidade',
+    },
+    {
+      keywords: ['cartao', 'cartão', 'cartoes', 'cartões', 'visita', 'profissional'],
+      lead: 'é a porta de entrada para novas conexões, transmitindo credibilidade e profissionalismo em cada detalhe',
+      support: 'Seu design limpo e toque de qualidade reforçam a identidade da sua marca no primeiro contato.',
+      useCase: 'Essencial para networking, reuniões e eventos, facilitando a troca de contatos com uma apresentação impecável.',
+      shortFocus: 'credibilidade profissional e excelente apresentação',
+    },
+    {
+      keywords: ['adesivo', 'etiqueta', 'rotulo', 'rótulo', 'selo', 'sticker'],
+      lead: 'oferece o acabamento perfeito para personalizar embalagens, produtos e brindes de forma rápida',
+      support: 'Com excelente aderência e corte preciso, valoriza o produto final e reforça a sua identidade visual.',
+      useCase: 'Ideal para identificação de produtos, fechamento de pacotes e personalização de itens promocionais com facilidade.',
+      shortFocus: 'personalização prática e acabamento de qualidade',
+    },
+    {
+      keywords: ['caneca', 'copo', 'garrafa', 'squeeze', 'taca', 'taça'],
+      lead: 'une utilidade e estilo, sendo um item indispensável para o dia a dia ou para criar momentos memoráveis',
+      support: 'Seu design ergonômico e acabamento resistente fazem dela uma escolha durável e cheia de personalidade.',
+      useCase: 'Perfeita para uso pessoal, presentes afetivos ou ações promocionais que buscam utilidade e valor percebido.',
+      shortFocus: 'uso diário e ótimo potencial para presente',
+    },
+    {
+      keywords: ['camiseta', 'camisa', 'uniforme', 'boné', 'bone', 'vestuario'],
+      lead: 'foi projetado para vestir com conforto enquanto destaca a identidade visual da sua marca ou evento',
+      support: 'Com tecido de qualidade e ajuste ideal, oferece durabilidade e presença visual em qualquer ocasião.',
+      useCase: 'Excelente para padronização de equipes, brindes corporativos e eventos, unindo estilo e divulgação.',
+      shortFocus: 'conforto, estilo e presença de marca',
+    },
+    {
+      keywords: ['caixa', 'embalagem', 'sacola', 'sacolinha'],
+      lead: 'transforma o ato de entregar em uma experiência de desembalagem única e valorizada pelo cliente',
+      support: 'Design estruturado que protege o conteúdo enquanto eleva o nível da sua apresentação comercial.',
+      useCase: 'Eleva a percepção de cuidado e valor da marca, tornando o produto final muito mais atrativo e profissional.',
+      shortFocus: 'valorização da entrega e proteção do produto',
+    },
+    {
+      keywords: ['flyer', 'folder', 'panfleto', 'catalogo', 'folheto', 'convite', 'informativo'],
+      lead: 'comunica sua mensagem de forma direta, organizada e visualmente atraente para o seu público',
+      support: 'Papel de qualidade e diagramação clara facilitam a leitura e o interesse pelas informações apresentadas.',
+      useCase: 'Poderosa ferramenta de divulgação para promoções, serviços e eventos, garantindo uma comunicação eficiente.',
+      shortFocus: 'divulgação eficiente e leitura atrativa',
+    },
+    {
+      keywords: ['carimbo', 'datador', 'seladora'],
+      lead: 'oferece agilidade e padronização para a sua rotina de trabalho com marcações claras e precisas',
+      support: 'Mecanismo durável e ergonômico feito para suportar o uso frequente com excelente desempenho.',
+      useCase: 'Ideal para autenticação de documentos, personalização de sacolas e organização de fluxos operacionais.',
+      shortFocus: 'agilidade operacional e padronização visual',
+    },
+    {
+      keywords: ['placa', 'sinalizacao', 'acrilico', 'pvc', 'pix'],
+      lead: 'garante uma sinalização clara e moderna, ajudando na orientação e na comunicação do seu espaço',
+      support: 'Material de alta durabilidade e acabamento refinado que complementa a decoração do ambiente.',
+      useCase: 'Perfeita para identificação de setores, instruções de pagamento (PIX) e avisos importantes com elegância.',
+      shortFocus: 'comunicação clara e design moderno',
+    },
+  ];
 
 function generateSlug(name: string): string {
   return name
@@ -329,26 +344,27 @@ const buildElegantDescriptions = ({
         : 'um produto';
   const copyPattern = detectProductCopyPattern(trimmedName, category);
   const unitLabel = toCopyUnitLabel(unit);
-  const unitLine = unitLabel ? ` A venda acontece por ${unitLabel}, o que facilita a composição comercial e a organização da oferta.` : '';
+  const unitLine = unitLabel ? ` Este item é comercializado por ${unitLabel}, permitindo uma compra ajustada à sua necessidade.` : '';
   const personalizationLine = personalizationEnabled
-    ? ' A possibilidade de personalização amplia o apelo comercial e torna a oferta mais versátil para diferentes pedidos.'
+    ? ' Além disso, oferece suporte a personalização para que o resultado final seja exatamente como você deseja.'
     : '';
   const genericLead =
     productType === 'servico'
-      ? 'foi estruturado para entregar praticidade, boa apresentação e uma experiência mais profissional ao cliente'
+      ? 'oferece uma solução profissional e eficiente para atender suas demandas com qualidade e pontualidade'
       : productType === 'confeccionado'
-        ? 'foi desenvolvido para unir apresentação, praticidade e bom valor percebido'
-        : 'é uma opção pensada para unir boa apresentação, praticidade e valor percebido';
+        ? 'é um produto artesanal desenvolvido com cuidado para unir utilidade, durabilidade e uma ótima apresentação'
+        : 'foi selecionado para oferecer a melhor relação entre custo e benefício, garantindo satisfação e praticidade';
   const lead = copyPattern?.lead || genericLead;
   const support =
     copyPattern?.support ||
-    'Seu visual e proposta comercial ajudam a destacar o item no catálogo com uma comunicação mais clara e atrativa.';
+    'Sua versatilidade permite que ele se adapte perfeitamente às suas necessidades diárias com clareza e eficiência.';
   const useCase =
     copyPattern?.useCase ||
-    'É uma alternativa interessante para compor vendas com mais clareza, reforçar a apresentação do produto e tornar a oferta mais fácil de entender.';
+    'É uma escolha confiável para quem busca um item funcional, fácil de usar e que entrega resultados consistentes em qualquer situação.';
   const shortFocus =
     copyPattern?.shortFocus ||
-    'boa apresentação, praticidade e percepção de valor';
+    'excelente qualidade, praticidade e ótimo valor percebido';
+
   const leadSentence = ensureSentenceEnding(lead);
   const supportSentence = ensureSentenceEnding(support);
   const useCaseSentence = ensureSentenceEnding(useCase);
@@ -362,7 +378,7 @@ const buildElegantDescriptions = ({
 
   const shortDescription = truncateAtWord(
     ensureSentenceEnding(
-      `${trimmedName} com ${shortFocus}.`,
+      `${trimmedName} com foco em ${shortFocus}.`,
     ),
     140,
   );
@@ -371,8 +387,8 @@ const buildElegantDescriptions = ({
     `${trimmedName}${categoryText} é ${productLabel}. ${leadSentence} ${supportSentence}`,
     `${useCaseSentence}${unitLine}`,
     personalizationEnabled
-      ? 'Com opção de personalização, o item ganha ainda mais flexibilidade para campanhas, temas e pedidos sob medida, reforçando seu diferencial comercial.'
-      : 'A proposta valoriza o catálogo com uma descrição mais clara, conectada ao produto e focada nos benefícios que realmente fazem sentido para a venda.',
+      ? 'Com a opção de personalização integrada, este produto se torna uma peça exclusiva, ideal para reforçar sua identidade ou criar presentes marcantes.'
+      : 'Esta proposta foi estruturada para oferecer uma visão clara dos benefícios do produto, ajudando você a tomar a melhor decisão de compra com confiança.',
   ]
     .map((paragraph) => ensureSentenceEnding(paragraph))
     .join('\n\n');
@@ -488,6 +504,7 @@ interface ProductSupplyItem {
 }
 
 type ReferenceProduct = Product & {
+  category?: { name: string } | null;
   product_supplies?: Array<{
     quantity: number;
     supply?: { cost_per_unit: number | null } | null;
@@ -525,6 +542,58 @@ type CopyAttributeSource = {
   attributeName: string;
   value: string;
   priceModifier: number;
+};
+
+type FormSnapshot = {
+  name: string;
+  sku: string;
+  barcode: string;
+  description: string;
+  productSlug: string;
+  productType: ProductType;
+  categoryId: string;
+  unit: string;
+  saleUnitPreset: string;
+  saleUnitCustom: string;
+  isActive: boolean;
+  showInCatalog: boolean;
+  catalogFeatured: boolean;
+  catalogPrice: number | null;
+  catalogShortDescription: string;
+  catalogLongDescription: string;
+  imageUrls: string[];
+  baseCost: number;
+  laborCost: number;
+  expensePercentage: number;
+  wastePercentage: number;
+  profitMargin: number;
+  finalPrice: number;
+  pricingMethod: 'margin' | 'multiplier';
+  pricingMultiplier: number;
+  serviceBasePrice: number;
+  stockQuantity: number;
+  minStock: number;
+  minOrderQuantity: number;
+  trackStock: boolean;
+  promoPrice: number | null;
+  promoStartAt: string;
+  promoEndAt: string;
+  isPublicProduct: boolean;
+  isCopyProduct: boolean;
+  originalProductId: string | null;
+  productOwnerId: string | null;
+  productColors: ProductColor[];
+  personalizationEnabled: boolean;
+  productionTimeDays: number | null;
+  productSupplies: Array<{ supply_id: string; quantity: number }>;
+  serviceItems: Array<{ name: string; description: string; item_kind: string; base_price: number }>;
+  serviceProducts: Array<{ product_id: string; quantity: number; notes: string }>;
+  priceTiers: PriceTierItem[];
+  productAttributes: Array<{
+    attribute_id: string;
+    values: Array<{ id: string; selected: boolean; price_modifier: number }>;
+  }>;
+  unitType?: string; // Legacy field for draft compatibility
 };
 
 export default function ProductForm() {
@@ -714,7 +783,7 @@ export default function ProductForm() {
 
   useEffect(() => {
     fetchData();
-  }, [id]);
+  }, [fetchData]);
 
   useEffect(() => {
     setInitialSnapshot(null);
@@ -727,7 +796,7 @@ export default function ProductForm() {
     }
   }, [isEditing, currentUserId]);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
     const companyId = company?.id || profile?.company_id || null;
     const [catResult, supResult, attrResult, attrValResult, productsResult, expensesResult, ordersResult, salesResult] = await Promise.all([
@@ -737,14 +806,14 @@ export default function ProductForm() {
       supabase.from('attribute_values').select('*, attribute:attributes(name)').order('value'),
       (companyId
         ? supabase
-            .from('products')
-            .select('*, product_supplies(quantity, supply:supplies(cost_per_unit))')
-            .eq('company_id', companyId)
-            .order('name')
+          .from('products')
+          .select('*, product_supplies(quantity, supply:supplies(cost_per_unit))')
+          .eq('company_id', companyId)
+          .order('name')
         : supabase
-            .from('products')
-            .select('*, product_supplies(quantity, supply:supplies(cost_per_unit))')
-            .order('name')),
+          .from('products')
+          .select('*, product_supplies(quantity, supply:supplies(cost_per_unit))')
+          .order('name')),
       companyId
         ? supabase.from('expenses').select('*').eq('company_id', companyId).order('created_at', { ascending: false })
         : Promise.resolve({ data: [] }),
@@ -781,15 +850,15 @@ export default function ProductForm() {
     const [orderItemsResult, saleItemsResult] = await Promise.all([
       validOrderIds.length
         ? supabase
-            .from('order_items')
-            .select('id, order_id, product_id, product_name, quantity, unit_price, discount, total, attributes, notes, created_at')
-            .in('order_id', validOrderIds)
+          .from('order_items')
+          .select('id, order_id, product_id, product_name, quantity, unit_price, discount, total, attributes, notes, created_at')
+          .in('order_id', validOrderIds)
         : Promise.resolve({ data: [] }),
       saleIds.length
         ? supabase
-            .from('sale_items')
-            .select('id, sale_id, product_id, product_name, quantity, unit_price, discount, total, attributes, created_at')
-            .in('sale_id', saleIds)
+          .from('sale_items')
+          .select('id, sale_id, product_id, product_name, quantity, unit_price, discount, total, attributes, created_at')
+          .in('sale_id', saleIds)
         : Promise.resolve({ data: [] }),
     ]);
 
@@ -810,11 +879,13 @@ export default function ProductForm() {
 
     // If editing, load product data
     if (isEditing && id) {
-      const { data: product, error } = await supabase
+      const { data: productData, error } = await supabase
         .from('products')
         .select('*, category:categories(name)')
         .eq('id', id)
         .maybeSingle();
+
+      const product = productData as ReferenceProduct | null;
 
       if (error || !product) {
         toast({ title: 'Produto não encontrado', variant: 'destructive' });
@@ -834,12 +905,12 @@ export default function ProductForm() {
       setProductType(product.product_type as ProductType);
       setCategoryId(product.category_id || '');
       setUnit(product.unit);
-      if (isProductSaleUnitPreset((product as any).unit_type)) {
-        setSaleUnitPreset(resolveProductSaleUnit(String((product as any).unit_type || DEFAULT_PRODUCT_SALE_UNIT)));
+      if (isProductSaleUnitPreset(product.unit_type)) {
+        setSaleUnitPreset(resolveProductSaleUnit(String(product.unit_type || DEFAULT_PRODUCT_SALE_UNIT)));
         setSaleUnitCustom('');
       } else {
         setSaleUnitPreset(CUSTOM_PRODUCT_SALE_UNIT_VALUE);
-        setSaleUnitCustom(resolveProductSaleUnit(CUSTOM_PRODUCT_SALE_UNIT_VALUE, (product as any).unit_type || ''));
+        setSaleUnitCustom(resolveProductSaleUnit(CUSTOM_PRODUCT_SALE_UNIT_VALUE, product.unit_type || ''));
       }
       setIsActive(product.is_active);
       setShowInCatalog(product.catalog_enabled ?? product.show_in_catalog ?? false);
@@ -849,7 +920,7 @@ export default function ProductForm() {
       setCatalogLongDescription(product.catalog_long_description || '');
       setProductColors(normalizeProductColors(product.product_colors));
       setPersonalizationEnabled(product.personalization_enabled ?? false);
-      setServiceBasePrice(Number((product as any).service_base_price || 0));
+      setServiceBasePrice(Number(product.service_base_price || 0));
       setProductionTimeDays(
         product.production_time_days !== null && product.production_time_days !== undefined
           ? Math.max(0, Math.trunc(Number(product.production_time_days)))
@@ -859,7 +930,7 @@ export default function ProductForm() {
       setImageUrls(normalizeProductImages(product.image_urls, normalizedPrimaryImage));
       setBaseCost(Number(product.base_cost));
       setLaborCost(Number(product.labor_cost));
-      setExpensePercentage(Number((product as any).expense_percentage || 0));
+      setExpensePercentage(Number(product.expense_percentage || 0));
       setWastePercentage(Number(product.waste_percentage));
       setProfitMargin(Number(product.profit_margin));
       if (product.final_price !== null && product.final_price !== undefined) {
@@ -876,10 +947,10 @@ export default function ProductForm() {
       setPromoPrice(product.promo_price !== null ? Number(product.promo_price) : null);
       setPromoStartAt(product.promo_start_at ? new Date(product.promo_start_at).toISOString().slice(0, 16) : '');
       setPromoEndAt(product.promo_end_at ? new Date(product.promo_end_at).toISOString().slice(0, 16) : '');
-      setIsPublicProduct(Boolean((product as any).is_public));
-      setIsCopyProduct(Boolean((product as any).is_copy));
-      setOriginalProductId((product as any).original_product_id ?? null);
-      setProductOwnerId((product as any).owner_id ?? null);
+      setIsPublicProduct(Boolean(product.is_public));
+      setIsCopyProduct(Boolean(product.is_copy));
+      setOriginalProductId(product.original_product_id ?? null);
+      setProductOwnerId(product.owner_id ?? null);
 
       // Load product supplies
       const { data: prodSupplies } = await supabase
@@ -977,9 +1048,9 @@ export default function ProductForm() {
 
     setProductAttributes(productAttrSelection);
     setLoading(false);
-  };
+  }, [id, company?.id, profile?.company_id, isEditing, currentUserId, navigate, toast]);
 
-    // Image upload
+  // Image upload
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
     if (files.length === 0) return;
@@ -1412,7 +1483,7 @@ export default function ProductForm() {
     try {
       const parsed = JSON.parse(stored) as {
         productId?: string | null;
-        data?: typeof formSnapshot;
+        data?: FormSnapshot;
         meta?: { slugTouched?: boolean; finalPriceTouched?: boolean };
       };
       const draftData = parsed?.data;
@@ -1442,15 +1513,15 @@ export default function ProductForm() {
       setUnit(draftData.unit ?? 'un');
       setSaleUnitPreset(
         draftData.saleUnitPreset ??
-          (isProductSaleUnitPreset((draftData as any).unitType)
-            ? resolveProductSaleUnit((draftData as any).unitType)
-            : CUSTOM_PRODUCT_SALE_UNIT_VALUE),
+        (isProductSaleUnitPreset(draftData.unitType)
+          ? resolveProductSaleUnit(draftData.unitType)
+          : CUSTOM_PRODUCT_SALE_UNIT_VALUE),
       );
       setSaleUnitCustom(
         draftData.saleUnitCustom ??
-          (isProductSaleUnitPreset((draftData as any).unitType)
-            ? ''
-            : resolveProductSaleUnit(CUSTOM_PRODUCT_SALE_UNIT_VALUE, (draftData as any).unitType)),
+        (isProductSaleUnitPreset(draftData.unitType)
+          ? ''
+          : resolveProductSaleUnit(CUSTOM_PRODUCT_SALE_UNIT_VALUE, draftData.unitType)),
       );
       setIsActive(Boolean(draftData.isActive));
       setShowInCatalog(Boolean(draftData.showInCatalog));
@@ -1467,7 +1538,7 @@ export default function ProductForm() {
       setFinalPrice(Number(draftData.finalPrice ?? 0));
       setPricingMethod(draftData.pricingMethod === 'multiplier' ? 'multiplier' : 'margin');
       setPricingMultiplier(Number(draftData.pricingMultiplier ?? 2));
-      setServiceBasePrice(Number((draftData as any).serviceBasePrice ?? 0));
+      setServiceBasePrice(Number(draftData.serviceBasePrice ?? 0));
       setStockQuantity(Number(draftData.stockQuantity ?? 0));
       setMinStock(Number(draftData.minStock ?? 0));
       setMinOrderQuantity(Number(draftData.minOrderQuantity ?? 1));
@@ -1475,10 +1546,10 @@ export default function ProductForm() {
       setPromoPrice(draftData.promoPrice ?? null);
       setPromoStartAt(draftData.promoStartAt ?? '');
       setPromoEndAt(draftData.promoEndAt ?? '');
-      setIsPublicProduct(Boolean((draftData as any).isPublicProduct));
-      setIsCopyProduct(Boolean((draftData as any).isCopyProduct));
-      setOriginalProductId((draftData as any).originalProductId ?? null);
-      setProductOwnerId((draftData as any).productOwnerId ?? currentUserId);
+      setIsPublicProduct(Boolean(draftData.isPublicProduct));
+      setIsCopyProduct(Boolean(draftData.isCopyProduct));
+      setOriginalProductId(draftData.originalProductId ?? null);
+      setProductOwnerId(draftData.productOwnerId ?? currentUserId);
       setProductColors(normalizeProductColors(draftData.productColors));
       setPersonalizationEnabled(Boolean(draftData.personalizationEnabled));
       setProductionTimeDays(
@@ -1497,9 +1568,9 @@ export default function ProductForm() {
         );
       }
 
-      if (Array.isArray((draftData as any).serviceItems)) {
+      if (Array.isArray(draftData.serviceItems)) {
         setServiceItems(
-          (draftData as any).serviceItems.map((item: any) => ({
+          draftData.serviceItems.map((item) => ({
             name: String(item.name || ''),
             description: String(item.description || ''),
             item_kind: item.item_kind === 'adicional' ? 'adicional' : 'item',
@@ -1508,9 +1579,9 @@ export default function ProductForm() {
         );
       }
 
-      if (Array.isArray((draftData as any).serviceProducts)) {
+      if (Array.isArray(draftData.serviceProducts)) {
         setServiceProducts(
-          (draftData as any).serviceProducts.map((item: any) => ({
+          draftData.serviceProducts.map((item) => ({
             product_id: String(item.product_id || ''),
             quantity: Number(item.quantity || 1),
             notes: String(item.notes || ''),
@@ -1643,12 +1714,12 @@ export default function ProductForm() {
       prev.map((item, itemIndex) =>
         itemIndex === index
           ? {
-              ...item,
-              [field]:
-                field === 'base_price'
-                  ? Number(value || 0)
-                  : value,
-            }
+            ...item,
+            [field]:
+              field === 'base_price'
+                ? Number(value || 0)
+                : value,
+          }
           : item,
       ),
     );
@@ -1671,9 +1742,9 @@ export default function ProductForm() {
       prev.map((item, itemIndex) =>
         itemIndex === index
           ? {
-              ...item,
-              [field]: field === 'quantity' ? Number(value || 0) : value,
-            }
+            ...item,
+            [field]: field === 'quantity' ? Number(value || 0) : value,
+          }
           : item,
       ),
     );
@@ -1695,7 +1766,7 @@ export default function ProductForm() {
 
   const updatePriceTier = (index: number, field: keyof PriceTierItem, value: number | null) => {
     const updated = [...priceTiers];
-    (updated[index] as any)[field] = value;
+    updated[index] = { ...updated[index], [field]: value } as PriceTierItem;
     setPriceTiers(updated);
   };
 
@@ -1757,7 +1828,8 @@ export default function ProductForm() {
       setCatalogShortDescription(refined.shortDescription);
       setCatalogLongDescription(refined.longDescription);
       toast({ title: 'Descrições geradas com sucesso' });
-    } catch (error: any) {
+    } catch (err) {
+      const error = err as { status?: number; message?: string };
       const status = Number(error?.status || 0);
       const extraHelp = status === 401
         ? ' Verifique login/sessão e se a função generate-product-description está deployada no mesmo projeto.'
@@ -2004,7 +2076,7 @@ export default function ProductForm() {
     }
 
     const attributeIdByName = new Map<string, string>();
-    (existingAttributes || []).forEach((row: any) => {
+    (existingAttributes || []).forEach((row) => {
       attributeIdByName.set(String(row.name).toLowerCase(), row.id);
     });
 
@@ -2022,7 +2094,7 @@ export default function ProductForm() {
         throw createAttributesError;
       }
 
-      (createdAttributes || []).forEach((row: any) => {
+      (createdAttributes || []).forEach((row) => {
         attributeIdByName.set(String(row.name).toLowerCase(), row.id);
       });
     }
@@ -2040,7 +2112,7 @@ export default function ProductForm() {
     }
 
     const valueIdByKey = new Map<string, string>();
-    (existingValues || []).forEach((row: any) => {
+    (existingValues || []).forEach((row) => {
       const key = `${row.attribute_id}::${String(row.value).toLowerCase()}`;
       valueIdByKey.set(key, row.id);
     });
@@ -2072,7 +2144,7 @@ export default function ProductForm() {
         throw createValuesError;
       }
 
-      (createdValues || []).forEach((row: any) => {
+      (createdValues || []).forEach((row) => {
         const key = `${row.attribute_id}::${String(row.value).toLowerCase()}`;
         valueIdByKey.set(key, row.id);
       });
@@ -2120,17 +2192,19 @@ export default function ProductForm() {
 
     setCopyingProduct(true);
     try {
-      const { data: sourceProduct, error: sourceProductError } = await supabase
+      const { data: sourceProductData, error: sourceProductError } = await supabase
         .from('products')
         .select('*, category:categories(name)')
         .eq('id', id)
         .maybeSingle();
 
+      const sourceProduct = sourceProductData as ReferenceProduct | null;
+
       if (sourceProductError || !sourceProduct) {
         throw sourceProductError || new Error('Produto de origem não encontrado.');
       }
 
-      const sourceCategoryName = (sourceProduct as any).category?.name as string | undefined;
+      const sourceCategoryName = sourceProduct.category?.name;
       const targetCategoryId = await resolveCopyCategoryId(sourceCategoryName);
 
       const baseName = String(sourceProduct.name || 'Produto').trim();
@@ -2138,8 +2212,8 @@ export default function ProductForm() {
       const safeBaseName = baseName.slice(0, Math.max(0, 100 - copySuffix.length)).trim() || 'Produto';
       const copyName = `${safeBaseName}${copySuffix}`;
       const normalizedImageUrls = normalizeProductImages(
-        (sourceProduct as any).image_urls,
-        (sourceProduct as any).image_url,
+        sourceProduct.image_urls,
+        sourceProduct.image_url,
       );
       const primaryImageUrl = normalizedImageUrls[0] ?? null;
 
@@ -2161,24 +2235,24 @@ export default function ProductForm() {
         show_in_catalog: false,
         catalog_enabled: false,
         catalog_featured: false,
-        catalog_price: (sourceProduct as any).catalog_price ?? null,
-        catalog_short_description: (sourceProduct as any).catalog_short_description ?? null,
-        catalog_long_description: (sourceProduct as any).catalog_long_description ?? null,
-        catalog_min_order: (sourceProduct as any).catalog_min_order ?? sourceProduct.min_order_quantity ?? 1,
-        product_colors: (sourceProduct as any).product_colors ?? [],
-        personalization_enabled: (sourceProduct as any).personalization_enabled ?? false,
-        production_time_days: (sourceProduct as any).production_time_days ?? null,
+        catalog_price: sourceProduct.catalog_price ?? null,
+        catalog_short_description: sourceProduct.catalog_short_description ?? null,
+        catalog_long_description: sourceProduct.catalog_long_description ?? null,
+        catalog_min_order: sourceProduct.catalog_min_order ?? sourceProduct.min_order_quantity ?? 1,
+        product_colors: sourceProduct.product_colors ?? [],
+        personalization_enabled: sourceProduct.personalization_enabled ?? false,
+        production_time_days: sourceProduct.production_time_days ?? null,
         unit: sourceProduct.unit || 'un',
         unit_type: resolveProductSaleUnit(
-          isProductSaleUnitPreset((sourceProduct as any).unit_type)
-            ? String((sourceProduct as any).unit_type || DEFAULT_PRODUCT_SALE_UNIT)
+          isProductSaleUnitPreset(sourceProduct.unit_type)
+            ? String(sourceProduct.unit_type || DEFAULT_PRODUCT_SALE_UNIT)
             : CUSTOM_PRODUCT_SALE_UNIT_VALUE,
-          (sourceProduct as any).unit_type || '',
+          sourceProduct.unit_type || '',
         ),
         is_active: Boolean(sourceProduct.is_active),
         base_cost: Number(sourceProduct.base_cost || 0),
         labor_cost: Number(sourceProduct.labor_cost || 0),
-        expense_percentage: Number((sourceProduct as any).expense_percentage || 0),
+        expense_percentage: Number(sourceProduct.expense_percentage || 0),
         waste_percentage: Number(sourceProduct.waste_percentage || 0),
         profit_margin: Number(sourceProduct.profit_margin || 0),
         final_price: sourceProduct.final_price !== null ? Number(sourceProduct.final_price) : null,
@@ -2237,7 +2311,7 @@ export default function ProductForm() {
       }
 
       const sourceAttributes: CopyAttributeSource[] = (sourceAttributeRows || [])
-        .map((row: any) => {
+        .map((row) => {
           const attributeValue = Array.isArray(row.attribute_value)
             ? row.attribute_value[0]
             : row.attribute_value;
@@ -2259,7 +2333,8 @@ export default function ProductForm() {
 
       toast({ title: 'Cópia criada com sucesso!' });
       navigate(`/produtos/${copiedProductId}`);
-    } catch (error: any) {
+    } catch (err) {
+      const error = err as { message?: string };
       toast({
         title: 'Erro ao criar cópia',
         description: error?.message || 'Não foi possível copiar o produto público.',
@@ -2404,7 +2479,7 @@ export default function ProductForm() {
 
       if (error) {
         if (error.code === '23505') {
-          const message = String(error.message || (error as any).details || '').toLowerCase();
+          const message = String(error.message || error.details || '').toLowerCase();
           if (message.includes('barcode')) {
             setErrors((prev) => ({ ...(prev || {}), barcode: 'Código de barras já está em uso' }));
           } else {
@@ -2434,7 +2509,7 @@ export default function ProductForm() {
 
       if (error || !product) {
         if (error?.code === '23505') {
-          const message = String(error?.message || (error as any)?.details || '').toLowerCase();
+          const message = String(error?.message || error?.details || '').toLowerCase();
           if (message.includes('barcode')) {
             setErrors((prev) => ({ ...(prev || {}), barcode: 'Código de barras já está em uso' }));
           } else {
@@ -2598,1404 +2673,1404 @@ export default function ProductForm() {
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className={isReadOnlyPublicProduct ? 'pointer-events-none select-none opacity-95' : ''}>
           <Tabs defaultValue="informacoes" className="space-y-6">
-          <TabsList className="grid h-auto w-full grid-cols-1 gap-2 sm:h-10 sm:grid-cols-3">
-            <TabsTrigger value="informacoes">Informações Gerais</TabsTrigger>
-            <TabsTrigger value="estoque">Estoque</TabsTrigger>
-            <TabsTrigger value="valores">Valores</TabsTrigger>
-          </TabsList>
+            <TabsList className="grid h-auto w-full grid-cols-1 gap-2 sm:h-10 sm:grid-cols-3">
+              <TabsTrigger value="informacoes">Informações Gerais</TabsTrigger>
+              <TabsTrigger value="estoque">Estoque</TabsTrigger>
+              <TabsTrigger value="valores">Valores</TabsTrigger>
+            </TabsList>
 
-          <TabsContent value="informacoes" className="space-y-6">
-            {/* Basic Info */}
-            <Card>
-          <CardHeader>
-            <CardTitle>Informações Gerais</CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="name">Nome *</Label>
-              <Input
-                id="name"
-                value={name}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  setName(value);
-                  if (!slugTouched) {
-                    setProductSlug(generateSlug(value));
-                  }
-                }}
-                placeholder="Nome do produto"
-                className={errors?.name ? 'border-destructive' : ''}
-              />
-              {errors?.name && <p className="text-xs text-destructive">{errors.name}</p>}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="sku">SKU / Código</Label>
-              <div className="flex gap-2">
-                <Input
-                  id="sku"
-                  value={sku}
-                  onChange={(e) => {
-                    setSku(e.target.value.toUpperCase());
-                    clearSkuError();
-                  }}
-                  placeholder="Código interno"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleGenerateSku}
-                  disabled={skuChecking}
-                  className="shrink-0"
-                >
-                  {skuChecking ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    'Gerar SKU'
-                  )}
-                </Button>
-              </div>
-              {errors?.sku && <p className="text-xs text-destructive">{errors.sku}</p>}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="barcode">Código de barras</Label>
-              <div className="flex flex-col gap-2">
-                <div className="flex flex-wrap gap-2">
-                  <Select value={barcodeFormat} onValueChange={(value) => setBarcodeFormat(value as BarcodeFormat)}>
-                    <SelectTrigger className="w-full sm:w-[140px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="ean13">EAN-13</SelectItem>
-                      <SelectItem value="code128">Code 128</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Input
-                    id="barcode"
-                    value={barcode}
-                    onChange={(e) => {
-                      setBarcode(normalizeBarcodeValue(e.target.value));
-                      clearBarcodeError();
-                    }}
-                    placeholder="Código de barras"
-                    className={`flex-1 ${errors?.barcode ? 'border-destructive' : ''}`}
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={handleGenerateBarcode}
-                    disabled={barcodeChecking}
-                    className="shrink-0"
-                  >
-                    {barcodeChecking ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      'Gerar'
-                    )}
-                  </Button>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  EAN-13: 13 dígitos. Code 128: ASCII 32-126.
-                </p>
-                {normalizedBarcodePreview ? (
-                  <div className="flex flex-col items-center gap-0.5 rounded-lg border bg-white px-4 py-1.5">
-                    <BarcodeSvg
-                      value={normalizedBarcodePreview}
-                      format={resolvedBarcodeFormat}
-                      height={30}
-                      moduleWidth={resolvedBarcodeFormat === 'ean13' ? 1.35 : 1.1}
-                      className="mx-auto w-full max-w-[320px]"
+            <TabsContent value="informacoes" className="space-y-6">
+              {/* Basic Info */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Informações Gerais</CardTitle>
+                </CardHeader>
+                <CardContent className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="name">Nome *</Label>
+                    <Input
+                      id="name"
+                      value={name}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setName(value);
+                        if (!slugTouched) {
+                          setProductSlug(generateSlug(value));
+                        }
+                      }}
+                      placeholder="Nome do produto"
+                      className={errors?.name ? 'border-destructive' : ''}
                     />
-                    <span className="text-xs font-medium text-foreground tracking-[0.22em]">
-                      {normalizedBarcodePreview}
-                    </span>
+                    {errors?.name && <p className="text-xs text-destructive">{errors.name}</p>}
                   </div>
-                ) : null}
-              </div>
-              {errors?.barcode && <p className="text-xs text-destructive">{errors.barcode}</p>}
-            </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="type">Tipo *</Label>
-              <Select value={productType} onValueChange={(v) => setProductType(v as ProductType)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="produto">Produto (Revenda)</SelectItem>
-                  <SelectItem value="confeccionado">Confeccionado (Produção)</SelectItem>
-                  <SelectItem value="servico">Serviço</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="category">Categoria</Label>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 px-2 text-xs"
-                  onClick={() => setCategoryDialogOpen(true)}
-                >
-                  <FolderPlus className="h-3 w-3 mr-1" />
-                  Nova
-                </Button>
-              </div>
-              <Select value={categoryId} onValueChange={setCategoryId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {categoryOptions.map((option) => (
-                    <SelectItem key={option.id} value={option.id}>
-                      <span style={{ paddingLeft: option.level * 12 }}>{option.name}</span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="flex items-center gap-3 pt-6">
-              <Switch checked={isActive} onCheckedChange={setIsActive} />
-              <Label>Produto ativo</Label>
-            </div>
-
-            <div className="flex items-center gap-3 pt-6">
-              <Switch checked={showInCatalog} onCheckedChange={setShowInCatalog} />
-              <Label className="flex items-center gap-2">
-                <Globe className="h-4 w-4" />
-                Exibir no catálogo público
-              </Label>
-            </div>
-
-            {canControlPublicToggle && (
-              <div className="md:col-span-2 rounded-lg border p-3">
-                <div className="flex items-center gap-3">
-                  <Switch
-                    checked={isPublicProduct}
-                    onCheckedChange={setIsPublicProduct}
-                    disabled={isCopyProduct}
-                  />
-                  <Label>Tornar este produto público (Disponível para todos os usuários)</Label>
-                </div>
-                <p className="mt-2 text-xs text-muted-foreground">
-                  Outros usuários poderão visualizar este produto e criar uma cópia para suas lojas. Eles não poderão editar o original.
-                </p>
-                {isCopyProduct && (
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Cópias de produto público não podem ser publicadas como produto compartilhado.
-                  </p>
-                )}
-              </div>
-            )}
-
-            <div className="flex items-center gap-3 pt-4">
-              <Switch checked={catalogFeatured} onCheckedChange={setCatalogFeatured} />
-              <Label className="flex items-center gap-2">
-                <Tag className="h-4 w-4" />
-                Destacar no catálogo
-              </Label>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="catalogPrice">Preço para catálogo</Label>
-              <CurrencyInput
-                id="catalogPrice"
-                value={catalogPrice ?? 0}
-                onChange={(value) => setCatalogPrice(value)}
-              />
-              <p className="text-xs text-muted-foreground">Deixe em branco para usar o preço padrão.</p>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="productSlug">Slug do produto</Label>
-              <Input
-                id="productSlug"
-                value={productSlug}
-                onChange={(e) => {
-                  setSlugTouched(true);
-                  setProductSlug(generateSlug(e.target.value));
-                }}
-                placeholder="slug-do-produto"
-              />
-                <p className="text-xs text-muted-foreground">{productLinkPreview}</p>
-            </div>
-
-            <div className="md:col-span-2 space-y-2">
-              <Label htmlFor="description">Descrição</Label>
-              <div className="flex justify-end">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={handleGenerateDescription}
-                  disabled={generatingDescription}
-                >
-                  {generatingDescription ? 'Gerando...' : 'Gerar descrição com IA'}
-                </Button>
-              </div>
-              <Textarea
-                id="description"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Descrição do produto..."
-                rows={3}
-              />
-            </div>
-            <div className="md:col-span-2 space-y-2">
-              <Label htmlFor="catalogShortDescription">Descrição curta (catálogo)</Label>
-              <Textarea
-                id="catalogShortDescription"
-                value={catalogShortDescription}
-                onChange={(e) => setCatalogShortDescription(e.target.value)}
-                placeholder="Resumo curto para o catálogo (até 140 caracteres)"
-                rows={2}
-                maxLength={140}
-              />
-              <p className="text-xs text-muted-foreground">
-                {catalogShortDescription.length}/140 caracteres
-              </p>
-            </div>
-            <div className="md:col-span-2 space-y-2">
-              <Label htmlFor="catalogLongDescription">Descrição longa (catálogo)</Label>
-              <Textarea
-                id="catalogLongDescription"
-                value={catalogLongDescription}
-                onChange={(e) => setCatalogLongDescription(e.target.value)}
-                placeholder="Descrição completa para o catálogo"
-                rows={4}
-              />
-            </div>
-
-            <Separator className="md:col-span-2" />
-
-            <div className="md:col-span-2 space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label className="text-base">Cores disponíveis</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Configure as cores que o cliente pode escolher no catálogo.
-                  </p>
-                </div>
-                <Button type="button" variant="outline" size="sm" onClick={addProductColor}>
-                  <Plus className="h-4 w-4 mr-1" /> Adicionar cor
-                </Button>
-              </div>
-
-              {productColors.length > 0 ? (
-                <div className="space-y-3">
-                  {productColors.map((color, index) => (
-                    <div
-                      key={`${color.name}-${index}`}
-                      className="grid gap-3 rounded-lg border p-3 md:grid-cols-[1fr_140px_120px_80px_40px] items-center"
-                    >
+                  <div className="space-y-2">
+                    <Label htmlFor="sku">SKU / Código</Label>
+                    <div className="flex gap-2">
                       <Input
-                        placeholder="Nome da cor"
-                        value={color.name}
-                        onChange={(e) => updateProductColor(index, 'name', e.target.value)}
+                        id="sku"
+                        value={sku}
+                        onChange={(e) => {
+                          setSku(e.target.value.toUpperCase());
+                          clearSkuError();
+                        }}
+                        placeholder="Código interno"
                       />
-                      <Input
-                        placeholder="#1E90FF"
-                        value={color.hex}
-                        onChange={(e) => updateProductColor(index, 'hex', e.target.value)}
-                      />
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="color"
-                          value={color.hex || '#000000'}
-                          onChange={(e) => updateProductColor(index, 'hex', e.target.value)}
-                          className="h-9 w-12 rounded border border-input bg-transparent p-0"
-                          aria-label="Selecionar cor"
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handleGenerateSku}
+                        disabled={skuChecking}
+                        className="shrink-0"
+                      >
+                        {skuChecking ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          'Gerar SKU'
+                        )}
+                      </Button>
+                    </div>
+                    {errors?.sku && <p className="text-xs text-destructive">{errors.sku}</p>}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="barcode">Código de barras</Label>
+                    <div className="flex flex-col gap-2">
+                      <div className="flex flex-wrap gap-2">
+                        <Select value={barcodeFormat} onValueChange={(value) => setBarcodeFormat(value as BarcodeFormat)}>
+                          <SelectTrigger className="w-full sm:w-[140px]">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="ean13">EAN-13</SelectItem>
+                            <SelectItem value="code128">Code 128</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <Input
+                          id="barcode"
+                          value={barcode}
+                          onChange={(e) => {
+                            setBarcode(normalizeBarcodeValue(e.target.value));
+                            clearBarcodeError();
+                          }}
+                          placeholder="Código de barras"
+                          className={`flex-1 ${errors?.barcode ? 'border-destructive' : ''}`}
                         />
-                        <div
-                          className="h-9 w-9 rounded border"
-                          style={{ backgroundColor: color.hex || '#000000' }}
-                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={handleGenerateBarcode}
+                          disabled={barcodeChecking}
+                          className="shrink-0"
+                        >
+                          {barcodeChecking ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            'Gerar'
+                          )}
+                        </Button>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Switch
-                          checked={color.active}
-                          onCheckedChange={(checked) => updateProductColor(index, 'active', checked)}
-                        />
-                        <span className="text-xs text-muted-foreground">Ativa</span>
-                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        EAN-13: 13 dígitos. Code 128: ASCII 32-126.
+                      </p>
+                      {normalizedBarcodePreview ? (
+                        <div className="flex flex-col items-center gap-0.5 rounded-lg border bg-white px-4 py-1.5">
+                          <BarcodeSvg
+                            value={normalizedBarcodePreview}
+                            format={resolvedBarcodeFormat}
+                            height={30}
+                            moduleWidth={resolvedBarcodeFormat === 'ean13' ? 1.35 : 1.1}
+                            className="mx-auto w-full max-w-[320px]"
+                          />
+                          <span className="text-xs font-medium text-foreground tracking-[0.22em]">
+                            {normalizedBarcodePreview}
+                          </span>
+                        </div>
+                      ) : null}
+                    </div>
+                    {errors?.barcode && <p className="text-xs text-destructive">{errors.barcode}</p>}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="type">Tipo *</Label>
+                    <Select value={productType} onValueChange={(v) => setProductType(v as ProductType)}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="produto">Produto (Revenda)</SelectItem>
+                        <SelectItem value="confeccionado">Confeccionado (Produção)</SelectItem>
+                        <SelectItem value="servico">Serviço</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="category">Categoria</Label>
                       <Button
                         type="button"
                         variant="ghost"
-                        size="icon"
-                        onClick={() => removeProductColor(index)}
+                        size="sm"
+                        className="h-6 px-2 text-xs"
+                        onClick={() => setCategoryDialogOpen(true)}
                       >
-                        <Trash2 className="h-4 w-4 text-destructive" />
+                        <FolderPlus className="h-3 w-3 mr-1" />
+                        Nova
                       </Button>
                     </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-                  Nenhuma cor cadastrada.
-                </div>
-              )}
-            </div>
+                    <Select value={categoryId} onValueChange={setCategoryId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {categoryOptions.map((option) => (
+                          <SelectItem key={option.id} value={option.id}>
+                            <span style={{ paddingLeft: option.level * 12 }}>{option.name}</span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-            <div className="md:col-span-2 space-y-3 rounded-lg border p-3">
-              <div className="flex items-center justify-between gap-3">
-                <div className="space-y-1">
-                  <Label className="text-sm font-medium">Produto personalizado</Label>
-                  <p className="text-xs text-muted-foreground">
-                    Quando ativo, o cliente pode anexar opcionalmente a arte/modelo no pedido do catálogo (JPG, PNG, WEBP ou PDF).
-                  </p>
-                </div>
-                <Switch checked={personalizationEnabled} onCheckedChange={setPersonalizationEnabled} />
-              </div>
+                  <div className="flex items-center gap-3 pt-6">
+                    <Switch checked={isActive} onCheckedChange={setIsActive} />
+                    <Label>Produto ativo</Label>
+                  </div>
 
-              {(productType === 'confeccionado' || personalizationEnabled) && (
-                <div className="space-y-2">
-                  <Label htmlFor="productionTimeDays">Tempo de produção (dias corridos)</Label>
-                  <Input
-                    id="productionTimeDays"
-                    type="number"
-                    min={0}
-                    step={1}
-                    value={productionTimeDays ?? ''}
-                    onChange={(event) => {
-                      const rawValue = event.target.value;
-                      setProductionTimeDays(
-                        rawValue === '' ? null : Math.max(0, Math.trunc(Number(rawValue) || 0)),
-                      );
-                    }}
-                    className={errors?.production_time_days ? 'border-destructive' : ''}
-                    placeholder="Ex.: 3"
-                  />
-                  {errors?.production_time_days ? (
-                    <p className="text-xs text-destructive">{errors.production_time_days}</p>
-                  ) : (
-                    <p className="text-xs text-muted-foreground">
-                      Defina em dias corridos. Esse prazo será exibido no catálogo e no pedido.
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+                  <div className="flex items-center gap-3 pt-6">
+                    <Switch checked={showInCatalog} onCheckedChange={setShowInCatalog} />
+                    <Label className="flex items-center gap-2">
+                      <Globe className="h-4 w-4" />
+                      Exibir no catálogo público
+                    </Label>
+                  </div>
 
-            {/* Product Image */}
-            <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Image className="h-5 w-5" />
-              Imagem do Produto
-            </CardTitle>
-            <CardDescription>
-              Adicione até 5 imagens para exibir no catálogo público
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
-              multiple
-              onChange={handleImageUpload}
-              className="hidden"
-            />
-
-            <div className="space-y-4">
-              {imageUrls.length > 0 && (
-                <div className="flex flex-wrap gap-4">
-                  {imageUrls.map((url, index) => (
-                    <div
-                      key={`${url}-${index}`}
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => setPrimaryImage(index)}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Enter' || event.key === ' ') {
-                          setPrimaryImage(index);
-                        }
-                      }}
-                      className="group relative h-32 w-32 overflow-hidden rounded-lg border cursor-pointer"
-                      title={index === 0 ? 'Imagem principal' : 'Definir como capa'}
-                    >
-                      <img
-                        src={url}
-                        alt={`Produto ${index + 1}`}
-                        className="h-full w-full object-cover"
-                      />
-                      {index === 0 ? (
-                        <Badge variant="secondary" className="absolute left-2 top-2">
-                          Principal
-                        </Badge>
-                      ) : (
-                        <span className="absolute left-2 top-2 rounded bg-white/80 px-2 py-0.5 text-[10px] text-slate-700 opacity-0 transition-opacity group-hover:opacity-100">
-                          Definir capa
-                        </span>
+                  {canControlPublicToggle && (
+                    <div className="md:col-span-2 rounded-lg border p-3">
+                      <div className="flex items-center gap-3">
+                        <Switch
+                          checked={isPublicProduct}
+                          onCheckedChange={setIsPublicProduct}
+                          disabled={isCopyProduct}
+                        />
+                        <Label>Tornar este produto público (Disponível para todos os usuários)</Label>
+                      </div>
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        Outros usuários poderão visualizar este produto e criar uma cópia para suas lojas. Eles não poderão editar o original.
+                      </p>
+                      {isCopyProduct && (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Cópias de produto público não podem ser publicadas como produto compartilhado.
+                        </p>
                       )}
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-3 pt-4">
+                    <Switch checked={catalogFeatured} onCheckedChange={setCatalogFeatured} />
+                    <Label className="flex items-center gap-2">
+                      <Tag className="h-4 w-4" />
+                      Destacar no catálogo
+                    </Label>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="catalogPrice">Preço para catálogo</Label>
+                    <CurrencyInput
+                      id="catalogPrice"
+                      value={catalogPrice ?? 0}
+                      onChange={(value) => setCatalogPrice(value)}
+                    />
+                    <p className="text-xs text-muted-foreground">Deixe em branco para usar o preço padrão.</p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="productSlug">Slug do produto</Label>
+                    <Input
+                      id="productSlug"
+                      value={productSlug}
+                      onChange={(e) => {
+                        setSlugTouched(true);
+                        setProductSlug(generateSlug(e.target.value));
+                      }}
+                      placeholder="slug-do-produto"
+                    />
+                    <p className="text-xs text-muted-foreground">{productLinkPreview}</p>
+                  </div>
+
+                  <div className="md:col-span-2 space-y-2">
+                    <Label htmlFor="description">Descrição</Label>
+                    <div className="flex justify-end">
                       <Button
                         type="button"
-                        variant="destructive"
-                        size="icon"
-                        className="absolute right-2 top-2 h-6 w-6 opacity-0 transition-opacity group-hover:opacity-100"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          removeImage(index);
-                        }}
+                        variant="outline"
+                        size="sm"
+                        onClick={handleGenerateDescription}
+                        disabled={generatingDescription}
                       >
-                        <Trash2 className="h-3 w-3" />
+                        {generatingDescription ? 'Gerando...' : 'Gerar descrição com IA'}
                       </Button>
                     </div>
-                  ))}
-                </div>
-              )}
+                    <Textarea
+                      id="description"
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      placeholder="Descrição do produto..."
+                      rows={3}
+                    />
+                  </div>
+                  <div className="md:col-span-2 space-y-2">
+                    <Label htmlFor="catalogShortDescription">Descrição curta (catálogo)</Label>
+                    <Textarea
+                      id="catalogShortDescription"
+                      value={catalogShortDescription}
+                      onChange={(e) => setCatalogShortDescription(e.target.value)}
+                      placeholder="Resumo curto para o catálogo (até 140 caracteres)"
+                      rows={2}
+                      maxLength={140}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {catalogShortDescription.length}/140 caracteres
+                    </p>
+                  </div>
+                  <div className="md:col-span-2 space-y-2">
+                    <Label htmlFor="catalogLongDescription">Descrição longa (catálogo)</Label>
+                    <Textarea
+                      id="catalogLongDescription"
+                      value={catalogLongDescription}
+                      onChange={(e) => setCatalogLongDescription(e.target.value)}
+                      placeholder="Descrição completa para o catálogo"
+                      rows={4}
+                    />
+                  </div>
 
-              {imageUrls.length < MAX_PRODUCT_IMAGES && (
-                <div
-                  onClick={() => !uploadingImage && fileInputRef.current?.click()}
-                  className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover:border-primary/50 transition-colors"
-                >
-                  {uploadingImage ? (
-                    <div className="flex flex-col items-center gap-2">
-                      <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                      <p className="text-sm text-muted-foreground">Enviando...</p>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col items-center gap-2">
-                      <Upload className="h-8 w-8 text-muted-foreground" />
-                      <p className="text-sm text-muted-foreground">
-                        Clique para enviar imagens
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        PNG, JPG ou WEBP (max. 5MB)
-                      </p>
-                    </div>
-                  )}
-                </div>
-              )}
+                  <Separator className="md:col-span-2" />
 
-              <p className="text-xs text-muted-foreground">
-                {imageUrls.length}/{MAX_PRODUCT_IMAGES} imagens cadastradas.
-              </p>
-            </div>
-          </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="valores" className="space-y-6">
-            {/* Cost Composition */}
-            <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Calculator className="h-5 w-5" />
-              Composição de Custos
-            </CardTitle>
-            <CardDescription>
-              Configure os custos para calcular o preço de venda automaticamente
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="grid gap-4 md:grid-cols-5">
-              <div className="space-y-2">
-                <Label htmlFor="baseCost">Custo Base (R$)</Label>
-                <CurrencyInput
-                  id="baseCost"
-                  value={baseCost}
-                  onChange={setBaseCost}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="laborCost">Mão de Obra (R$)</Label>
-                <CurrencyInput
-                  id="laborCost"
-                  value={laborCost}
-                  onChange={setLaborCost}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="expensePercentage">Despesas aplicadas (%)</Label>
-                <Input
-                  id="expensePercentage"
-                  type="number"
-                  step="0.1"
-                  min="0"
-                  value={expensePercentage}
-                  onChange={(e) => setExpensePercentage(parseFloat(e.target.value) || 0)}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="waste">Desperdício (%)</Label>
-                <Input
-                  id="waste"
-                  type="number"
-                  step="0.1"
-                  min="0"
-                  max="100"
-                  value={wastePercentage}
-                  onChange={(e) => setWastePercentage(parseFloat(e.target.value) || 0)}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="margin">Margem de Lucro (%)</Label>
-                <Input
-                  id="margin"
-                  type="number"
-                  step="0.1"
-                  min="0"
-                  value={profitMargin}
-                  onChange={(e) => setProfitMargin(parseFloat(e.target.value) || 0)}
-                />
-              </div>
-            </div>
-
-            <div className="grid gap-4 rounded-lg border border-border bg-muted/20 p-4 md:grid-cols-[minmax(0,1fr)_220px]">
-              <div className="space-y-3">
-                <div>
-                  <Label className="text-base">Método de precificação</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Escolha entre margem tradicional ou multiplicador, sem perder o preço manual.
-                  </p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    type="button"
-                    variant={pricingMethod === 'margin' ? 'default' : 'outline'}
-                    onClick={() => {
-                      setPricingMethod('margin');
-                      setFinalPriceTouched(false);
-                    }}
-                  >
-                    Margem %
-                  </Button>
-                  <Button
-                    type="button"
-                    variant={pricingMethod === 'multiplier' ? 'default' : 'outline'}
-                    onClick={() => {
-                      setPricingMethod('multiplier');
-                      setFinalPriceTouched(false);
-                    }}
-                  >
-                    Multiplicador
-                  </Button>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="pricingMultiplier">Multiplicador</Label>
-                <Input
-                  id="pricingMultiplier"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={pricingMultiplier}
-                  onChange={(e) => setPricingMultiplier(parseFloat(e.target.value) || 0)}
-                  disabled={pricingMethod !== 'multiplier'}
-                />
-              </div>
-            </div>
-
-            {productType === 'servico' && (
-              <>
-                <Separator />
-                <Card className="border-primary/20 bg-primary/5">
-                  <CardHeader>
-                    <CardTitle>Composição do serviço</CardTitle>
-                    <CardDescription>
-                      Monte o valor do serviço com valor base, produtos utilizados e itens adicionais.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-6">
-                    <div className="grid gap-4 md:grid-cols-[220px_minmax(0,1fr)]">
-                      <div className="space-y-2">
-                        <Label htmlFor="serviceBasePrice">Valor base do serviço</Label>
-                        <CurrencyInput
-                          id="serviceBasePrice"
-                          value={serviceBasePrice}
-                          onChange={(value) => setServiceBasePrice(value)}
-                        />
-                      </div>
-                      <div className="rounded-lg border bg-background/80 p-4">
-                        <p className="text-sm font-medium">Como o total é calculado</p>
-                        <p className="mt-2 text-sm text-muted-foreground">
-                          O sistema soma o valor base do serviço, os produtos vinculados e os itens adicionais.
-                          Se a precificação por custo resultar em um valor maior, ele será usado como referência.
+                  <div className="md:col-span-2 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <Label className="text-base">Cores disponíveis</Label>
+                        <p className="text-sm text-muted-foreground">
+                          Configure as cores que o cliente pode escolher no catálogo.
                         </p>
                       </div>
+                      <Button type="button" variant="outline" size="sm" onClick={addProductColor}>
+                        <Plus className="h-4 w-4 mr-1" /> Adicionar cor
+                      </Button>
                     </div>
 
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <Label className="text-base">Produtos utilizados</Label>
-                          <p className="text-sm text-muted-foreground">
-                            Produtos da loja que entram no serviço composto.
+                    {productColors.length > 0 ? (
+                      <div className="space-y-3">
+                        {productColors.map((color, index) => (
+                          <div
+                            key={`${color.name}-${index}`}
+                            className="grid gap-3 rounded-lg border p-3 md:grid-cols-[1fr_140px_120px_80px_40px] items-center"
+                          >
+                            <Input
+                              placeholder="Nome da cor"
+                              value={color.name}
+                              onChange={(e) => updateProductColor(index, 'name', e.target.value)}
+                            />
+                            <Input
+                              placeholder="#1E90FF"
+                              value={color.hex}
+                              onChange={(e) => updateProductColor(index, 'hex', e.target.value)}
+                            />
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="color"
+                                value={color.hex || '#000000'}
+                                onChange={(e) => updateProductColor(index, 'hex', e.target.value)}
+                                className="h-9 w-12 rounded border border-input bg-transparent p-0"
+                                aria-label="Selecionar cor"
+                              />
+                              <div
+                                className="h-9 w-9 rounded border"
+                                style={{ backgroundColor: color.hex || '#000000' }}
+                              />
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Switch
+                                checked={color.active}
+                                onCheckedChange={(checked) => updateProductColor(index, 'active', checked)}
+                              />
+                              <span className="text-xs text-muted-foreground">Ativa</span>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => removeProductColor(index)}
+                            >
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                        Nenhuma cor cadastrada.
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="md:col-span-2 space-y-3 rounded-lg border p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="space-y-1">
+                        <Label className="text-sm font-medium">Produto personalizado</Label>
+                        <p className="text-xs text-muted-foreground">
+                          Quando ativo, o cliente pode anexar opcionalmente a arte/modelo no pedido do catálogo (JPG, PNG, WEBP ou PDF).
+                        </p>
+                      </div>
+                      <Switch checked={personalizationEnabled} onCheckedChange={setPersonalizationEnabled} />
+                    </div>
+
+                    {(productType === 'confeccionado' || personalizationEnabled) && (
+                      <div className="space-y-2">
+                        <Label htmlFor="productionTimeDays">Tempo de produção (dias corridos)</Label>
+                        <Input
+                          id="productionTimeDays"
+                          type="number"
+                          min={0}
+                          step={1}
+                          value={productionTimeDays ?? ''}
+                          onChange={(event) => {
+                            const rawValue = event.target.value;
+                            setProductionTimeDays(
+                              rawValue === '' ? null : Math.max(0, Math.trunc(Number(rawValue) || 0)),
+                            );
+                          }}
+                          className={errors?.production_time_days ? 'border-destructive' : ''}
+                          placeholder="Ex.: 3"
+                        />
+                        {errors?.production_time_days ? (
+                          <p className="text-xs text-destructive">{errors.production_time_days}</p>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">
+                            Defina em dias corridos. Esse prazo será exibido no catálogo e no pedido.
                           </p>
-                        </div>
-                        <Button type="button" variant="outline" size="sm" onClick={addServiceProduct}>
-                          <Plus className="mr-1 h-4 w-4" />
-                          Adicionar produto
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Product Image */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Image className="h-5 w-5" />
+                    Imagem do Produto
+                  </CardTitle>
+                  <CardDescription>
+                    Adicione até 5 imagens para exibir no catálogo público
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+                    multiple
+                    onChange={handleImageUpload}
+                    className="hidden"
+                  />
+
+                  <div className="space-y-4">
+                    {imageUrls.length > 0 && (
+                      <div className="flex flex-wrap gap-4">
+                        {imageUrls.map((url, index) => (
+                          <div
+                            key={`${url}-${index}`}
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => setPrimaryImage(index)}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter' || event.key === ' ') {
+                                setPrimaryImage(index);
+                              }
+                            }}
+                            className="group relative h-32 w-32 overflow-hidden rounded-lg border cursor-pointer"
+                            title={index === 0 ? 'Imagem principal' : 'Definir como capa'}
+                          >
+                            <img
+                              src={url}
+                              alt={`Produto ${index + 1}`}
+                              className="h-full w-full object-cover"
+                            />
+                            {index === 0 ? (
+                              <Badge variant="secondary" className="absolute left-2 top-2">
+                                Principal
+                              </Badge>
+                            ) : (
+                              <span className="absolute left-2 top-2 rounded bg-white/80 px-2 py-0.5 text-[10px] text-slate-700 opacity-0 transition-opacity group-hover:opacity-100">
+                                Definir capa
+                              </span>
+                            )}
+                            <Button
+                              type="button"
+                              variant="destructive"
+                              size="icon"
+                              className="absolute right-2 top-2 h-6 w-6 opacity-0 transition-opacity group-hover:opacity-100"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                removeImage(index);
+                              }}
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {imageUrls.length < MAX_PRODUCT_IMAGES && (
+                      <div
+                        onClick={() => !uploadingImage && fileInputRef.current?.click()}
+                        className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover:border-primary/50 transition-colors"
+                      >
+                        {uploadingImage ? (
+                          <div className="flex flex-col items-center gap-2">
+                            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                            <p className="text-sm text-muted-foreground">Enviando...</p>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col items-center gap-2">
+                            <Upload className="h-8 w-8 text-muted-foreground" />
+                            <p className="text-sm text-muted-foreground">
+                              Clique para enviar imagens
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              PNG, JPG ou WEBP (max. 5MB)
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    <p className="text-xs text-muted-foreground">
+                      {imageUrls.length}/{MAX_PRODUCT_IMAGES} imagens cadastradas.
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="valores" className="space-y-6">
+              {/* Cost Composition */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Calculator className="h-5 w-5" />
+                    Composição de Custos
+                  </CardTitle>
+                  <CardDescription>
+                    Configure os custos para calcular o preço de venda automaticamente
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="grid gap-4 md:grid-cols-5">
+                    <div className="space-y-2">
+                      <Label htmlFor="baseCost">Custo Base (R$)</Label>
+                      <CurrencyInput
+                        id="baseCost"
+                        value={baseCost}
+                        onChange={setBaseCost}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="laborCost">Mão de Obra (R$)</Label>
+                      <CurrencyInput
+                        id="laborCost"
+                        value={laborCost}
+                        onChange={setLaborCost}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="expensePercentage">Despesas aplicadas (%)</Label>
+                      <Input
+                        id="expensePercentage"
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        value={expensePercentage}
+                        onChange={(e) => setExpensePercentage(parseFloat(e.target.value) || 0)}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="waste">Desperdício (%)</Label>
+                      <Input
+                        id="waste"
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        max="100"
+                        value={wastePercentage}
+                        onChange={(e) => setWastePercentage(parseFloat(e.target.value) || 0)}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="margin">Margem de Lucro (%)</Label>
+                      <Input
+                        id="margin"
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        value={profitMargin}
+                        onChange={(e) => setProfitMargin(parseFloat(e.target.value) || 0)}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid gap-4 rounded-lg border border-border bg-muted/20 p-4 md:grid-cols-[minmax(0,1fr)_220px]">
+                    <div className="space-y-3">
+                      <div>
+                        <Label className="text-base">Método de precificação</Label>
+                        <p className="text-sm text-muted-foreground">
+                          Escolha entre margem tradicional ou multiplicador, sem perder o preço manual.
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          variant={pricingMethod === 'margin' ? 'default' : 'outline'}
+                          onClick={() => {
+                            setPricingMethod('margin');
+                            setFinalPriceTouched(false);
+                          }}
+                        >
+                          Margem %
+                        </Button>
+                        <Button
+                          type="button"
+                          variant={pricingMethod === 'multiplier' ? 'default' : 'outline'}
+                          onClick={() => {
+                            setPricingMethod('multiplier');
+                            setFinalPriceTouched(false);
+                          }}
+                        >
+                          Multiplicador
                         </Button>
                       </div>
-
-                      {serviceProducts.length > 0 ? (
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Produto</TableHead>
-                              <TableHead className="w-24">Qtd.</TableHead>
-                              <TableHead className="w-32">Valor ref.</TableHead>
-                              <TableHead className="w-32">Subtotal</TableHead>
-                              <TableHead>Observações</TableHead>
-                              <TableHead className="w-16" />
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {serviceProducts.map((item, index) => {
-                              const linkedProduct = getReferenceProductById(item.product_id);
-                              const unitValue = getReferenceProductPrice(linkedProduct);
-                              const subtotal = unitValue * Number(item.quantity || 0);
-
-                              return (
-                                <TableRow key={`${item.product_id}-${index}`}>
-                                  <TableCell>
-                                    <Select
-                                      value={item.product_id}
-                                      onValueChange={(value) => updateServiceProduct(index, 'product_id', value)}
-                                    >
-                                      <SelectTrigger>
-                                        <SelectValue placeholder="Selecione um produto..." />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        {selectableServiceProducts.map((product) => (
-                                          <SelectItem key={product.id} value={product.id}>
-                                            {product.name}
-                                          </SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
-                                  </TableCell>
-                                  <TableCell>
-                                    <Input
-                                      type="number"
-                                      min="0.01"
-                                      step="0.01"
-                                      value={item.quantity}
-                                      onChange={(event) =>
-                                        updateServiceProduct(index, 'quantity', event.target.value)
-                                      }
-                                    />
-                                  </TableCell>
-                                  <TableCell className="text-muted-foreground">
-                                    {linkedProduct ? formatCurrency(unitValue) : '-'}
-                                  </TableCell>
-                                  <TableCell className="font-medium text-primary">
-                                    {formatCurrency(subtotal)}
-                                  </TableCell>
-                                  <TableCell>
-                                    <Input
-                                      value={item.notes}
-                                      onChange={(event) =>
-                                        updateServiceProduct(index, 'notes', event.target.value)
-                                      }
-                                      placeholder="Opcional"
-                                    />
-                                  </TableCell>
-                                  <TableCell>
-                                    <Button
-                                      type="button"
-                                      variant="ghost"
-                                      size="icon"
-                                      onClick={() => removeServiceProduct(index)}
-                                    >
-                                      <Trash2 className="h-4 w-4 text-destructive" />
-                                    </Button>
-                                  </TableCell>
-                                </TableRow>
-                              );
-                            })}
-                          </TableBody>
-                        </Table>
-                      ) : (
-                        <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-                          Nenhum produto vinculado ao serviço.
-                        </div>
-                      )}
                     </div>
 
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <Label className="text-base">Itens e serviços adicionais</Label>
-                          <p className="text-sm text-muted-foreground">
-                            Exemplo: logo, cartão, capa para redes sociais, revisão extra.
-                          </p>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          <Button type="button" variant="outline" size="sm" onClick={() => addServiceItem('item')}>
-                            <Plus className="mr-1 h-4 w-4" />
-                            Adicionar item
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => addServiceItem('adicional')}
-                          >
-                            <Plus className="mr-1 h-4 w-4" />
-                            Adicional
-                          </Button>
-                        </div>
-                      </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="pricingMultiplier">Multiplicador</Label>
+                      <Input
+                        id="pricingMultiplier"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={pricingMultiplier}
+                        onChange={(e) => setPricingMultiplier(parseFloat(e.target.value) || 0)}
+                        disabled={pricingMethod !== 'multiplier'}
+                      />
+                    </div>
+                  </div>
 
-                      {serviceItems.length > 0 ? (
-                        <div className="space-y-3">
-                          {serviceItems.map((item, index) => (
-                            <div key={`${item.name}-${index}`} className="grid gap-3 rounded-lg border bg-background/80 p-4 md:grid-cols-[180px_minmax(0,1fr)_180px_48px]">
-                              <div className="space-y-2">
-                                <Label>Tipo</Label>
-                                <Select
-                                  value={item.item_kind}
-                                  onValueChange={(value) =>
-                                    updateServiceItem(index, 'item_kind', value as 'item' | 'adicional')
-                                  }
-                                >
-                                  <SelectTrigger>
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="item">Item incluso</SelectItem>
-                                    <SelectItem value="adicional">Serviço adicional</SelectItem>
-                                  </SelectContent>
-                                </Select>
+                  {productType === 'servico' && (
+                    <>
+                      <Separator />
+                      <Card className="border-primary/20 bg-primary/5">
+                        <CardHeader>
+                          <CardTitle>Composição do serviço</CardTitle>
+                          <CardDescription>
+                            Monte o valor do serviço com valor base, produtos utilizados e itens adicionais.
+                          </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-6">
+                          <div className="grid gap-4 md:grid-cols-[220px_minmax(0,1fr)]">
+                            <div className="space-y-2">
+                              <Label htmlFor="serviceBasePrice">Valor base do serviço</Label>
+                              <CurrencyInput
+                                id="serviceBasePrice"
+                                value={serviceBasePrice}
+                                onChange={(value) => setServiceBasePrice(value)}
+                              />
+                            </div>
+                            <div className="rounded-lg border bg-background/80 p-4">
+                              <p className="text-sm font-medium">Como o total é calculado</p>
+                              <p className="mt-2 text-sm text-muted-foreground">
+                                O sistema soma o valor base do serviço, os produtos vinculados e os itens adicionais.
+                                Se a precificação por custo resultar em um valor maior, ele será usado como referência.
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <Label className="text-base">Produtos utilizados</Label>
+                                <p className="text-sm text-muted-foreground">
+                                  Produtos da loja que entram no serviço composto.
+                                </p>
                               </div>
-                              <div className="space-y-2">
-                                <Label>Nome</Label>
-                                <Input
-                                  value={item.name}
-                                  onChange={(event) => updateServiceItem(index, 'name', event.target.value)}
-                                  placeholder="Ex.: Cartão de visita"
-                                />
-                                <Textarea
-                                  value={item.description}
-                                  onChange={(event) =>
-                                    updateServiceItem(index, 'description', event.target.value)
-                                  }
-                                  placeholder="Descrição opcional"
-                                  rows={2}
-                                />
+                              <Button type="button" variant="outline" size="sm" onClick={addServiceProduct}>
+                                <Plus className="mr-1 h-4 w-4" />
+                                Adicionar produto
+                              </Button>
+                            </div>
+
+                            {serviceProducts.length > 0 ? (
+                              <Table>
+                                <TableHeader>
+                                  <TableRow>
+                                    <TableHead>Produto</TableHead>
+                                    <TableHead className="w-24">Qtd.</TableHead>
+                                    <TableHead className="w-32">Valor ref.</TableHead>
+                                    <TableHead className="w-32">Subtotal</TableHead>
+                                    <TableHead>Observações</TableHead>
+                                    <TableHead className="w-16" />
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {serviceProducts.map((item, index) => {
+                                    const linkedProduct = getReferenceProductById(item.product_id);
+                                    const unitValue = getReferenceProductPrice(linkedProduct);
+                                    const subtotal = unitValue * Number(item.quantity || 0);
+
+                                    return (
+                                      <TableRow key={`${item.product_id}-${index}`}>
+                                        <TableCell>
+                                          <Select
+                                            value={item.product_id}
+                                            onValueChange={(value) => updateServiceProduct(index, 'product_id', value)}
+                                          >
+                                            <SelectTrigger>
+                                              <SelectValue placeholder="Selecione um produto..." />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                              {selectableServiceProducts.map((product) => (
+                                                <SelectItem key={product.id} value={product.id}>
+                                                  {product.name}
+                                                </SelectItem>
+                                              ))}
+                                            </SelectContent>
+                                          </Select>
+                                        </TableCell>
+                                        <TableCell>
+                                          <Input
+                                            type="number"
+                                            min="0.01"
+                                            step="0.01"
+                                            value={item.quantity}
+                                            onChange={(event) =>
+                                              updateServiceProduct(index, 'quantity', event.target.value)
+                                            }
+                                          />
+                                        </TableCell>
+                                        <TableCell className="text-muted-foreground">
+                                          {linkedProduct ? formatCurrency(unitValue) : '-'}
+                                        </TableCell>
+                                        <TableCell className="font-medium text-primary">
+                                          {formatCurrency(subtotal)}
+                                        </TableCell>
+                                        <TableCell>
+                                          <Input
+                                            value={item.notes}
+                                            onChange={(event) =>
+                                              updateServiceProduct(index, 'notes', event.target.value)
+                                            }
+                                            placeholder="Opcional"
+                                          />
+                                        </TableCell>
+                                        <TableCell>
+                                          <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="icon"
+                                            onClick={() => removeServiceProduct(index)}
+                                          >
+                                            <Trash2 className="h-4 w-4 text-destructive" />
+                                          </Button>
+                                        </TableCell>
+                                      </TableRow>
+                                    );
+                                  })}
+                                </TableBody>
+                              </Table>
+                            ) : (
+                              <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                                Nenhum produto vinculado ao serviço.
                               </div>
-                              <div className="space-y-2">
-                                <Label>Valor</Label>
-                                <CurrencyInput
-                                  value={item.base_price}
-                                  onChange={(value) => updateServiceItem(index, 'base_price', value)}
-                                />
+                            )}
+                          </div>
+
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <Label className="text-base">Itens e serviços adicionais</Label>
+                                <p className="text-sm text-muted-foreground">
+                                  Exemplo: logo, cartão, capa para redes sociais, revisão extra.
+                                </p>
                               </div>
-                              <div className="flex items-end">
+                              <div className="flex flex-wrap gap-2">
+                                <Button type="button" variant="outline" size="sm" onClick={() => addServiceItem('item')}>
+                                  <Plus className="mr-1 h-4 w-4" />
+                                  Adicionar item
+                                </Button>
                                 <Button
                                   type="button"
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => removeServiceItem(index)}
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => addServiceItem('adicional')}
                                 >
-                                  <Trash2 className="h-4 w-4 text-destructive" />
+                                  <Plus className="mr-1 h-4 w-4" />
+                                  Adicional
                                 </Button>
                               </div>
                             </div>
-                          ))}
+
+                            {serviceItems.length > 0 ? (
+                              <div className="space-y-3">
+                                {serviceItems.map((item, index) => (
+                                  <div key={`${item.name}-${index}`} className="grid gap-3 rounded-lg border bg-background/80 p-4 md:grid-cols-[180px_minmax(0,1fr)_180px_48px]">
+                                    <div className="space-y-2">
+                                      <Label>Tipo</Label>
+                                      <Select
+                                        value={item.item_kind}
+                                        onValueChange={(value) =>
+                                          updateServiceItem(index, 'item_kind', value as 'item' | 'adicional')
+                                        }
+                                      >
+                                        <SelectTrigger>
+                                          <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="item">Item incluso</SelectItem>
+                                          <SelectItem value="adicional">Serviço adicional</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                    <div className="space-y-2">
+                                      <Label>Nome</Label>
+                                      <Input
+                                        value={item.name}
+                                        onChange={(event) => updateServiceItem(index, 'name', event.target.value)}
+                                        placeholder="Ex.: Cartão de visita"
+                                      />
+                                      <Textarea
+                                        value={item.description}
+                                        onChange={(event) =>
+                                          updateServiceItem(index, 'description', event.target.value)
+                                        }
+                                        placeholder="Descrição opcional"
+                                        rows={2}
+                                      />
+                                    </div>
+                                    <div className="space-y-2">
+                                      <Label>Valor</Label>
+                                      <CurrencyInput
+                                        value={item.base_price}
+                                        onChange={(value) => updateServiceItem(index, 'base_price', value)}
+                                      />
+                                    </div>
+                                    <div className="flex items-end">
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => removeServiceItem(index)}
+                                      >
+                                        <Trash2 className="h-4 w-4 text-destructive" />
+                                      </Button>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                                Nenhum item adicional configurado.
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="grid gap-3 md:grid-cols-4">
+                            <div className="rounded-lg border bg-background p-4">
+                              <p className="text-xs uppercase tracking-wide text-muted-foreground">Valor base</p>
+                              <p className="mt-2 text-lg font-semibold">{formatCurrency(serviceBasePrice)}</p>
+                            </div>
+                            <div className="rounded-lg border bg-background p-4">
+                              <p className="text-xs uppercase tracking-wide text-muted-foreground">Produtos vinculados</p>
+                              <p className="mt-2 text-lg font-semibold">{formatCurrency(serviceLinkedProductsValue)}</p>
+                            </div>
+                            <div className="rounded-lg border bg-background p-4">
+                              <p className="text-xs uppercase tracking-wide text-muted-foreground">Itens adicionais</p>
+                              <p className="mt-2 text-lg font-semibold">{formatCurrency(serviceItemsValue)}</p>
+                            </div>
+                            <div className="rounded-lg border border-primary/30 bg-primary/10 p-4">
+                              <p className="text-xs uppercase tracking-wide text-muted-foreground">Total composto</p>
+                              <p className="mt-2 text-lg font-semibold text-primary">
+                                {formatCurrency(serviceCompositionValue)}
+                              </p>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </>
+                  )}
+
+                  {/* Supplies section - available for all product types */}
+                  <Separator />
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <div>
+                        <Label className="text-base">Insumos Utilizados</Label>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          Vincule os insumos para cálculo automático do custo de produção
+                        </p>
+                      </div>
+                      <Button type="button" variant="outline" size="sm" onClick={addSupply}>
+                        <Plus className="h-4 w-4 mr-1" /> Adicionar Insumo
+                      </Button>
+                    </div>
+
+                    {productSupplies.length > 0 ? (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Insumo</TableHead>
+                            <TableHead className="w-32">Qtd. Usada</TableHead>
+                            <TableHead className="w-32">Custo Unit.</TableHead>
+                            <TableHead className="w-32">Subtotal</TableHead>
+                            <TableHead className="w-16"></TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {productSupplies.map((ps, index) => {
+                            const supply = supplies.find(s => s.id === ps.supply_id);
+                            const subtotal = supply ? Number(supply.cost_per_unit) * ps.quantity : 0;
+                            return (
+                              <TableRow key={index}>
+                                <TableCell>
+                                  <Select value={ps.supply_id} onValueChange={(v) => updateSupply(index, 'supply_id', v)}>
+                                    <SelectTrigger>
+                                      <SelectValue placeholder="Selecione o insumo..." />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {supplies.map((s) => (
+                                        <SelectItem key={s.id} value={s.id}>
+                                          <div className="flex items-center gap-2">
+                                            {s.image_url && (
+                                              <img src={s.image_url} alt={s.name} className="w-6 h-6 rounded object-cover" />
+                                            )}
+                                            <span>{s.name}</span>
+                                            <span className="text-muted-foreground">({s.unit}) - {formatCurrency(s.cost_per_unit)}</span>
+                                          </div>
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </TableCell>
+                                <TableCell>
+                                  <div className="flex items-center gap-1">
+                                    <Input
+                                      type="number"
+                                      step="0.001"
+                                      min="0"
+                                      value={ps.quantity}
+                                      onChange={(e) => updateSupply(index, 'quantity', e.target.value)}
+                                      className="w-20"
+                                    />
+                                    <span className="text-sm text-muted-foreground">{supply?.unit || ''}</span>
+                                  </div>
+                                </TableCell>
+                                <TableCell className="text-muted-foreground">
+                                  {supply ? formatCurrency(Number(supply.cost_per_unit)) : '-'}
+                                </TableCell>
+                                <TableCell className="font-medium text-primary">
+                                  {formatCurrency(subtotal)}
+                                </TableCell>
+                                <TableCell>
+                                  <Button type="button" variant="ghost" size="icon" onClick={() => removeSupply(index)}>
+                                    <Trash2 className="h-4 w-4 text-destructive" />
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                          <TableRow className="bg-muted/30">
+                            <TableCell colSpan={3} className="text-right font-medium">
+                              Total Insumos:
+                            </TableCell>
+                            <TableCell className="font-bold text-primary">
+                              {formatCurrency(suppliesCost)}
+                            </TableCell>
+                            <TableCell></TableCell>
+                          </TableRow>
+                        </TableBody>
+                      </Table>
+                    ) : (
+                      <div className="border-2 border-dashed rounded-lg p-6 text-center">
+                        <Package className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+                        <p className="text-sm text-muted-foreground">
+                          Nenhum insumo vinculado a este produto
+                        </p>
+                        <Button type="button" variant="outline" size="sm" className="mt-3" onClick={addSupply}>
+                          <Plus className="h-4 w-4 mr-1" /> Adicionar Primeiro Insumo
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+
+                  <Separator />
+
+                  {/* Cost Summary */}
+                  <div className="bg-muted/50 rounded-lg p-4">
+                    <h4 className="font-medium mb-3">Resumo de Custos</h4>
+                    <div className="grid gap-3 text-sm md:grid-cols-2 lg:grid-cols-6">
+                      <div className="p-2 rounded bg-background">
+                        <span className="text-muted-foreground text-xs block">Custo Base</span>
+                        <span className="font-medium">{formatCurrency(baseCost)}</span>
+                      </div>
+                      <div className="p-2 rounded bg-background">
+                        <span className="text-muted-foreground text-xs block">Insumos ({productSupplies.length})</span>
+                        <span className="font-medium text-primary">{formatCurrency(suppliesCost)}</span>
+                      </div>
+                      <div className="p-2 rounded bg-background">
+                        <span className="text-muted-foreground text-xs block">Mão de Obra</span>
+                        <span className="font-medium">{formatCurrency(laborCost)}</span>
+                      </div>
+                      {productType === 'servico' && (
+                        <div className="p-2 rounded bg-background">
+                          <span className="text-muted-foreground text-xs block">Produtos do serviço</span>
+                          <span className="font-medium">{formatCurrency(serviceLinkedProductsCost)}</span>
                         </div>
-                      ) : (
-                        <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-                          Nenhum item adicional configurado.
+                      )}
+                      <div className="p-2 rounded bg-background">
+                        <span className="text-muted-foreground text-xs block">Custo Total</span>
+                        <span className="font-medium">{formatCurrency(totalCost)}</span>
+                      </div>
+                      <div className="p-2 rounded bg-background">
+                        <span className="text-muted-foreground text-xs block">+ Desperdício ({wastePercentage}%)</span>
+                        <span className="font-medium">{formatCurrency(costWithWaste)}</span>
+                      </div>
+                    </div>
+                    <Separator className="my-3" />
+                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                      <div className="rounded bg-background p-3">
+                        <span className="text-xs text-muted-foreground">Preço mínimo (10%)</span>
+                        <p className="mt-2 font-semibold text-chart-4">{formatCurrency(minPrice)}</p>
+                      </div>
+                      <div className="rounded bg-background p-3">
+                        <span className="text-xs text-muted-foreground">Preço por margem</span>
+                        <p className="mt-2 font-semibold text-chart-2">{formatCurrency(suggestedPrice)}</p>
+                      </div>
+                      <div className="rounded bg-background p-3">
+                        <span className="text-xs text-muted-foreground">Markup sugerido</span>
+                        <p className="mt-2 font-semibold">{markupSimulation.markupSuggested.toFixed(2)}x</p>
+                      </div>
+                      <div className="rounded bg-background p-3">
+                        <span className="text-xs text-muted-foreground">Preço por multiplicador</span>
+                        <p className="mt-2 font-semibold">{formatCurrency(multiplierPrice)}</p>
+                      </div>
+                      {productType === 'servico' && (
+                        <div className="rounded bg-background p-3">
+                          <span className="text-xs text-muted-foreground">Total composto do serviço</span>
+                          <p className="mt-2 font-semibold text-primary">
+                            {formatCurrency(serviceCompositionValue)}
+                          </p>
                         </div>
                       )}
                     </div>
-
-                    <div className="grid gap-3 md:grid-cols-4">
+                  </div>
+                  <div className="mt-4 grid gap-2 sm:grid-cols-[1fr_200px] items-end">
+                    <div>
+                      <Label htmlFor="final-price">Preço final do produto</Label>
+                      <p className="text-xs text-muted-foreground">
+                        Usado nos pedidos e no catálogo. Você pode alterar manualmente a qualquer momento.
+                      </p>
+                    </div>
+                    <CurrencyInput
+                      id="final-price"
+                      value={finalPrice}
+                      onChange={(value) => {
+                        setFinalPrice(value);
+                        setFinalPriceTouched(true);
+                      }}
+                    />
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <div className="rounded-lg border bg-background p-4">
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Lucro estimado</p>
+                      <p className="mt-2 text-lg font-semibold">{formatCurrency(estimatedProfit)}</p>
+                    </div>
+                    <div className="rounded-lg border bg-background p-4">
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Margem real</p>
+                      <p className="mt-2 text-lg font-semibold">{realMargin.toFixed(2)}%</p>
+                    </div>
+                    <div className="rounded-lg border bg-background p-4">
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Método ativo</p>
+                      <p className="mt-2 text-lg font-semibold">
+                        {pricingMethod === 'multiplier' ? 'Multiplicador' : 'Margem %'}
+                      </p>
+                    </div>
+                  </div>
+                  <Separator className="my-4" />
+                  <div className="space-y-3">
+                    <div>
+                      <h4 className="text-sm font-semibold text-foreground">Lucro real e rateio de despesas</h4>
+                      <p className="text-xs text-muted-foreground">
+                        Considera custo de insumos, despesas variáveis e rateio automático das despesas fixas da empresa.
+                      </p>
+                    </div>
+                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                       <div className="rounded-lg border bg-background p-4">
-                        <p className="text-xs uppercase tracking-wide text-muted-foreground">Valor base</p>
-                        <p className="mt-2 text-lg font-semibold">{formatCurrency(serviceBasePrice)}</p>
+                        <p className="text-xs uppercase tracking-wide text-muted-foreground">Custo direto</p>
+                        <p className="mt-2 text-lg font-semibold">
+                          {formatCurrency(currentProfitability?.directCost ?? costWithWaste)}
+                        </p>
                       </div>
                       <div className="rounded-lg border bg-background p-4">
-                        <p className="text-xs uppercase tracking-wide text-muted-foreground">Produtos vinculados</p>
-                        <p className="mt-2 text-lg font-semibold">{formatCurrency(serviceLinkedProductsValue)}</p>
+                        <p className="text-xs uppercase tracking-wide text-muted-foreground">Rateio despesas fixas</p>
+                        <p className="mt-2 text-lg font-semibold">
+                          {formatCurrency(currentProfitability?.fixedAllocation ?? 0)}
+                        </p>
                       </div>
                       <div className="rounded-lg border bg-background p-4">
-                        <p className="text-xs uppercase tracking-wide text-muted-foreground">Itens adicionais</p>
-                        <p className="mt-2 text-lg font-semibold">{formatCurrency(serviceItemsValue)}</p>
+                        <p className="text-xs uppercase tracking-wide text-muted-foreground">Despesas variáveis</p>
+                        <p className="mt-2 text-lg font-semibold">
+                          {formatCurrency(currentProfitability?.variableShare ?? 0)}
+                        </p>
                       </div>
-                      <div className="rounded-lg border border-primary/30 bg-primary/10 p-4">
-                        <p className="text-xs uppercase tracking-wide text-muted-foreground">Total composto</p>
-                        <p className="mt-2 text-lg font-semibold text-primary">
-                          {formatCurrency(serviceCompositionValue)}
+                      <div className="rounded-lg border bg-background p-4">
+                        <p className="text-xs uppercase tracking-wide text-muted-foreground">Custo total real</p>
+                        <p className="mt-2 text-lg font-semibold">
+                          {formatCurrency(currentProfitability?.totalRealCost ?? costWithWaste)}
+                        </p>
+                      </div>
+                      <div className="rounded-lg border bg-background p-4">
+                        <p className="text-xs uppercase tracking-wide text-muted-foreground">Lucro por unidade</p>
+                        <p className="mt-2 text-lg font-semibold">
+                          {formatCurrency(currentProfitability?.profitPerUnit ?? estimatedProfit)}
+                        </p>
+                      </div>
+                      <div className="rounded-lg border bg-background p-4">
+                        <p className="text-xs uppercase tracking-wide text-muted-foreground">Margem de lucro real</p>
+                        <p className="mt-2 text-lg font-semibold">
+                          {(currentProfitability?.marginPct ?? realMargin).toFixed(2)}%
+                        </p>
+                      </div>
+                      <div className="rounded-lg border bg-background p-4">
+                        <p className="text-xs uppercase tracking-wide text-muted-foreground">Qtd. vendida usada no rateio</p>
+                        <p className="mt-2 text-lg font-semibold">
+                          {Math.round(currentProfitability?.soldUnits ?? 0)}
+                        </p>
+                      </div>
+                      <div className="rounded-lg border bg-background p-4">
+                        <p className="text-xs uppercase tracking-wide text-muted-foreground">Preço considerado</p>
+                        <p className="mt-2 text-lg font-semibold">
+                          {formatCurrency(currentProfitability?.salePrice ?? finalPrice)}
                         </p>
                       </div>
                     </div>
-                  </CardContent>
-                </Card>
-              </>
-            )}
+                  </div>
+                </CardContent>
+              </Card>
 
-            {/* Supplies section - available for all product types */}
-            <Separator />
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <div>
-                  <Label className="text-base">Insumos Utilizados</Label>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Vincule os insumos para cálculo automático do custo de produção
-                  </p>
-                </div>
-                <Button type="button" variant="outline" size="sm" onClick={addSupply}>
-                  <Plus className="h-4 w-4 mr-1" /> Adicionar Insumo
-                </Button>
-              </div>
-
-              {productSupplies.length > 0 ? (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Insumo</TableHead>
-                      <TableHead className="w-32">Qtd. Usada</TableHead>
-                      <TableHead className="w-32">Custo Unit.</TableHead>
-                      <TableHead className="w-32">Subtotal</TableHead>
-                      <TableHead className="w-16"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {productSupplies.map((ps, index) => {
-                      const supply = supplies.find(s => s.id === ps.supply_id);
-                      const subtotal = supply ? Number(supply.cost_per_unit) * ps.quantity : 0;
-                      return (
-                        <TableRow key={index}>
-                          <TableCell>
-                            <Select value={ps.supply_id} onValueChange={(v) => updateSupply(index, 'supply_id', v)}>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Selecione o insumo..." />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {supplies.map((s) => (
-                                  <SelectItem key={s.id} value={s.id}>
-                                    <div className="flex items-center gap-2">
-                                      {s.image_url && (
-                                        <img src={s.image_url} alt={s.name} className="w-6 h-6 rounded object-cover" />
-                                      )}
-                                      <span>{s.name}</span>
-                                      <span className="text-muted-foreground">({s.unit}) - {formatCurrency(s.cost_per_unit)}</span>
-                                    </div>
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-1">
+              {/* Price Tiers */}
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle>Faixas de Preço por Quantidade</CardTitle>
+                      <CardDescription>
+                        Configure preços diferenciados para compras em quantidade
+                      </CardDescription>
+                    </div>
+                    <Button type="button" variant="outline" onClick={addPriceTier}>
+                      <Plus className="h-4 w-4 mr-1" /> Adicionar Faixa
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {priceTiers.length > 0 ? (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Qtd Mínima</TableHead>
+                          <TableHead>Qtd Máxima</TableHead>
+                          <TableHead>Preço Unitário</TableHead>
+                          <TableHead className="w-16"></TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {priceTiers.map((tier, index) => (
+                          <TableRow key={index}>
+                            <TableCell>
                               <Input
                                 type="number"
-                                step="0.001"
-                                min="0"
-                                value={ps.quantity}
-                                onChange={(e) => updateSupply(index, 'quantity', e.target.value)}
-                                className="w-20"
+                                min="1"
+                                value={tier.min_quantity}
+                                onChange={(e) => updatePriceTier(index, 'min_quantity', parseInt(e.target.value) || 1)}
                               />
-                              <span className="text-sm text-muted-foreground">{supply?.unit || ''}</span>
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-muted-foreground">
-                            {supply ? formatCurrency(Number(supply.cost_per_unit)) : '-'}
-                          </TableCell>
-                          <TableCell className="font-medium text-primary">
-                            {formatCurrency(subtotal)}
-                          </TableCell>
-                          <TableCell>
-                            <Button type="button" variant="ghost" size="icon" onClick={() => removeSupply(index)}>
-                              <Trash2 className="h-4 w-4 text-destructive" />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                    <TableRow className="bg-muted/30">
-                      <TableCell colSpan={3} className="text-right font-medium">
-                        Total Insumos:
-                      </TableCell>
-                      <TableCell className="font-bold text-primary">
-                        {formatCurrency(suppliesCost)}
-                      </TableCell>
-                      <TableCell></TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
-              ) : (
-                <div className="border-2 border-dashed rounded-lg p-6 text-center">
-                  <Package className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
-                  <p className="text-sm text-muted-foreground">
-                    Nenhum insumo vinculado a este produto
-                  </p>
-                  <Button type="button" variant="outline" size="sm" className="mt-3" onClick={addSupply}>
-                    <Plus className="h-4 w-4 mr-1" /> Adicionar Primeiro Insumo
-                  </Button>
-                </div>
-              )}
-            </div>
-
-            <Separator />
-
-            {/* Cost Summary */}
-            <div className="bg-muted/50 rounded-lg p-4">
-              <h4 className="font-medium mb-3">Resumo de Custos</h4>
-              <div className="grid gap-3 text-sm md:grid-cols-2 lg:grid-cols-6">
-                <div className="p-2 rounded bg-background">
-                  <span className="text-muted-foreground text-xs block">Custo Base</span>
-                  <span className="font-medium">{formatCurrency(baseCost)}</span>
-                </div>
-                <div className="p-2 rounded bg-background">
-                  <span className="text-muted-foreground text-xs block">Insumos ({productSupplies.length})</span>
-                  <span className="font-medium text-primary">{formatCurrency(suppliesCost)}</span>
-                </div>
-                <div className="p-2 rounded bg-background">
-                  <span className="text-muted-foreground text-xs block">Mão de Obra</span>
-                  <span className="font-medium">{formatCurrency(laborCost)}</span>
-                </div>
-                {productType === 'servico' && (
-                  <div className="p-2 rounded bg-background">
-                    <span className="text-muted-foreground text-xs block">Produtos do serviço</span>
-                    <span className="font-medium">{formatCurrency(serviceLinkedProductsCost)}</span>
-                  </div>
-                )}
-                <div className="p-2 rounded bg-background">
-                  <span className="text-muted-foreground text-xs block">Custo Total</span>
-                  <span className="font-medium">{formatCurrency(totalCost)}</span>
-                </div>
-                <div className="p-2 rounded bg-background">
-                  <span className="text-muted-foreground text-xs block">+ Desperdício ({wastePercentage}%)</span>
-                  <span className="font-medium">{formatCurrency(costWithWaste)}</span>
-                </div>
-              </div>
-              <Separator className="my-3" />
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                <div className="rounded bg-background p-3">
-                  <span className="text-xs text-muted-foreground">Preço mínimo (10%)</span>
-                  <p className="mt-2 font-semibold text-chart-4">{formatCurrency(minPrice)}</p>
-                </div>
-                <div className="rounded bg-background p-3">
-                  <span className="text-xs text-muted-foreground">Preço por margem</span>
-                  <p className="mt-2 font-semibold text-chart-2">{formatCurrency(suggestedPrice)}</p>
-                </div>
-                <div className="rounded bg-background p-3">
-                  <span className="text-xs text-muted-foreground">Markup sugerido</span>
-                  <p className="mt-2 font-semibold">{markupSimulation.markupSuggested.toFixed(2)}x</p>
-                </div>
-                <div className="rounded bg-background p-3">
-                  <span className="text-xs text-muted-foreground">Preço por multiplicador</span>
-                  <p className="mt-2 font-semibold">{formatCurrency(multiplierPrice)}</p>
-                </div>
-                {productType === 'servico' && (
-                  <div className="rounded bg-background p-3">
-                    <span className="text-xs text-muted-foreground">Total composto do serviço</span>
-                    <p className="mt-2 font-semibold text-primary">
-                      {formatCurrency(serviceCompositionValue)}
+                            </TableCell>
+                            <TableCell>
+                              <Input
+                                type="number"
+                                min={tier.min_quantity}
+                                value={tier.max_quantity || ''}
+                                onChange={(e) => updatePriceTier(index, 'max_quantity', e.target.value ? parseInt(e.target.value) : null)}
+                                placeholder="Sem limite"
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <CurrencyInput
+                                value={tier.price}
+                                onChange={(value) => updatePriceTier(index, 'price', value)}
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <Button type="button" variant="ghost" size="icon" onClick={() => removePriceTier(index)}>
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  ) : (
+                    <p className="text-sm text-muted-foreground text-center py-6">
+                      Nenhuma faixa de preço configurada. O {defaultPriceLabel} ({formatCurrency(defaultUnitPrice)}) será usado para todas as quantidades.
                     </p>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Promotion */}
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center gap-2">
+                    <Tag className="h-5 w-5 text-primary" />
+                    <CardTitle>Promoção (Opcional)</CardTitle>
                   </div>
-                )}
-              </div>
-            </div>
-            <div className="mt-4 grid gap-2 sm:grid-cols-[1fr_200px] items-end">
-              <div>
-                <Label htmlFor="final-price">Preço final do produto</Label>
-                <p className="text-xs text-muted-foreground">
-                  Usado nos pedidos e no catálogo. Você pode alterar manualmente a qualquer momento.
-                </p>
-              </div>
-              <CurrencyInput
-                id="final-price"
-                value={finalPrice}
-                onChange={(value) => {
-                  setFinalPrice(value);
-                  setFinalPriceTouched(true);
-                }}
-              />
-            </div>
-            <div className="grid gap-3 md:grid-cols-3">
-              <div className="rounded-lg border bg-background p-4">
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">Lucro estimado</p>
-                <p className="mt-2 text-lg font-semibold">{formatCurrency(estimatedProfit)}</p>
-              </div>
-              <div className="rounded-lg border bg-background p-4">
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">Margem real</p>
-                <p className="mt-2 text-lg font-semibold">{realMargin.toFixed(2)}%</p>
-              </div>
-              <div className="rounded-lg border bg-background p-4">
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">Método ativo</p>
-                <p className="mt-2 text-lg font-semibold">
-                  {pricingMethod === 'multiplier' ? 'Multiplicador' : 'Margem %'}
-                </p>
-              </div>
-            </div>
-            <Separator className="my-4" />
-            <div className="space-y-3">
-              <div>
-                <h4 className="text-sm font-semibold text-foreground">Lucro real e rateio de despesas</h4>
-                <p className="text-xs text-muted-foreground">
-                  Considera custo de insumos, despesas variáveis e rateio automático das despesas fixas da empresa.
-                </p>
-              </div>
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                <div className="rounded-lg border bg-background p-4">
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Custo direto</p>
-                  <p className="mt-2 text-lg font-semibold">
-                    {formatCurrency(currentProfitability?.directCost ?? costWithWaste)}
-                  </p>
-                </div>
-                <div className="rounded-lg border bg-background p-4">
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Rateio despesas fixas</p>
-                  <p className="mt-2 text-lg font-semibold">
-                    {formatCurrency(currentProfitability?.fixedAllocation ?? 0)}
-                  </p>
-                </div>
-                <div className="rounded-lg border bg-background p-4">
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Despesas variáveis</p>
-                  <p className="mt-2 text-lg font-semibold">
-                    {formatCurrency(currentProfitability?.variableShare ?? 0)}
-                  </p>
-                </div>
-                <div className="rounded-lg border bg-background p-4">
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Custo total real</p>
-                  <p className="mt-2 text-lg font-semibold">
-                    {formatCurrency(currentProfitability?.totalRealCost ?? costWithWaste)}
-                  </p>
-                </div>
-                <div className="rounded-lg border bg-background p-4">
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Lucro por unidade</p>
-                  <p className="mt-2 text-lg font-semibold">
-                    {formatCurrency(currentProfitability?.profitPerUnit ?? estimatedProfit)}
-                  </p>
-                </div>
-                <div className="rounded-lg border bg-background p-4">
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Margem de lucro real</p>
-                  <p className="mt-2 text-lg font-semibold">
-                    {(currentProfitability?.marginPct ?? realMargin).toFixed(2)}%
-                  </p>
-                </div>
-                <div className="rounded-lg border bg-background p-4">
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Qtd. vendida usada no rateio</p>
-                  <p className="mt-2 text-lg font-semibold">
-                    {Math.round(currentProfitability?.soldUnits ?? 0)}
-                  </p>
-                </div>
-                <div className="rounded-lg border bg-background p-4">
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Preço considerado</p>
-                  <p className="mt-2 text-lg font-semibold">
-                    {formatCurrency(currentProfitability?.salePrice ?? finalPrice)}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+                  <CardDescription>
+                    Defina um preço promocional e o período de validade. O preço original aparecerá riscado no catálogo.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid gap-4 md:grid-cols-3">
+                    <div className="space-y-2">
+                      <Label htmlFor="promoPrice">Preço Promocional (R$)</Label>
+                      <CurrencyInput
+                        id="promoPrice"
+                        value={promoPrice || 0}
+                        onChange={(v) => setPromoPrice(v > 0 ? v : null)}
+                      />
+                      {errors?.promo_price && <p className="text-xs text-destructive">{errors.promo_price}</p>}
+                    </div>
 
-            {/* Price Tiers */}
-            <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle>Faixas de Preço por Quantidade</CardTitle>
-                <CardDescription>
-                  Configure preços diferenciados para compras em quantidade
-                </CardDescription>
-              </div>
-              <Button type="button" variant="outline" onClick={addPriceTier}>
-                <Plus className="h-4 w-4 mr-1" /> Adicionar Faixa
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {priceTiers.length > 0 ? (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Qtd Mínima</TableHead>
-                    <TableHead>Qtd Máxima</TableHead>
-                    <TableHead>Preço Unitário</TableHead>
-                    <TableHead className="w-16"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {priceTiers.map((tier, index) => (
-                    <TableRow key={index}>
-                      <TableCell>
-                        <Input
-                          type="number"
-                          min="1"
-                          value={tier.min_quantity}
-                          onChange={(e) => updatePriceTier(index, 'min_quantity', parseInt(e.target.value) || 1)}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Input
-                          type="number"
-                          min={tier.min_quantity}
-                          value={tier.max_quantity || ''}
-                          onChange={(e) => updatePriceTier(index, 'max_quantity', e.target.value ? parseInt(e.target.value) : null)}
-                          placeholder="Sem limite"
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <CurrencyInput
-                          value={tier.price}
-                          onChange={(value) => updatePriceTier(index, 'price', value)}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Button type="button" variant="ghost" size="icon" onClick={() => removePriceTier(index)}>
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            ) : (
-              <p className="text-sm text-muted-foreground text-center py-6">
-                Nenhuma faixa de preço configurada. O {defaultPriceLabel} ({formatCurrency(defaultUnitPrice)}) será usado para todas as quantidades.
-              </p>
-            )}
-          </CardContent>
-        </Card>
+                    <div className="space-y-2">
+                      <Label htmlFor="promoStartAt">Data de Início</Label>
+                      <Input
+                        id="promoStartAt"
+                        type="datetime-local"
+                        value={promoStartAt}
+                        onChange={(e) => setPromoStartAt(e.target.value)}
+                      />
+                    </div>
 
-            {/* Promotion */}
-            <Card>
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <Tag className="h-5 w-5 text-primary" />
-              <CardTitle>Promoção (Opcional)</CardTitle>
-            </div>
-            <CardDescription>
-              Defina um preço promocional e o período de validade. O preço original aparecerá riscado no catálogo.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-3">
-              <div className="space-y-2">
-                <Label htmlFor="promoPrice">Preço Promocional (R$)</Label>
-                <CurrencyInput
-                  id="promoPrice"
-                  value={promoPrice || 0}
-                  onChange={(v) => setPromoPrice(v > 0 ? v : null)}
-                />
-                {errors?.promo_price && <p className="text-xs text-destructive">{errors.promo_price}</p>}
-              </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="promoEndAt">Data de Término</Label>
+                      <Input
+                        id="promoEndAt"
+                        type="datetime-local"
+                        value={promoEndAt}
+                        onChange={(e) => setPromoEndAt(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
 
-              <div className="space-y-2">
-                <Label htmlFor="promoStartAt">Data de Início</Label>
-                <Input
-                  id="promoStartAt"
-                  type="datetime-local"
-                  value={promoStartAt}
-                  onChange={(e) => setPromoStartAt(e.target.value)}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="promoEndAt">Data de Término</Label>
-                <Input
-                  id="promoEndAt"
-                  type="datetime-local"
-                  value={promoEndAt}
-                  onChange={(e) => setPromoEndAt(e.target.value)}
-                />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-            {/* Attributes */}
-            <Card>
-          <CardHeader>
-            <CardTitle>Atributos do Produto</CardTitle>
-            <CardDescription>
-              Selecione os atributos disponíveis e configure modificadores de preço
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {productAttributes.map((attr, attrIndex) => (
-              <div key={attr.attribute_id}>
-                <Label className="text-base">{attr.attribute_name}</Label>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {attr.values.map((val, valIndex) => (
-                    <div
-                      key={val.id}
-                      className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-colors ${val.selected ? 'border-primary bg-primary/10' : 'hover:border-muted-foreground'
-                        }`}
-                      onClick={() => toggleAttributeValue(attrIndex, valIndex)}
-                    >
-                      <Badge variant={val.selected ? 'default' : 'outline'}>
-                        {val.value}
-                      </Badge>
-                      {val.selected && (
-                        <CurrencyInput
-                          className="w-24 h-7 text-xs"
-                          showPrefix={false}
-                          value={val.price_modifier || 0}
-                          onClick={(e) => e.stopPropagation()}
-                          onChange={(value) => updateAttributeModifier(attrIndex, valIndex, value)}
-                        />
-                      )}
+              {/* Attributes */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Atributos do Produto</CardTitle>
+                  <CardDescription>
+                    Selecione os atributos disponíveis e configure modificadores de preço
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {productAttributes.map((attr, attrIndex) => (
+                    <div key={attr.attribute_id}>
+                      <Label className="text-base">{attr.attribute_name}</Label>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {attr.values.map((val, valIndex) => (
+                          <div
+                            key={val.id}
+                            className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-colors ${val.selected ? 'border-primary bg-primary/10' : 'hover:border-muted-foreground'
+                              }`}
+                            onClick={() => toggleAttributeValue(attrIndex, valIndex)}
+                          >
+                            <Badge variant={val.selected ? 'default' : 'outline'}>
+                              {val.value}
+                            </Badge>
+                            {val.selected && (
+                              <CurrencyInput
+                                className="w-24 h-7 text-xs"
+                                showPrefix={false}
+                                value={val.price_modifier || 0}
+                                onClick={(e) => e.stopPropagation()}
+                                onChange={(value) => updateAttributeModifier(attrIndex, valIndex, value)}
+                              />
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                      {attrIndex < productAttributes.length - 1 && <Separator className="mt-4" />}
                     </div>
                   ))}
-                </div>
-                {attrIndex < productAttributes.length - 1 && <Separator className="mt-4" />}
-              </div>
-            ))}
-          </CardContent>
-            </Card>
-          </TabsContent>
+                </CardContent>
+              </Card>
+            </TabsContent>
 
-          <TabsContent value="estoque" className="space-y-6">
-            {/* Stock */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Estoque</CardTitle>
-                <CardDescription>
-                  Configure como este produto será controlado no estoque.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="grid gap-4 md:grid-cols-2">
-                <div className="md:col-span-2 flex items-center justify-between rounded-lg border p-3">
-                  <div className="space-y-1">
-                    <Label className="text-sm font-medium">Controlar estoque</Label>
-                    <p className="text-xs text-muted-foreground">
-                      Desative para que o produto não apareça no controle de estoque.
-                    </p>
+            <TabsContent value="estoque" className="space-y-6">
+              {/* Stock */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Estoque</CardTitle>
+                  <CardDescription>
+                    Configure como este produto será controlado no estoque.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="grid gap-4 md:grid-cols-2">
+                  <div className="md:col-span-2 flex items-center justify-between rounded-lg border p-3">
+                    <div className="space-y-1">
+                      <Label className="text-sm font-medium">Controlar estoque</Label>
+                      <p className="text-xs text-muted-foreground">
+                        Desative para que o produto não apareça no controle de estoque.
+                      </p>
+                    </div>
+                    <Switch checked={trackStock} onCheckedChange={setTrackStock} />
                   </div>
-                  <Switch checked={trackStock} onCheckedChange={setTrackStock} />
-                </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="unit">Unidade *</Label>
-                  <Select value={unit} onValueChange={setUnit}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="un">Unidade (un)</SelectItem>
-                      <SelectItem value="m">Metro (m)</SelectItem>
-                      <SelectItem value="m\u00B2">Metro2 (m\u00B2)</SelectItem>
-                      <SelectItem value="kg">Quilograma (kg)</SelectItem>
-                      <SelectItem value="cx">Caixa (cx)</SelectItem>
-                      <SelectItem value="pct">Pacote (pct)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="saleUnitType">Unidade de venda *</Label>
-                  <Select
-                    value={saleUnitPreset}
-                    onValueChange={(value) => {
-                      setSaleUnitPreset(value);
-                      if (value !== CUSTOM_PRODUCT_SALE_UNIT_VALUE) {
-                        setErrors((prev) => {
-                          if (!prev?.unit_type) return prev;
-                          const next = { ...(prev || {}) };
-                          delete next.unit_type;
-                          return next;
-                        });
-                      }
-                    }}
-                  >
-                    <SelectTrigger id="saleUnitType" className={errors?.unit_type ? 'border-destructive' : ''}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {PRODUCT_SALE_UNIT_OPTIONS.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                      <SelectItem value={CUSTOM_PRODUCT_SALE_UNIT_VALUE}>Outro (personalizado)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">
-                    O catálogo exibirá o preço como por {getProductSaleUnitLabel(resolvedSaleUnitType || DEFAULT_PRODUCT_SALE_UNIT)}.
-                  </p>
-                  {errors?.unit_type && (
-                    <p className="text-xs text-destructive">{errors.unit_type}</p>
-                  )}
-                </div>
-
-                {saleUnitPreset === CUSTOM_PRODUCT_SALE_UNIT_VALUE && (
                   <div className="space-y-2">
-                    <Label htmlFor="saleUnitCustom">Unidade personalizada *</Label>
-                    <Input
-                      id="saleUnitCustom"
-                      value={saleUnitCustom}
-                      onChange={(e) => setSaleUnitCustom(e.target.value)}
-                      placeholder="Ex.: bloco, pacote com 50, dúzia"
-                      className={errors?.unit_type ? 'border-destructive' : ''}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Informe como o produto será vendido para o cliente.
-                    </p>
+                    <Label htmlFor="unit">Unidade *</Label>
+                    <Select value={unit} onValueChange={setUnit}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="un">Unidade (un)</SelectItem>
+                        <SelectItem value="m">Metro (m)</SelectItem>
+                        <SelectItem value="m\u00B2">Metro2 (m\u00B2)</SelectItem>
+                        <SelectItem value="kg">Quilograma (kg)</SelectItem>
+                        <SelectItem value="cx">Caixa (cx)</SelectItem>
+                        <SelectItem value="pct">Pacote (pct)</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
-                )}
 
-                <div className="space-y-2">
-                  <Label htmlFor="minOrderQuantity">Quantidade mínima para pedido no catálogo</Label>
-                  <Input
-                    id="minOrderQuantity"
-                    type="number"
-                    min="1"
-                    step="1"
-                    value={minOrderQuantity}
-                    onChange={(e) =>
-                      setMinOrderQuantity(Math.max(1, parseInt(e.target.value, 10) || 1))
-                    }
-                    className={errors?.min_order_quantity ? 'border-destructive' : ''}
-                  />
-                  {errors?.min_order_quantity && (
-                    <p className="text-xs text-destructive">{errors.min_order_quantity}</p>
+                  <div className="space-y-2">
+                    <Label htmlFor="saleUnitType">Unidade de venda *</Label>
+                    <Select
+                      value={saleUnitPreset}
+                      onValueChange={(value) => {
+                        setSaleUnitPreset(value);
+                        if (value !== CUSTOM_PRODUCT_SALE_UNIT_VALUE) {
+                          setErrors((prev) => {
+                            if (!prev?.unit_type) return prev;
+                            const next = { ...(prev || {}) };
+                            delete next.unit_type;
+                            return next;
+                          });
+                        }
+                      }}
+                    >
+                      <SelectTrigger id="saleUnitType" className={errors?.unit_type ? 'border-destructive' : ''}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PRODUCT_SALE_UNIT_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                        <SelectItem value={CUSTOM_PRODUCT_SALE_UNIT_VALUE}>Outro (personalizado)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      O catálogo exibirá o preço como por {getProductSaleUnitLabel(resolvedSaleUnitType || DEFAULT_PRODUCT_SALE_UNIT)}.
+                    </p>
+                    {errors?.unit_type && (
+                      <p className="text-xs text-destructive">{errors.unit_type}</p>
+                    )}
+                  </div>
+
+                  {saleUnitPreset === CUSTOM_PRODUCT_SALE_UNIT_VALUE && (
+                    <div className="space-y-2">
+                      <Label htmlFor="saleUnitCustom">Unidade personalizada *</Label>
+                      <Input
+                        id="saleUnitCustom"
+                        value={saleUnitCustom}
+                        onChange={(e) => setSaleUnitCustom(e.target.value)}
+                        placeholder="Ex.: bloco, pacote com 50, dúzia"
+                        className={errors?.unit_type ? 'border-destructive' : ''}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Informe como o produto será vendido para o cliente.
+                      </p>
+                    </div>
                   )}
-                </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="stockQuantity">Quantidade em Estoque</Label>
-                  <Input
-                    id="stockQuantity"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={stockQuantity}
-                    onChange={(e) => setStockQuantity(parseFloat(e.target.value) || 0)}
-                    disabled={!trackStock}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="minStock">Estoque Mínimo (alerta)</Label>
-                  <Input
-                    id="minStock"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={minStock}
-                    onChange={(e) => setMinStock(parseFloat(e.target.value) || 0)}
-                    disabled={!trackStock}
-                  />
-                </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="minOrderQuantity">Quantidade mínima para pedido no catálogo</Label>
+                    <Input
+                      id="minOrderQuantity"
+                      type="number"
+                      min="1"
+                      step="1"
+                      value={minOrderQuantity}
+                      onChange={(e) =>
+                        setMinOrderQuantity(Math.max(1, parseInt(e.target.value, 10) || 1))
+                      }
+                      className={errors?.min_order_quantity ? 'border-destructive' : ''}
+                    />
+                    {errors?.min_order_quantity && (
+                      <p className="text-xs text-destructive">{errors.min_order_quantity}</p>
+                    )}
+                  </div>
 
-                {!trackStock && (
-                  <p className="md:col-span-2 text-xs text-muted-foreground">
-                    Este produto ficará marcado como "Não controla estoque" na listagem.
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
+                  <div className="space-y-2">
+                    <Label htmlFor="stockQuantity">Quantidade em Estoque</Label>
+                    <Input
+                      id="stockQuantity"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={stockQuantity}
+                      onChange={(e) => setStockQuantity(parseFloat(e.target.value) || 0)}
+                      disabled={!trackStock}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="minStock">Estoque Mínimo (alerta)</Label>
+                    <Input
+                      id="minStock"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={minStock}
+                      onChange={(e) => setMinStock(parseFloat(e.target.value) || 0)}
+                      disabled={!trackStock}
+                    />
+                  </div>
+
+                  {!trackStock && (
+                    <p className="md:col-span-2 text-xs text-muted-foreground">
+                      Este produto ficará marcado como "Não controla estoque" na listagem.
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
           </Tabs>
         </div>
 
@@ -4041,11 +4116,11 @@ export default function ProductForm() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">Sem categoria pai (categoria principal)</SelectItem>
-                    {parentCategoryOptions.map((option) => (
-                      <SelectItem key={option.id} value={option.id}>
-                        {`${'-- '.repeat(option.level)}${option.name}`}
-                      </SelectItem>
-                    ))}
+                  {parentCategoryOptions.map((option) => (
+                    <SelectItem key={option.id} value={option.id}>
+                      {`${'-- '.repeat(option.level)}${option.name}`}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
