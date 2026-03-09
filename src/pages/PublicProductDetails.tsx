@@ -1206,6 +1206,19 @@ export default function PublicProductDetails() {
         }
 
         @media (max-width: 1023px) {
+          .catalog-detail-hero {
+            gap: 1.5rem;
+          }
+
+          .catalog-detail-buybox {
+            padding: 0.85rem;
+          }
+
+          .catalog-detail-media-frame {
+            min-height: clamp(240px, 50vw, 400px);
+            height: clamp(240px, 50vw, 400px);
+          }
+
           .pc-footer-top {
             flex-direction: column;
             align-items: flex-start;
@@ -1213,6 +1226,30 @@ export default function PublicProductDetails() {
 
           .pc-footer-actions {
             justify-content: flex-start;
+            width: 100%;
+          }
+
+          .pc-footer-btn {
+            flex: 1;
+            min-width: 120px;
+          }
+        }
+
+        @media (max-width: 639px) {
+          .catalog-detail-hero > div:last-child {
+             border: none;
+             padding: 0;
+             background: transparent;
+          }
+
+          .catalog-detail-buybox {
+            border-radius: 1.25rem;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+          }
+
+          .catalog-btn {
+            height: 48px;
+            font-size: 15px;
           }
         }
 

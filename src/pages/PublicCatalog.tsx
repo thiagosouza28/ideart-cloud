@@ -401,10 +401,9 @@ function DiscoverySidebar({
   );
 }
 
-function ProductCard({
+function ProductListCard({
   product,
   company,
-  viewMode,
   showPrices,
   buttonText,
   reviewHref,
@@ -412,7 +411,6 @@ function ProductCard({
 }: {
   product: ProductWithCategory;
   company: Company | null;
-  viewMode: ViewMode;
   showPrices: boolean;
   buttonText: string;
   reviewHref: string;
@@ -430,270 +428,134 @@ function ProductCard({
     if (company?.id) pushRecentlyViewedProduct(company.id, product.id);
   };
 
-  if (viewMode === 'list') {
-    return (
-      <div
-        className="group overflow-hidden rounded-[24px] border border-[var(--pc-card-border)] bg-[var(--pc-card-bg)] transition hover:-translate-y-0.5 hover:border-[var(--pc-filter-bg)]/35"
-        style={{ boxShadow: cardShadow }}
+  return (
+    <div
+      className="group overflow-hidden rounded-[24px] border border-[var(--pc-card-border)] bg-[var(--pc-card-bg)] transition hover:-translate-y-0.5 hover:border-[var(--pc-filter-bg)]/35"
+      style={{ boxShadow: cardShadow }}
+    >
+      <Link
+        to={href}
+        className="grid min-h-[216px] md:grid-cols-[240px_1fr]"
+        onClick={handleProductOpen}
       >
-        <Link
-          to={href}
-          className="grid min-h-[216px] md:grid-cols-[240px_1fr]"
-          onClick={handleProductOpen}
-        >
-          <div className="relative overflow-hidden border-b border-[var(--pc-card-border)] bg-[var(--pc-page-bg)] md:border-b-0 md:border-r">
-            <div className="flex h-full min-h-[216px] items-center justify-center">
-              {product.image_url ? (
-                <img
-                  src={product.image_url}
-                  alt={product.name}
-                  loading="lazy"
-                  className="h-full w-full object-contain p-4 transition duration-300 group-hover:scale-[1.03]"
-                />
-              ) : (
-                <Package className="h-12 w-12 text-[var(--pc-muted)]" />
-              )}
-            </div>
+        <div className="relative overflow-hidden border-b border-[var(--pc-card-border)] bg-[var(--pc-page-bg)] md:border-b-0 md:border-r">
+          <div className="flex h-full min-h-[216px] items-center justify-center">
+            {product.image_url ? (
+              <img
+                src={product.image_url}
+                alt={product.name}
+                loading="lazy"
+                className="h-full w-full object-contain p-4 transition duration-300 group-hover:scale-[1.03]"
+              />
+            ) : (
+              <Package className="h-12 w-12 text-[var(--pc-muted)]" />
+            )}
+          </div>
 
-            {badges.length > 0 ? (
-              <div className="absolute left-3 top-3 flex flex-wrap gap-2">
-                {badges.map((badge) => (
-                  <span
-                    key={badge}
-                    className="inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.08em]"
-                    style={{
-                      backgroundColor:
-                        badge === 'Promocao'
-                          ? 'var(--pc-badge-bg)'
-                          : badge === 'Mais vendido'
-                            ? 'color-mix(in srgb, var(--pc-filter-bg) 18%, white)'
-                            : 'color-mix(in srgb, var(--pc-button-bg) 14%, white)',
-                      color: badge === 'Promocao' ? 'var(--pc-badge-text)' : 'var(--pc-text)',
-                    }}
-                  >
-                    {badge === 'Promocao' ? 'Promoção' : badge}
-                  </span>
-                ))}
-              </div>
+          {badges.length > 0 ? (
+            <div className="absolute left-3 top-3 flex flex-wrap gap-2">
+              {badges.map((badge) => (
+                <span
+                  key={badge}
+                  className="inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.08em]"
+                  style={{
+                    backgroundColor:
+                      badge === 'Promocao'
+                        ? 'var(--pc-badge-bg)'
+                        : badge === 'Mais vendido'
+                          ? 'color-mix(in srgb, var(--pc-filter-bg) 18%, white)'
+                          : 'color-mix(in srgb, var(--pc-button-bg) 14%, white)',
+                    color: badge === 'Promocao' ? 'var(--pc-badge-text)' : 'var(--pc-text)',
+                  }}
+                >
+                  {badge === 'Promocao' ? 'Promoção' : badge}
+                </span>
+              ))}
+            </div>
+          ) : null}
+        </div>
+
+        <div className="flex min-w-0 flex-1 flex-col gap-4 p-5">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm text-[var(--pc-muted)]">{product.category?.name || 'Produto'}</span>
+            {product.personalization_enabled ? (
+              <span className="rounded-full border border-[var(--pc-badge-bg)]/30 bg-[var(--pc-badge-bg)]/10 px-2.5 py-1 text-[11px] font-semibold text-[var(--pc-badge-text)]">
+                Personalizado
+              </span>
+            ) : null}
+            {(metrics?.averageRating || 0) > 0 ? (
+              <span className="inline-flex items-center gap-1 rounded-full border border-[var(--pc-card-border)] bg-[var(--pc-page-bg)] px-2.5 py-1 text-[11px] font-semibold text-[var(--pc-muted)]">
+                <Star className="h-3.5 w-3.5 text-amber-500" />
+                {metrics?.averageRating?.toFixed(1)}
+              </span>
             ) : null}
           </div>
 
-          <div className="flex min-w-0 flex-1 flex-col gap-4 p-5">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-sm text-[var(--pc-muted)]">{product.category?.name || 'Produto'}</span>
-              {product.personalization_enabled ? (
-                <span className="rounded-full border border-[var(--pc-badge-bg)]/30 bg-[var(--pc-badge-bg)]/10 px-2.5 py-1 text-[11px] font-semibold text-[var(--pc-badge-text)]">
-                  Personalizado
-                </span>
-              ) : null}
-              {(metrics?.averageRating || 0) > 0 ? (
-                <span className="inline-flex items-center gap-1 rounded-full border border-[var(--pc-card-border)] bg-[var(--pc-page-bg)] px-2.5 py-1 text-[11px] font-semibold text-[var(--pc-muted)]">
-                  <Star className="h-3.5 w-3.5 text-amber-500" />
-                  {metrics?.averageRating?.toFixed(1)}
-                </span>
-              ) : null}
-            </div>
+          <div>
+            <h3 className="text-[1.02rem] font-bold leading-tight text-[var(--pc-text)]">{product.name}</h3>
+            <p className="mt-2 line-clamp-2 text-sm leading-6 text-[var(--pc-muted)]">
+              {product.catalog_short_description || product.description || 'Produto disponível no catálogo.'}
+            </p>
+          </div>
 
-            <div>
-              <h3 className="text-[1.02rem] font-bold leading-tight text-[var(--pc-text)]">{product.name}</h3>
-              <p className="mt-2 line-clamp-2 text-sm leading-6 text-[var(--pc-muted)]">
-                {product.catalog_short_description || product.description || 'Produto disponível no catálogo.'}
-              </p>
-            </div>
-
-            <div className="flex flex-wrap gap-3 text-xs text-[var(--pc-muted)]">
-              {Math.max(1, Number(product.catalog_min_order ?? product.min_order_quantity ?? 1)) > 1 ? (
-                <span className="rounded-full border border-[var(--pc-card-border)] px-2.5 py-1">
-                  Pedido mínimo: {Math.max(1, Number(product.catalog_min_order ?? product.min_order_quantity ?? 1))}
-                </span>
-              ) : null}
-              {productionTimeDays !== null ? (
-                <span className="rounded-full border border-[var(--pc-card-border)] px-2.5 py-1">
-                  Produção: {productionTimeDays} {productionTimeDays === 1 ? 'dia' : 'dias'}
-                </span>
-              ) : null}
+          <div className="flex flex-wrap gap-3 text-xs text-[var(--pc-muted)]">
+            {Math.max(1, Number(product.catalog_min_order ?? product.min_order_quantity ?? 1)) > 1 ? (
               <span className="rounded-full border border-[var(--pc-card-border)] px-2.5 py-1">
-                {Number(product.sales_count || 0)} vendas
+                Pedido mínimo: {Math.max(1, Number(product.catalog_min_order ?? product.min_order_quantity ?? 1))}
               </span>
-            </div>
-
-            <div className="mt-auto flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-              {showPrices ? (
-                <div>
-                  {inPromotion ? (
-                    <p className="text-sm text-[var(--pc-muted)] line-through">
-                      {asCurrency(getPromotionBasePrice(product))}
-                    </p>
-                  ) : null}
-                  <p className="text-xl font-extrabold text-[var(--pc-price)]">
-                    {asCurrency(getProductPrice(product))}
-                  </p>
-                  <p className="text-xs font-medium text-[var(--pc-muted)]">
-                    {getProductSaleUnitPriceSuffix(product.unit_type)}
-                  </p>
-                </div>
-              ) : (
-                <p className="text-base font-semibold text-[var(--pc-price)]">Preço sob consulta</p>
-              )}
-
-              <span
-                className="inline-flex min-h-[42px] items-center justify-center rounded-2xl px-4 py-2 text-sm font-semibold"
-                style={{
-                  backgroundColor: 'var(--pc-button-bg)',
-                  color: 'var(--pc-button-text)',
-                }}
-              >
-                {buttonText}
+            ) : null}
+            {productionTimeDays !== null ? (
+              <span className="rounded-full border border-[var(--pc-card-border)] px-2.5 py-1">
+                Produção: {productionTimeDays} {productionTimeDays === 1 ? 'dia' : 'dias'}
               </span>
-            </div>
-          </div>
-        </Link>
-
-        <div className="border-t border-[var(--pc-card-border)] px-5 py-4">
-          <Link
-            to={reviewHref}
-            className="inline-flex min-h-[42px] w-full items-center justify-center rounded-2xl border border-[var(--pc-card-border)] bg-[var(--pc-card-bg)] px-4 py-2 text-sm font-semibold text-[var(--pc-text)] transition hover:border-[var(--pc-filter-bg)] hover:text-[var(--pc-filter-bg)]"
-            onClick={handleProductOpen}
-          >
-            Avaliar produto
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <Link
-      to={href}
-      className={[
-        'group overflow-hidden rounded-[24px] border border-[var(--pc-card-border)] bg-[var(--pc-card-bg)] transition',
-        viewMode === 'list' ? 'grid min-h-[216px] md:grid-cols-[240px_1fr]' : 'flex flex-col',
-        'hover:-translate-y-0.5 hover:border-[var(--pc-filter-bg)]/35',
-      ].join(' ')}
-      style={{ boxShadow: cardShadow }}
-      onClick={handleProductOpen}
-    >
-      <div
-        className={[
-          'relative overflow-hidden border-[var(--pc-card-border)] bg-[var(--pc-page-bg)]',
-          viewMode === 'list' ? 'border-b md:border-b-0 md:border-r' : 'border-b',
-        ].join(' ')}
-      >
-        <div
-          className={
-            viewMode === 'list'
-              ? 'flex h-full min-h-[216px] items-center justify-center'
-              : 'flex h-[188px] items-center justify-center sm:h-[208px]'
-          }
-        >
-          {product.image_url ? (
-            <img
-              src={product.image_url}
-              alt={product.name}
-              loading="lazy"
-              className="h-full w-full object-contain p-4 transition duration-300 group-hover:scale-[1.03]"
-            />
-          ) : (
-            <Package className="h-12 w-12 text-[var(--pc-muted)]" />
-          )}
-        </div>
-
-        {badges.length > 0 ? (
-          <div className="absolute left-3 top-3 flex flex-wrap gap-2">
-            {badges.map((badge) => (
-              <span
-                key={badge}
-                className="inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.08em]"
-                style={{
-                  backgroundColor:
-                    badge === 'Promocao'
-                      ? 'var(--pc-badge-bg)'
-                      : badge === 'Mais vendido'
-                        ? 'color-mix(in srgb, var(--pc-filter-bg) 18%, white)'
-                        : 'color-mix(in srgb, var(--pc-button-bg) 14%, white)',
-                  color:
-                    badge === 'Promocao'
-                      ? 'var(--pc-badge-text)'
-                      : 'var(--pc-text)',
-                }}
-              >
-                {badge === 'Promocao' ? 'Promoção' : badge}
-              </span>
-            ))}
-          </div>
-        ) : null}
-      </div>
-
-      <div className={viewMode === 'list' ? 'flex min-w-0 flex-1 flex-col gap-4 p-5' : 'flex min-w-0 flex-1 flex-col gap-3 p-4'}>
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm text-[var(--pc-muted)]">{product.category?.name || 'Produto'}</span>
-          {product.personalization_enabled ? (
-            <span className="rounded-full border border-[var(--pc-badge-bg)]/30 bg-[var(--pc-badge-bg)]/10 px-2.5 py-1 text-[11px] font-semibold text-[var(--pc-badge-text)]">
-              Personalizado
-            </span>
-          ) : null}
-          {(metrics?.averageRating || 0) > 0 ? (
-            <span className="inline-flex items-center gap-1 rounded-full border border-[var(--pc-card-border)] bg-[var(--pc-page-bg)] px-2.5 py-1 text-[11px] font-semibold text-[var(--pc-muted)]">
-              <Star className="h-3.5 w-3.5 text-amber-500" />
-              {metrics?.averageRating?.toFixed(1)}
-            </span>
-          ) : null}
-        </div>
-
-        <div>
-          <h3 className="text-[1.02rem] font-bold leading-tight text-[var(--pc-text)]">{product.name}</h3>
-          <p className="mt-2 line-clamp-2 text-sm leading-6 text-[var(--pc-muted)]">
-            {product.catalog_short_description || product.description || 'Produto disponível no catálogo.'}
-          </p>
-        </div>
-
-        <div className="flex flex-wrap gap-3 text-xs text-[var(--pc-muted)]">
-          {Math.max(1, Number(product.catalog_min_order ?? product.min_order_quantity ?? 1)) > 1 ? (
+            ) : null}
             <span className="rounded-full border border-[var(--pc-card-border)] px-2.5 py-1">
-              Pedido mínimo: {Math.max(1, Number(product.catalog_min_order ?? product.min_order_quantity ?? 1))}
+              {Number(product.sales_count || 0)} vendas
             </span>
-          ) : null}
-          {productionTimeDays !== null ? (
-            <span className="rounded-full border border-[var(--pc-card-border)] px-2.5 py-1">
-              Produção: {productionTimeDays} {productionTimeDays === 1 ? 'dia' : 'dias'}
-            </span>
-          ) : null}
-          <span className="rounded-full border border-[var(--pc-card-border)] px-2.5 py-1">
-            {Number(product.sales_count || 0)} vendas
-          </span>
-        </div>
+          </div>
 
-        <div className="mt-auto flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          {showPrices ? (
-            <div>
-              {inPromotion ? (
-                <p className="text-sm text-[var(--pc-muted)] line-through">
-                  {asCurrency(getPromotionBasePrice(product))}
+          <div className="mt-auto flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            {showPrices ? (
+              <div>
+                {inPromotion ? (
+                  <p className="text-sm text-[var(--pc-muted)] line-through">
+                    {asCurrency(getPromotionBasePrice(product))}
+                  </p>
+                ) : null}
+                <p className="text-xl font-extrabold text-[var(--pc-price)]">
+                  {asCurrency(getProductPrice(product))}
                 </p>
-              ) : null}
-              <p className="text-xl font-extrabold text-[var(--pc-price)]">
-                {asCurrency(getProductPrice(product))}
-              </p>
-              <p className="text-xs font-medium text-[var(--pc-muted)]">
-                {getProductSaleUnitPriceSuffix(product.unit_type)}
-              </p>
-            </div>
-          ) : (
-            <p className="text-base font-semibold text-[var(--pc-price)]">Preço sob consulta</p>
-          )}
+                <p className="text-xs font-medium text-[var(--pc-muted)]">
+                  {getProductSaleUnitPriceSuffix(product.unit_type)}
+                </p>
+              </div>
+            ) : (
+              <p className="text-base font-semibold text-[var(--pc-price)]">Preço sob consulta</p>
+            )}
 
-          <span
-            className="inline-flex min-h-[42px] items-center justify-center rounded-2xl px-4 py-2 text-sm font-semibold"
-            style={{
-              backgroundColor: 'var(--pc-button-bg)',
-              color: 'var(--pc-button-text)',
-            }}
-          >
-            {buttonText}
-          </span>
+            <span
+              className="inline-flex min-h-[42px] items-center justify-center rounded-2xl px-4 py-2 text-sm font-semibold"
+              style={{
+                backgroundColor: 'var(--pc-button-bg)',
+                color: 'var(--pc-button-text)',
+              }}
+            >
+              {buttonText}
+            </span>
+          </div>
         </div>
+      </Link>
+
+      <div className="border-t border-[var(--pc-card-border)] px-5 py-4">
+        <Link
+          to={reviewHref}
+          className="inline-flex min-h-[42px] w-full items-center justify-center rounded-2xl border border-[var(--pc-card-border)] bg-[var(--pc-card-bg)] px-4 py-2 text-sm font-semibold text-[var(--pc-text)] transition hover:border-[var(--pc-filter-bg)] hover:text-[var(--pc-filter-bg)]"
+          onClick={handleProductOpen}
+        >
+          Avaliar produto
+        </Link>
       </div>
-    </Link>
+    </div>
   );
 }
 
@@ -919,7 +781,7 @@ export default function PublicCatalog() {
         return;
       }
 
-      const mappedProducts = ((productsData || []) as ProductWithCategory[]).map((product) => ({
+      const mappedProducts = ((productsData || []) as unknown as ProductWithCategory[]).map((product) => ({
         ...product,
         image_url: ensurePublicStorageUrl('product-images', product.image_url),
       }));
@@ -940,9 +802,9 @@ export default function PublicCatalog() {
           .eq('is_approved', true),
         productIds.length > 0
           ? supabase
-              .from('product_attributes')
-              .select('product_id, attribute_value:attribute_values(id, value, attribute:attributes(id, name))')
-              .in('product_id', productIds)
+            .from('product_attributes')
+            .select('product_id, attribute_value:attribute_values(id, value, attribute:attributes(id, name))')
+            .in('product_id', productIds)
           : Promise.resolve({ data: [], error: null }),
       ]);
 
@@ -1157,11 +1019,11 @@ export default function PublicCatalog() {
       .map((product) => {
         const score = normalizedSearch
           ? scoreCatalogSearchMatch({
-              product: product as Product,
-              categoryName: categoryNameMap.get(product.category_id || '') || product.category?.name || '',
-              attributeTerms: productAttributeMap.get(product.id)?.terms || [],
-              term: normalizedSearch,
-            })
+            product: product as Product,
+            categoryName: categoryNameMap.get(product.category_id || '') || product.category?.name || '',
+            attributeTerms: productAttributeMap.get(product.id)?.terms || [],
+            term: normalizedSearch,
+          })
           : 1;
 
         return { product, score };
@@ -1625,7 +1487,7 @@ export default function PublicCatalog() {
           </div>
         </div>
 
-        <div className="grid gap-6 xl:grid-cols-[300px_minmax(0,1fr)_320px]">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[280px_1fr] xl:grid-cols-[300px_minmax(0,1fr)_320px]">
           <aside className={mobileFiltersOpen ? 'block' : 'hidden md:block'}>
             <div className="space-y-5 md:sticky md:top-[92px]">
               <div
@@ -1776,25 +1638,24 @@ export default function PublicCatalog() {
           </aside>
 
           <div className="space-y-6 xl:min-w-0">
-            <div className="hidden">
-            <ProductMiniShelf
-              title="Recomendados para você"
-              icon={<ShoppingCart className="h-5 w-5" />}
-              products={recommendedProducts}
-              company={company}
-              metricsMap={productMetricsMap}
-            />
-
-            {recentlyViewedProducts.length > 0 ? (
+            <div className="xl:hidden">
               <ProductMiniShelf
-                title="Você viu recentemente"
-                icon={<Tag className="h-5 w-5" />}
-                products={recentlyViewedProducts}
+                title="Recomendados para você"
+                icon={<ShoppingCart className="h-5 w-5" />}
+                products={recommendedProducts}
                 company={company}
                 metricsMap={productMetricsMap}
               />
-            ) : null}
 
+              {recentlyViewedProducts.length > 0 ? (
+                <ProductMiniShelf
+                  title="Você viu recentemente"
+                  icon={<Tag className="h-5 w-5" />}
+                  products={recentlyViewedProducts}
+                  company={company}
+                  metricsMap={productMetricsMap}
+                />
+              ) : null}
             </div>
 
             <section
@@ -1848,9 +1709,9 @@ export default function PublicCatalog() {
                     viewMode === 'list'
                       ? undefined
                       : {
-                          gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 290px))',
-                          justifyContent: 'start',
-                        }
+                        gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 250px), 1fr))',
+                        justifyContent: 'center',
+                      }
                   }
                 >
                   {filteredProducts.map((product) => {
@@ -1874,10 +1735,9 @@ export default function PublicCatalog() {
                             metricsMap={productMetricsMap}
                           />
                         ) : (
-                          <ProductCard
+                          <ProductListCard
                             product={product}
                             company={company}
-                            viewMode={viewMode}
                             showPrices={showPrices}
                             buttonText={buttonText}
                             reviewHref={reviewHref}
@@ -1892,7 +1752,7 @@ export default function PublicCatalog() {
             </section>
           </div>
 
-          <div className="xl:min-w-0">
+          <div className="hidden xl:block xl:min-w-0">
             <DiscoverySidebar
               sections={discoverySections}
               activeSection={activeDiscoverySection}
