@@ -782,9 +782,6 @@ export default function ProductForm() {
     return resolveProductBasePrice(product, 1, [], getReferenceProductSupplyCost(product));
   };
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
 
   useEffect(() => {
     setInitialSnapshot(null);
@@ -827,7 +824,7 @@ export default function ProductForm() {
     ]);
 
     setCategories(catResult.data as Category[] || []);
-    const mappedSupplies = (supResult.data as Supply[] || []).map((supply) => ({
+    const mappedSupplies = ((supResult.data as unknown as Supply[]) || []).map((supply) => ({
       ...supply,
       image_url: ensurePublicStorageUrl('product-images', supply.image_url),
     }));
@@ -835,7 +832,7 @@ export default function ProductForm() {
     setAttributes(attrResult.data as Attribute[] || []);
     setAttributeValues(attrValResult.data as AttributeValue[] || []);
     setAvailableProducts(
-      (productsResult.data as ReferenceProduct[] || []).map((product) => ({
+      ((productsResult.data as unknown as ReferenceProduct[]) || []).map((product) => ({
         ...product,
         image_url: ensurePublicStorageUrl('product-images', product.image_url),
         image_urls: normalizeProductImages(product.image_urls, product.image_url),
@@ -886,7 +883,7 @@ export default function ProductForm() {
         .eq('id', id)
         .maybeSingle();
 
-      const product = productData as ReferenceProduct | null;
+      const product = productData as unknown as ReferenceProduct | null;
 
       if (error || !product) {
         toast({ title: 'Produto não encontrado', variant: 'destructive' });
@@ -962,7 +959,7 @@ export default function ProductForm() {
       if (prodSupplies) {
         setProductSupplies(prodSupplies.map(ps => ({
           supply_id: ps.supply_id,
-          supply: ps.supply as Supply,
+          supply: ps.supply as unknown as Supply,
           quantity: Number(ps.quantity),
         })));
       }
@@ -1050,6 +1047,10 @@ export default function ProductForm() {
     setProductAttributes(productAttrSelection);
     setLoading(false);
   }, [id, company?.id, profile?.company_id, isEditing, currentUserId, navigate, toast]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   // Image upload
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1301,7 +1302,7 @@ export default function ProductForm() {
           supply_id: `supply-${index}`,
           quantity: Number(item.quantity || 0),
           created_at: draftCreatedAtRef.current,
-          supply: item.supply || undefined,
+          supply: (item.supply || undefined) as Supply | undefined,
         })),
       );
 
@@ -1592,7 +1593,7 @@ export default function ProductForm() {
       }
 
       if (Array.isArray(draftData.productAttributes)) {
-        setProductAttributes((prev) => mergeAttributeDraft(prev, draftData.productAttributes));
+        setProductAttributes((prev) => mergeAttributeDraft(prev, draftData.productAttributes as ProductAttributeItem[]));
       }
 
       if (typeof parsed.meta?.slugTouched === 'boolean') {
@@ -2188,7 +2189,7 @@ export default function ProductForm() {
         .eq('id', id)
         .maybeSingle();
 
-      const sourceProduct = sourceProductData as ReferenceProduct | null;
+      const sourceProduct = sourceProductData as unknown as ReferenceProduct | null;
 
       if (sourceProductError || !sourceProduct) {
         throw sourceProductError || new Error('Produto de origem não encontrado.');
@@ -2229,7 +2230,7 @@ export default function ProductForm() {
         catalog_short_description: sourceProduct.catalog_short_description ?? null,
         catalog_long_description: sourceProduct.catalog_long_description ?? null,
         catalog_min_order: sourceProduct.catalog_min_order ?? sourceProduct.min_order_quantity ?? 1,
-        product_colors: sourceProduct.product_colors ?? [],
+        product_colors: (sourceProduct.product_colors ?? []) as unknown as Record<string, unknown>[],
         personalization_enabled: sourceProduct.personalization_enabled ?? false,
         production_time_days: sourceProduct.production_time_days ?? null,
         unit: sourceProduct.unit || 'un',
@@ -2257,7 +2258,7 @@ export default function ProductForm() {
 
       const { data: createdProduct, error: createProductError } = await supabase
         .from('products')
-        .insert(copyPayload)
+        .insert(copyPayload as any)
         .select('id')
         .single();
 
@@ -2394,7 +2395,7 @@ export default function ProductForm() {
       catalog_short_description: catalogShortDescription.trim() || null,
       catalog_long_description: catalogLongDescription.trim() || null,
       catalog_min_order: minOrderQuantity,
-      product_colors: normalizedColors,
+      product_colors: normalizedColors as unknown as Record<string, unknown>[],
       personalization_enabled: personalizationEnabled,
       production_time_days: normalizedProductionTimeDays,
       unit,
@@ -2464,7 +2465,7 @@ export default function ProductForm() {
       // Update product
       const { error } = await supabase
         .from('products')
-        .update(formData)
+        .update(formData as any)
         .eq('id', id);
 
       if (error) {
@@ -2493,7 +2494,7 @@ export default function ProductForm() {
       // Insert product
       const { data: product, error } = await supabase
         .from('products')
-        .insert(formData)
+        .insert(formData as any)
         .select()
         .single();
 
@@ -3950,7 +3951,7 @@ export default function ProductForm() {
                       <SelectContent>
                         <SelectItem value="un">Unidade (un)</SelectItem>
                         <SelectItem value="m">Metro (m)</SelectItem>
-                        <SelectItem value="m\u00B2">Metro2 (m\u00B2)</SelectItem>
+                        <SelectItem value="m²">Metro² (m²)</SelectItem>
                         <SelectItem value="kg">Quilograma (kg)</SelectItem>
                         <SelectItem value="cx">Caixa (cx)</SelectItem>
                         <SelectItem value="pct">Pacote (pct)</SelectItem>

@@ -1,5 +1,6 @@
 export type AppRole = 'super_admin' | 'admin' | 'financeiro' | 'atendente' | 'caixa' | 'producao';
 export type ProductType = 'produto' | 'confeccionado' | 'servico';
+export type StockControlType = 'none' | 'simple' | 'composition';
 export type OrderStatus =
   | 'orcamento'
   | 'pendente'
@@ -305,6 +306,7 @@ export interface Plan {
 
 export interface Product {
   track_stock: boolean;
+  stock_control_type?: StockControlType | null;
   id: string;
   name: string;
   sku: string | null;

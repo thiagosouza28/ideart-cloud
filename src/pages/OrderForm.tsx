@@ -21,6 +21,7 @@ import { normalizeDigits } from '@/components/ui/masked-input';
 import { useUnsavedChanges } from '@/hooks/use-unsaved-changes';
 import { ensurePublicStorageUrl } from '@/lib/storage';
 import { buildOrderDetailsPath } from '@/lib/orderRouting';
+import { isAreaUnit, M2_ATTRIBUTE_KEYS, calculateAreaM2, formatAreaM2, parseMeasurementInput } from '@/lib/measurements';
 import {
   getProductSaleEquivalentText,
   getProductSaleUnitLabel,
@@ -349,7 +350,7 @@ export default function OrderForm() {
         if (salespeopleResult.error) throw salespeopleResult.error;
 
         setCustomers((custResult.data as Customer[]) || []);
-        setProducts((prodResult.data as Product[]) || []);
+        setProducts((prodResult.data as unknown as Product[]) || []);
         setPriceTiers((tiersResult.data as PriceTier[]) || []);
         setSalespeople((salespeopleResult.data as SalespersonOption[]) || []);
 
@@ -734,6 +735,33 @@ export default function OrderForm() {
           unit_price: getProductPrice(item.product, nextValue),
         };
       }),
+    );
+  };
+
+  const changeM2SubQuantity = (productId: string, key: string, value: string) => {
+    setItems((prev) =>
+      prev.map((item) => {
+        if (item.product.id !== productId) return item;
+        if (!isAreaUnit(item.product.unit)) return item;
+
+        const nextAttributes = { ...(item.attributes || {}) };
+        nextAttributes[key] = value;
+
+        const widthCm = parseMeasurementInput(nextAttributes[M2_ATTRIBUTE_KEYS.widthCm]);
+        const heightCm = parseMeasurementInput(nextAttributes[M2_ATTRIBUTE_KEYS.heightCm]);
+
+        let areaM2 = 1;
+        if (typeof widthCm === 'number' && typeof heightCm === 'number' && widthCm > 0 && heightCm > 0) {
+          areaM2 = calculateAreaM2(widthCm, heightCm);
+        }
+
+        return {
+          ...item,
+          attributes: nextAttributes,
+          quantity: areaM2,
+          unit_price: getProductPrice(item.product, areaM2),
+        };
+      })
     );
   };
 
@@ -1299,27 +1327,60 @@ export default function OrderForm() {
                               </div>
                             </td>
                             <td>
-                              <div className="order-qty-control">
-                                <button
-                                  type="button"
-                                  onClick={() => changeQty(item.product.id, -1)}
-                                  disabled={saving || item.quantity <= 1}
-                                >
-                                  <Minus className="h-3.5 w-3.5" />
-                                </button>
-                                <input
-                                  type="number"
-                                  min={1}
-                                  value={item.quantity}
-                                  onChange={(event) => {
-                                    const parsed = Number(event.target.value);
-                                    setQty(item.product.id, Number.isFinite(parsed) ? parsed : 1);
-                                  }}
-                                />
-                                <button type="button" onClick={() => changeQty(item.product.id, 1)} disabled={saving}>
-                                  <Plus className="h-3.5 w-3.5" />
-                                </button>
-                              </div>
+                              {isAreaUnit(item.product.unit) ? (
+                                <div className="space-y-2">
+                                  <div className="flex items-center gap-2">
+                                    <div className="flex flex-col gap-1 w-[70px]">
+                                      <span className="text-[10px] uppercase text-muted-foreground font-semibold">Larg. (cm)</span>
+                                      <input
+                                        type="text"
+                                        inputMode="decimal"
+                                        className="order-input text-sm px-2 py-1 h-auto"
+                                        value={item.attributes[M2_ATTRIBUTE_KEYS.widthCm] ?? ''}
+                                        onChange={(e) => changeM2SubQuantity(item.product.id, M2_ATTRIBUTE_KEYS.widthCm, e.target.value)}
+                                        disabled={saving}
+                                      />
+                                    </div>
+                                    <span className="text-muted-foreground mt-4 text-xs font-medium">x</span>
+                                    <div className="flex flex-col gap-1 w-[70px]">
+                                      <span className="text-[10px] uppercase text-muted-foreground font-semibold">Alt. (cm)</span>
+                                      <input
+                                        type="text"
+                                        inputMode="decimal"
+                                        className="order-input text-sm px-2 py-1 h-auto"
+                                        value={item.attributes[M2_ATTRIBUTE_KEYS.heightCm] ?? ''}
+                                        onChange={(e) => changeM2SubQuantity(item.product.id, M2_ATTRIBUTE_KEYS.heightCm, e.target.value)}
+                                        disabled={saving}
+                                      />
+                                    </div>
+                                  </div>
+                                  <div className="text-xs font-semibold text-[var(--order-primary)]">
+                                    {formatAreaM2(item.quantity || 0)} m²
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="order-qty-control">
+                                  <button
+                                    type="button"
+                                    onClick={() => changeQty(item.product.id, -1)}
+                                    disabled={saving || item.quantity <= 1}
+                                  >
+                                    <Minus className="h-3.5 w-3.5" />
+                                  </button>
+                                  <input
+                                    type="number"
+                                    min={1}
+                                    value={item.quantity}
+                                    onChange={(event) => {
+                                      const parsed = Number(event.target.value);
+                                      setQty(item.product.id, Number.isFinite(parsed) ? parsed : 1);
+                                    }}
+                                  />
+                                  <button type="button" onClick={() => changeQty(item.product.id, 1)} disabled={saving}>
+                                    <Plus className="h-3.5 w-3.5" />
+                                  </button>
+                                </div>
+                              )}
                               {getTierRangeLabel(item.product.id) ? (
                                 <div className="mt-1 text-[11px] text-[var(--order-muted)]">
                                   Faixas: {getTierRangeLabel(item.product.id)}

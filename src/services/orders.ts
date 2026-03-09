@@ -961,23 +961,30 @@ export const updateOrderStatus = async ({
   if (order.company_id && order.status !== 'finalizado' && status === 'finalizado') {
     const { data: orderItems, error: orderItemsError } = await supabase
       .from('order_items')
-      .select('product_id, product_name, quantity')
+      .select('product_id, product_name, quantity, products(stock_control_type)')
       .eq('order_id', orderId);
 
     if (orderItemsError) {
       throw orderItemsError;
     }
 
-    await consumeProductSupplies({
-      companyId: order.company_id,
-      orderId,
-      userId: userId || null,
-      items: (orderItems || []).map((item) => ({
-        product_id: item.product_id,
-        product_name: item.product_name,
-        quantity: Number(item.quantity || 0),
-      })),
+    const compositionItems = (orderItems || []).filter(item => {
+      const stype = (item.products as any)?.stock_control_type;
+      return stype === 'composition';
     });
+
+    if (compositionItems.length > 0) {
+      await consumeProductSupplies({
+        companyId: order.company_id,
+        orderId,
+        userId: userId || null,
+        items: compositionItems.map((item) => ({
+          product_id: item.product_id,
+          product_name: item.product_name,
+          quantity: Number(item.quantity || 0),
+        })),
+      });
+    }
 
     await supabase.rpc('recalculate_product_sales_counts', {
       p_company_id: order.company_id,

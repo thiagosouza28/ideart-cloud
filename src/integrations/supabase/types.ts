@@ -1626,6 +1626,12 @@ export type Database = {
         Row: {
           base_cost: number
           barcode: string | null
+          catalog_enabled: boolean
+          catalog_featured: boolean
+          catalog_long_description: string | null
+          catalog_min_order: number
+          catalog_price: number | null
+          catalog_short_description: string | null
           category_id: string | null
           company_id: string | null
           created_at: string
@@ -1656,7 +1662,9 @@ export type Database = {
           service_base_price: number
           show_in_catalog: boolean
           sku: string | null
+          slug: string | null
           stock_quantity: number
+          stock_control_type: string
           track_stock: boolean
           unit: string
           unit_type: string
@@ -1668,6 +1676,12 @@ export type Database = {
         Insert: {
           base_cost?: number
           barcode?: string | null
+          catalog_enabled?: boolean
+          catalog_featured?: boolean
+          catalog_long_description?: string | null
+          catalog_min_order?: number
+          catalog_price?: number | null
+          catalog_short_description?: string | null
           category_id?: string | null
           company_id?: string | null
           created_at?: string
@@ -1698,7 +1712,9 @@ export type Database = {
           service_base_price?: number
           show_in_catalog?: boolean
           sku?: string | null
+          slug?: string | null
           stock_quantity?: number
+          stock_control_type?: string
           track_stock?: boolean
           unit?: string
           unit_type?: string
@@ -1710,6 +1726,12 @@ export type Database = {
         Update: {
           base_cost?: number
           barcode?: string | null
+          catalog_enabled?: boolean
+          catalog_featured?: boolean
+          catalog_long_description?: string | null
+          catalog_min_order?: number
+          catalog_price?: number | null
+          catalog_short_description?: string | null
           category_id?: string | null
           company_id?: string | null
           created_at?: string
@@ -1740,7 +1762,9 @@ export type Database = {
           service_base_price?: number
           show_in_catalog?: boolean
           sku?: string | null
+          slug?: string | null
           stock_quantity?: number
+          stock_control_type?: string
           track_stock?: boolean
           unit?: string
           unit_type?: string
@@ -1941,7 +1965,7 @@ export type Database = {
           must_complete_onboarding: boolean
           password_defined: boolean
           updated_at: string
-          }
+        }
         Insert: {
           avatar_url?: string | null
           cpf?: string | null
@@ -1955,7 +1979,7 @@ export type Database = {
           must_complete_onboarding?: boolean
           password_defined?: boolean
           updated_at?: string
-          }
+        }
         Update: {
           avatar_url?: string | null
           cpf?: string | null
@@ -1969,7 +1993,7 @@ export type Database = {
           must_complete_onboarding?: boolean
           password_defined?: boolean
           updated_at?: string
-          }
+        }
         Relationships: [
           {
             foreignKeyName: "profiles_company_id_fkey"
@@ -2248,67 +2272,67 @@ export type Database = {
           },
         ]
       }
-        subscriptions: {
-          Row: {
-            company_id: string
-            created_at: string
-            current_period_ends_at: string | null
-            customer_document: string | null
-            customer_email: string | null
-            customer_name: string | null
-            customer_phone: string | null
-            gateway: string
-            gateway_order_id: string | null
-            gateway_payment_link_id: string | null
-            gateway_subscription_id: string | null
-            id: string
+      subscriptions: {
+        Row: {
+          company_id: string
+          created_at: string
+          current_period_ends_at: string | null
+          customer_document: string | null
+          customer_email: string | null
+          customer_name: string | null
+          customer_phone: string | null
+          gateway: string
+          gateway_order_id: string | null
+          gateway_payment_link_id: string | null
+          gateway_subscription_id: string | null
+          id: string
           last_payment_status: string | null
-            payment_link_url: string | null
-            plan_id: string | null
-            status: string
-            trial_ends_at: string | null
-            updated_at: string
-          }
-          Insert: {
-            company_id: string
-            created_at?: string
-            current_period_ends_at?: string | null
-            customer_document?: string | null
-            customer_email?: string | null
-            customer_name?: string | null
-            customer_phone?: string | null
-            gateway?: string
-            gateway_order_id?: string | null
-            gateway_payment_link_id?: string | null
-            gateway_subscription_id?: string | null
-            id?: string
+          payment_link_url: string | null
+          plan_id: string | null
+          status: string
+          trial_ends_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          current_period_ends_at?: string | null
+          customer_document?: string | null
+          customer_email?: string | null
+          customer_name?: string | null
+          customer_phone?: string | null
+          gateway?: string
+          gateway_order_id?: string | null
+          gateway_payment_link_id?: string | null
+          gateway_subscription_id?: string | null
+          id?: string
           last_payment_status?: string | null
-            payment_link_url?: string | null
-            plan_id?: string | null
-            status?: string
-            trial_ends_at?: string | null
-            updated_at?: string
-          }
-          Update: {
-            company_id?: string
-            created_at?: string
-            current_period_ends_at?: string | null
-            customer_document?: string | null
-            customer_email?: string | null
-            customer_name?: string | null
-            customer_phone?: string | null
-            gateway?: string
-            gateway_order_id?: string | null
-            gateway_payment_link_id?: string | null
-            gateway_subscription_id?: string | null
-            id?: string
+          payment_link_url?: string | null
+          plan_id?: string | null
+          status?: string
+          trial_ends_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          current_period_ends_at?: string | null
+          customer_document?: string | null
+          customer_email?: string | null
+          customer_name?: string | null
+          customer_phone?: string | null
+          gateway?: string
+          gateway_order_id?: string | null
+          gateway_payment_link_id?: string | null
+          gateway_subscription_id?: string | null
+          id?: string
           last_payment_status?: string | null
-            payment_link_url?: string | null
-            plan_id?: string | null
-            status?: string
-            trial_ends_at?: string | null
-            updated_at?: string
-          }
+          payment_link_url?: string | null
+          plan_id?: string | null
+          status?: string
+          trial_ends_at?: string | null
+          updated_at?: string
+        }
         Relationships: [
           {
             foreignKeyName: "subscriptions_company_id_fkey"
