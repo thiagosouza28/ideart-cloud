@@ -488,7 +488,7 @@ export default function BannerManagement() {
             });
 
             // Use the local upload service
-            const url = await uploadFile(croppedFile, 'empresa');
+            const url = await uploadFile(croppedFile, 'product-images');
 
             setCurrentBanner((prev) => ({ ...prev, image_url: url }));
             closeCropDialog();

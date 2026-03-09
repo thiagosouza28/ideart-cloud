@@ -743,7 +743,7 @@ export default function Settings() {
         try {
           // If we had an old local logo, we should delete it, but Settings.tsx doesn't track specifically the "old" one before overwrite easily here.
           // However, the rule is to save the new one.
-          logoUrl = await uploadFile(logoFile, 'logos');
+          logoUrl = await uploadFile(logoFile, 'product-images');
         } catch (err) {
           throw new Error(`Erro ao enviar logo: ${err}`);
         }
@@ -751,7 +751,7 @@ export default function Settings() {
 
       if (signatureFile) {
         try {
-          signatureUrl = await uploadFile(signatureFile, 'empresa');
+          signatureUrl = await uploadFile(signatureFile, 'product-images');
         } catch (err) {
           throw new Error(`Erro ao enviar assinatura: ${err}`);
         }

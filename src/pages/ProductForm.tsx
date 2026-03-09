@@ -1101,7 +1101,7 @@ export default function ProductForm() {
 
     for (const file of validFiles) {
       try {
-        const url = await uploadFile(file, 'produtos');
+        const url = await uploadFile(file, 'product-images');
         uploadedUrls.push(url);
       } catch (err) {
         toast({ title: 'Erro ao enviar imagem', description: String(err), variant: 'destructive' });

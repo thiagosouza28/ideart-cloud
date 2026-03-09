@@ -192,7 +192,7 @@ export default function Categories() {
 
     setUploadingIcon(true);
     try {
-      const url = await uploadFile(file, 'empresa');
+      const url = await uploadFile(file, 'product-images');
       setFormData((prev) => ({
         ...prev,
         icon_url: url,

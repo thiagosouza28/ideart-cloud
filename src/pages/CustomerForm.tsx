@@ -235,7 +235,7 @@ export default function CustomerForm() {
     setUploadingPhoto(true);
 
     try {
-      const url = await uploadFile(file, 'clientes');
+      const url = await uploadFile(file, 'customer-photos');
       setForm((prev) => ({ ...prev, photo_url: url }));
       toast.success('Foto enviada com sucesso');
     } catch (err) {

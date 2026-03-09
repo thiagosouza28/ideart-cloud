@@ -767,7 +767,7 @@ export const createOrderPaymentWithCredit = async ({
     throw new Error('Valor invÃ¡lido');
   }
 
-  const { data, error } = await supabase.rpc('record_order_payment_internal', {
+  const { data, error } = await supabase.rpc('record_order_payment_internal' as any, {
     p_order_id: orderId,
     p_amount: amount,
     p_method: method,
@@ -821,7 +821,7 @@ export const applyCustomerCreditToOrder = async ({
     throw new Error('Valor invÃ¡lido');
   }
 
-  const { data, error } = await supabase.rpc('apply_customer_credit_to_order', {
+  const { data, error } = await supabase.rpc('apply_customer_credit_to_order' as any, {
     p_order_id: orderId,
     p_amount: amount,
     p_notes: notes || null,
@@ -1142,7 +1142,7 @@ export const cancelOrder = async ({
 export const deleteOrder = async (orderId: string) => {
   const { error } = await supabase
     .from('orders')
-    .update({ deleted_at: new Date().toISOString() })
+    .update({ deleted_at: new Date().toISOString() } as any)
     .eq('id', orderId);
 
   if (!error) {
@@ -1329,7 +1329,7 @@ export const cancelOrderPaymentWithCredit = async (
   orderId: string,
   paymentId: string,
 ) => {
-  const { data, error } = await supabase.rpc('cancel_order_payment_internal', {
+  const { data, error } = await supabase.rpc('cancel_order_payment_internal' as any, {
     p_order_id: orderId,
     p_payment_id: paymentId,
   });
@@ -1346,7 +1346,7 @@ export const deleteOrderPaymentWithCredit = async (
   orderId: string,
   paymentId: string,
 ) => {
-  const { data, error } = await supabase.rpc('delete_order_payment_internal', {
+  const { data, error } = await supabase.rpc('delete_order_payment_internal' as any, {
     p_order_id: orderId,
     p_payment_id: paymentId,
   });
@@ -1365,7 +1365,7 @@ export const uploadOrderFinalPhoto = async (
   userId?: string | null
 ) => {
   try {
-    const url = await uploadFile(file, 'pedidos');
+    const url = await uploadFile(file, 'order-final-photos');
 
     const { data: photo, error: dbError } = await supabase
       .from('order_final_photos' as any)
@@ -1406,7 +1406,7 @@ export const uploadOrderArtFile = async (
   );
 
   try {
-    const url = await uploadFile(file, 'pedidos');
+    const url = await uploadFile(file, 'order-art-files');
 
     const { data: artFile, error: dbError } = await supabase
       .from('order_art_files' as any)

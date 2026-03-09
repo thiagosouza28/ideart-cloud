@@ -167,7 +167,7 @@ export default function CompanyForm() {
 
     setUploadingLogo(true);
     try {
-      const url = await uploadFile(file, 'logos');
+      const url = await uploadFile(file, 'product-images');
       setForm((prev) => ({ ...prev, logo_url: url }));
       setLogoPreview(url);
       toast.success('Logo enviado com sucesso');

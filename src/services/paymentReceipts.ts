@@ -252,7 +252,7 @@ export const generatePaymentReceiptPdf = async (
 
 export const uploadPaymentReceiptPdf = async (blob: Blob, _path: string, _bucket = "payment-receipts") => {
   // Use local upload instead of Supabase
-  const url = await uploadFile(blob, 'pedidos');
+  const url = await uploadFile(blob, 'payment-receipts');
   return { path: url, publicUrl: url };
 };
 

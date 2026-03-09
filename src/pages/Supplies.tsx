@@ -207,7 +207,7 @@ export default function Supplies() {
     setUploading(true);
 
     try {
-      const url = await uploadFile(file, 'insumos');
+      const url = await uploadFile(file, 'product-images');
       setFormData({ ...formData, image_url: url });
       toast.success('Imagem enviada com sucesso');
     } catch (err) {
