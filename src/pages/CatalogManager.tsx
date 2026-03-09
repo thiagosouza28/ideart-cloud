@@ -86,49 +86,49 @@ const catalogColorSections: Array<{
   description: string;
   fields: Array<{ key: CatalogColorField; label: string }>;
 }> = [
-  {
-    title: "Identidade base",
-    description: "Cores principais usadas como base das demais variações.",
-    fields: [
-      { key: "primary_color", label: "Cor primária" },
-      { key: "secondary_color", label: "Cor secundária" },
-      { key: "accent_color", label: "Cor de destaque" },
-      { key: "text_color", label: "Cor do texto" },
-    ],
-  },
-  {
-    title: "Cabeçalho e rodapé",
-    description: "Controla topo, hero e rodapé do catálogo.",
-    fields: [
-      { key: "header_bg_color", label: "Fundo do cabeçalho" },
-      { key: "header_text_color", label: "Texto do cabeçalho" },
-      { key: "footer_bg_color", label: "Fundo do rodapé" },
-      { key: "footer_text_color", label: "Texto do rodapé" },
-    ],
-  },
-  {
-    title: "Botões e selos",
-    description: "Define chamadas para ação, selos e preço em destaque.",
-    fields: [
-      { key: "button_bg_color", label: "Fundo do botão" },
-      { key: "button_text_color", label: "Texto do botão" },
-      { key: "button_outline_color", label: "Borda do botão outline" },
-      { key: "price_color", label: "Cor do preço" },
-      { key: "badge_bg_color", label: "Fundo do selo" },
-      { key: "badge_text_color", label: "Texto do selo" },
-    ],
-  },
-  {
-    title: "Cards e filtros",
-    description: "Ajusta a área de listagem dos produtos e filtros rápidos.",
-    fields: [
-      { key: "card_bg_color", label: "Fundo do card" },
-      { key: "card_border_color", label: "Borda do card" },
-      { key: "filter_bg_color", label: "Fundo do filtro ativo" },
-      { key: "filter_text_color", label: "Texto do filtro ativo" },
-    ],
-  },
-];
+    {
+      title: "Identidade base",
+      description: "Cores principais usadas como base das demais variações.",
+      fields: [
+        { key: "primary_color", label: "Cor primária" },
+        { key: "secondary_color", label: "Cor secundária" },
+        { key: "accent_color", label: "Cor de destaque" },
+        { key: "text_color", label: "Cor do texto" },
+      ],
+    },
+    {
+      title: "Cabeçalho e rodapé",
+      description: "Controla topo, hero e rodapé do catálogo.",
+      fields: [
+        { key: "header_bg_color", label: "Fundo do cabeçalho" },
+        { key: "header_text_color", label: "Texto do cabeçalho" },
+        { key: "footer_bg_color", label: "Fundo do rodapé" },
+        { key: "footer_text_color", label: "Texto do rodapé" },
+      ],
+    },
+    {
+      title: "Botões e selos",
+      description: "Define chamadas para ação, selos e preço em destaque.",
+      fields: [
+        { key: "button_bg_color", label: "Fundo do botão" },
+        { key: "button_text_color", label: "Texto do botão" },
+        { key: "button_outline_color", label: "Borda do botão outline" },
+        { key: "price_color", label: "Cor do preço" },
+        { key: "badge_bg_color", label: "Fundo do selo" },
+        { key: "badge_text_color", label: "Texto do selo" },
+      ],
+    },
+    {
+      title: "Cards e filtros",
+      description: "Ajusta a área de listagem dos produtos e filtros rápidos.",
+      fields: [
+        { key: "card_bg_color", label: "Fundo do card" },
+        { key: "card_border_color", label: "Borda do card" },
+        { key: "filter_bg_color", label: "Fundo do filtro ativo" },
+        { key: "filter_text_color", label: "Texto do filtro ativo" },
+      ],
+    },
+  ];
 
 const PRODUCT_SELECT =
   "id,name,sku,barcode,image_url,catalog_enabled,catalog_featured,catalog_min_order,catalog_price,catalog_sort_order,show_in_catalog,is_active,slug";
@@ -1012,18 +1012,18 @@ export default function CatalogManager() {
             </p>
           </div>
 
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_420px] xl:items-start">
-            <div className="space-y-4 rounded-2xl border border-border bg-card p-4">
+          <div className="grid gap-4 xl:grid-cols-2 xl:items-stretch">
+            <div className="space-y-4 rounded-2xl border border-border bg-card p-4 flex flex-col">
               <div>
-                <h3 className="text-lg font-semibold">URL e status do catálogo</h3>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Configure o endereço público e controle se o catálogo da loja fica visível para clientes.
+                <h3 className="text-lg font-semibold whitespace-nowrap">URL e status do catálogo</h3>
+                <p className="mt-1 text-sm text-muted-foreground whitespace-nowrap">
+                  Configure o endereço público e controle a visibilidade.
                 </p>
               </div>
 
-              <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_220px]">
-                <div className="max-w-[720px] space-y-2">
-                  <Label htmlFor="catalog-slug">Slug do catálogo</Label>
+              <div className="flex flex-col gap-4 mt-auto">
+                <div className="space-y-2">
+                  <Label htmlFor="catalog-slug" className="whitespace-nowrap">Slug do catálogo</Label>
                   <Input
                     id="catalog-slug"
                     value={catalogSlug}
@@ -1031,25 +1031,25 @@ export default function CatalogManager() {
                     className="border-border"
                     placeholder="ex: ideart"
                   />
-                  <p className="text-xs text-muted-foreground">
-                    Endereço final: <span className="font-medium text-foreground">/catalogo/{normalizedCatalogSlug || "slug"}</span>
+                  <p className="text-xs text-muted-foreground whitespace-nowrap">
+                    Endereço: <span className="font-medium text-foreground">/catalogo/{normalizedCatalogSlug || "slug"}</span>
                   </p>
                   {slugCheckState === "checking" && (
-                    <p className="text-xs text-muted-foreground">Verificando disponibilidade da URL...</p>
+                    <p className="text-xs text-muted-foreground">Verificando...</p>
                   )}
                   {slugCheckState === "available" && normalizedCatalogSlug && (
-                    <p className="text-xs text-emerald-600">URL do catálogo disponível.</p>
+                    <p className="text-xs text-emerald-600">Disponível.</p>
                   )}
                   {slugCheckState === "conflict" && (
-                    <p className="text-xs text-destructive">Essa URL do catálogo já está em uso por outra loja.</p>
+                    <p className="text-xs text-destructive">Em uso.</p>
                   )}
                 </div>
 
                 <div className="flex items-center justify-between rounded-xl border border-border p-3">
-                  <div>
-                    <p className="text-sm font-semibold">Catálogo ativo</p>
-                    <p className="text-xs text-muted-foreground">
-                      {catalogStatus ? "Visível para clientes." : "Oculto para clientes."}
+                  <div className="mr-4">
+                    <p className="text-sm font-semibold whitespace-nowrap">Catálogo ativo</p>
+                    <p className="text-xs text-muted-foreground whitespace-nowrap">
+                      {catalogStatus ? "Visível." : "Oculto."}
                     </p>
                   </div>
                   <Switch checked={catalogStatus} onCheckedChange={setCatalogStatus} />
@@ -1057,19 +1057,21 @@ export default function CatalogManager() {
               </div>
             </div>
 
-            <div className="space-y-3 rounded-2xl border border-border bg-card p-4">
-              <div>
-                <p className="text-sm font-semibold">Link público do catálogo</p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Compartilhe esse endereço com seus clientes.
-                </p>
+            <div className="space-y-4 rounded-2xl border border-border bg-card p-4 flex flex-col justify-between">
+              <div className="space-y-3">
+                <div>
+                  <p className="text-sm font-semibold whitespace-nowrap">Link público do catálogo</p>
+                  <p className="mt-1 text-xs text-muted-foreground whitespace-nowrap">
+                    Compartilhe esse endereço com seus clientes.
+                  </p>
+                </div>
+                <div className="overflow-x-auto rounded-xl border border-border bg-background p-3">
+                  <code className="block whitespace-nowrap text-sm">
+                    {publicCatalogAbsoluteUrl || `${typeof window !== "undefined" ? window.location.origin : ""}/catalogo/slug`}
+                  </code>
+                </div>
               </div>
-              <div className="overflow-x-auto rounded-xl border border-border bg-background p-3">
-                <code className="block whitespace-nowrap text-sm">
-                  {publicCatalogAbsoluteUrl || `${typeof window !== "undefined" ? window.location.origin : ""}/catalogo/slug`}
-                </code>
-              </div>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2 pt-2">
                 <Button
                   type="button"
                   variant="outline"
@@ -1079,11 +1081,12 @@ export default function CatalogManager() {
                     await navigator.clipboard.writeText(publicCatalogAbsoluteUrl);
                     toast.success("Link do catálogo copiado.");
                   }}
+                  className="whitespace-nowrap"
                 >
                   Copiar link
                 </Button>
                 {publicCatalogUrl && (
-                  <Button type="button" variant="outline" onClick={() => window.open(publicCatalogUrl, "_blank")}>
+                  <Button type="button" variant="outline" onClick={() => window.open(publicCatalogUrl, "_blank")} className="whitespace-nowrap">
                     Ver catálogo
                   </Button>
                 )}

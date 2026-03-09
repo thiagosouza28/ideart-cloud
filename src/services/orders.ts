@@ -5,11 +5,13 @@ import { ensurePublicStorageUrl } from '@/lib/storage';
 import { formatOrderNumber } from '@/lib/utils';
 import { stripPendingCustomerInfoNotes } from '@/lib/orderMetadata';
 import { sanitizeDisplayFileName } from '@/lib/orderFiles';
+import { summarizeOrderPayments } from '@/lib/orderPayments';
 import { consumeProductSupplies } from '@/lib/supplyConsumption';
 import type {
   AppRole,
   Order,
   OrderPayment,
+  OrderPaymentSource,
   OrderStatus,
   PaymentMethod,
   PaymentStatus,
@@ -193,11 +195,19 @@ const buildCompanyAddress = (company?: Order['company'] | null) => {
   return parts.length > 0 ? parts.join(', ') : '-';
 };
 
+const getPaymentReceiptMethodLabel = (payment: OrderPayment) => {
+  if (payment.source === 'customer_credit') {
+    return 'Crédito do cliente';
+  }
+
+  return payment.method ? paymentMethodLabels[payment.method] || String(payment.method) : 'Não informado';
+};
+
 const fetchOrderForReceipt = async (orderId: string) => {
   const { data, error } = await supabase
     .from('orders')
     .select(
-      'id, order_number, company_id, customer_name, payment_method, amount_paid, total, production_time_days_used, estimated_delivery_date, company:companies(name, document, address, city, state, logo_url, signature_image_url, signature_responsible, signature_role), customer:customers(name, document)',
+      'id, order_number, company_id, customer_id, customer_name, payment_method, amount_paid, customer_credit_used, customer_credit_generated, total, production_time_days_used, estimated_delivery_date, company:companies(name, document, address, city, state, logo_url, signature_image_url, signature_responsible, signature_role), customer:customers(name, document)',
     )
     .eq('id', orderId)
     .single();
@@ -330,9 +340,57 @@ const generateReceiptForPayment = async ({
 export type PaymentSummary = {
   orderTotal: number;
   paidTotal: number;
+  creditUsedTotal: number;
+  settledTotal: number;
   remaining: number;
   paymentStatus: PaymentStatus;
+  generatedCreditTotal: number;
 };
+
+type OrderPaymentRpcPayload = {
+  payment: OrderPayment | null;
+  summary: PaymentSummary;
+  orderNumber: number;
+};
+
+const normalizePaymentSummary = (payload: Partial<PaymentSummary> | null | undefined): PaymentSummary => {
+  const orderTotal = Number(payload?.orderTotal ?? 0);
+  const paidTotal = Number(payload?.paidTotal ?? 0);
+  const creditUsedTotal = Number(payload?.creditUsedTotal ?? 0);
+  const settledTotal = Number(payload?.settledTotal ?? paidTotal + creditUsedTotal);
+  const remaining = Number(payload?.remaining ?? Math.max(0, orderTotal - settledTotal));
+  const paymentStatus = (payload?.paymentStatus as PaymentStatus | undefined) ?? 'pendente';
+  const generatedCreditTotal = Number(payload?.generatedCreditTotal ?? 0);
+
+  return {
+    orderTotal,
+    paidTotal,
+    creditUsedTotal,
+    settledTotal,
+    remaining,
+    paymentStatus,
+    generatedCreditTotal,
+  };
+};
+
+const normalizeOrderPayment = (payload: any): OrderPayment | null => {
+  if (!payload || typeof payload !== 'object') {
+    return null;
+  }
+
+  return {
+    ...payload,
+    amount: Number(payload.amount ?? 0),
+    generated_credit_amount: Number(payload.generated_credit_amount ?? 0),
+    source: (payload.source as OrderPaymentSource | undefined) ?? 'manual',
+  } as OrderPayment;
+};
+
+const normalizePaymentRpcPayload = (payload: any): OrderPaymentRpcPayload => ({
+  payment: normalizeOrderPayment(payload?.payment),
+  summary: normalizePaymentSummary(payload?.summary),
+  orderNumber: Number(payload?.orderNumber ?? 0),
+});
 
 const fetchOrderPaymentSummary = async (orderId: string) => {
   const { data: order, error: orderError } = await supabase
@@ -347,18 +405,25 @@ const fetchOrderPaymentSummary = async (orderId: string) => {
 
   const { data: payments, error: paymentsError } = await supabase
     .from('order_payments')
-    .select('amount, status')
+    .select('amount, status, source, generated_credit_amount')
     .eq('order_id', orderId);
 
   if (paymentsError) {
     throw paymentsError;
   }
 
-  const paidTotal = (payments || [])
-    .filter((payment) => payment.status !== 'pendente')
-    .reduce((sum, payment) => sum + Number(payment.amount), 0);
-
-  const summary = calculatePaymentSummary(Number(order.total), paidTotal);
+  const totals = summarizeOrderPayments((payments as Array<{
+    amount: number;
+    status: PaymentStatus;
+    source: OrderPaymentSource;
+    generated_credit_amount: number;
+  }> | null) || []);
+  const summary = calculatePaymentSummary(
+    Number(order.total),
+    totals.cashPaidTotal,
+    totals.creditUsedTotal,
+    totals.generatedCreditTotal,
+  );
 
   return { order, summary };
 };
@@ -370,6 +435,8 @@ const updateOrderPaymentTotals = async (orderId: string) => {
     .from('orders')
     .update({
       amount_paid: summary.paidTotal,
+      customer_credit_used: summary.creditUsedTotal,
+      customer_credit_generated: summary.generatedCreditTotal,
       payment_status: summary.paymentStatus,
     })
     .eq('id', orderId);
@@ -384,13 +451,25 @@ const updateOrderPaymentTotals = async (orderId: string) => {
 export const calculatePaymentSummary = (
   orderTotal: number,
   paidTotal: number,
+  creditUsedTotal = 0,
+  generatedCreditTotal = 0,
 ): PaymentSummary => {
   const total = Number(orderTotal);
   const paid = Number(paidTotal);
-  const remaining = Math.max(0, total - paid);
+  const creditUsed = Number(creditUsedTotal);
+  const settledTotal = paid + creditUsed;
+  const remaining = Math.max(0, total - settledTotal);
   const paymentStatus: PaymentStatus =
-    paid >= total ? 'pago' : paid > 0 ? 'parcial' : 'pendente';
-  return { orderTotal: total, paidTotal: paid, remaining, paymentStatus };
+    settledTotal >= total ? 'pago' : settledTotal > 0 ? 'parcial' : 'pendente';
+  return {
+    orderTotal: total,
+    paidTotal: paid,
+    creditUsedTotal: creditUsed,
+    settledTotal,
+    remaining,
+    paymentStatus,
+    generatedCreditTotal: Number(generatedCreditTotal),
+  };
 };
 
 export const fetchOrderStatuses = async (): Promise<string[]> => {
@@ -663,6 +742,97 @@ export const createOrderPayment = async ({
   };
 };
 
+type ApplyCustomerCreditInput = {
+  orderId: string;
+  amount: number;
+  notes?: string;
+  createdBy?: string | null;
+};
+
+export const createOrderPaymentWithCredit = async ({
+  orderId,
+  amount,
+  method,
+  status = 'pago',
+  notes,
+  createdBy,
+}: CreatePaymentInput): Promise<{
+  payment: OrderPayment | null;
+  summary: PaymentSummary;
+  orderNumber: number;
+  receipt: ReceiptInfo | null;
+}> => {
+  if (!amount || amount <= 0) {
+    throw new Error('Valor invÃ¡lido');
+  }
+
+  const { data, error } = await supabase.rpc('record_order_payment_internal', {
+    p_order_id: orderId,
+    p_amount: amount,
+    p_method: method,
+    p_status: status,
+    p_notes: notes || null,
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  const result = normalizePaymentRpcPayload(data);
+  const order = await fetchOrderForReceipt(orderId);
+
+  if (!order) {
+    throw new Error('Pedido nÃ£o encontrado');
+  }
+
+  let receipt: ReceiptInfo | null = null;
+  if (result.payment && result.payment.status !== 'pendente') {
+    try {
+      receipt = await generateReceiptForPayment({
+        orderId,
+        payment: result.payment,
+        orderData: order,
+        createdBy: createdBy || null,
+      });
+    } catch (receiptError) {
+      console.warn('[receipt] failed to generate payment receipt', receiptError);
+    }
+  }
+
+  return {
+    payment: result.payment,
+    summary: result.summary,
+    orderNumber: result.orderNumber || order.order_number,
+    receipt,
+  };
+};
+
+export const applyCustomerCreditToOrder = async ({
+  orderId,
+  amount,
+  notes,
+}: ApplyCustomerCreditInput): Promise<{
+  payment: OrderPayment | null;
+  summary: PaymentSummary;
+  orderNumber: number;
+}> => {
+  if (!amount || amount <= 0) {
+    throw new Error('Valor invÃ¡lido');
+  }
+
+  const { data, error } = await supabase.rpc('apply_customer_credit_to_order', {
+    p_order_id: orderId,
+    p_amount: amount,
+    p_notes: notes || null,
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  return normalizePaymentRpcPayload(data);
+};
+
 type UpdateStatusInput = {
   orderId: string;
   status: OrderStatus;
@@ -815,7 +985,7 @@ export const updateOrderStatus = async ({
 
   if (entrada && entrada > 0) {
     const resolvedMethod = paymentMethod || (updatedOrder.payment_method as PaymentMethod | null) || 'dinheiro';
-    await createOrderPayment({
+    await createOrderPaymentWithCredit({
       orderId,
       amount: Number(entrada),
       method: resolvedMethod,
@@ -1145,6 +1315,40 @@ export const deleteOrderPayment = async (
   }
 
   return { payment, summary };
+};
+
+export const cancelOrderPaymentWithCredit = async (
+  orderId: string,
+  paymentId: string,
+) => {
+  const { data, error } = await supabase.rpc('cancel_order_payment_internal', {
+    p_order_id: orderId,
+    p_payment_id: paymentId,
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  const result = normalizePaymentRpcPayload(data);
+  return { payment: result.payment, summary: result.summary };
+};
+
+export const deleteOrderPaymentWithCredit = async (
+  orderId: string,
+  paymentId: string,
+) => {
+  const { data, error } = await supabase.rpc('delete_order_payment_internal', {
+    p_order_id: orderId,
+    p_payment_id: paymentId,
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  const result = normalizePaymentRpcPayload(data);
+  return { payment: result.payment, summary: result.summary };
 };
 
 export const uploadOrderFinalPhoto = async (

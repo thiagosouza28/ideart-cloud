@@ -27,6 +27,7 @@ import {
   getProductSaleUnitPriceSuffix,
 } from '@/lib/productSaleUnit';
 import { fetchCompanyPaymentMethods } from '@/services/companyPaymentMethods';
+import { applyCustomerCreditToOrder } from '@/services/orders';
 import {
   defaultCompanyPaymentMethods,
   getActiveCompanyPaymentMethods,
@@ -83,21 +84,21 @@ const documentTypeOptions: Array<{
   label: string;
   icon: ComponentType<{ className?: string }>;
 }> = [
-  { id: 'orcamento', label: 'Orçamento', icon: ClipboardList },
-  { id: 'pedido_venda', label: 'Pedido de Venda', icon: ShoppingCart },
-  { id: 'pedido_compra', label: 'Pedido de Compra', icon: RefreshCcw },
-];
+    { id: 'orcamento', label: 'Orçamento', icon: ClipboardList },
+    { id: 'pedido_venda', label: 'Pedido de Venda', icon: ShoppingCart },
+    { id: 'pedido_compra', label: 'Pedido de Compra', icon: RefreshCcw },
+  ];
 
 const paymentMethodOptions: Array<{
   id: PaymentMethod;
   label: string;
   icon: ComponentType<{ className?: string }>;
 }> = [
-  { id: 'cartao', label: 'Cartão', icon: CreditCard },
-  { id: 'pix', label: 'PIX', icon: QrCode },
-  { id: 'dinheiro', label: 'Dinheiro', icon: Wallet },
-  { id: 'boleto', label: 'Boleto', icon: CalendarDays },
-];
+    { id: 'cartao', label: 'Cartão', icon: CreditCard },
+    { id: 'pix', label: 'PIX', icon: QrCode },
+    { id: 'dinheiro', label: 'Dinheiro', icon: Wallet },
+    { id: 'boleto', label: 'Boleto', icon: CalendarDays },
+  ];
 
 const paymentMethodIcons: Record<PaymentMethod, ComponentType<{ className?: string }>> = {
   dinheiro: Wallet,
@@ -147,6 +148,9 @@ export default function OrderForm() {
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerEmail, setCustomerEmail] = useState('');
+  const [customerAvailableCredit, setCustomerAvailableCredit] = useState(0);
+  const [useCustomerCredit, setUseCustomerCredit] = useState(false);
+  const [customerCreditToUse, setCustomerCreditToUse] = useState(0);
   const [notes, setNotes] = useState('');
   const [showNotesOnPdf, setShowNotesOnPdf] = useState(true);
   const [deliveryDate, setDeliveryDate] = useState('');
@@ -228,11 +232,11 @@ export default function OrderForm() {
     nextFreight: number = freight,
   ) => {
     const subtotal = nextItems.reduce((sum, item) => sum + calculateItemTotal(item), 0);
-    const total = Math.max(0, subtotal - Number(nextDiscount || 0) + Number(nextFreight || 0));
+    const calculatedTotal = Math.max(0, subtotal - Number(nextDiscount || 0) + Number(nextFreight || 0));
     setTotals({
       itemCount: nextItems.length,
       subtotal,
-      total,
+      total: calculatedTotal,
     });
   };
 
@@ -296,15 +300,17 @@ export default function OrderForm() {
   const isDirty = initialSnapshot !== null && initialSnapshot !== formSnapshotJson;
   const hasDraftData = Boolean(
     items.length > 0 ||
-      customerId ||
-      customerName.trim() ||
-      customerPhone.trim() ||
-      customerEmail.trim() ||
-      notes.trim() ||
-      !showNotesOnPdf ||
-      discount > 0 ||
-      freight > 0,
+    customerId ||
+    customerName.trim() ||
+    customerPhone.trim() ||
+    customerEmail.trim() ||
+    notes.trim() ||
+    !showNotesOnPdf ||
+    discount > 0 ||
+    freight > 0,
   );
+
+  const finalTotalToPay = Math.max(0, totals.total - (useCustomerCredit ? customerCreditToUse : 0));
 
   useUnsavedChanges((isDirty || hasDraftData) && !saving);
 
@@ -530,13 +536,13 @@ export default function OrderForm() {
       payload.items.length > 0 ||
       Boolean(
         payload.customerId ||
-          payload.customerName ||
-          payload.customerPhone ||
-          payload.customerEmail ||
-          payload.notes ||
-          !payload.showNotesOnPdf ||
-          payload.discount > 0 ||
-          payload.freight > 0,
+        payload.customerName ||
+        payload.customerPhone ||
+        payload.customerEmail ||
+        payload.notes ||
+        !payload.showNotesOnPdf ||
+        payload.discount > 0 ||
+        payload.freight > 0,
       );
 
     if (!hasData) {
@@ -597,10 +603,10 @@ export default function OrderForm() {
         const byName = customer.name.toLowerCase().includes(text);
         const byDigits = digits
           ? Boolean(
-              customer.document?.includes(digits) ||
-                customer.phone?.includes(digits) ||
-                customer.email?.toLowerCase().includes(text),
-            )
+            customer.document?.includes(digits) ||
+            customer.phone?.includes(digits) ||
+            customer.email?.toLowerCase().includes(text),
+          )
           : false;
         return byName || byDigits;
       })
@@ -736,13 +742,20 @@ export default function OrderForm() {
     setCustomerName(customer.name || '');
     setCustomerPhone(customer.phone || '');
     setCustomerEmail(customer.email || '');
+    setCustomerAvailableCredit(Number(customer.saldo_credito || 0));
+    setUseCustomerCredit(false);
+    setCustomerCreditToUse(0);
     setCustomerSearchTerm(customer.name || '');
     setCustomerDropdownOpen(false);
   };
 
   const clearCustomerSelection = () => {
     setCustomerId('');
+    setCustomerName('');
     setCustomerSearchTerm('');
+    setCustomerAvailableCredit(0);
+    setUseCustomerCredit(false);
+    setCustomerCreditToUse(0);
   };
 
   const persistDraftNow = () => {
@@ -925,6 +938,15 @@ export default function OrderForm() {
         notes: status === 'orcamento' ? 'Orçamento criado' : 'Pedido criado',
       });
       if (historyError) throw historyError;
+
+      if (useCustomerCredit && customerCreditToUse > 0 && customerAvailableCredit >= customerCreditToUse) {
+        await applyCustomerCreditToOrder({
+          orderId: createdOrder.id,
+          amount: customerCreditToUse,
+          createdBy: user.id,
+          notes: 'Aplicado na criação do pedido',
+        });
+      }
 
       window.localStorage.removeItem(draftStorageKey);
       setInitialSnapshot(JSON.stringify({ ...formSnapshot, items: [] }));
@@ -1442,9 +1464,62 @@ export default function OrderForm() {
                     className="order-input order-currency-input"
                   />
                 </div>
+
+                {customerAvailableCredit > 0 && customerId && (
+                  <>
+                    <div className="order-summary-row mt-2 pt-2 border-t border-[var(--order-border)]">
+                      <label className="flex items-center gap-2 cursor-pointer text-sm font-medium text-[#122046]">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-gray-300 text-[var(--order-primary)] focus:ring-[var(--order-primary)]"
+                          checked={useCustomerCredit}
+                          onChange={(e) => {
+                            setUseCustomerCredit(e.target.checked);
+                            if (e.target.checked) {
+                              setCustomerCreditToUse(Math.min(customerAvailableCredit, totals.total));
+                            } else {
+                              setCustomerCreditToUse(0);
+                            }
+                          }}
+                        />
+                        Usar saldo de crédito
+                      </label>
+                      <span className="text-sm font-semibold text-emerald-600">
+                        Disp: {fmt(customerAvailableCredit)}
+                      </span>
+                    </div>
+
+                    {useCustomerCredit && (
+                      <div className="order-summary-row order-summary-edit mt-2 bg-emerald-50/50 p-2 rounded-lg border border-emerald-100">
+                        <label htmlFor="credit-use-input" className="text-emerald-700">Valor do crédito</label>
+                        <CurrencyInput
+                          id="credit-use-input"
+                          value={customerCreditToUse}
+                          onChange={(val) => {
+                            const maxAllowed = Math.min(customerAvailableCredit, totals.total);
+                            setCustomerCreditToUse(Math.min(val, maxAllowed));
+                          }}
+                          className="order-input order-currency-input !border-emerald-200 focus:!border-emerald-400"
+                        />
+                      </div>
+                    )}
+                  </>
+                )}
+
                 <div className="order-total-row">
                   <span>Total</span>
-                  <strong>{fmt(totals.total)}</strong>
+                  <div className="flex flex-col items-end">
+                    {useCustomerCredit && customerCreditToUse > 0 ? (
+                      <>
+                        <span className="text-sm text-muted-foreground line-through decoration-muted-foreground/50">
+                          {fmt(totals.total)}
+                        </span>
+                        <strong className="text-emerald-600">{fmt(finalTotalToPay)}</strong>
+                      </>
+                    ) : (
+                      <strong>{fmt(totals.total)}</strong>
+                    )}
+                  </div>
                 </div>
 
                 <div className="order-status-block">
@@ -1594,7 +1669,7 @@ export default function OrderForm() {
           <span className="order-bottom-sep" />
           <div className="order-bottom-stat is-total">
             <span>Total</span>
-            <strong>{fmt(totals.total)}</strong>
+            <strong>{fmt(finalTotalToPay)}</strong>
           </div>
         </div>
 

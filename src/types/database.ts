@@ -28,6 +28,8 @@ export type PaymentMethod =
   | 'transferencia'
   | 'outro';
 export type PaymentStatus = 'pendente' | 'parcial' | 'pago';
+export type OrderPaymentSource = 'manual' | 'customer_credit';
+export type CustomerCreditTransactionType = 'credit_generated' | 'credit_used';
 export type PixGateway = 'MercadoPago' | 'PagSeguro' | 'PixManual';
 export type PixKeyType = 'CPF' | 'CNPJ' | 'Email' | 'Telefone' | 'ChaveAleatoria';
 export type FinancialEntryType = 'receita' | 'despesa';
@@ -514,6 +516,7 @@ export interface Customer {
   state: string | null;
   zip_code: string | null;
   notes: string | null;
+  saldo_credito: number;
   created_at: string;
   updated_at: string;
 }
@@ -581,6 +584,8 @@ export interface Order {
   payment_copy_paste?: string | null;
   paid_at?: string | null;
   amount_paid: number;
+  customer_credit_used: number;
+  customer_credit_generated: number;
   notes: string | null;
   show_notes_on_pdf?: boolean;
   cancel_reason: string | null;
@@ -651,6 +656,8 @@ export interface OrderPayment {
   amount: number;
   status: PaymentStatus;
   method: PaymentMethod | null;
+  source: OrderPaymentSource;
+  generated_credit_amount: number;
   paid_at: string | null;
   gateway?: string | null;
   gateway_order_id?: string | null;
@@ -659,6 +666,20 @@ export interface OrderPayment {
   created_at: string;
   created_by: string | null;
   notes: string | null;
+}
+
+export interface CustomerCreditTransaction {
+  id: string;
+  company_id: string;
+  customer_id: string;
+  order_id: string | null;
+  payment_id: string | null;
+  type: CustomerCreditTransactionType;
+  amount: number;
+  description: string | null;
+  created_by: string | null;
+  created_at: string;
+  order?: Pick<Order, 'id' | 'order_number'> | null;
 }
 
 export interface Subscription {
@@ -716,6 +737,8 @@ export interface PublicOrderPayload {
     | 'payment_status'
     | 'payment_method'
     | 'amount_paid'
+    | 'customer_credit_used'
+    | 'customer_credit_generated'
     | 'gateway'
     | 'gateway_order_id'
     | 'payment_link_id'

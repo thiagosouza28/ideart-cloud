@@ -1,11 +1,13 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Save } from 'lucide-react';
+import { ArrowLeft, Save, Wallet } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
@@ -55,6 +57,16 @@ export default function CustomerForm() {
     state: '',
     notes: '',
   });
+  const [creditBalance, setCreditBalance] = useState(0);
+  const [creditTransactions, setCreditTransactions] = useState<Array<{
+    id: string;
+    type: string;
+    amount: number;
+    description: string | null;
+    order_id: string | null;
+    created_at: string;
+    order?: { id: string; order_number: number } | null;
+  }>>([]);
 
   useEffect(() => {
     setInitialSnapshot(null);
@@ -80,7 +92,24 @@ export default function CustomerForm() {
       setForm(nextForm);
       setBirthDateError('');
       setInitialSnapshot(JSON.stringify(nextForm));
+      setCreditBalance(Number(data.saldo_credito ?? 0));
     });
+
+    supabase
+      .from('customer_credit_transactions')
+      .select('id, type, amount, description, order_id, created_at, order:orders!customer_credit_transactions_order_id_fkey(id, order_number)')
+      .eq('customer_id', id)
+      .order('created_at', { ascending: false })
+      .limit(50)
+      .then(({ data }) => {
+        setCreditTransactions(
+          (data || []).map((row: any) => ({
+            ...row,
+            amount: Number(row.amount ?? 0),
+            order: Array.isArray(row.order) ? row.order[0] || null : row.order || null,
+          })),
+        );
+      });
   }, [id, isEditing]);
 
   const formSnapshot = useMemo(() => ({
@@ -391,6 +420,62 @@ export default function CustomerForm() {
             </div>
           </CardContent>
         </Card>
+
+        {isEditing && creditBalance > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Wallet className="h-5 w-5" />
+                Saldo de Crédito
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-muted-foreground">Saldo disponível:</span>
+                <Badge variant="outline" className="text-emerald-600 border-emerald-200 bg-emerald-50 text-base px-3 py-1">
+                  {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(creditBalance)}
+                </Badge>
+              </div>
+              {creditTransactions.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">Histórico de créditos</p>
+                  <div className="rounded-md border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Tipo</TableHead>
+                          <TableHead>Valor</TableHead>
+                          <TableHead>Pedido</TableHead>
+                          <TableHead>Data</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {creditTransactions.map((tx) => (
+                          <TableRow key={tx.id}>
+                            <TableCell>
+                              <Badge variant={tx.type === 'credit_generated' ? 'default' : 'outline'} className="text-xs">
+                                {tx.type === 'credit_generated' ? 'Gerado' : 'Utilizado'}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className={tx.type === 'credit_generated' ? 'text-emerald-600' : 'text-orange-600'}>
+                              {tx.type === 'credit_generated' ? '+' : '-'}{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Math.abs(tx.amount))}
+                            </TableCell>
+                            <TableCell className="text-xs">
+                              {tx.order ? `#${String(tx.order.order_number).padStart(5, '0')}` : '-'}
+                            </TableCell>
+                            <TableCell className="text-xs text-muted-foreground">
+                              {new Date(tx.created_at).toLocaleDateString('pt-BR')}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         <Card>
           <CardHeader>

@@ -6,15 +6,22 @@ import {
   CalendarDays,
   Coffee,
   Gift,
+  GlassWater,
   ImageIcon,
   LayoutGrid,
+  Monitor,
+  Notebook,
   Package,
   Palette,
   PaintBucket,
+  Pen,
+  PenTool,
+  Printer,
   ShoppingBag,
   Shirt,
   Sparkles,
   Tag,
+  Wine,
 } from "lucide-react";
 import { ensurePublicStorageUrl } from "@/lib/storage";
 import { cn } from "@/lib/utils";
@@ -35,6 +42,13 @@ const categoryIconMap = {
   Shirt,
   BriefcaseBusiness,
   BookOpen,
+  PenTool,
+  Printer,
+  Monitor,
+  Notebook,
+  Pen,
+  Wine,
+  GlassWater,
 } satisfies Record<string, LucideIcon>;
 
 export const categoryIconOptions = [
@@ -53,6 +67,13 @@ export const categoryIconOptions = [
   { name: "Shirt", label: "Vestuário" },
   { name: "BriefcaseBusiness", label: "Serviço" },
   { name: "BookOpen", label: "Catálogo" },
+  { name: "PenTool", label: "Papelaria" },
+  { name: "Printer", label: "Gráfica" },
+  { name: "Monitor", label: "Informática" },
+  { name: "Notebook", label: "Agendas" },
+  { name: "Pen", label: "Canetas" },
+  { name: "Wine", label: "Taças" },
+  { name: "GlassWater", label: "Copos" },
 ] as const;
 
 export const resolveCategoryIconComponent = (iconName?: string | null) => {

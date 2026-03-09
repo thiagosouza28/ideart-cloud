@@ -312,8 +312,8 @@ export default function Orders() {
                       className="cursor-pointer hover:bg-muted/50"
                       onClick={() => openOrderDetails(order)}
                     >
-                      <TableCell className="font-medium">#{formatOrderNumber(order.order_number)}</TableCell>
-                      <TableCell>
+                      <TableCell className="font-medium py-1">#{formatOrderNumber(order.order_number)}</TableCell>
+                      <TableCell className="py-1">
                         <div className="flex flex-col gap-1">
                           {order.customer_id ? (
                             <Button
@@ -336,7 +336,7 @@ export default function Orders() {
                           )}
                         </div>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="py-1">
                         <div className="flex flex-col gap-1">
                           <span
                             className="status-badge"
@@ -351,35 +351,37 @@ export default function Orders() {
                           )}
                         </div>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="py-1">
                         <span className={`rounded px-2 py-1 text-xs ${getPaymentStatusColor(order.payment_status)}`}>
                           {getPaymentStatusLabel(order.payment_status)}
                         </span>
                       </TableCell>
-                      <TableCell className="text-right font-medium">
+                      <TableCell className="text-right font-medium py-1">
                         {formatCurrency(Number(order.total))}
                       </TableCell>
-                      <TableCell className="text-muted-foreground">{formatDate(order.created_at)}</TableCell>
-                      <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            openOrderDetails(order);
-                          }}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="text-destructive"
-                          onClick={(event) => handleDeleteOrder(event, order.id)}
-                          disabled={deletingId === order.id}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                      <TableCell className="text-muted-foreground py-1">{formatDate(order.created_at)}</TableCell>
+                      <TableCell className="py-1">
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              openOrderDetails(order);
+                            }}
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="text-destructive"
+                            onClick={(event) => handleDeleteOrder(event, order.id)}
+                            disabled={deletingId === order.id}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))

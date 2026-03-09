@@ -13,7 +13,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { Order, OrderFinalPhoto, OrderArtFile, OrderItem, OrderStatusHistory, OrderStatus, OrderPayment, PaymentMethod, PaymentStatus, Product, Customer, PriceTier } from '@/types/database';
-import { ArrowLeft, Loader2, CheckCircle, Clock, Package, Truck, XCircle, User, FileText, Printer, MessageCircle, Link, Copy, CreditCard, PauseCircle, Trash2, Image as ImageIcon, Upload, Paintbrush, Sparkles } from 'lucide-react';
+import { ArrowLeft, Loader2, CheckCircle, Clock, Package, Truck, XCircle, User, FileText, Printer, MessageCircle, Link, Copy, CreditCard, PauseCircle, Trash2, Image as ImageIcon, Upload, Paintbrush, Sparkles, Wallet } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -27,17 +27,26 @@ import { buildReceiptA5Url } from '@/lib/receiptA5';
 import { M2_ATTRIBUTE_KEYS, buildM2Attributes, calculateAreaM2, formatAreaM2, isAreaUnit, parseM2Attributes, parseMeasurementInput, stripM2Attributes } from '@/lib/measurements';
 import { useConfirm } from '@/components/ui/confirm-dialog';
 import {
+  applyCustomerCreditToOrder,
   cancelOrder,
+  cancelOrderPaymentWithCredit as cancelOrderPayment,
+  createOrderPaymentWithCredit as createOrderPayment,
   deleteOrder,
-  cancelOrderPayment,
-  createOrderPayment,
-  deleteOrderPayment,
+  deleteOrderPaymentWithCredit as deleteOrderPayment,
   getOrCreatePublicLink,
   updateOrderStatus,
   updateOrderItems,
   uploadOrderFinalPhoto,
 } from '@/services/orders';
 import { ensurePublicStorageUrl } from '@/lib/storage';
+import {
+  getOrderCashPaidAmount,
+  getOrderCustomerCreditUsedAmount,
+  getOrderGeneratedCreditAmount,
+  getOrderRemainingAmount,
+  getOrderSettledAmount,
+  isCustomerCreditPayment,
+} from '@/lib/orderPayments';
 import {
   getInitialTierQuantity,
   getProductPriceTiers,
@@ -226,6 +235,11 @@ export default function OrderDetails() {
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('pago');
   const [paymentNotes, setPaymentNotes] = useState('');
   const [paymentSaving, setPaymentSaving] = useState(false);
+  const [creditDialogOpen, setCreditDialogOpen] = useState(false);
+  const [creditAmount, setCreditAmount] = useState(0);
+  const [creditNotes, setCreditNotes] = useState('');
+  const [creditSaving, setCreditSaving] = useState(false);
+  const [customerAvailableCredit, setCustomerAvailableCredit] = useState(0);
   const [paymentActionId, setPaymentActionId] = useState<string | null>(null);
   const [paymentActionType, setPaymentActionType] = useState<'cancel' | 'delete' | null>(null);
   const [receiptDialogOpen, setReceiptDialogOpen] = useState(false);
@@ -760,10 +774,10 @@ export default function OrderDetails() {
     const unitPrice = getProductPriceForQuantity(product, quantity > 0 ? quantity : 1);
     const attributes = isM2
       ? buildM2Attributes({}, {
-          widthCm: widthCm as number,
-          heightCm: heightCm as number,
-          areaM2: quantity,
-        })
+        widthCm: widthCm as number,
+        heightCm: heightCm as number,
+        areaM2: quantity,
+      })
       : null;
     const newItem: OrderItem = {
       id: crypto.randomUUID(),
@@ -927,11 +941,11 @@ export default function OrderDetails() {
       setOrder((prev) =>
         prev
           ? {
-              ...prev,
-              customer_id: customerId,
-              customer_name: trimmedName,
-              customer: customerRecord || prev.customer,
-            }
+            ...prev,
+            customer_id: customerId,
+            customer_name: trimmedName,
+            customer: customerRecord || prev.customer,
+          }
           : prev,
       );
       toast({ title: 'Cliente atualizado com sucesso!' });
@@ -954,29 +968,29 @@ export default function OrderDetails() {
     if (digits.length === 10 || digits.length === 11) return `55${digits}`;
     return digits.startsWith('55') ? digits : `55${digits}`;
   };
-const sendWhatsAppMessage = (message: string) => {
-  const rawPhone = normalizeWhatsappPhone(order?.customer?.phone);
+  const sendWhatsAppMessage = (message: string) => {
+    const rawPhone = normalizeWhatsappPhone(order?.customer?.phone);
 
-  if (!rawPhone) {
-    toast({ title: 'Cliente sem telefone cadastrado', variant: 'destructive' });
-    return;
-  }
+    if (!rawPhone) {
+      toast({ title: 'Cliente sem telefone cadastrado', variant: 'destructive' });
+      return;
+    }
 
-  let phone = rawPhone.replace(/\D/g, '');
+    let phone = rawPhone.replace(/\D/g, '');
 
-  // Garante DDI Brasil
-  if (!phone.startsWith('55')) {
-    phone = `55${phone}`;
-  }
+    // Garante DDI Brasil
+    if (!phone.startsWith('55')) {
+      phone = `55${phone}`;
+    }
 
-  const text = encodeURIComponent(message);
+    const text = encodeURIComponent(message);
 
-  // Usa sessão já logada do WhatsApp Web
-  const whatsappUrl = `https://web.whatsapp.com/send?phone=${phone}&text=${text}`;
+    // Usa sessão já logada do WhatsApp Web
+    const whatsappUrl = `https://web.whatsapp.com/send?phone=${phone}&text=${text}`;
 
-  // Redireciona a aba atual
-  window.location.href = whatsappUrl;
-};
+    // Redireciona a aba atual
+    window.location.href = whatsappUrl;
+  };
 
   const generateReceiptText = () => {
     if (!order) return '';
@@ -1589,11 +1603,11 @@ const sendWhatsAppMessage = (message: string) => {
     setOrder((prev) =>
       prev
         ? {
-            ...prev,
-            notes: nextNotes,
-            show_notes_on_pdf: showNotesOnPdf,
-            updated_by: user?.id || prev.updated_by,
-          }
+          ...prev,
+          notes: nextNotes,
+          show_notes_on_pdf: showNotesOnPdf,
+          updated_by: user?.id || prev.updated_by,
+        }
         : prev,
     );
     toast({ title: 'Observações atualizadas' });
@@ -1745,7 +1759,8 @@ const sendWhatsAppMessage = (message: string) => {
 
   const openPaymentDialog = () => {
     if (!order) return;
-    const remaining = Math.max(0, Number(order.total) - Number(order.amount_paid));
+    const creditUsedAmount = Number(order.customer_credit_used ?? 0);
+    const remaining = Math.max(0, Number(order.total) - Number(order.amount_paid) - creditUsedAmount);
     if (remaining <= 0) {
       toast({ title: 'Pedido já quitado', description: 'Não há saldo pendente.', variant: 'destructive' });
       return;
@@ -1755,6 +1770,71 @@ const sendWhatsAppMessage = (message: string) => {
     setPaymentStatus('pago');
     setPaymentNotes('');
     setPaymentDialogOpen(true);
+  };
+
+  const fetchCustomerCredit = async (customerId?: string | null) => {
+    if (!customerId) {
+      setCustomerAvailableCredit(0);
+      return;
+    }
+    const { data, error } = await supabase
+      .from('customers')
+      .select('saldo_credito')
+      .eq('id', customerId)
+      .maybeSingle();
+    if (error || !data) {
+      setCustomerAvailableCredit(0);
+      return;
+    }
+    setCustomerAvailableCredit(Number(data.saldo_credito ?? 0));
+  };
+
+  const openCreditDialog = async () => {
+    if (!order || !order.customer_id) return;
+    await fetchCustomerCredit(order.customer_id);
+    const creditUsedAmount = Number(order.customer_credit_used ?? 0);
+    const remaining = Math.max(0, Number(order.total) - Number(order.amount_paid) - creditUsedAmount);
+    if (remaining <= 0) {
+      toast({ title: 'Pedido já quitado', variant: 'destructive' });
+      return;
+    }
+    const { data: freshCustomer } = await supabase
+      .from('customers')
+      .select('saldo_credito')
+      .eq('id', order.customer_id)
+      .maybeSingle();
+    const availableCredit = Number(freshCustomer?.saldo_credito ?? 0);
+    setCustomerAvailableCredit(availableCredit);
+    if (availableCredit <= 0) {
+      toast({ title: 'Cliente sem saldo de crédito', variant: 'destructive' });
+      return;
+    }
+    setCreditAmount(Math.min(availableCredit, remaining));
+    setCreditNotes('');
+    setCreditDialogOpen(true);
+  };
+
+  const handleApplyCredit = async () => {
+    if (!order) return;
+    if (creditAmount <= 0) {
+      toast({ title: 'Informe um valor válido', variant: 'destructive' });
+      return;
+    }
+    setCreditSaving(true);
+    try {
+      await applyCustomerCreditToOrder({
+        orderId: order.id,
+        amount: creditAmount,
+        notes: creditNotes || undefined,
+      });
+      toast({ title: 'Crédito aplicado com sucesso!' });
+      setCreditDialogOpen(false);
+      fetchOrder();
+    } catch (error: any) {
+      toast({ title: 'Erro ao aplicar crédito', description: error?.message, variant: 'destructive' });
+    } finally {
+      setCreditSaving(false);
+    }
   };
 
   const handleCreatePayment = async () => {
@@ -1770,8 +1850,8 @@ const sendWhatsAppMessage = (message: string) => {
       return;
     }
 
-    if (paymentAmount > remainingAmount) {
-      toast({ title: 'Valor excede o saldo restante', variant: 'destructive' });
+    if (paymentAmount > remainingAmount && !order.customer_id) {
+      toast({ title: 'Associe um cliente ao pedido para gerar crédito do excedente', variant: 'destructive' });
       return;
     }
 
@@ -1786,7 +1866,12 @@ const sendWhatsAppMessage = (message: string) => {
         createdBy: user.id,
       });
 
-      toast({ title: 'Pagamento registrado com sucesso!' });
+      const creditGenerated = Number(result.payment?.generated_credit_amount ?? 0);
+      if (creditGenerated > 0) {
+        toast({ title: 'Pagamento registrado com sucesso!', description: `Crédito de ${formatCurrency(creditGenerated)} gerado para o cliente.` });
+      } else {
+        toast({ title: 'Pagamento registrado com sucesso!' });
+      }
       setPaymentDialogOpen(false);
       if (result.payment) {
         const payload = buildPaymentReceiptPayload(result.payment);
@@ -1880,7 +1965,7 @@ const sendWhatsAppMessage = (message: string) => {
     }
   };
 
-    const handleStatusChange = async () => {
+  const handleStatusChange = async () => {
     if (!newStatus || !order) return;
 
     if (order.status === 'orcamento' && newStatus === 'pendente') {
@@ -1974,9 +2059,9 @@ const sendWhatsAppMessage = (message: string) => {
       prev.map((item) =>
         item.id === id
           ? {
-              ...item,
-              displayName: sanitizeDisplayFileName(value, item.file.name, 'arte'),
-            }
+            ...item,
+            displayName: sanitizeDisplayFileName(value, item.file.name, 'arte'),
+          }
           : item,
       ),
     );
@@ -2177,8 +2262,12 @@ const sendWhatsAppMessage = (message: string) => {
 
   const orderTotal = Number(order.total);
   const paidTotal = Number(order.amount_paid);
-  const remainingAmount = Math.max(0, orderTotal - paidTotal);
+  const creditUsed = Number(order.customer_credit_used ?? 0);
+  const generatedCredit = Number(order.customer_credit_generated ?? 0);
+  const remainingAmount = Math.max(0, orderTotal - paidTotal - creditUsed);
   const isOrderPaid = remainingAmount <= 0;
+  const hasCustomerCredit = Boolean(order.customer_id) && customerAvailableCredit > 0;
+  const canUseCredit = hasCustomerCredit && !isOrderPaid;
   const latestPaidPayment = payments.find((payment) => payment.status !== 'pendente') || null;
 
   const config = statusConfig[order.status];
@@ -2237,10 +2326,10 @@ const sendWhatsAppMessage = (message: string) => {
   const newItemHeightValue = parseMeasurementInput(newItemHeightCm);
   const newItemArea =
     newItemIsM2 &&
-    typeof newItemWidthValue === 'number' &&
-    typeof newItemHeightValue === 'number' &&
-    newItemWidthValue > 0 &&
-    newItemHeightValue > 0
+      typeof newItemWidthValue === 'number' &&
+      typeof newItemHeightValue === 'number' &&
+      newItemWidthValue > 0 &&
+      newItemHeightValue > 0
       ? calculateAreaM2(newItemWidthValue, newItemHeightValue)
       : 0;
   const artIndicator =
@@ -2388,14 +2477,14 @@ const sendWhatsAppMessage = (message: string) => {
           <div className="space-y-2">
             <Label>Mensagem para o cliente</Label>
             <div className="flex flex-col gap-2 md:flex-row md:items-start">
-                <Textarea
-                  value={clientMessage}
-                  onChange={(event) => {
-                    setMessageDirty(true);
-                    setMessageText(event.target.value);
-                  }}
-                  className="min-h-[88px] w-full"
-                />
+              <Textarea
+                value={clientMessage}
+                onChange={(event) => {
+                  setMessageDirty(true);
+                  setMessageText(event.target.value);
+                }}
+                className="min-h-[88px] w-full"
+              />
               <div className="flex gap-2 md:flex-col">
                 <Button
                   variant="outline"
@@ -2487,147 +2576,147 @@ const sendWhatsAppMessage = (message: string) => {
             </CardHeader>
             <CardContent>
               <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-              <Table className="min-w-[720px]">
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Produto</TableHead>
-                    <TableHead className="text-center">Qtd</TableHead>
-                    <TableHead className="text-right">Preço Unit.</TableHead>
-                    <TableHead className="text-right">Total</TableHead>
-                    {isEditingItems && <TableHead className="text-right">Açãoes</TableHead>}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {(isEditingItems ? editableItems : items).map((item, index) => {
-                    const m2Data = parseM2Attributes(item.attributes);
-                    const isM2 = isItemM2(item);
-                    const displayAttributes = stripM2Attributes(item.attributes);
-                    const widthRaw = item.attributes?.[M2_ATTRIBUTE_KEYS.widthCm] ?? '';
-                    const heightRaw = item.attributes?.[M2_ATTRIBUTE_KEYS.heightCm] ?? '';
-                    const hasValidDimensions =
-                      typeof m2Data.widthCm === 'number' &&
-                      typeof m2Data.heightCm === 'number' &&
-                      m2Data.widthCm > 0 &&
-                      m2Data.heightCm > 0;
-
-                    return (
-                      <TableRow key={item.id}>
-                      <TableCell>
-                        {isEditingItems ? (
-                          <div className="space-y-2">
-                            <Select
-                              value={item.product_id ?? ""}
-                              onValueChange={(value) => handleChangeItemProduct(index, value)}
-                            >
-                              <SelectTrigger>
-                                <SelectValue placeholder="Selecione o produto" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {products.map((product) => (
-                                  <SelectItem key={product.id} value={product.id}>
-                                    {product.name}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            {isM2 && (
-                              <div className="space-y-2">
-                                <div className="grid gap-2 sm:grid-cols-2">
-                                  <div className="space-y-1">
-                                    <Label className="text-[10px] uppercase text-muted-foreground">Largura (cm)</Label>
-                                    <Input
-                                      value={widthRaw}
-                                      onChange={(e) => handleChangeItemDimensions(index, M2_ATTRIBUTE_KEYS.widthCm, e.target.value)}
-                                      className="h-8 text-xs"
-                                      inputMode="decimal"
-                                    />
-                                  </div>
-                                  <div className="space-y-1">
-                                    <Label className="text-[10px] uppercase text-muted-foreground">Altura (cm)</Label>
-                                    <Input
-                                      value={heightRaw}
-                                      onChange={(e) => handleChangeItemDimensions(index, M2_ATTRIBUTE_KEYS.heightCm, e.target.value)}
-                                      className="h-8 text-xs"
-                                      inputMode="decimal"
-                                    />
-                                  </div>
-                                </div>
-                                <p className={`text-xs ${hasValidDimensions ? 'text-muted-foreground' : 'text-destructive'}`}>
-                                  Area: {hasValidDimensions ? `${formatAreaM2(item.quantity)} m\u00B2` : 'Informe dimensoes validas'}
-                                </p>
-                              </div>
-                            )}
-                          </div>
-                        ) : (
-                          <div>
-                            <p className="font-medium">{item.product_name}</p>
-                            {Object.keys(displayAttributes).length > 0 && (
-                              <div className="mt-1 flex flex-wrap gap-1">
-                                {Object.entries(displayAttributes).map(([key, value]) => (
-                                  <Badge key={key} variant="outline" className="text-xs">
-                                    {value}
-                                  </Badge>
-                                ))}
-                              </div>
-                            )}
-                            {hasValidDimensions && (
-                              <p className="text-xs text-muted-foreground mt-1">
-                                {m2Data.widthCm}cm x {m2Data.heightCm}cm - Area: {formatAreaM2(item.quantity)} m\u00B2
-                              </p>
-                            )}
-                            {item.notes && (
-                              <p className="text-xs text-muted-foreground mt-1">Obs: {item.notes}</p>
-                            )}
-                            {getTierRangeLabel(item.product_id) && !isM2 && (
-                              <p className="mt-1 text-xs text-muted-foreground">
-                                Faixas válidas: {getTierRangeLabel(item.product_id)}
-                              </p>
-                            )}
-                          </div>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {isEditingItems ? (
-                          isM2 ? (
-                            <span className={`text-sm ${hasValidDimensions ? 'text-foreground' : 'text-destructive'}`}>
-                              {hasValidDimensions ? `${formatAreaM2(item.quantity)} m\u00B2` : '--'}
-                            </span>
-                          ) : (
-                            <Input
-                              type="number"
-                              min={1}
-                              value={item.quantity}
-                              onChange={(e) => handleChangeItemQuantity(index, Number(e.target.value))}
-                              className="w-20 text-center"
-                            />
-                          )
-                        ) : (
-                          isM2 ? `${formatAreaM2(item.quantity)} m\u00B2` : item.quantity
-                        )}
-                        {isEditingItems && getTierRangeLabel(item.product_id) && !isM2 && (
-                          <p className="mt-1 text-[11px] text-muted-foreground">
-                            {getTierRangeLabel(item.product_id)}
-                          </p>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right">{formatCurrency(Number(item.unit_price))}</TableCell>
-                      <TableCell className="text-right font-medium">{formatCurrency(Number(item.total))}</TableCell>
-                      {isEditingItems && (
-                        <TableCell className="text-right">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleRemoveItem(index)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </TableCell>
-                      )}
+                <Table className="min-w-[720px]">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Produto</TableHead>
+                      <TableHead className="text-center">Qtd</TableHead>
+                      <TableHead className="text-right">Preço Unit.</TableHead>
+                      <TableHead className="text-right">Total</TableHead>
+                      {isEditingItems && <TableHead className="text-right">Açãoes</TableHead>}
                     </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {(isEditingItems ? editableItems : items).map((item, index) => {
+                      const m2Data = parseM2Attributes(item.attributes);
+                      const isM2 = isItemM2(item);
+                      const displayAttributes = stripM2Attributes(item.attributes);
+                      const widthRaw = item.attributes?.[M2_ATTRIBUTE_KEYS.widthCm] ?? '';
+                      const heightRaw = item.attributes?.[M2_ATTRIBUTE_KEYS.heightCm] ?? '';
+                      const hasValidDimensions =
+                        typeof m2Data.widthCm === 'number' &&
+                        typeof m2Data.heightCm === 'number' &&
+                        m2Data.widthCm > 0 &&
+                        m2Data.heightCm > 0;
+
+                      return (
+                        <TableRow key={item.id} className="h-12">
+                          <TableCell className="py-2">
+                            {isEditingItems ? (
+                              <div className="space-y-2">
+                                <Select
+                                  value={item.product_id ?? ""}
+                                  onValueChange={(value) => handleChangeItemProduct(index, value)}
+                                >
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Selecione o produto" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {products.map((product) => (
+                                      <SelectItem key={product.id} value={product.id}>
+                                        {product.name}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                                {isM2 && (
+                                  <div className="space-y-2">
+                                    <div className="grid gap-2 sm:grid-cols-2">
+                                      <div className="space-y-1">
+                                        <Label className="text-[10px] uppercase text-muted-foreground">Largura (cm)</Label>
+                                        <Input
+                                          value={widthRaw}
+                                          onChange={(e) => handleChangeItemDimensions(index, M2_ATTRIBUTE_KEYS.widthCm, e.target.value)}
+                                          className="h-8 text-xs"
+                                          inputMode="decimal"
+                                        />
+                                      </div>
+                                      <div className="space-y-1">
+                                        <Label className="text-[10px] uppercase text-muted-foreground">Altura (cm)</Label>
+                                        <Input
+                                          value={heightRaw}
+                                          onChange={(e) => handleChangeItemDimensions(index, M2_ATTRIBUTE_KEYS.heightCm, e.target.value)}
+                                          className="h-8 text-xs"
+                                          inputMode="decimal"
+                                        />
+                                      </div>
+                                    </div>
+                                    <p className={`text-xs ${hasValidDimensions ? 'text-muted-foreground' : 'text-destructive'}`}>
+                                      Area: {hasValidDimensions ? `${formatAreaM2(item.quantity)} m\u00B2` : 'Informe dimensoes validas'}
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <div>
+                                <p className="font-medium">{item.product_name}</p>
+                                {Object.keys(displayAttributes).length > 0 && (
+                                  <div className="mt-1 flex flex-wrap gap-1">
+                                    {Object.entries(displayAttributes).map(([key, value]) => (
+                                      <Badge key={key} variant="outline" className="text-xs">
+                                        {value}
+                                      </Badge>
+                                    ))}
+                                  </div>
+                                )}
+                                {hasValidDimensions && (
+                                  <p className="text-xs text-muted-foreground mt-1">
+                                    {m2Data.widthCm}cm x {m2Data.heightCm}cm - Area: {formatAreaM2(item.quantity)} m\u00B2
+                                  </p>
+                                )}
+                                {item.notes && (
+                                  <p className="text-xs text-muted-foreground mt-1">Obs: {item.notes}</p>
+                                )}
+                                {getTierRangeLabel(item.product_id) && !isM2 && (
+                                  <p className="mt-1 text-xs text-muted-foreground">
+                                    Faixas válidas: {getTierRangeLabel(item.product_id)}
+                                  </p>
+                                )}
+                              </div>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-center py-2">
+                            {isEditingItems ? (
+                              isM2 ? (
+                                <span className={`text-sm ${hasValidDimensions ? 'text-foreground' : 'text-destructive'}`}>
+                                  {hasValidDimensions ? `${formatAreaM2(item.quantity)} m\u00B2` : '--'}
+                                </span>
+                              ) : (
+                                <Input
+                                  type="number"
+                                  min={1}
+                                  value={item.quantity}
+                                  onChange={(e) => handleChangeItemQuantity(index, Number(e.target.value))}
+                                  className="w-20 text-center"
+                                />
+                              )
+                            ) : (
+                              isM2 ? `${formatAreaM2(item.quantity)} m\u00B2` : item.quantity
+                            )}
+                            {isEditingItems && getTierRangeLabel(item.product_id) && !isM2 && (
+                              <p className="mt-1 text-[11px] text-muted-foreground">
+                                {getTierRangeLabel(item.product_id)}
+                              </p>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right py-2">{formatCurrency(Number(item.unit_price))}</TableCell>
+                          <TableCell className="text-right font-medium py-2">{formatCurrency(Number(item.total))}</TableCell>
+                          {isEditingItems && (
+                            <TableCell className="text-right py-1">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleRemoveItem(index)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </TableCell>
+                          )}
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
               </div>
 
               {isEditingItems && (
@@ -2968,10 +3057,22 @@ const sendWhatsAppMessage = (message: string) => {
                 )}
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Valor pago</span>
-                  <span>{formatCurrency(Number(order.amount_paid))}</span>
+                  <span>{formatCurrency(paidTotal)}</span>
                 </div>
+                {creditUsed > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Crédito usado</span>
+                    <span className="text-emerald-600">{formatCurrency(creditUsed)}</span>
+                  </div>
+                )}
+                {generatedCredit > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Crédito gerado</span>
+                    <span className="text-blue-600">{formatCurrency(generatedCredit)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Saldo</span>
+                  <span className="text-muted-foreground">Saldo restante</span>
                   <span>{formatCurrency(remainingAmount)}</span>
                 </div>
               </div>
@@ -2981,12 +3082,17 @@ const sendWhatsAppMessage = (message: string) => {
               {payments.length > 0 ? (
                 <div className="space-y-2">
                   {payments.map((payment) => (
-                    <div key={payment.id} className="flex flex-col gap-2 rounded-md border p-2 text-sm sm:flex-row sm:items-center sm:justify-between">
+                    <div key={payment.id} className="flex items-center justify-between gap-2 rounded-md border p-2 text-sm">
                       <div>
                         <p className="font-medium">{formatCurrency(Number(payment.amount))}</p>
                         <p className="text-xs text-muted-foreground">
-                          {getPaymentMethodDisplayName(payment.method, companyPaymentMethods) || '-'} - {formatDate(payment.paid_at || payment.created_at)}
+                          {isCustomerCreditPayment(payment) ? 'Crédito do cliente' : (getPaymentMethodDisplayName(payment.method, companyPaymentMethods) || '-')} - {formatDate(payment.paid_at || payment.created_at)}
                         </p>
+                        {Number(payment.generated_credit_amount ?? 0) > 0 && (
+                          <p className="text-xs text-blue-600">
+                            Crédito gerado: {formatCurrency(Number(payment.generated_credit_amount))}
+                          </p>
+                        )}
                       </div>
                       <div className="flex items-center gap-1 sm:gap-2">
                         <Badge variant={payment.status === 'pago' ? 'default' : 'outline'}>
@@ -3047,6 +3153,17 @@ const sendWhatsAppMessage = (message: string) => {
                 <Button variant="outline" onClick={openPaymentDialog} disabled={isOrderPaid}>
                   Registrar Pagamento
                 </Button>
+                {order.customer_id && (
+                  <Button
+                    variant="outline"
+                    onClick={openCreditDialog}
+                    disabled={isOrderPaid}
+                    className="gap-2"
+                  >
+                    <Wallet className="h-4 w-4" />
+                    Usar saldo do cliente
+                  </Button>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -3163,10 +3280,62 @@ const sendWhatsAppMessage = (message: string) => {
             </Button>
             <Button
               onClick={handleCreatePayment}
-              disabled={paymentSaving || paymentAmount <= 0 || paymentAmount > remainingAmount}
+              disabled={paymentSaving || paymentAmount <= 0 || (paymentAmount > remainingAmount && !order.customer_id)}
             >
               {paymentSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Confirmar
+              {paymentAmount > remainingAmount && order.customer_id ? `Confirmar (gera crédito de ${formatCurrency(paymentAmount - remainingAmount)})` : 'Confirmar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Credit Dialog */}
+      <Dialog open={creditDialogOpen} onOpenChange={setCreditDialogOpen}>
+        <DialogContent aria-describedby={undefined} className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Usar saldo do cliente</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="rounded-md border p-3 text-sm space-y-1">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Saldo disponível do cliente</span>
+                <span className="font-medium text-emerald-600">{formatCurrency(customerAvailableCredit)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Saldo restante do pedido</span>
+                <span>{formatCurrency(remainingAmount)}</span>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Valor a utilizar</Label>
+              <CurrencyInput value={creditAmount} onChange={setCreditAmount} />
+              {creditAmount > customerAvailableCredit && (
+                <p className="text-xs text-destructive">Valor excede o saldo disponível do cliente.</p>
+              )}
+              {creditAmount > remainingAmount && (
+                <p className="text-xs text-destructive">Valor excede o saldo restante do pedido.</p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label>Observações</Label>
+              <Textarea
+                value={creditNotes}
+                onChange={(e) => setCreditNotes(e.target.value)}
+                placeholder="Observações sobre o uso do crédito..."
+                rows={2}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreditDialogOpen(false)} disabled={creditSaving}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleApplyCredit}
+              disabled={creditSaving || creditAmount <= 0 || creditAmount > customerAvailableCredit || creditAmount > remainingAmount}
+            >
+              {creditSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Aplicar crédito
             </Button>
           </DialogFooter>
         </DialogContent>

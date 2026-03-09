@@ -4,6 +4,7 @@ import { Search, ShoppingCart, Barcode, User, Plus, Minus, Trash2 } from 'lucide
 import GraphPOSCard from '@/components/graphpos/GraphPOSCard';
 import GraphPOSSidebarResumo from '@/components/graphpos/GraphPOSSidebarResumo';
 import { BotaoPrimario } from '@/components/graphpos/GraphPOSButtons';
+import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from '@/components/ui/drawer';
 import { supabase } from '@/integrations/supabase/client';
 import { Product, CartItem, Customer, PriceTier } from '@/types/database';
 import { ensurePublicStorageUrl } from '@/lib/storage';
@@ -19,8 +20,10 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { getGraphPOSCheckoutState, setGraphPOSCheckoutState } from '@/lib/graphposCheckout';
 import { normalizeDigits } from '@/components/ui/masked-input';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { useUnsavedChanges } from '@/hooks/use-unsaved-changes';
 import { M2_ATTRIBUTE_KEYS, calculateAreaM2, formatAreaM2, isAreaUnit, parseM2Attributes, parseMeasurementInput } from '@/lib/measurements';
+import { cn } from '@/lib/utils';
 
 const createLocalId = () => {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -73,6 +76,7 @@ export default function GraphPOSPDV() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { profile } = useAuth();
+  const isMobile = useIsMobile();
   const [search, setSearch] = useState('');
   const [barcodeInput, setBarcodeInput] = useState('');
   const [products, setProducts] = useState<Product[]>([]);
@@ -86,6 +90,7 @@ export default function GraphPOSPDV() {
   const [customerLoading, setCustomerLoading] = useState(false);
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [isCartDrawerOpen, setIsCartDrawerOpen] = useState(false);
   const customerRef = useRef<HTMLDivElement>(null);
   const draftHydratedRef = useRef(false);
   const draftStorageKey = 'graphpos_pdv_draft';
@@ -104,6 +109,12 @@ export default function GraphPOSPDV() {
   useEffect(() => {
     setProductSearchCache(null);
   }, [profile?.company_id]);
+
+  useEffect(() => {
+    if (!isMobile) {
+      setIsCartDrawerOpen(false);
+    }
+  }, [isMobile]);
 
   useEffect(() => {
     const loadPriceTiers = async () => {
@@ -524,6 +535,7 @@ export default function GraphPOSPDV() {
 
   const subtotal = cart.reduce((acc, i) => acc + (i.unit_price * i.quantity - i.discount), 0);
   const total = Math.max(0, subtotal - discount);
+  const cartItemsLabel = `${cart.length} ${cart.length === 1 ? 'item' : 'itens'}`;
   const hasUnsavedChanges = cart.length > 0 || discount > 0 || Boolean(selectedCustomer);
   const dottedSurfaceStyle = {
     backgroundImage: 'radial-gradient(circle, hsl(var(--border)) 0.8px, transparent 0.8px)',
@@ -596,19 +608,261 @@ export default function GraphPOSPDV() {
     navigate('/pagamento');
   };
 
+  const cartPanelContent = (
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
+      <div className="relative" ref={customerRef}>
+        {selectedCustomer ? (
+          <div className="flex items-center gap-2 rounded-xl border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground shadow-sm">
+            <User className="h-4 w-4 text-muted-foreground" />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold text-foreground">{selectedCustomer.name}</p>
+              <p className="truncate text-xs text-muted-foreground">
+                {[selectedCustomer.document, selectedCustomer.phone, selectedCustomer.email].filter(Boolean).join(' | ') || 'Sem contato'}
+              </p>
+            </div>
+            <button
+              type="button"
+              className="shrink-0 text-xs font-semibold text-destructive transition hover:text-destructive/80"
+              onClick={() => {
+                setSelectedCustomer(null);
+                setCustomerSearch('');
+                const checkout = getGraphPOSCheckoutState();
+                if (checkout) {
+                  setGraphPOSCheckoutState({
+                    ...checkout,
+                    customer: undefined,
+                  });
+                }
+                toast({ title: 'Cliente removido do pedido' });
+              }}
+            >
+              Remover
+            </button>
+          </div>
+        ) : (
+          <>
+            <User className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <input
+              className={graphPosSearchInputClass}
+              placeholder="Buscar cliente (nome, CPF, telefone)..."
+              value={customerSearch}
+              onChange={(e) => {
+                setCustomerSearch(e.target.value);
+                setShowCustomerDropdown(true);
+              }}
+              onFocus={() => customerSearch.length >= 2 && setShowCustomerDropdown(true)}
+            />
+          </>
+        )}
+
+        {showCustomerDropdown && !selectedCustomer && customerSearch.length >= 2 && (
+          <div className="absolute z-20 mt-2 max-h-60 w-full overflow-y-auto rounded-xl border border-border bg-popover py-2 text-sm text-popover-foreground shadow-lg">
+            {customerLoading ? (
+              <div className="px-4 py-2 text-muted-foreground">Buscando...</div>
+            ) : customerOptions.length === 0 ? (
+              <div className="px-4 py-2 text-muted-foreground">Nenhum cliente encontrado</div>
+            ) : (
+              customerOptions.map((customer) => (
+                <button
+                  key={customer.id}
+                  type="button"
+                  onClick={() => {
+                    setSelectedCustomer(customer);
+                    setCustomerSearch('');
+                    setShowCustomerDropdown(false);
+                  }}
+                  className="flex w-full items-center gap-3 px-4 py-2 text-left transition hover:bg-muted/70"
+                >
+                  <User className="h-4 w-4 text-muted-foreground" />
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-foreground">{customer.name}</p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {[customer.document, customer.phone, customer.email].filter(Boolean).join(' | ') || 'Sem contato'}
+                    </p>
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+        {cart.length === 0 ? (
+          <div className="flex h-full min-h-[220px] flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border bg-muted/45 text-sm text-muted-foreground">
+            <ShoppingCart className="h-8 w-8 text-muted-foreground" />
+            Carrinho vazio
+          </div>
+        ) : (
+          <div className="space-y-2.5">
+            {cart.map((item) => {
+              const isM2 = isM2Product(item.product);
+              const widthRaw = item.attributes?.[M2_ATTRIBUTE_KEYS.widthCm] ?? '';
+              const heightRaw = item.attributes?.[M2_ATTRIBUTE_KEYS.heightCm] ?? '';
+              const widthCm = parseMeasurementInput(widthRaw);
+              const heightCm = parseMeasurementInput(heightRaw);
+              const hasValidDimensions =
+                typeof widthCm === 'number' &&
+                typeof heightCm === 'number' &&
+                widthCm > 0 &&
+                heightCm > 0;
+              const areaLabel = hasValidDimensions
+                ? `${formatAreaM2(item.quantity)} m\u00B2`
+                : 'Informe largura e altura';
+              const dimensionLabel = hasValidDimensions
+                ? `${formatMeasurement(widthCm as number)}cm x ${formatMeasurement(heightCm as number)}cm`
+                : '';
+
+              return (
+                <div key={item.id} className="rounded-xl border border-border bg-card p-3 shadow-sm">
+                  <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl border border-border bg-muted/40">
+                      {item.product.image_url ? (
+                        <img src={item.product.image_url} alt={item.product.name} className="h-full w-full object-cover" />
+                      ) : (
+                        <ShoppingCart className="h-5 w-5 text-muted-foreground" />
+                      )}
+                    </div>
+
+                    <div className="min-w-0 space-y-1">
+                      <p className="text-sm font-semibold leading-5 text-foreground">{item.product.name}</p>
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                        <span>
+                          {formatCurrency(item.unit_price)}
+                          {isM2 ? ' / m\u00B2' : ''}
+                        </span>
+                        <span>{isM2 ? areaLabel : `Qtd ${item.quantity}`}</span>
+                      </div>
+                      {getTierRangeLabel(item.product.id) && !isM2 && (
+                        <p className="text-[11px] text-muted-foreground">
+                          Faixas: {getTierRangeLabel(item.product.id)}
+                        </p>
+                      )}
+                      {isM2 && hasValidDimensions && (
+                        <p className="text-[11px] text-muted-foreground">{dimensionLabel}</p>
+                      )}
+                    </div>
+
+                    <div className="flex min-w-[92px] flex-col items-end justify-between gap-2">
+                      <p className="text-right text-sm font-semibold leading-5 text-foreground">
+                        {formatCurrency(item.unit_price * item.quantity - item.discount)}
+                      </p>
+                      <div className="flex items-center gap-1.5">
+                        {!isM2 && (
+                          <>
+                            <button
+                              type="button"
+                              className="flex h-7 w-7 items-center justify-center rounded-full border border-border text-muted-foreground transition hover:border-primary/45 hover:text-foreground"
+                              onClick={() => updateQuantity(item.id, -1)}
+                            >
+                              <Minus className="h-3 w-3" />
+                            </button>
+                            <span className="min-w-6 text-center text-xs font-medium text-muted-foreground">{item.quantity}</span>
+                            <button
+                              type="button"
+                              className="flex h-7 w-7 items-center justify-center rounded-full border border-border text-muted-foreground transition hover:border-primary/45 hover:text-foreground"
+                              onClick={() => updateQuantity(item.id, 1)}
+                            >
+                              <Plus className="h-3 w-3" />
+                            </button>
+                          </>
+                        )}
+                        <button
+                          type="button"
+                          className="flex h-7 w-7 items-center justify-center rounded-full border border-border text-destructive transition hover:border-destructive/40 hover:bg-destructive/10"
+                          onClick={() => removeFromCart(item.id)}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {isM2 && (
+                    <div className="mt-3 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2">
+                      <label className="flex flex-col gap-1">
+                        <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Largura (cm)</span>
+                        <input
+                          className={graphPosCompactInputClass}
+                          inputMode="decimal"
+                          value={widthRaw}
+                          onChange={(e) => updateM2Value(item.id, M2_ATTRIBUTE_KEYS.widthCm, e.target.value)}
+                        />
+                      </label>
+                      <label className="flex flex-col gap-1">
+                        <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Altura (cm)</span>
+                        <input
+                          className={graphPosCompactInputClass}
+                          inputMode="decimal"
+                          value={heightRaw}
+                          onChange={(e) => updateM2Value(item.id, M2_ATTRIBUTE_KEYS.heightCm, e.target.value)}
+                        />
+                      </label>
+                      <div className={`col-span-1 text-[11px] ${hasValidDimensions ? 'text-muted-foreground' : 'text-destructive'} sm:col-span-2`}>
+                        Área: {hasValidDimensions ? `${formatAreaM2(item.quantity)} m\u00B2` : 'Preencha largura e altura válidas'}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      <div className="mt-auto shrink-0 border-t border-border pt-3">
+        <div className="space-y-3 text-sm text-muted-foreground">
+          <div className="flex items-center justify-between">
+            <span>Subtotal</span>
+            <span className="font-medium text-foreground">{formatCurrency(subtotal)}</span>
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <span>Desconto</span>
+            <input
+              className={graphPosInlineInputClass}
+              inputMode="decimal"
+              value={discount.toFixed(2).replace('.', ',')}
+              onChange={(e) => {
+                const value = Number(e.target.value.replace(',', '.'));
+                setDiscount(Number.isNaN(value) ? 0 : value);
+              }}
+            />
+          </div>
+          <div className="h-px w-full bg-border" />
+          <div className="flex items-center justify-between text-lg font-semibold text-foreground">
+            <span>Total</span>
+            <span>{formatCurrency(total)}</span>
+          </div>
+        </div>
+        <BotaoPrimario
+          type="button"
+          onClick={handleFinalize}
+          className="mt-4 h-[46px] w-full rounded-[10px]"
+        >
+          Finalizar Venda
+        </BotaoPrimario>
+      </div>
+    </div>
+  );
+
   return (
-    <div className="w-full bg-background font-sans text-foreground lg:h-full lg:min-h-0 lg:overflow-hidden">
-      <main className="w-full pb-14 pt-2 lg:flex lg:h-full lg:min-h-0 lg:flex-col lg:pb-0">
-        <div className="mb-4 flex items-center justify-between lg:shrink-0">
+    <div className="w-full bg-background font-sans text-foreground md:h-full md:min-h-0 md:overflow-hidden">
+      <main
+        className={cn(
+          'w-full pt-2 md:flex md:h-full md:min-h-0 md:flex-col',
+          isMobile ? 'pb-28' : 'pb-14 md:pb-0',
+        )}
+      >
+        <div className="mb-4 flex items-center justify-between md:shrink-0">
           <div>
             <h1 className="text-3xl font-semibold tracking-tight">PDV</h1>
             <p className="text-sm text-muted-foreground">Ponto de venda</p>
           </div>
         </div>
 
-        <div className="grid gap-5 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_380px] lg:items-stretch">
-          <div className="flex min-h-0 flex-col gap-4">
-            <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-4 md:min-h-0 md:flex-1 md:grid-cols-[minmax(0,7fr)_minmax(280px,3fr)] md:items-stretch xl:gap-5 xl:grid-cols-[minmax(0,3fr)_minmax(300px,1fr)]">
+          <div className="flex min-h-0 flex-col gap-4 md:gap-5">
+            <div className="grid gap-3 sm:grid-cols-2 md:shrink-0 lg:gap-4">
               <form className="relative" onSubmit={handleBarcodeSubmit}>
                 <Barcode className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <input
@@ -631,7 +885,7 @@ export default function GraphPOSPDV() {
 
             <GraphPOSCard className="flex min-h-0 flex-1 p-0">
               <div
-                className="h-[52vh] min-h-[320px] w-full flex-1 overflow-hidden rounded-xl border border-dashed border-border bg-card/90 p-6 shadow-sm lg:h-full lg:min-h-0"
+                className="h-[60vh] min-h-[360px] w-full flex-1 overflow-hidden rounded-xl border border-dashed border-border bg-card/90 p-5 shadow-sm sm:p-6 md:h-full md:min-h-0"
                 style={dottedSurfaceStyle}
               >
                 {!search.trim() ? (
@@ -656,22 +910,26 @@ export default function GraphPOSPDV() {
                   </div>
                 ) : (
                   <div className="h-full overflow-y-auto pr-1">
-                    <div className="grid grid-cols-1 gap-4 min-[420px]:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+                    <div className="grid grid-cols-1 gap-5 min-[460px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 min-[1900px]:grid-cols-6">
                       {products.map((product) => (
                         <button
                           key={product.id}
                           type="button"
                           onClick={() => addToCart(product)}
-                          className="rounded-lg border border-border bg-card p-3 text-left shadow-sm transition hover:border-primary/45 hover:shadow-md"
+                          className="group rounded-xl border border-border bg-card p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-md"
                         >
-                          <div className="mb-3 flex aspect-square items-center justify-center overflow-hidden rounded-lg border border-border bg-muted/40">
+                          <div className="mb-3 flex aspect-square items-center justify-center overflow-hidden rounded-xl border border-border bg-muted/40">
                             {product.image_url ? (
-                              <img src={product.image_url} alt={product.name} className="h-full w-full object-cover" />
+                              <img
+                                src={product.image_url}
+                                alt={product.name}
+                                className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.02]"
+                              />
                             ) : (
                               <ShoppingCart className="h-8 w-8 text-muted-foreground" />
                             )}
                           </div>
-                          <p className="text-sm font-semibold text-foreground">{product.name}</p>
+                          <p className="text-sm font-semibold leading-5 text-foreground">{product.name}</p>
                           <p className="text-sm font-semibold text-primary">
                             {formatCurrency(getUnitPrice(product, 1))}
                             {isM2Product(product) ? ' / m\u00B2' : ''}
@@ -693,240 +951,54 @@ export default function GraphPOSPDV() {
             </GraphPOSCard>
           </div>
 
-          <div className="h-[52vh] min-h-[320px] lg:h-full lg:min-h-0">
-            <GraphPOSSidebarResumo
-              title="Carrinho"
-              className="flex h-full min-h-0 flex-col rounded-xl shadow-md"
-            >
-              <div className="flex min-h-0 flex-1 flex-col gap-5">
-                <div className="relative" ref={customerRef}>
-                  {selectedCustomer ? (
-                    <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground shadow-sm">
-                      <User className="h-4 w-4 text-muted-foreground" />
-                      <div className="flex-1">
-                        <p className="text-sm font-semibold text-foreground">{selectedCustomer.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {[selectedCustomer.document, selectedCustomer.phone, selectedCustomer.email]
-                            .filter(Boolean)
-                            .join(' | ') || 'Sem contato'}
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        className="text-xs font-semibold text-destructive transition hover:text-destructive/80"
-                        onClick={() => {
-                          setSelectedCustomer(null);
-                          setCustomerSearch('');
-                          const checkout = getGraphPOSCheckoutState();
-                          if (checkout) {
-                            setGraphPOSCheckoutState({
-                              ...checkout,
-                              customer: undefined,
-                            });
-                          }
-                          toast({ title: 'Cliente removido do pedido' });
-                        }}
-                      >
-                        Remover
-                      </button>
-                    </div>
-                  ) : (
-                    <>
-                      <User className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                      <input
-                        className={graphPosSearchInputClass}
-                        placeholder="Buscar cliente (nome, CPF, telefone)..."
-                        value={customerSearch}
-                        onChange={(e) => {
-                          setCustomerSearch(e.target.value);
-                          setShowCustomerDropdown(true);
-                        }}
-                        onFocus={() => customerSearch.length >= 2 && setShowCustomerDropdown(true)}
-                      />
-                    </>
-                  )}
-
-                  {showCustomerDropdown && !selectedCustomer && customerSearch.length >= 2 && (
-                    <div className="absolute z-20 mt-2 w-full rounded-xl border border-border bg-popover py-2 text-sm text-popover-foreground shadow-lg">
-                      {customerLoading ? (
-                        <div className="px-4 py-2 text-muted-foreground">Buscando...</div>
-                      ) : customerOptions.length === 0 ? (
-                        <div className="px-4 py-2 text-muted-foreground">Nenhum cliente encontrado</div>
-                      ) : (
-                        customerOptions.map((customer) => (
-                          <button
-                            key={customer.id}
-                            type="button"
-                            onClick={() => {
-                              setSelectedCustomer(customer);
-                              setCustomerSearch('');
-                              setShowCustomerDropdown(false);
-                            }}
-                            className="flex w-full items-center gap-3 px-4 py-2 text-left transition hover:bg-muted/70"
-                          >
-                            <User className="h-4 w-4 text-muted-foreground" />
-                            <div>
-                              <p className="text-sm font-semibold text-foreground">{customer.name}</p>
-                              <p className="text-xs text-muted-foreground">
-                                {[customer.document, customer.phone, customer.email].filter(Boolean).join(' | ') || 'Sem contato'}
-                              </p>
-                            </div>
-                          </button>
-                        ))
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                <div className="min-h-0 flex-1 overflow-y-auto pr-1">
-                  {cart.length === 0 ? (
-                    <div className="flex h-full min-h-[220px] flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border bg-muted/45 text-sm text-muted-foreground">
-                      <ShoppingCart className="h-8 w-8 text-muted-foreground" />
-                      Carrinho vazio
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {cart.map((item) => {
-                        const isM2 = isM2Product(item.product);
-                        const widthRaw = item.attributes?.[M2_ATTRIBUTE_KEYS.widthCm] ?? '';
-                        const heightRaw = item.attributes?.[M2_ATTRIBUTE_KEYS.heightCm] ?? '';
-                        const widthCm = parseMeasurementInput(widthRaw);
-                        const heightCm = parseMeasurementInput(heightRaw);
-                        const hasValidDimensions =
-                          typeof widthCm === 'number' &&
-                          typeof heightCm === 'number' &&
-                          widthCm > 0 &&
-                          heightCm > 0;
-                        const areaLabel = hasValidDimensions
-                          ? `${formatAreaM2(item.quantity)} m\u00B2`
-                          : 'Informe largura e altura';
-                        const dimensionLabel = hasValidDimensions
-                          ? `${formatMeasurement(widthCm as number)}cm x ${formatMeasurement(heightCm as number)}cm`
-                          : '';
-
-                        return (
-                          <div key={item.id} className="rounded-lg border border-border bg-card p-3 shadow-sm">
-                            <div className="flex items-center gap-3">
-                              <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-xl border border-border bg-muted/40">
-                                {item.product.image_url ? (
-                                  <img src={item.product.image_url} alt={item.product.name} className="h-full w-full object-cover" />
-                                ) : (
-                                  <ShoppingCart className="h-5 w-5 text-muted-foreground" />
-                                )}
-                              </div>
-                              <div className="flex-1">
-                                <p className="text-sm font-semibold text-foreground">{item.product.name}</p>
-                                <p className="text-xs text-muted-foreground">
-                                  {formatCurrency(item.unit_price)}
-                                  {isM2 ? ' / m\u00B2' : ''}{' '}
-                                  {isM2 ? areaLabel : `x ${item.quantity}`}
-                                </p>
-                                {getTierRangeLabel(item.product.id) && !isM2 && (
-                                  <p className="text-[11px] text-muted-foreground">
-                                    Faixas: {getTierRangeLabel(item.product.id)}
-                                  </p>
-                                )}
-                                {isM2 && hasValidDimensions && (
-                                  <p className="text-[11px] text-muted-foreground">
-                                    {dimensionLabel}
-                                  </p>
-                                )}
-                                <p className="text-xs font-semibold text-foreground">
-                                  {formatCurrency(item.unit_price * item.quantity - item.discount)}
-                                </p>
-                              </div>
-                              <div className="flex items-center gap-1">
-                                {!isM2 && (
-                                  <>
-                                    <button
-                                      className="flex h-7 w-7 items-center justify-center rounded-full border border-border text-muted-foreground transition hover:border-primary/45 hover:text-foreground"
-                                      onClick={() => updateQuantity(item.id, -1)}
-                                    >
-                                      <Minus className="h-3 w-3" />
-                                    </button>
-                                    <span className="w-5 text-center text-xs text-muted-foreground">{item.quantity}</span>
-                                    <button
-                                      className="flex h-7 w-7 items-center justify-center rounded-full border border-border text-muted-foreground transition hover:border-primary/45 hover:text-foreground"
-                                      onClick={() => updateQuantity(item.id, 1)}
-                                    >
-                                      <Plus className="h-3 w-3" />
-                                    </button>
-                                  </>
-                                )}
-                                <button
-                                  className="flex h-7 w-7 items-center justify-center rounded-full border border-border text-destructive transition hover:border-destructive/40 hover:bg-destructive/10"
-                                  onClick={() => removeFromCart(item.id)}
-                                >
-                                  <Trash2 className="h-3 w-3" />
-                                </button>
-                              </div>
-                            </div>
-                            {isM2 && (
-                              <div className="mt-3 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2">
-                                <label className="flex flex-col gap-1">
-                                  <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Largura (cm)</span>
-                                  <input
-                                    className={graphPosCompactInputClass}
-                                    inputMode="decimal"
-                                    value={widthRaw}
-                                    onChange={(e) => updateM2Value(item.id, M2_ATTRIBUTE_KEYS.widthCm, e.target.value)}
-                                  />
-                                </label>
-                                <label className="flex flex-col gap-1">
-                                  <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Altura (cm)</span>
-                                  <input
-                                    className={graphPosCompactInputClass}
-                                    inputMode="decimal"
-                                    value={heightRaw}
-                                    onChange={(e) => updateM2Value(item.id, M2_ATTRIBUTE_KEYS.heightCm, e.target.value)}
-                                  />
-                                </label>
-                                <div className={`col-span-1 text-[11px] ${hasValidDimensions ? 'text-muted-foreground' : 'text-destructive'} sm:col-span-2`}>
-                                  Área: {hasValidDimensions ? `${formatAreaM2(item.quantity)} m\u00B2` : 'Preencha largura e altura válidas'}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-
-                <div className="mt-auto shrink-0 border-t border-border pt-3">
-                  <div className="space-y-3 text-sm text-muted-foreground">
-                    <div className="flex items-center justify-between">
-                      <span>Subtotal</span>
-                      <span className="font-medium text-foreground">{formatCurrency(subtotal)}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span>Desconto</span>
-                      <input
-                        className={graphPosInlineInputClass}
-                        value={discount.toFixed(2).replace('.', ',')}
-                        onChange={(e) => {
-                          const value = Number(e.target.value.replace(',', '.'));
-                          setDiscount(Number.isNaN(value) ? 0 : value);
-                        }}
-                      />
-                    </div>
-                    <div className="h-px w-full bg-border" />
-                    <div className="flex items-center justify-between text-lg font-semibold text-foreground">
-                      <span>Total</span>
-                      <span>{formatCurrency(total)}</span>
-                    </div>
-                  </div>
-                  <BotaoPrimario
-                    onClick={handleFinalize}
-                    className="mt-4 h-[46px] w-full rounded-[10px]"
-                  >
-                    Finalizar Venda
-                  </BotaoPrimario>
-                </div>
-              </div>
-            </GraphPOSSidebarResumo>
-          </div>
+          {!isMobile && (
+            <div className="min-h-[320px] md:h-full md:min-h-0">
+              <GraphPOSSidebarResumo
+                title="Carrinho"
+                className="flex h-full min-h-0 flex-col rounded-xl p-4 shadow-md xl:p-5"
+              >
+                {cartPanelContent}
+              </GraphPOSSidebarResumo>
+            </div>
+          )}
         </div>
+
+        {isMobile && (
+          <>
+            <Drawer open={isCartDrawerOpen} onOpenChange={setIsCartDrawerOpen}>
+              <DrawerContent className="h-[88vh] max-h-[88vh] border-border bg-background/95 px-0">
+                <DrawerHeader className="px-4 pb-2 text-left">
+                  <DrawerTitle>Carrinho</DrawerTitle>
+                  <DrawerDescription>Revise itens, cliente e desconto antes de finalizar a venda.</DrawerDescription>
+                </DrawerHeader>
+                <div className="flex min-h-0 flex-1 flex-col px-4 pb-4">
+                  <div className="flex min-h-0 flex-1 flex-col rounded-2xl border border-border bg-card p-4 text-card-foreground shadow-sm">
+                    {cartPanelContent}
+                  </div>
+                </div>
+              </DrawerContent>
+            </Drawer>
+
+            <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-background/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/85 md:hidden">
+              <div className="mx-auto flex max-w-3xl items-center gap-3">
+                <div className="min-w-0 flex-1 rounded-2xl border border-border bg-card px-4 py-3 shadow-sm">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Carrinho</p>
+                  <div className="mt-1 flex items-center justify-between gap-3">
+                    <span className="truncate text-sm text-muted-foreground">{cartItemsLabel}</span>
+                    <span className="text-sm font-semibold text-foreground">{formatCurrency(total)}</span>
+                  </div>
+                </div>
+                <BotaoPrimario
+                  type="button"
+                  onClick={() => setIsCartDrawerOpen(true)}
+                  className="h-12 w-auto min-w-[140px] rounded-2xl px-5"
+                >
+                  Ver carrinho
+                </BotaoPrimario>
+              </div>
+            </div>
+          </>
+        )}
       </main>
     </div>
   );

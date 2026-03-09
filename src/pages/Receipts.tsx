@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ExternalLink, FileDown, RefreshCw, Search } from 'lucide-react';
+import { ChevronDown, ExternalLink, FileDown, RefreshCw, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -124,6 +125,28 @@ const buildCompanyAddress = (company?: CompanyReceiptData | null) => {
   const cityState = [company.city, company.state].filter(Boolean).join(' - ');
   const parts = [company.address, cityState].filter(Boolean);
   return parts.length > 0 ? parts.join(', ') : '-';
+};
+
+const openReceiptPreview = (payload: PaymentReceiptPayload) => {
+  const receiptA5Url = buildReceiptA5Url(payload);
+  const previewWindow = window.open(receiptA5Url, '_blank', 'noopener,noreferrer');
+  if (!previewWindow) {
+    throw new Error('Nao foi possivel abrir a visualizacao. Verifique o bloqueador de pop-ups.');
+  }
+};
+
+const downloadReceiptFromStorage = async (path: string, fileName: string) => {
+  const { data, error } = await supabase.storage.from('payment-receipts').download(path);
+  if (error) throw error;
+
+  const blobUrl = window.URL.createObjectURL(data);
+  const link = document.createElement('a');
+  link.href = blobUrl;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => window.URL.revokeObjectURL(blobUrl), 0);
 };
 
 export default function Receipts() {
@@ -376,15 +399,13 @@ export default function Receipts() {
       };
 
       const path = `${companyId}/${payment.order_id}/recibo-${receiptNumber}.pdf`;
-      await generateAndUploadPaymentReceipt(payload, {
+      const receipt = await generateAndUploadPaymentReceipt(payload, {
         bucket: 'payment-receipts',
         path,
       });
 
-      const receiptA5Url = buildReceiptA5Url(payload);
-      window.open(receiptA5Url, '_blank', 'noopener,noreferrer');
-
-      toast({ title: 'Comprovante gerado com sucesso' });
+      await downloadReceiptFromStorage(receipt.path, `comprovante-pedido-${formatOrderNumber(order.order_number)}.pdf`);
+      toast({ title: 'Comprovante baixado com sucesso' });
     } catch (error: any) {
       toast({
         title: 'Erro ao gerar comprovante',
@@ -448,15 +469,13 @@ export default function Receipts() {
       };
 
       const path = `${companyId}/pdv/${sale.id}/recibo-${receiptNumber}.pdf`;
-      await generateAndUploadPaymentReceipt(payload, {
+      const receipt = await generateAndUploadPaymentReceipt(payload, {
         bucket: 'payment-receipts',
         path,
       });
 
-      const receiptA5Url = buildReceiptA5Url(payload);
-      window.open(receiptA5Url, '_blank', 'noopener,noreferrer');
-
-      toast({ title: 'Recibo PDV gerado com sucesso' });
+      await downloadReceiptFromStorage(receipt.path, `recibo-pdv-${saleCode}.pdf`);
+      toast({ title: 'Recibo PDV baixado com sucesso' });
     } catch (error: any) {
       toast({
         title: 'Erro ao gerar recibo PDV',
@@ -467,6 +486,187 @@ export default function Receipts() {
       setRunningKey(null);
     }
   };
+
+  const buildOrderReceiptData = async (payment: OrderPaymentRow) => {
+    if (!companyId) throw new Error('Empresa nao encontrada na sessao.');
+
+    const order = ordersById[payment.order_id];
+    if (!order || !order.order_number) {
+      throw new Error('Pedido nao encontrado para este pagamento.');
+    }
+
+    const { data: itemsData, error: itemsError } = await supabase
+      .from('order_items')
+      .select('product_name, quantity')
+      .eq('order_id', payment.order_id);
+
+    if (itemsError) throw itemsError;
+
+    const receiptNumber = buildOrderReceiptNumber(order.order_number, payment.id);
+    const description = buildDescription(
+      ((itemsData || []) as Array<{ product_name: string; quantity: number }>),
+      `Pedido #${formatOrderNumber(order.order_number)}`,
+    );
+    const customer = order.customer_id ? customersById[order.customer_id] : null;
+    const paymentMethodLabel = payment.method ? paymentMethodLabels[payment.method] || String(payment.method) : 'Nao informado';
+
+    const payload: PaymentReceiptPayload = {
+      cliente: {
+        nome: customer?.name || order.customer_name || 'Cliente',
+        documento: customer?.document || null,
+      },
+      pagamento: {
+        valor: Number(payment.amount || 0),
+        forma: paymentMethodLabel,
+        descricao: description,
+        data: payment.paid_at || payment.created_at,
+      },
+      loja: {
+        nome: companyData?.name || 'Loja',
+        documento: companyData?.document || null,
+        endereco: buildCompanyAddress(companyData),
+        logo: companyData?.logo_url ? ensurePublicStorageUrl('product-images', companyData.logo_url) : null,
+        assinaturaImagem: companyData?.signature_image_url
+          ? ensurePublicStorageUrl('product-images', companyData.signature_image_url)
+          : null,
+        responsavel: companyData?.signature_responsible || companyData?.name || 'Responsavel',
+        cargo: companyData?.signature_role || 'Responsavel',
+      },
+      numeroRecibo: receiptNumber,
+      referencia: {
+        tipo: 'pedido',
+        numero: `#${formatOrderNumber(order.order_number)}`,
+        codigo: payment.id.slice(0, 8).toUpperCase(),
+      },
+      pedido: {
+        tempoProducaoDias: order.production_time_days_used ?? null,
+        previsaoEntrega: order.estimated_delivery_date ?? null,
+      },
+    };
+
+    return {
+      payload,
+      path: `${companyId}/${payment.order_id}/recibo-${receiptNumber}.pdf`,
+      fileName: `comprovante-pedido-${formatOrderNumber(order.order_number)}.pdf`,
+    };
+  };
+
+  const buildSaleReceiptData = async (sale: SaleRow) => {
+    if (!companyId) throw new Error('Empresa nao encontrada na sessao.');
+
+    const { data: itemsData, error: itemsError } = await supabase
+      .from('sale_items')
+      .select('product_name, quantity')
+      .eq('sale_id', sale.id);
+
+    if (itemsError) throw itemsError;
+
+    const receiptNumber = buildSaleReceiptNumber(sale.id);
+    const saleCode = sale.id.slice(0, 8).toUpperCase();
+    const description = buildDescription(
+      ((itemsData || []) as Array<{ product_name: string; quantity: number }>),
+      `Venda PDV #${saleCode}`,
+    );
+    const customer = sale.customer_id ? customersById[sale.customer_id] : null;
+
+    const payload: PaymentReceiptPayload = {
+      cliente: {
+        nome: customer?.name || 'Consumidor final',
+        documento: customer?.document || null,
+      },
+      pagamento: {
+        valor: Number(sale.amount_paid || sale.total || 0),
+        forma: paymentMethodLabels[sale.payment_method] || String(sale.payment_method),
+        descricao: description,
+        data: sale.created_at,
+      },
+      loja: {
+        nome: companyData?.name || 'Loja',
+        documento: companyData?.document || null,
+        endereco: buildCompanyAddress(companyData),
+        logo: companyData?.logo_url ? ensurePublicStorageUrl('product-images', companyData.logo_url) : null,
+        assinaturaImagem: companyData?.signature_image_url
+          ? ensurePublicStorageUrl('product-images', companyData.signature_image_url)
+          : null,
+        responsavel: companyData?.signature_responsible || companyData?.name || 'Responsavel',
+        cargo: companyData?.signature_role || 'Responsavel',
+      },
+      numeroRecibo: receiptNumber,
+      referencia: {
+        tipo: 'pdv',
+        numero: `#${saleCode}`,
+        codigo: saleCode,
+      },
+    };
+
+    return {
+      payload,
+      path: `${companyId}/pdv/${sale.id}/recibo-${receiptNumber}.pdf`,
+      fileName: `recibo-pdv-${saleCode}.pdf`,
+    };
+  };
+
+  const handlePreviewOrderReceipt = async (payment: OrderPaymentRow) => {
+    const key = `order-${payment.id}`;
+    setRunningKey(key);
+
+    try {
+      const { payload } = await buildOrderReceiptData(payment);
+      openReceiptPreview(payload);
+    } catch (error: any) {
+      toast({
+        title: 'Erro ao preparar comprovante',
+        description: error?.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setRunningKey(null);
+    }
+  };
+
+  const handlePreviewSaleReceipt = async (sale: SaleRow) => {
+    const key = `sale-${sale.id}`;
+    setRunningKey(key);
+
+    try {
+      const { payload } = await buildSaleReceiptData(sale);
+      openReceiptPreview(payload);
+    } catch (error: any) {
+      toast({
+        title: 'Erro ao preparar recibo PDV',
+        description: error?.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setRunningKey(null);
+    }
+  };
+
+  const renderReceiptActions = (
+    key: string,
+    onPreview: () => void,
+    onDownload: () => void,
+  ) => (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button size="sm" disabled={runningKey === key}>
+          <FileDown className="mr-1 h-4 w-4" />
+          {runningKey === key ? 'Gerando...' : 'Comprovante'}
+          <ChevronDown className="ml-1 h-4 w-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-52">
+        <DropdownMenuItem onClick={onPreview}>
+          <ExternalLink className="mr-2 h-4 w-4" />
+          Visualizar / imprimir
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={onDownload}>
+          <FileDown className="mr-2 h-4 w-4" />
+          Baixar PDF
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
 
   if (!companyId) {
     return (
@@ -581,14 +781,11 @@ export default function Receipts() {
                                 <ExternalLink className="mr-1 h-4 w-4" />
                                 Pedido
                               </Button>
-                              <Button
-                                size="sm"
-                                onClick={() => handleGenerateOrderReceipt(payment)}
-                                disabled={runningKey === `order-${payment.id}`}
-                              >
-                                <FileDown className="mr-1 h-4 w-4" />
-                                {runningKey === `order-${payment.id}` ? 'Gerando...' : 'A5'}
-                              </Button>
+                              {renderReceiptActions(
+                                `order-${payment.id}`,
+                                () => void handlePreviewOrderReceipt(payment),
+                                () => void handleGenerateOrderReceipt(payment),
+                              )}
                             </div>
                           </TableCell>
                         </TableRow>
@@ -640,14 +837,11 @@ export default function Receipts() {
                           <TableCell className="text-right">{formatCurrency(Number(sale.total))}</TableCell>
                           <TableCell>
                             <div className="flex justify-end gap-2">
-                              <Button
-                                size="sm"
-                                onClick={() => handleGenerateSaleReceipt(sale)}
-                                disabled={runningKey === `sale-${sale.id}`}
-                              >
-                                <FileDown className="mr-1 h-4 w-4" />
-                                {runningKey === `sale-${sale.id}` ? 'Gerando...' : 'A5'}
-                              </Button>
+                              {renderReceiptActions(
+                                `sale-${sale.id}`,
+                                () => void handlePreviewSaleReceipt(sale),
+                                () => void handleGenerateSaleReceipt(sale),
+                              )}
                             </div>
                           </TableCell>
                         </TableRow>

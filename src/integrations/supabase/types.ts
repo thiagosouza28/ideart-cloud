@@ -594,6 +594,74 @@ export type Database = {
           },
         ]
       }
+      customer_credit_transactions: {
+        Row: {
+          amount: number
+          company_id: string
+          created_at: string
+          created_by: string | null
+          customer_id: string
+          description: string | null
+          id: string
+          order_id: string | null
+          payment_id: string | null
+          type: string
+        }
+        Insert: {
+          amount: number
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          customer_id: string
+          description?: string | null
+          id?: string
+          order_id?: string | null
+          payment_id?: string | null
+          type: string
+        }
+        Update: {
+          amount?: number
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          customer_id?: string
+          description?: string | null
+          id?: string
+          order_id?: string | null
+          payment_id?: string | null
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_credit_transactions_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_credit_transactions_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_credit_transactions_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_credit_transactions_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "order_payments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       customers: {
         Row: {
           address: string | null
@@ -608,6 +676,7 @@ export type Database = {
           notes: string | null
           photo_url: string | null
           phone: string | null
+          saldo_credito: number
           state: string | null
           updated_at: string
           user_id: string | null
@@ -626,6 +695,7 @@ export type Database = {
           notes?: string | null
           photo_url?: string | null
           phone?: string | null
+          saldo_credito?: number
           state?: string | null
           updated_at?: string
           user_id?: string | null
@@ -644,6 +714,7 @@ export type Database = {
           notes?: string | null
           photo_url?: string | null
           phone?: string | null
+          saldo_credito?: number
           state?: string | null
           updated_at?: string
           user_id?: string | null
@@ -943,6 +1014,8 @@ export type Database = {
           created_at: string
           created_by: string | null
           customer_id: string | null
+          customer_credit_generated: number
+          customer_credit_used: number
           customer_user_id: string | null
           customer_name: string | null
           delivered_at: string | null
@@ -979,6 +1052,8 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           customer_id?: string | null
+          customer_credit_generated?: number
+          customer_credit_used?: number
           customer_user_id?: string | null
           customer_name?: string | null
           delivered_at?: string | null
@@ -1015,6 +1090,8 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           customer_id?: string | null
+          customer_credit_generated?: number
+          customer_credit_used?: number
           customer_user_id?: string | null
           customer_name?: string | null
           delivered_at?: string | null
@@ -1164,12 +1241,14 @@ export type Database = {
           gateway: string | null
           gateway_order_id: string | null
           gateway_transaction_id: string | null
+          generated_credit_amount: number
           id: string
           method: Database["public"]["Enums"]["payment_method"] | null
           notes: string | null
           order_id: string
           paid_at: string | null
           raw_payload: Json | null
+          source: string
           status: Database["public"]["Enums"]["payment_status"]
         }
         Insert: {
@@ -1180,12 +1259,14 @@ export type Database = {
           gateway?: string | null
           gateway_order_id?: string | null
           gateway_transaction_id?: string | null
+          generated_credit_amount?: number
           id?: string
           method?: Database["public"]["Enums"]["payment_method"] | null
           notes?: string | null
           order_id: string
           paid_at?: string | null
           raw_payload?: Json | null
+          source?: string
           status?: Database["public"]["Enums"]["payment_status"]
         }
         Update: {
@@ -1196,12 +1277,14 @@ export type Database = {
           gateway?: string | null
           gateway_order_id?: string | null
           gateway_transaction_id?: string | null
+          generated_credit_amount?: number
           id?: string
           method?: Database["public"]["Enums"]["payment_method"] | null
           notes?: string | null
           order_id?: string
           paid_at?: string | null
           raw_payload?: Json | null
+          source?: string
           status?: Database["public"]["Enums"]["payment_status"]
         }
         Relationships: [
