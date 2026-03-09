@@ -2,6 +2,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { invokeEdgeFunction } from '@/services/edgeFunctions';
 import { generateAndUploadPaymentReceipt } from '@/services/paymentReceipts';
 import { ensurePublicStorageUrl } from '@/lib/storage';
+import { uploadFile, deleteFile } from '@/lib/upload';
 import { formatOrderNumber } from '@/lib/utils';
 import { stripPendingCustomerInfoNotes } from '@/lib/orderMetadata';
 import { sanitizeDisplayFileName } from '@/lib/orderFiles';
@@ -1356,38 +1357,30 @@ export const uploadOrderFinalPhoto = async (
   file: File,
   userId?: string | null
 ) => {
-  const rawExt = file.name.split('.').pop()?.trim().toLowerCase() || '';
-  const fallbackExt = file.type.split('/').pop()?.split('+')[0]?.toLowerCase() || 'jpg';
-  const fileExt = /^[a-z0-9]+$/i.test(rawExt) ? rawExt : fallbackExt;
-  const fileName = `${orderId}/${generateFileId()}.${fileExt}`;
+  try {
+    const url = await uploadFile(file, 'pedidos');
 
-  const { error: uploadError } = await supabase.storage
-    .from('order-final-photos')
-    .upload(fileName, file, {
-      contentType: file.type || undefined,
-    });
+    const { data: photo, error: dbError } = await supabase
+      .from('order_final_photos' as any)
+      .insert({
+        order_id: orderId,
+        storage_path: url,
+        created_by: userId || null,
+      })
+      .select('*')
+      .single();
 
-  if (uploadError) {
-    throw uploadError;
+    if (dbError) {
+      if (url.startsWith('/uploads/')) {
+        await deleteFile(url);
+      }
+      throw dbError;
+    }
+
+    return photo;
+  } catch (err) {
+    throw err;
   }
-
-  const { data: photo, error: dbError } = await supabase
-    .from('order_final_photos')
-    .insert({
-      order_id: orderId,
-      storage_path: fileName,
-      created_by: userId || null,
-    })
-    .select('*')
-    .single();
-
-  if (dbError) {
-    // Cleanup file if DB insert fails
-    await supabase.storage.from('order-final-photos').remove([fileName]);
-    throw dbError;
-  }
-
-  return photo;
 };
 
 export const uploadOrderArtFile = async (
@@ -1404,37 +1397,34 @@ export const uploadOrderArtFile = async (
     file.name,
     'referencia',
   );
-  const safeName = displayFileName.replace(/[^a-zA-Z0-9._-]/g, '_');
-  const fileExt = safeName.split('.').pop();
-  const fileName = `${orderId}/${generateFileId()}-${fileExt ? safeName : `${safeName}.bin`}`;
 
-  const { error: uploadError } = await supabase.storage
-    .from('order-art-files')
-    .upload(fileName, file, { contentType: file.type || undefined });
+  try {
+    const url = await uploadFile(file, 'pedidos');
 
-  if (uploadError) {
-    throw uploadError;
+    const { data: artFile, error: dbError } = await supabase
+      .from('order_art_files' as any)
+      .insert({
+        order_id: orderId,
+        customer_id: options?.customerId || null,
+        storage_path: url,
+        file_name: displayFileName,
+        file_type: file.type || null,
+        created_by: userId || null,
+      })
+      .select('*')
+      .single();
+
+    if (dbError) {
+      if (url.startsWith('/uploads/')) {
+        await deleteFile(url);
+      }
+      throw dbError;
+    }
+
+    return artFile;
+  } catch (err) {
+    throw err;
   }
-
-  const { data: artFile, error: dbError } = await supabase
-    .from('order_art_files' as any)
-    .insert({
-      order_id: orderId,
-      customer_id: options?.customerId || null,
-      storage_path: fileName,
-      file_name: displayFileName,
-      file_type: file.type || null,
-      created_by: userId || null,
-    })
-    .select('*')
-    .single();
-
-  if (dbError) {
-    await supabase.storage.from('order-art-files').remove([fileName]);
-    throw dbError;
-  }
-
-  return artFile;
 };
 
 

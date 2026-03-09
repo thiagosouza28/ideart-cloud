@@ -17,6 +17,7 @@ import { buildProductProfitabilityRows, buildSoldUnitsMap } from '@/lib/finance'
 import { isPromotionActive } from '@/lib/pricing';
 import { isValidCode128, isValidEan13, normalizeBarcode } from '@/lib/barcode';
 import { ensurePublicStorageUrl } from '@/lib/storage';
+import { deleteFile } from '@/lib/upload';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -132,15 +133,15 @@ export default function Products() {
     const [orderItemsResult, saleItemsResult] = await Promise.all([
       validOrderIds.length
         ? supabase
-            .from('order_items')
-            .select('id, order_id, product_id, product_name, quantity, unit_price, discount, total, attributes, notes, created_at')
-            .in('order_id', validOrderIds)
+          .from('order_items')
+          .select('id, order_id, product_id, product_name, quantity, unit_price, discount, total, attributes, notes, created_at')
+          .in('order_id', validOrderIds)
         : Promise.resolve({ data: [] }),
       saleIds.length
         ? supabase
-            .from('sale_items')
-            .select('id, sale_id, product_id, product_name, quantity, unit_price, discount, total, attributes, created_at')
-            .in('sale_id', saleIds)
+          .from('sale_items')
+          .select('id, sale_id, product_id, product_name, quantity, unit_price, discount, total, attributes, created_at')
+          .in('sale_id', saleIds)
         : Promise.resolve({ data: [] }),
     ]);
 
@@ -151,6 +152,29 @@ export default function Products() {
 
   const handleDelete = async () => {
     if (!deleteId) return;
+
+    const productToDelete = products.find((p) => p.id === deleteId);
+    if (productToDelete) {
+      if (productToDelete.image_url) {
+        if (productToDelete.image_url.startsWith('/uploads/')) {
+          await deleteFile(productToDelete.image_url);
+        } else {
+          await supabase.storage.from('product-images').remove([productToDelete.image_url]);
+        }
+      }
+
+      if (Array.isArray(productToDelete.image_urls)) {
+        for (const url of productToDelete.image_urls) {
+          if (typeof url === 'string') {
+            if (url.startsWith('/uploads/')) {
+              await deleteFile(url);
+            } else {
+              await supabase.storage.from('product-images').remove([url]);
+            }
+          }
+        }
+      }
+    }
 
     let deleteQuery = supabase.from('products').delete().eq('id', deleteId);
     if (profile?.id) {

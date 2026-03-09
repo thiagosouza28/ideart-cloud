@@ -26,7 +26,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import type { StockMovementType, Supply, SupplyStockMovement } from '@/types/database';
-import { ensurePublicStorageUrl } from '@/lib/storage';
+import { ensurePublicStorageUrl, getStoragePathFromUrl } from '@/lib/storage';
+import { uploadFile, deleteFile } from '@/lib/upload';
 import { useUnsavedChanges } from '@/hooks/use-unsaved-changes';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
@@ -198,43 +199,36 @@ export default function Supplies() {
       return;
     }
 
-    if (file.size > 2 * 1024 * 1024) {
-      toast.error('Imagem deve ter no máximo 2MB');
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Imagem deve ter no máximo 5MB');
       return;
     }
 
     setUploading(true);
 
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-    const filePath = `supplies/${fileName}`;
-
-    const { error: uploadError } = await supabase.storage
-      .from('product-images')
-      .upload(filePath, file, { upsert: true, contentType: file.type });
-
-    if (uploadError) {
-      console.error('Falha ao enviar imagem de insumo', uploadError);
-      const message = uploadError.message || 'Erro ao fazer upload da imagem';
-      const hint = uploadError.message?.toLowerCase().includes('bucket')
-        ? ' Verifique se o bucket "product-images" existe e se as policies permitem upload.'
-        : '';
-      toast.error(`${message}${hint}`);
+    try {
+      const url = await uploadFile(file, 'insumos');
+      setFormData({ ...formData, image_url: url });
+      toast.success('Imagem enviada com sucesso');
+    } catch (err) {
+      toast.error(String(err));
+    } finally {
       setUploading(false);
-      return;
     }
-
-    const { data: { publicUrl } } = supabase.storage
-      .from('product-images')
-      .getPublicUrl(filePath);
-
-    const normalizedUrl = ensurePublicStorageUrl('product-images', publicUrl);
-    setFormData({ ...formData, image_url: normalizedUrl || '' });
-    setUploading(false);
-    toast.success('Imagem enviada com sucesso');
   };
 
-  const removeImage = () => {
+  const removeImage = async () => {
+    const targetUrl = formData.image_url;
+    if (targetUrl) {
+      if (targetUrl.startsWith('/uploads/')) {
+        await deleteFile(targetUrl);
+      } else {
+        const path = getStoragePathFromUrl('product-images', targetUrl);
+        if (path) {
+          await supabase.storage.from('product-images').remove([path]);
+        }
+      }
+    }
     setFormData({ ...formData, image_url: '' });
   };
 
@@ -310,6 +304,17 @@ export default function Supplies() {
 
   const handleDelete = async () => {
     if (!selectedSupply) return;
+
+    if (selectedSupply.image_url) {
+      if (selectedSupply.image_url.startsWith('/uploads/')) {
+        await deleteFile(selectedSupply.image_url);
+      } else {
+        const path = getStoragePathFromUrl('product-images', selectedSupply.image_url);
+        if (path) {
+          await supabase.storage.from('product-images').remove([path]);
+        }
+      }
+    }
 
     const { error } = await supabase
       .from('supplies')

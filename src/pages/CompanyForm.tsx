@@ -11,7 +11,8 @@ import { PhoneInput, formatPhone, normalizeDigits, validatePhone } from '@/compo
 import { supabase } from '@/integrations/supabase/client';
 import type { Company } from '@/types/database';
 import { toast } from 'sonner';
-import { ensurePublicStorageUrl } from '@/lib/storage';
+import { ensurePublicStorageUrl, getStoragePathFromUrl } from '@/lib/storage';
+import { uploadFile, deleteFile } from '@/lib/upload';
 import { useUnsavedChanges } from '@/hooks/use-unsaved-changes';
 
 const MAX_LOGO_SIZE_BYTES = 2 * 1024 * 1024;
@@ -158,54 +159,38 @@ export default function CompanyForm() {
       return;
     }
 
-    if (file.size > MAX_LOGO_SIZE_BYTES) {
-      toast.error('A imagem deve ter no máximo 2MB');
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('A imagem deve ter no máximo 5MB');
       e.target.value = '';
       return;
     }
-
-    const previousLogo = form.logo_url;
-    if (logoObjectUrlRef.current) {
-      URL.revokeObjectURL(logoObjectUrlRef.current);
-      logoObjectUrlRef.current = null;
-    }
-
-    const previewUrl = URL.createObjectURL(file);
-    logoObjectUrlRef.current = previewUrl;
-    setLogoPreview(previewUrl);
 
     setUploadingLogo(true);
-    const fileExt = file.name.split('.').pop() || 'png';
-    const fileName = `logos/${Date.now()}.${fileExt}`;
-
-    const { error: uploadError } = await supabase.storage
-      .from('product-images')
-      .upload(fileName, file, { upsert: true, contentType: file.type });
-
-    if (uploadError) {
-      toast.error('Erro ao enviar logo');
-      setLogoPreview(previousLogo);
+    try {
+      const url = await uploadFile(file, 'logos');
+      setForm((prev) => ({ ...prev, logo_url: url }));
+      setLogoPreview(url);
+      toast.success('Logo enviado com sucesso');
+    } catch (err) {
+      toast.error(String(err));
+    } finally {
       setUploadingLogo(false);
       e.target.value = '';
-      return;
     }
-
-    const { data: { publicUrl } } = supabase.storage
-      .from('product-images')
-      .getPublicUrl(fileName);
-
-    const normalizedUrl = ensurePublicStorageUrl('product-images', publicUrl);
-    setForm((prev) => ({ ...prev, logo_url: normalizedUrl }));
-    setLogoPreview(normalizedUrl);
-    if (logoObjectUrlRef.current) {
-      URL.revokeObjectURL(logoObjectUrlRef.current);
-      logoObjectUrlRef.current = null;
-    }
-    setUploadingLogo(false);
-    e.target.value = '';
   };
 
-  const handleRemoveLogo = () => {
+  const handleRemoveLogo = async () => {
+    const targetUrl = form.logo_url;
+    if (targetUrl) {
+      if (targetUrl.startsWith('/uploads/')) {
+        await deleteFile(targetUrl);
+      } else {
+        const path = getStoragePathFromUrl('product-images', targetUrl);
+        if (path) {
+          await supabase.storage.from('product-images').remove([path]);
+        }
+      }
+    }
     resetLogoPreview();
     if (fileInputRef.current) {
       fileInputRef.current.value = '';

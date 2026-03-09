@@ -3,6 +3,10 @@ import { supabase } from '@/integrations/supabase/client';
 export const ensurePublicStorageUrl = (bucket: string, value?: string | null) => {
   if (!value) return null;
 
+  if (value.startsWith('/uploads/')) {
+    return value;
+  }
+
   if (value.includes('/storage/v1/object/public/')) {
     return value;
   }

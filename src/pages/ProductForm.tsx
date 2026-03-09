@@ -22,6 +22,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { generateProductDescription } from '@/services/ai';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { ensurePublicStorageUrl, getStoragePathFromUrl } from '@/lib/storage';
+import { uploadFile, deleteFile } from '@/lib/upload';
 import { BarcodeSvg } from '@/components/BarcodeSvg';
 import { buildProductProfitabilityRows, buildSoldUnitsMap } from '@/lib/finance';
 import {
@@ -1098,26 +1099,11 @@ export default function ProductForm() {
     const uploadedUrls: string[] = [];
 
     for (const file of validFiles) {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-      const filePath = `products/${fileName}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from('product-images')
-        .upload(filePath, file);
-
-      if (uploadError) {
-        toast({ title: 'Erro ao enviar imagem', variant: 'destructive' });
-        continue;
-      }
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('product-images')
-        .getPublicUrl(filePath);
-
-      const normalizedUrl = ensurePublicStorageUrl('product-images', publicUrl);
-      if (normalizedUrl) {
-        uploadedUrls.push(normalizedUrl);
+      try {
+        const url = await uploadFile(file, 'produtos');
+        uploadedUrls.push(url);
+      } catch (err) {
+        toast({ title: 'Erro ao enviar imagem', description: String(err), variant: 'destructive' });
       }
     }
 
@@ -1143,9 +1129,13 @@ export default function ProductForm() {
   const removeImage = async (index: number) => {
     const targetUrl = imageUrls[index];
     if (targetUrl) {
-      const path = getStoragePathFromUrl('product-images', targetUrl);
-      if (path) {
-        await supabase.storage.from('product-images').remove([path]);
+      if (targetUrl.startsWith('/uploads/')) {
+        await deleteFile(targetUrl);
+      } else {
+        const path = getStoragePathFromUrl('product-images', targetUrl);
+        if (path) {
+          await supabase.storage.from('product-images').remove([path]);
+        }
       }
     }
     setImageUrls((prev) => prev.filter((_, i) => i !== index));

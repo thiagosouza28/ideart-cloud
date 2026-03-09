@@ -53,7 +53,8 @@ import {
     validateBannerImageFile,
     type BannerPosition,
 } from '@/lib/bannerLayout';
-import { ensurePublicStorageUrl } from '@/lib/storage';
+import { ensurePublicStorageUrl, getStoragePathFromUrl } from '@/lib/storage';
+import { uploadFile, deleteFile } from '@/lib/upload';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useUnsavedChanges } from '@/hooks/use-unsaved-changes';
@@ -325,6 +326,18 @@ export default function BannerManagement() {
         if (!approved) return;
 
         try {
+            const bannerToDelete = banners.find((b) => b.id === id);
+            if (bannerToDelete?.image_url) {
+                if (bannerToDelete.image_url.startsWith('/uploads/')) {
+                    await deleteFile(bannerToDelete.image_url);
+                } else {
+                    const path = getStoragePathFromUrl('product-images', bannerToDelete.image_url);
+                    if (path) {
+                        await supabase.storage.from('product-images').remove([path]);
+                    }
+                }
+            }
+
             const { error } = await supabase
                 .from('banners')
                 .delete()
@@ -474,23 +487,10 @@ export default function BannerManagement() {
                 crop: cropArea,
             });
 
-            const fileExt = croppedFile.name.split('.').pop() || 'jpg';
-            const fileName = `banners/${profile.company_id}/${Math.random()}.${fileExt}`;
+            // Use the local upload service
+            const url = await uploadFile(croppedFile, 'empresa');
 
-            const { error: uploadError } = await supabase.storage
-                .from('product-images')
-                .upload(fileName, croppedFile, {
-                    upsert: true,
-                    contentType: croppedFile.type,
-                });
-
-            if (uploadError) throw uploadError;
-
-            const { data: { publicUrl } } = supabase.storage
-                .from('product-images')
-                .getPublicUrl(fileName);
-
-            setCurrentBanner((prev) => ({ ...prev, image_url: publicUrl }));
+            setCurrentBanner((prev) => ({ ...prev, image_url: url }));
             closeCropDialog();
             toast.success('Imagem ajustada e enviada com sucesso');
         } catch (error: any) {

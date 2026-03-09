@@ -1,3 +1,4 @@
+import { uploadFile } from "@/lib/upload";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import { supabase } from "@/integrations/supabase/client";
@@ -28,9 +29,9 @@ const defaultFitSinglePage = true;
 const generateUniqueStorageSuffix = () => {
   const iso = new Date().toISOString();
   const stamp = iso
-    .replaceAll("-", "")
-    .replaceAll(":", "")
-    .replaceAll(".", "")
+    .replace(/-/g, "")
+    .replace(/:/g, "")
+    .replace(/\./g, "")
     .replace("T", "")
     .replace("Z", "")
     .slice(0, 14);
@@ -249,18 +250,10 @@ export const generatePaymentReceiptPdf = async (
   }
 };
 
-export const uploadPaymentReceiptPdf = async (blob: Blob, path: string, bucket = "payment-receipts") => {
-  const { error } = await supabase.storage.from(bucket).upload(path, blob, {
-    contentType: "application/pdf",
-    upsert: false,
-  });
-
-  if (error) {
-    throw error;
-  }
-
-  const publicUrl = ensurePublicStorageUrl(bucket, path);
-  return { path, publicUrl };
+export const uploadPaymentReceiptPdf = async (blob: Blob, _path: string, _bucket = "payment-receipts") => {
+  // Use local upload instead of Supabase
+  const url = await uploadFile(blob, 'pedidos');
+  return { path: url, publicUrl: url };
 };
 
 export const generateAndUploadPaymentReceipt = async (
@@ -271,6 +264,6 @@ export const generateAndUploadPaymentReceipt = async (
   const bucket = options?.bucket || "payment-receipts";
   const basePath = options?.path || `receipts/recibo-${receiptNumber}.pdf`;
   const path = appendSuffixToPath(basePath, generateUniqueStorageSuffix());
-  const { publicUrl } = await uploadPaymentReceiptPdf(blob, path, bucket);
-  return { number: receiptNumber, path, publicUrl };
+  const { path: uploadedPath, publicUrl } = await uploadPaymentReceiptPdf(blob, path, bucket);
+  return { number: receiptNumber, path: uploadedPath, publicUrl };
 };

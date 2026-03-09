@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { supabase } from '@/integrations/supabase/client';
 import { Order } from '@/types/database';
 import { updateOrderStatus, uploadOrderFinalPhoto } from '@/services/orders';
+import { deleteFile } from '@/lib/upload';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
@@ -124,17 +125,18 @@ export default function Production() {
     const uploadedPaths: string[] = [];
     try {
       for (const file of files) {
-        const photo = await uploadOrderFinalPhoto(orderId, file, user?.id || null);
+        const photo = await uploadOrderFinalPhoto(orderId, file, user?.id || null) as any;
         uploadedPaths.push(photo.storage_path);
       }
     } catch (error) {
       if (uploadedPaths.length > 0) {
-        await supabase
-          .from('order_final_photos' as any)
-          .delete()
-          .eq('order_id', orderId)
-          .in('storage_path', uploadedPaths);
-        await supabase.storage.from('order-final-photos').remove(uploadedPaths);
+        for (const path of uploadedPaths) {
+          if (path.startsWith('/uploads/')) {
+            await deleteFile(path);
+          } else {
+            await supabase.storage.from('order-final-photos').remove([path]);
+          }
+        }
       }
       throw error;
     }
@@ -156,12 +158,13 @@ export default function Production() {
       fetchOrders();
     } catch (error: any) {
       if (uploadedPaths.length > 0) {
-        await supabase
-          .from('order_final_photos' as any)
-          .delete()
-          .eq('order_id', readyOrder.id)
-          .in('storage_path', uploadedPaths);
-        await supabase.storage.from('order-final-photos').remove(uploadedPaths);
+        for (const path of uploadedPaths) {
+          if (path.startsWith('/uploads/')) {
+            await deleteFile(path);
+          } else {
+            await supabase.storage.from('order-final-photos').remove([path]);
+          }
+        }
       }
       toast({ title: 'Erro ao concluir pedido', description: error?.message, variant: 'destructive' });
     } finally {

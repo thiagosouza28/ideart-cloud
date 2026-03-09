@@ -25,6 +25,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useUnsavedChanges } from '@/hooks/use-unsaved-changes';
 import { ensurePublicStorageUrl, getStoragePathFromUrl } from '@/lib/storage';
+import { uploadFile, deleteFile } from '@/lib/upload';
 import { calculateAge, parseDateInput } from '@/lib/birthdays';
 
 const ESTADOS_BR = [
@@ -232,45 +233,31 @@ export default function CustomerForm() {
     }
 
     setUploadingPhoto(true);
-    const fileExt = file.name.split('.').pop() || 'jpg';
-    const fileName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${fileExt}`;
-    const filePath = `customers/${fileName}`;
 
-    const { error: uploadError } = await supabase.storage
-      .from('customer-photos')
-      .upload(filePath, file, { upsert: true });
-
-    if (uploadError) {
-      toast.error('Erro ao enviar foto do cliente');
+    try {
+      const url = await uploadFile(file, 'clientes');
+      setForm((prev) => ({ ...prev, photo_url: url }));
+      toast.success('Foto enviada com sucesso');
+    } catch (err) {
+      toast.error(String(err));
+    } finally {
       setUploadingPhoto(false);
       event.target.value = '';
-      return;
     }
-
-    const { data: { publicUrl } } = supabase.storage
-      .from('customer-photos')
-      .getPublicUrl(filePath);
-
-    const normalizedUrl = ensurePublicStorageUrl('customer-photos', publicUrl);
-    if (normalizedUrl) {
-      const previousUrl = form.photo_url;
-      setForm((prev) => ({ ...prev, photo_url: normalizedUrl }));
-
-      if (previousUrl && previousUrl !== normalizedUrl) {
-        const previousPath = getStoragePathFromUrl('customer-photos', previousUrl);
-        await supabase.storage.from('customer-photos').remove([previousPath]);
-      }
-      toast.success('Foto enviada com sucesso');
-    }
-
-    setUploadingPhoto(false);
-    event.target.value = '';
   };
 
   const removePhoto = async () => {
-    if (!form.photo_url) return;
-    const path = getStoragePathFromUrl('customer-photos', form.photo_url);
-    await supabase.storage.from('customer-photos').remove([path]);
+    const targetUrl = form.photo_url;
+    if (targetUrl) {
+      if (targetUrl.startsWith('/uploads/')) {
+        await deleteFile(targetUrl);
+      } else {
+        const path = getStoragePathFromUrl('customer-photos', targetUrl);
+        if (path) {
+          await supabase.storage.from('customer-photos').remove([path]);
+        }
+      }
+    }
     setForm((prev) => ({ ...prev, photo_url: '' }));
   };
 

@@ -11,6 +11,7 @@ import { Customer } from '@/types/database';
 import { toast } from 'sonner';
 import { normalizeDigits } from '@/components/ui/masked-input';
 import { ensurePublicStorageUrl } from '@/lib/storage';
+import { deleteFile } from '@/lib/upload';
 import { calculateAge, formatDateBr } from '@/lib/birthdays';
 import { useConfirm } from '@/components/ui/confirm-dialog';
 
@@ -52,6 +53,16 @@ export default function Customers() {
       destructive: true,
     });
     if (!approved) return;
+
+    const customerToDelete = customers.find((c) => c.id === id);
+    if (customerToDelete?.photo_url) {
+      if (customerToDelete.photo_url.startsWith('/uploads/')) {
+        await deleteFile(customerToDelete.photo_url);
+      } else {
+        await supabase.storage.from('customer-photos').remove([customerToDelete.photo_url]);
+      }
+    }
+
     const { error } = await supabase.from('customers').delete().eq('id', id);
     if (error) {
       toast.error('Erro ao excluir cliente');

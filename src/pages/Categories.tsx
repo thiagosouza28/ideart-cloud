@@ -30,6 +30,7 @@ import {
   flattenCategoryTree,
 } from '@/lib/categoryTree';
 import { ensurePublicStorageUrl, getStoragePathFromUrl } from '@/lib/storage';
+import { uploadFile, deleteFile } from '@/lib/upload';
 
 type ParentOption = {
   id: string;
@@ -189,26 +190,34 @@ export default function Categories() {
       return;
     }
 
-    const extension = file.name.split('.').pop()?.toLowerCase() || 'png';
-    const objectPath = `categories/${companyId}/${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${extension}`;
-
     setUploadingIcon(true);
-    const { error } = await supabase.storage.from('product-images').upload(objectPath, file, {
-      upsert: false,
-      cacheControl: '3600',
-      contentType: file.type || undefined,
-    });
-    setUploadingIcon(false);
-
-    if (error) {
-      toast.error('Não foi possível enviar o ícone da categoria');
-      return;
+    try {
+      const url = await uploadFile(file, 'empresa');
+      setFormData((prev) => ({
+        ...prev,
+        icon_url: url,
+      }));
+      toast.success('Ícone enviado com sucesso');
+    } catch (err) {
+      toast.error(String(err));
+    } finally {
+      setUploadingIcon(false);
     }
+  };
 
-    setFormData((prev) => ({
-      ...prev,
-      icon_url: objectPath,
-    }));
+  const removeIcon = async () => {
+    const targetUrl = formData.icon_url;
+    if (targetUrl) {
+      if (targetUrl.startsWith('/uploads/')) {
+        await deleteFile(targetUrl);
+      } else {
+        const path = getStoragePathFromUrl('product-images', targetUrl);
+        if (path) {
+          await supabase.storage.from('product-images').remove([path]);
+        }
+      }
+    }
+    setFormData((prev) => ({ ...prev, icon_url: null }));
   };
 
   const handleSave = async () => {
@@ -659,7 +668,7 @@ export default function Categories() {
                         type="button"
                         variant="ghost"
                         size="sm"
-                        onClick={() => setFormData((prev) => ({ ...prev, icon_url: null }))}
+                        onClick={removeIcon}
                       >
                         <X className="mr-2 h-4 w-4" />
                         Remover imagem
@@ -682,7 +691,7 @@ export default function Categories() {
                     <div>
                       <p className="text-sm font-semibold">Prévia do ícone enviado</p>
                       <p className="text-xs text-muted-foreground">
-                        {getStoragePathFromUrl('product-images', formData.icon_url)}
+                        {formData.icon_url.startsWith('/uploads/') ? formData.icon_url : getStoragePathFromUrl('product-images', formData.icon_url)}
                       </p>
                     </div>
                   </div>
@@ -715,7 +724,20 @@ export default function Categories() {
             <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
               Cancelar
             </Button>
-            <Button variant="destructive" onClick={handleDelete}>
+            <Button variant="destructive" onClick={async () => {
+              const targetUrl = selectedCategory?.icon_url;
+              if (targetUrl) {
+                if (targetUrl.startsWith('/uploads/')) {
+                  await deleteFile(targetUrl);
+                } else {
+                  const path = getStoragePathFromUrl('product-images', targetUrl);
+                  if (path) {
+                    await supabase.storage.from('product-images').remove([path]);
+                  }
+                }
+              }
+              await handleDelete();
+            }}>
               Excluir
             </Button>
           </DialogFooter>

@@ -136,6 +136,20 @@ const openReceiptPreview = (payload: PaymentReceiptPayload) => {
 };
 
 const downloadReceiptFromStorage = async (path: string, fileName: string) => {
+  if (path.startsWith('/uploads/')) {
+    const response = await fetch(path);
+    const blob = await response.blob();
+    const blobUrl = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = blobUrl;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => window.URL.revokeObjectURL(blobUrl), 0);
+    return;
+  }
+
   const { data, error } = await supabase.storage.from('payment-receipts').download(path);
   if (error) throw error;
 
@@ -241,9 +255,9 @@ export default function Receipts() {
       const orderIds = Array.from(new Set(paymentRows.map((row) => row.order_id).filter(Boolean)));
       const ordersResult = orderIds.length
         ? await supabase
-            .from('orders')
-            .select('id, order_number, customer_id, customer_name, production_time_days_used, estimated_delivery_date')
-            .in('id', orderIds)
+          .from('orders')
+          .select('id, order_number, customer_id, customer_name, production_time_days_used, estimated_delivery_date')
+          .in('id', orderIds)
         : { data: [], error: null };
 
       if (ordersResult.error) throw ordersResult.error;
@@ -262,9 +276,9 @@ export default function Receipts() {
 
       const customersResult = customerIds.size > 0
         ? await supabase
-            .from('customers')
-            .select('id, name, document')
-            .in('id', Array.from(customerIds))
+          .from('customers')
+          .select('id, name, document')
+          .in('id', Array.from(customerIds))
         : { data: [], error: null };
 
       if (customersResult.error) throw customersResult.error;

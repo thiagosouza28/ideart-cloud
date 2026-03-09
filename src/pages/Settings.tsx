@@ -64,7 +64,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useCompanyTheme } from '@/contexts/CompanyThemeContext';
 import { invokeEdgeFunction } from '@/services/edgeFunctions';
 import { z } from 'zod';
-import { ensurePublicStorageUrl } from '@/lib/storage';
+import { ensurePublicStorageUrl, getStoragePathFromUrl } from '@/lib/storage';
+import { uploadFile, deleteFile } from '@/lib/upload';
 import {
   applyCompanyThemeTemplate,
   companyThemeTemplateLabels,
@@ -143,56 +144,56 @@ const themeModeOptions: Array<{
   description: string;
   icon: typeof Sun;
 }> = [
-  { value: 'light', title: 'Claro', description: 'Aplica o tema claro em todo o sistema.', icon: Sun },
-  { value: 'dark', title: 'Escuro', description: 'Aplica o tema escuro em todo o sistema.', icon: Moon },
-  {
-    value: 'system',
-    title: 'Automático',
-    description: 'Segue a preferência do navegador do usuário.',
-    icon: Monitor,
-  },
-];
+    { value: 'light', title: 'Claro', description: 'Aplica o tema claro em todo o sistema.', icon: Sun },
+    { value: 'dark', title: 'Escuro', description: 'Aplica o tema escuro em todo o sistema.', icon: Moon },
+    {
+      value: 'system',
+      title: 'Automático',
+      description: 'Segue a preferência do navegador do usuário.',
+      icon: Monitor,
+    },
+  ];
 
 const buttonStyleOptions: Array<{
   value: CompanyThemeButtonStyle;
   title: string;
   description: string;
 }> = [
-  { value: 'soft', title: 'Suave', description: 'Botões mais leves, com contraste suave.' },
-  { value: 'modern', title: 'Moderno', description: 'Botões com mais presença visual e profundidade.' },
-  { value: 'solid', title: 'Sólido', description: 'Botões chapados, diretos e com alto contraste.' },
-  { value: 'outline', title: 'Outline', description: 'Botões transparentes com borda e hover suave.' },
-];
+    { value: 'soft', title: 'Suave', description: 'Botões mais leves, com contraste suave.' },
+    { value: 'modern', title: 'Moderno', description: 'Botões com mais presença visual e profundidade.' },
+    { value: 'solid', title: 'Sólido', description: 'Botões chapados, diretos e com alto contraste.' },
+    { value: 'outline', title: 'Outline', description: 'Botões transparentes com borda e hover suave.' },
+  ];
 
 const borderRadiusOptions: Array<{
   value: CompanyThemeBorderRadius;
   title: string;
   description: string;
 }> = [
-  { value: 'small', title: 'Pequeno', description: 'Raio aproximado de 6px.' },
-  { value: 'medium', title: 'Médio', description: 'Raio aproximado de 12px.' },
-  { value: 'large', title: 'Grande', description: 'Raio aproximado de 20px.' },
-];
+    { value: 'small', title: 'Pequeno', description: 'Raio aproximado de 6px.' },
+    { value: 'medium', title: 'Médio', description: 'Raio aproximado de 12px.' },
+    { value: 'large', title: 'Grande', description: 'Raio aproximado de 20px.' },
+  ];
 
 const borderSizeOptions: Array<{
   value: CompanyThemeBorderSize;
   title: string;
   description: string;
 }> = [
-  { value: 'thin', title: 'Fina', description: 'Contornos mais discretos e leves.' },
-  { value: 'normal', title: 'Normal', description: 'Equilíbrio entre definição visual e suavidade.' },
-  { value: 'thick', title: 'Marcada', description: 'Mais presença em cards, campos e tabelas.' },
-];
+    { value: 'thin', title: 'Fina', description: 'Contornos mais discretos e leves.' },
+    { value: 'normal', title: 'Normal', description: 'Equilíbrio entre definição visual e suavidade.' },
+    { value: 'thick', title: 'Marcada', description: 'Mais presença em cards, campos e tabelas.' },
+  ];
 
 const densityOptions: Array<{
   value: CompanyThemeLayoutDensity;
   title: string;
   description: string;
 }> = [
-  { value: 'compact', title: 'Compacto', description: 'Menos espaçamento em cards, tabelas e formulários.' },
-  { value: 'normal', title: 'Normal', description: 'Equilíbrio entre respiro visual e densidade.' },
-  { value: 'spacious', title: 'Espaçado', description: 'Mais respiro em toda a interface.' },
-];
+    { value: 'compact', title: 'Compacto', description: 'Menos espaçamento em cards, tabelas e formulários.' },
+    { value: 'normal', title: 'Normal', description: 'Equilíbrio entre respiro visual e densidade.' },
+    { value: 'spacious', title: 'Espaçado', description: 'Mais respiro em toda a interface.' },
+  ];
 
 const fontOptions: CompanyThemeFontFamily[] = ['Inter', 'Roboto', 'Poppins', 'Open Sans'];
 
@@ -211,16 +212,16 @@ const themeColorFields: Array<{
   >;
   label: string;
 }> = [
-  { key: 'primary_color', label: 'Cor primária' },
-  { key: 'secondary_color', label: 'Cor secundária' },
-  { key: 'background_color', label: 'Cor de fundo' },
-  { key: 'card_color', label: 'Cor dos cards' },
-  { key: 'border_color', label: 'Cor das bordas' },
-  { key: 'text_color', label: 'Cor do texto' },
-  { key: 'button_color', label: 'Cor dos botões' },
-  { key: 'button_hover_color', label: 'Hover dos botões' },
-  { key: 'menu_hover_color', label: 'Hover do menu' },
-];
+    { key: 'primary_color', label: 'Cor primária' },
+    { key: 'secondary_color', label: 'Cor secundária' },
+    { key: 'background_color', label: 'Cor de fundo' },
+    { key: 'card_color', label: 'Cor dos cards' },
+    { key: 'border_color', label: 'Cor das bordas' },
+    { key: 'text_color', label: 'Cor do texto' },
+    { key: 'button_color', label: 'Cor dos botões' },
+    { key: 'button_hover_color', label: 'Hover dos botões' },
+    { key: 'menu_hover_color', label: 'Hover do menu' },
+  ];
 
 const themePaletteModeOptions: Array<{
   value: CompanyThemePaletteMode;
@@ -228,19 +229,19 @@ const themePaletteModeOptions: Array<{
   description: string;
   icon: typeof Sun;
 }> = [
-  { value: 'light', title: 'Paleta clara', description: 'Usada quando o sistema estiver em modo claro.', icon: Sun },
-  { value: 'dark', title: 'Paleta escura', description: 'Usada quando o sistema estiver em modo escuro.', icon: Moon },
-];
+    { value: 'light', title: 'Paleta clara', description: 'Usada quando o sistema estiver em modo claro.', icon: Sun },
+    { value: 'dark', title: 'Paleta escura', description: 'Usada quando o sistema estiver em modo escuro.', icon: Moon },
+  ];
 
 const themeTemplateOptions: Array<{
   value: CompanyThemeTemplateId;
   description: string;
 }> = [
-  { value: 'blue', description: 'Base sóbria e profissional, com contraste seguro para SaaS.' },
-  { value: 'green', description: 'Mais fresca e moderna, com ênfase em conversão e destaque.' },
-  { value: 'purple', description: 'Visual SaaS mais expressivo, sem fugir do padrão atual.' },
-  { value: 'logo', description: 'Gera uma paleta clara e escura a partir da cor dominante da logo.' },
-];
+    { value: 'blue', description: 'Base sóbria e profissional, com contraste seguro para SaaS.' },
+    { value: 'green', description: 'Mais fresca e moderna, com ênfase em conversão e destaque.' },
+    { value: 'purple', description: 'Visual SaaS mais expressivo, sem fugir do padrão atual.' },
+    { value: 'logo', description: 'Gera uma paleta clara e escura a partir da cor dominante da logo.' },
+  ];
 
 export default function Settings() {
   const { toast } = useToast();
@@ -739,51 +740,21 @@ export default function Settings() {
 
       // Upload new logo if changed
       if (logoFile) {
-        const fileExt = logoFile.name.split(".").pop() || "png";
-        const fileName = `${company.id}-${Date.now()}.${fileExt}`;
-        const filePath = `logos/${fileName}`;
-
-        const { error: uploadError } = await supabase.storage
-          .from("product-images")
-          .upload(filePath, logoFile, { upsert: true });
-
-        if (uploadError) {
-          throw uploadError;
+        try {
+          // If we had an old local logo, we should delete it, but Settings.tsx doesn't track specifically the "old" one before overwrite easily here.
+          // However, the rule is to save the new one.
+          logoUrl = await uploadFile(logoFile, 'logos');
+        } catch (err) {
+          throw new Error(`Erro ao enviar logo: ${err}`);
         }
-
-        const { data: urlData } = supabase.storage
-          .from("product-images")
-          .getPublicUrl(filePath);
-
-        if (!urlData?.publicUrl) {
-          throw new Error("URL do logo não foi retornada.");
-        }
-
-        logoUrl = ensurePublicStorageUrl('product-images', urlData.publicUrl);
       }
 
       if (signatureFile) {
-        const fileExt = signatureFile.name.split(".").pop() || "png";
-        const fileName = `${company.id}-${Date.now()}.${fileExt}`;
-        const filePath = `signatures/${fileName}`;
-
-        const { error: uploadError } = await supabase.storage
-          .from("product-images")
-          .upload(filePath, signatureFile, { upsert: true });
-
-        if (uploadError) {
-          throw uploadError;
+        try {
+          signatureUrl = await uploadFile(signatureFile, 'empresa');
+        } catch (err) {
+          throw new Error(`Erro ao enviar assinatura: ${err}`);
         }
-
-        const { data: urlData } = supabase.storage
-          .from("product-images")
-          .getPublicUrl(filePath);
-
-        if (!urlData?.publicUrl) {
-          throw new Error("URL da assinatura não foi retornada.");
-        }
-
-        signatureUrl = ensurePublicStorageUrl('product-images', urlData.publicUrl);
       }
 
       const normalizedStatusMessages = buildOrderStatusMessageTemplates(
@@ -1153,590 +1124,590 @@ export default function Settings() {
                 </TabsList>
 
                 <TabsContent value="geral" className="mt-0 space-y-6">
-              {/* Logo Upload */}
-              <div className="flex items-center gap-6">
-                <div className="relative">
-                  <div className="h-20 w-20 rounded-full border-2 border-dashed border-muted-foreground/30 flex items-center justify-center overflow-hidden bg-muted/50">
-                    {logoPreview ? (
-                      <img
-                        src={logoPreview}
-                        alt="Logo"
-                        className="h-full w-full object-cover"
+                  {/* Logo Upload */}
+                  <div className="flex items-center gap-6">
+                    <div className="relative">
+                      <div className="h-20 w-20 rounded-full border-2 border-dashed border-muted-foreground/30 flex items-center justify-center overflow-hidden bg-muted/50">
+                        {logoPreview ? (
+                          <img
+                            src={logoPreview}
+                            alt="Logo"
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <Upload className="h-6 w-6 text-muted-foreground/50" />
+                        )}
+                      </div>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleLogoChange}
+                        className="absolute inset-0 opacity-0 cursor-pointer"
                       />
-                    ) : (
-                      <Upload className="h-6 w-6 text-muted-foreground/50" />
+                    </div>
+                    <div>
+                      <p className="font-medium">Logo da Empresa</p>
+                      <p className="text-sm text-muted-foreground">
+                        Clique para alterar
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-4 rounded-lg border border-muted/60 p-4">
+                    <div className="flex items-center gap-6">
+                      <div className="relative">
+                        <div className="h-20 w-32 rounded-md border-2 border-dashed border-muted-foreground/30 flex items-center justify-center overflow-hidden bg-muted/50">
+                          {signaturePreview ? (
+                            <img
+                              src={signaturePreview}
+                              alt="Assinatura"
+                              className="h-full w-full object-contain"
+                            />
+                          ) : (
+                            <Upload className="h-6 w-6 text-muted-foreground/50" />
+                          )}
+                        </div>
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg"
+                          onChange={handleSignatureChange}
+                          className="absolute inset-0 opacity-0 cursor-pointer"
+                        />
+                      </div>
+                      <div>
+                        <p className="font-medium">Assinatura para recibos</p>
+                        <p className="text-sm text-muted-foreground">
+                          Envie uma imagem PNG/JPG (de preferência com fundo transparente).
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="company-signature-responsible">Responsável pela assinatura</Label>
+                        <Input
+                          id="company-signature-responsible"
+                          value={companyForm.signature_responsible}
+                          onChange={(e) => setCompanyForm({ ...companyForm, signature_responsible: e.target.value })}
+                          placeholder="Nome do responsável"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="company-signature-role">Cargo do responsável</Label>
+                        <Input
+                          id="company-signature-role"
+                          value={companyForm.signature_role}
+                          onChange={(e) => setCompanyForm({ ...companyForm, signature_role: e.target.value })}
+                          placeholder="Cargo"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Company Name */}
+                  <div className="space-y-2">
+                    <Label htmlFor="company-name" className="flex items-center gap-2">
+                      <Building2 className="h-4 w-4" />
+                      Nome da Empresa *
+                    </Label>
+                    <Input
+                      id="company-name"
+                      value={companyForm.name}
+                      onChange={(e) => {
+                        setCompanyForm({ ...companyForm, name: e.target.value });
+                        if (nameTouched) {
+                          setNameError(!e.target.value.trim());
+                        }
+                      }}
+                      onBlur={() => {
+                        setNameTouched(true);
+                        setNameError(!companyForm.name.trim());
+                      }}
+                      className={nameError ? "border-destructive focus-visible:ring-destructive" : ""}
+                    />
+                    {nameError && (
+                      <p className="text-sm text-destructive">Nome da empresa é obrigatório</p>
                     )}
                   </div>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleLogoChange}
-                    className="absolute inset-0 opacity-0 cursor-pointer"
-                  />
-                </div>
-                <div>
-                  <p className="font-medium">Logo da Empresa</p>
-                  <p className="text-sm text-muted-foreground">
-                    Clique para alterar
-                  </p>
-                </div>
-              </div>
 
-              <div className="flex flex-col gap-4 rounded-lg border border-muted/60 p-4">
-                <div className="flex items-center gap-6">
-                  <div className="relative">
-                    <div className="h-20 w-32 rounded-md border-2 border-dashed border-muted-foreground/30 flex items-center justify-center overflow-hidden bg-muted/50">
-                      {signaturePreview ? (
-                        <img
-                          src={signaturePreview}
-                          alt="Assinatura"
-                          className="h-full w-full object-contain"
-                        />
-                      ) : (
-                        <Upload className="h-6 w-6 text-muted-foreground/50" />
+                  {/* Description */}
+                  <div className="space-y-2">
+                    <Label htmlFor="company-description">Descrição</Label>
+                    <Textarea
+                      id="company-description"
+                      value={companyForm.description}
+                      onChange={(e) => setCompanyForm({ ...companyForm, description: e.target.value })}
+                      className="resize-none"
+                      rows={2}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="company-min-order">Valor mínimo do pedido</Label>
+                      <CurrencyInput
+                        id="company-min-order"
+                        value={Number(companyForm.minimum_order_value || 0)}
+                        onChange={(value) =>
+                          setCompanyForm((prev) => ({ ...prev, minimum_order_value: value }))
+                        }
+                      />
+                      <p className="text-sm text-muted-foreground">
+                        Pedido só pode ser finalizado no catálogo a partir desse valor.
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="company-min-delivery">Valor mínimo para entrega</Label>
+                      <CurrencyInput
+                        id="company-min-delivery"
+                        value={Number(companyForm.minimum_delivery_value || 0)}
+                        onChange={(value) =>
+                          setCompanyForm((prev) => ({ ...prev, minimum_delivery_value: value }))
+                        }
+                        className={hasInvalidMinimumDelivery ? "border-destructive focus-visible:ring-destructive" : undefined}
+                      />
+                      <p className="text-sm text-muted-foreground">
+                        Valor mínimo para habilitar entrega. Abaixo disso, apenas retirada.
+                      </p>
+                      {hasInvalidMinimumDelivery && (
+                        <p className="text-sm text-destructive">
+                          O valor mínimo para entrega deve ser maior ou igual ao valor mínimo do pedido.
+                        </p>
                       )}
                     </div>
-                    <input
-                      type="file"
-                      accept="image/png,image/jpeg"
-                      onChange={handleSignatureChange}
-                      className="absolute inset-0 opacity-0 cursor-pointer"
-                    />
                   </div>
-                  <div>
-                    <p className="font-medium">Assinatura para recibos</p>
-                    <p className="text-sm text-muted-foreground">
-                      Envie uma imagem PNG/JPG (de preferência com fundo transparente).
-                    </p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="company-signature-responsible">Responsável pela assinatura</Label>
-                    <Input
-                      id="company-signature-responsible"
-                      value={companyForm.signature_responsible}
-                      onChange={(e) => setCompanyForm({ ...companyForm, signature_responsible: e.target.value })}
-                      placeholder="Nome do responsável"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="company-signature-role">Cargo do responsável</Label>
-                    <Input
-                      id="company-signature-role"
-                      value={companyForm.signature_role}
-                      onChange={(e) => setCompanyForm({ ...companyForm, signature_role: e.target.value })}
-                      placeholder="Cargo"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Company Name */}
-              <div className="space-y-2">
-                <Label htmlFor="company-name" className="flex items-center gap-2">
-                  <Building2 className="h-4 w-4" />
-                  Nome da Empresa *
-                </Label>
-                <Input
-                  id="company-name"
-                  value={companyForm.name}
-                  onChange={(e) => {
-                    setCompanyForm({ ...companyForm, name: e.target.value });
-                    if (nameTouched) {
-                      setNameError(!e.target.value.trim());
-                    }
-                  }}
-                  onBlur={() => {
-                    setNameTouched(true);
-                    setNameError(!companyForm.name.trim());
-                  }}
-                  className={nameError ? "border-destructive focus-visible:ring-destructive" : ""}
-                />
-                {nameError && (
-                  <p className="text-sm text-destructive">Nome da empresa é obrigatório</p>
-                )}
-              </div>
-
-              {/* Description */}
-              <div className="space-y-2">
-                <Label htmlFor="company-description">Descrição</Label>
-                <Textarea
-                  id="company-description"
-                  value={companyForm.description}
-                  onChange={(e) => setCompanyForm({ ...companyForm, description: e.target.value })}
-                  className="resize-none"
-                  rows={2}
-                />
-              </div>
-
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="company-min-order">Valor mínimo do pedido</Label>
-                  <CurrencyInput
-                    id="company-min-order"
-                    value={Number(companyForm.minimum_order_value || 0)}
-                    onChange={(value) =>
-                      setCompanyForm((prev) => ({ ...prev, minimum_order_value: value }))
-                    }
-                  />
-                  <p className="text-sm text-muted-foreground">
-                    Pedido só pode ser finalizado no catálogo a partir desse valor.
+                  <p className="text-xs text-muted-foreground">
+                    Esses valores são independentes: um controla o pedido mínimo geral e o outro apenas a entrega.
                   </p>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="company-min-delivery">Valor mínimo para entrega</Label>
-                  <CurrencyInput
-                    id="company-min-delivery"
-                    value={Number(companyForm.minimum_delivery_value || 0)}
-                    onChange={(value) =>
-                      setCompanyForm((prev) => ({ ...prev, minimum_delivery_value: value }))
-                    }
-                    className={hasInvalidMinimumDelivery ? "border-destructive focus-visible:ring-destructive" : undefined}
-                  />
-                  <p className="text-sm text-muted-foreground">
-                    Valor mínimo para habilitar entrega. Abaixo disso, apenas retirada.
-                  </p>
-                  {hasInvalidMinimumDelivery && (
-                    <p className="text-sm text-destructive">
-                      O valor mínimo para entrega deve ser maior ou igual ao valor mínimo do pedido.
-                    </p>
-                  )}
-                </div>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Esses valores são independentes: um controla o pedido mínimo geral e o outro apenas a entrega.
-              </p>
 
                 </TabsContent>
 
                 <TabsContent value="contato" className="mt-0 space-y-6">
-              {/* Contact Info */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="company-email" className="flex items-center gap-2">
-                    <Mail className="h-4 w-4" />
-                    E-mail
-                  </Label>
-                  <Input
-                    id="company-email"
-                    type="email"
-                    value={companyForm.email}
-                    onChange={(e) => setCompanyForm({ ...companyForm, email: e.target.value })}
-                  />
-                </div>
+                  {/* Contact Info */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="company-email" className="flex items-center gap-2">
+                        <Mail className="h-4 w-4" />
+                        E-mail
+                      </Label>
+                      <Input
+                        id="company-email"
+                        type="email"
+                        value={companyForm.email}
+                        onChange={(e) => setCompanyForm({ ...companyForm, email: e.target.value })}
+                      />
+                    </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="company-phone" className="flex items-center gap-2">
-                    <Phone className="h-4 w-4" />
-                    Telefone
-                  </Label>
-                  <PhoneInput
-                    id="company-phone"
-                    value={companyForm.phone}
-                    onChange={(value) => setCompanyForm({ ...companyForm, phone: value })}
-                  />
-                </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="company-phone" className="flex items-center gap-2">
+                        <Phone className="h-4 w-4" />
+                        Telefone
+                      </Label>
+                      <PhoneInput
+                        id="company-phone"
+                        value={companyForm.phone}
+                        onChange={(value) => setCompanyForm({ ...companyForm, phone: value })}
+                      />
+                    </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="company-whatsapp">WhatsApp</Label>
-                  <PhoneInput
-                    id="company-whatsapp"
-                    value={companyForm.whatsapp}
-                    onChange={(value) => setCompanyForm({ ...companyForm, whatsapp: value })}
-                  />
-                </div>
-              </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="company-whatsapp">WhatsApp</Label>
+                      <PhoneInput
+                        id="company-whatsapp"
+                        value={companyForm.whatsapp}
+                        onChange={(value) => setCompanyForm({ ...companyForm, whatsapp: value })}
+                      />
+                    </div>
+                  </div>
 
-              {/* Address */}
-              <div className="space-y-4">
-                <Label className="flex items-center gap-2">
-                  <MapPin className="h-4 w-4" />
-                  Endereço
-                </Label>
-                <Input
-                  placeholder="Rua, número, bairro"
-                  value={companyForm.address}
-                  onChange={(e) => setCompanyForm({ ...companyForm, address: e.target.value })}
-                />
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <Input
-                    placeholder="Cidade"
-                    value={companyForm.city}
-                    onChange={(e) => setCompanyForm({ ...companyForm, city: e.target.value })}
-                  />
-                  <Input
-                    placeholder="Estado"
-                    value={companyForm.state}
-                    onChange={(e) => setCompanyForm({ ...companyForm, state: e.target.value })}
-                  />
-                </div>
-              </div>
+                  {/* Address */}
+                  <div className="space-y-4">
+                    <Label className="flex items-center gap-2">
+                      <MapPin className="h-4 w-4" />
+                      Endereço
+                    </Label>
+                    <Input
+                      placeholder="Rua, número, bairro"
+                      value={companyForm.address}
+                      onChange={(e) => setCompanyForm({ ...companyForm, address: e.target.value })}
+                    />
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      <Input
+                        placeholder="Cidade"
+                        value={companyForm.city}
+                        onChange={(e) => setCompanyForm({ ...companyForm, city: e.target.value })}
+                      />
+                      <Input
+                        placeholder="Estado"
+                        value={companyForm.state}
+                        onChange={(e) => setCompanyForm({ ...companyForm, state: e.target.value })}
+                      />
+                    </div>
+                  </div>
 
-              {/* Social Media */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="company-instagram" className="flex items-center gap-2">
-                    <Globe className="h-4 w-4" />
-                    Instagram
-                  </Label>
-                  <Input
-                    id="company-instagram"
-                    placeholder="@suaempresa"
-                    value={companyForm.instagram}
-                    onChange={(e) => setCompanyForm({ ...companyForm, instagram: e.target.value })}
-                  />
-                </div>
+                  {/* Social Media */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="company-instagram" className="flex items-center gap-2">
+                        <Globe className="h-4 w-4" />
+                        Instagram
+                      </Label>
+                      <Input
+                        id="company-instagram"
+                        placeholder="@suaempresa"
+                        value={companyForm.instagram}
+                        onChange={(e) => setCompanyForm({ ...companyForm, instagram: e.target.value })}
+                      />
+                    </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="company-facebook">Facebook</Label>
-                  <Input
-                    id="company-facebook"
-                    value={companyForm.facebook}
-                    onChange={(e) => setCompanyForm({ ...companyForm, facebook: e.target.value })}
-                  />
-                </div>
-              </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="company-facebook">Facebook</Label>
+                      <Input
+                        id="company-facebook"
+                        value={companyForm.facebook}
+                        onChange={(e) => setCompanyForm({ ...companyForm, facebook: e.target.value })}
+                      />
+                    </div>
+                  </div>
 
                 </TabsContent>
 
                 <TabsContent value="mensagens" className="mt-0 space-y-6">
-              <div className="space-y-3">
-                <Label htmlFor="whatsapp-template" className="flex items-center gap-2">
-                  <MessageCircle className="h-4 w-4" />
-                  Mensagem padrão do WhatsApp
-                </Label>
-                <TooltipProvider delayDuration={150}>
-                  <div className="flex flex-wrap gap-2">
-                    {whatsappPlaceholders.map((placeholder) => (
-                      <Tooltip key={placeholder.value}>
-                        <TooltipTrigger asChild>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onMouseDown={(event) => event.preventDefault()}
-                              onClick={() => insertWhatsappPlaceholder(placeholder.value)}
-                            >
-                            {placeholder.label}
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <div className="text-xs">
-                            <p className="font-medium">{placeholder.description}</p>
-                            <p className="mt-1 text-muted-foreground">{placeholder.value}</p>
-                          </div>
-                        </TooltipContent>
-                      </Tooltip>
-                    ))}
-                  </div>
-                </TooltipProvider>
-                <Textarea
-                  id="whatsapp-template"
-                  ref={(textarea) => {
-                    whatsappTemplateRef.current = textarea;
-                    registerMessageTextarea('whatsapp-template', textarea);
-                  }}
-                  value={companyForm.whatsapp_message_template}
-                  onChange={(e) => {
-                    setCompanyForm({ ...companyForm, whatsapp_message_template: e.target.value });
-                    autoResizeTextarea(e.currentTarget);
-                  }}
-                  placeholder="Ola {cliente_nome}! {mensagem_status} Pedido #{pedido_numero}. Acompanhe: {pedido_link}"
-                  className="!min-h-0 resize-none overflow-hidden"
-                  rows={1}
-                />
-                  <div className="text-xs text-muted-foreground">
-                    Variáveis disponíveis:
-                    <div className="mt-2 grid grid-cols-1 gap-1 sm:grid-cols-2">
-                      <span>{'{cliente_nome}'}</span>
-                      <span>{'{cliente_telefone}'}</span>
-                      <span>{'{pedido_numero}'}</span>
-                      <span>{'{pedido_status}'}</span>
-                      <span>{'{mensagem_status}'}</span>
-                      <span>{'{pedido_total}'}</span>
-                      <span>{'{pedido_link}'}</span>
-                      <span>{'{empresa_nome}'}</span>
+                  <div className="space-y-3">
+                    <Label htmlFor="whatsapp-template" className="flex items-center gap-2">
+                      <MessageCircle className="h-4 w-4" />
+                      Mensagem padrão do WhatsApp
+                    </Label>
+                    <TooltipProvider delayDuration={150}>
+                      <div className="flex flex-wrap gap-2">
+                        {whatsappPlaceholders.map((placeholder) => (
+                          <Tooltip key={placeholder.value}>
+                            <TooltipTrigger asChild>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onMouseDown={(event) => event.preventDefault()}
+                                onClick={() => insertWhatsappPlaceholder(placeholder.value)}
+                              >
+                                {placeholder.label}
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <div className="text-xs">
+                                <p className="font-medium">{placeholder.description}</p>
+                                <p className="mt-1 text-muted-foreground">{placeholder.value}</p>
+                              </div>
+                            </TooltipContent>
+                          </Tooltip>
+                        ))}
+                      </div>
+                    </TooltipProvider>
+                    <Textarea
+                      id="whatsapp-template"
+                      ref={(textarea) => {
+                        whatsappTemplateRef.current = textarea;
+                        registerMessageTextarea('whatsapp-template', textarea);
+                      }}
+                      value={companyForm.whatsapp_message_template}
+                      onChange={(e) => {
+                        setCompanyForm({ ...companyForm, whatsapp_message_template: e.target.value });
+                        autoResizeTextarea(e.currentTarget);
+                      }}
+                      placeholder="Ola {cliente_nome}! {mensagem_status} Pedido #{pedido_numero}. Acompanhe: {pedido_link}"
+                      className="!min-h-0 resize-none overflow-hidden"
+                      rows={1}
+                    />
+                    <div className="text-xs text-muted-foreground">
+                      Variáveis disponíveis:
+                      <div className="mt-2 grid grid-cols-1 gap-1 sm:grid-cols-2">
+                        <span>{'{cliente_nome}'}</span>
+                        <span>{'{cliente_telefone}'}</span>
+                        <span>{'{pedido_numero}'}</span>
+                        <span>{'{pedido_status}'}</span>
+                        <span>{'{mensagem_status}'}</span>
+                        <span>{'{pedido_total}'}</span>
+                        <span>{'{pedido_link}'}</span>
+                        <span>{'{empresa_nome}'}</span>
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <div className="space-y-3">
-                  <Label className="flex items-center gap-2">
-                    <MessageCircle className="h-4 w-4" />
-                    Mensagem por status do pedido
-                  </Label>
-                  <p className="text-xs text-muted-foreground">
-                    Este texto alimenta a variavel <span>{'{mensagem_status}'}</span> da mensagem do WhatsApp.
-                  </p>
-                  <div className="grid gap-3 md:grid-cols-2">
-                    {orderStatusTemplateKeys.map((status) => (
-                      <div key={status} className="space-y-2">
-                        <Label htmlFor={`status-message-${status}`}>{orderStatusLabels[status]}</Label>
-                        <Textarea
-                          id={`status-message-${status}`}
-                          ref={(textarea) =>
-                            registerMessageTextarea(`status-message-${status}`, textarea)
-                          }
-                          value={companyForm.order_status_message_templates[status] || ''}
-                          onChange={(event) => {
-                            setCompanyForm((prev) => ({
-                              ...prev,
-                              order_status_message_templates: {
-                                ...prev.order_status_message_templates,
-                                [status]: event.target.value,
-                              },
-                            }));
-                            autoResizeTextarea(event.currentTarget);
-                          }}
-                          className="!min-h-0 resize-none overflow-hidden"
-                          rows={1}
-                        />
-                      </div>
-                    ))}
+                  <div className="space-y-3">
+                    <Label className="flex items-center gap-2">
+                      <MessageCircle className="h-4 w-4" />
+                      Mensagem por status do pedido
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      Este texto alimenta a variavel <span>{'{mensagem_status}'}</span> da mensagem do WhatsApp.
+                    </p>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      {orderStatusTemplateKeys.map((status) => (
+                        <div key={status} className="space-y-2">
+                          <Label htmlFor={`status-message-${status}`}>{orderStatusLabels[status]}</Label>
+                          <Textarea
+                            id={`status-message-${status}`}
+                            ref={(textarea) =>
+                              registerMessageTextarea(`status-message-${status}`, textarea)
+                            }
+                            value={companyForm.order_status_message_templates[status] || ''}
+                            onChange={(event) => {
+                              setCompanyForm((prev) => ({
+                                ...prev,
+                                order_status_message_templates: {
+                                  ...prev.order_status_message_templates,
+                                  [status]: event.target.value,
+                                },
+                              }));
+                              autoResizeTextarea(event.currentTarget);
+                            }}
+                            className="!min-h-0 resize-none overflow-hidden"
+                            rows={1}
+                          />
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
 
-                <div className="space-y-3">
-                  <Label className="flex items-center gap-2">
-                    <SettingsIcon className="h-4 w-4" />
-                    Status personalizados no sistema
-                  </Label>
-                  <p className="text-xs text-muted-foreground">
-                    Escolha os status que aparecem na tela de pedidos e personalize o nome exibido.
-                  </p>
-                  <div className="grid gap-3 md:grid-cols-2">
-                    {configurableOrderStatuses.map((status) => {
-                      const enabled = companyForm.order_status_customization.enabled_statuses.includes(status);
-                      return (
-                        <div key={`status-config-${status}`} className="space-y-2 rounded-lg border border-border p-3">
-                          <div className="flex items-center justify-between gap-2">
-                            <Label htmlFor={`status-label-${status}`}>{defaultOrderStatusLabels[status]}</Label>
-                            <div className="flex items-center gap-2">
-                              <Checkbox
-                                id={`status-enabled-${status}`}
-                                checked={enabled}
-                                onCheckedChange={(checked) => {
-                                  const shouldEnable = checked === true;
-                                  setCompanyForm((prev) => {
-                                    const currentEnabled = prev.order_status_customization.enabled_statuses;
-                                    const nextEnabled = shouldEnable
-                                      ? Array.from(new Set([...currentEnabled, status]))
-                                      : currentEnabled.filter((item) => item !== status);
+                  <div className="space-y-3">
+                    <Label className="flex items-center gap-2">
+                      <SettingsIcon className="h-4 w-4" />
+                      Status personalizados no sistema
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      Escolha os status que aparecem na tela de pedidos e personalize o nome exibido.
+                    </p>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      {configurableOrderStatuses.map((status) => {
+                        const enabled = companyForm.order_status_customization.enabled_statuses.includes(status);
+                        return (
+                          <div key={`status-config-${status}`} className="space-y-2 rounded-lg border border-border p-3">
+                            <div className="flex items-center justify-between gap-2">
+                              <Label htmlFor={`status-label-${status}`}>{defaultOrderStatusLabels[status]}</Label>
+                              <div className="flex items-center gap-2">
+                                <Checkbox
+                                  id={`status-enabled-${status}`}
+                                  checked={enabled}
+                                  onCheckedChange={(checked) => {
+                                    const shouldEnable = checked === true;
+                                    setCompanyForm((prev) => {
+                                      const currentEnabled = prev.order_status_customization.enabled_statuses;
+                                      const nextEnabled = shouldEnable
+                                        ? Array.from(new Set([...currentEnabled, status]))
+                                        : currentEnabled.filter((item) => item !== status);
 
-                                    return {
+                                      return {
+                                        ...prev,
+                                        order_status_customization: {
+                                          ...prev.order_status_customization,
+                                          enabled_statuses: nextEnabled,
+                                        },
+                                      };
+                                    });
+                                  }}
+                                />
+                                <span className="text-xs text-muted-foreground">Exibir</span>
+                              </div>
+                            </div>
+                            <Input
+                              id={`status-label-${status}`}
+                              value={companyForm.order_status_customization.labels[status] || ''}
+                              onChange={(event) =>
+                                setCompanyForm((prev) => ({
+                                  ...prev,
+                                  order_status_customization: {
+                                    ...prev.order_status_customization,
+                                    labels: {
+                                      ...prev.order_status_customization.labels,
+                                      [status]: event.target.value,
+                                    },
+                                  },
+                                }))
+                              }
+                              placeholder={defaultOrderStatusLabels[status]}
+                            />
+                            <div className="grid gap-2 sm:grid-cols-[96px,1fr]">
+                              <div className="space-y-1">
+                                <Label htmlFor={`status-color-${status}`} className="text-xs text-muted-foreground">
+                                  Cor
+                                </Label>
+                                <input
+                                  id={`status-color-${status}`}
+                                  type="color"
+                                  value={companyForm.order_status_customization.colors[status]}
+                                  onChange={(event) =>
+                                    setCompanyForm((prev) => ({
                                       ...prev,
                                       order_status_customization: {
                                         ...prev.order_status_customization,
-                                        enabled_statuses: nextEnabled,
+                                        colors: {
+                                          ...prev.order_status_customization.colors,
+                                          [status]: event.target.value,
+                                        },
                                       },
-                                    };
-                                  });
-                                }}
-                              />
-                              <span className="text-xs text-muted-foreground">Exibir</span>
-                            </div>
-                          </div>
-                          <Input
-                            id={`status-label-${status}`}
-                            value={companyForm.order_status_customization.labels[status] || ''}
-                            onChange={(event) =>
-                              setCompanyForm((prev) => ({
-                                ...prev,
-                                order_status_customization: {
-                                  ...prev.order_status_customization,
-                                  labels: {
-                                    ...prev.order_status_customization.labels,
-                                    [status]: event.target.value,
-                                  },
-                                },
-                              }))
-                            }
-                            placeholder={defaultOrderStatusLabels[status]}
-                          />
-                          <div className="grid gap-2 sm:grid-cols-[96px,1fr]">
-                            <div className="space-y-1">
-                              <Label htmlFor={`status-color-${status}`} className="text-xs text-muted-foreground">
-                                Cor
-                              </Label>
-                              <input
-                                id={`status-color-${status}`}
-                                type="color"
-                                value={companyForm.order_status_customization.colors[status]}
-                                onChange={(event) =>
-                                  setCompanyForm((prev) => ({
-                                    ...prev,
-                                    order_status_customization: {
-                                      ...prev.order_status_customization,
-                                      colors: {
-                                        ...prev.order_status_customization.colors,
-                                        [status]: event.target.value,
-                                      },
-                                    },
-                                  }))
-                                }
-                                className="h-10 w-full cursor-pointer rounded-md border border-border bg-background p-1"
-                              />
-                            </div>
-                            <div className="space-y-1">
-                              <Label className="text-xs text-muted-foreground">Preview</Label>
-                              <div className="flex min-h-10 items-center">
-                                <span
-                                  className="status-badge"
-                                  style={getOrderStatusBadgeStyle(status, companyForm.order_status_customization)}
-                                >
-                                  {companyForm.order_status_customization.labels[status] || defaultOrderStatusLabels[status]}
-                                </span>
+                                    }))
+                                  }
+                                  className="h-10 w-full cursor-pointer rounded-md border border-border bg-background p-1"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <Label className="text-xs text-muted-foreground">Preview</Label>
+                                <div className="flex min-h-10 items-center">
+                                  <span
+                                    className="status-badge"
+                                    style={getOrderStatusBadgeStyle(status, companyForm.order_status_customization)}
+                                  >
+                                    {companyForm.order_status_customization.labels[status] || defaultOrderStatusLabels[status]}
+                                  </span>
+                                </div>
                               </div>
                             </div>
                           </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
 
-                
-                <div className="space-y-3">
-                  <Label htmlFor="birthday-template" className="flex items-center gap-2">
-                    <Gift className="h-4 w-4" />
-                    Mensagem de aniversário
-                  </Label>
-                  <TooltipProvider delayDuration={150}>
-                    <div className="flex flex-wrap gap-2">
-                      {birthdayPlaceholders.map((placeholder) => (
-                        <Tooltip key={placeholder.value}>
-                          <TooltipTrigger asChild>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onMouseDown={(event) => event.preventDefault()}
-                              onClick={() => insertBirthdayPlaceholder(placeholder.value)}
-                            >
-                              {placeholder.label}
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <div className="text-xs">
-                              <p className="font-medium">{placeholder.description}</p>
-                              <p className="mt-1 text-muted-foreground">{placeholder.value}</p>
-                            </div>
-                          </TooltipContent>
-                        </Tooltip>
-                      ))}
-                    </div>
-                  </TooltipProvider>
-                  <Textarea
-                    id="birthday-template"
-                    ref={(textarea) => {
-                      birthdayTemplateRef.current = textarea;
-                      registerMessageTextarea('birthday-template', textarea);
-                    }}
-                    value={companyForm.birthday_message_template}
-                    onChange={(e) => {
-                      setCompanyForm({ ...companyForm, birthday_message_template: e.target.value });
-                      autoResizeTextarea(e.currentTarget);
-                    }}
-                    placeholder="Olá {cliente_nome}, feliz aniversário! Que seu dia seja especial. {empresa_nome}"
-                    className="!min-h-0 resize-none overflow-hidden"
-                    rows={1}
-                  />
-                  <div className="text-xs text-muted-foreground">
-                    Variáveis disponíveis:
-                    <div className="mt-2 grid grid-cols-1 gap-1 sm:grid-cols-2">
-                      <span>{'{cliente_nome}'}</span>
-                      <span>{'{cliente_telefone}'}</span>
-                      <span>{'{cliente_idade}'}</span>
-                      <span>{'{aniversario_data}'}</span>
-                      <span>{'{empresa_nome}'}</span>
+
+                  <div className="space-y-3">
+                    <Label htmlFor="birthday-template" className="flex items-center gap-2">
+                      <Gift className="h-4 w-4" />
+                      Mensagem de aniversário
+                    </Label>
+                    <TooltipProvider delayDuration={150}>
+                      <div className="flex flex-wrap gap-2">
+                        {birthdayPlaceholders.map((placeholder) => (
+                          <Tooltip key={placeholder.value}>
+                            <TooltipTrigger asChild>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onMouseDown={(event) => event.preventDefault()}
+                                onClick={() => insertBirthdayPlaceholder(placeholder.value)}
+                              >
+                                {placeholder.label}
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <div className="text-xs">
+                                <p className="font-medium">{placeholder.description}</p>
+                                <p className="mt-1 text-muted-foreground">{placeholder.value}</p>
+                              </div>
+                            </TooltipContent>
+                          </Tooltip>
+                        ))}
+                      </div>
+                    </TooltipProvider>
+                    <Textarea
+                      id="birthday-template"
+                      ref={(textarea) => {
+                        birthdayTemplateRef.current = textarea;
+                        registerMessageTextarea('birthday-template', textarea);
+                      }}
+                      value={companyForm.birthday_message_template}
+                      onChange={(e) => {
+                        setCompanyForm({ ...companyForm, birthday_message_template: e.target.value });
+                        autoResizeTextarea(e.currentTarget);
+                      }}
+                      placeholder="Olá {cliente_nome}, feliz aniversário! Que seu dia seja especial. {empresa_nome}"
+                      className="!min-h-0 resize-none overflow-hidden"
+                      rows={1}
+                    />
+                    <div className="text-xs text-muted-foreground">
+                      Variáveis disponíveis:
+                      <div className="mt-2 grid grid-cols-1 gap-1 sm:grid-cols-2">
+                        <span>{'{cliente_nome}'}</span>
+                        <span>{'{cliente_telefone}'}</span>
+                        <span>{'{cliente_idade}'}</span>
+                        <span>{'{aniversario_data}'}</span>
+                        <span>{'{empresa_nome}'}</span>
+                      </div>
                     </div>
                   </div>
-                </div>
 
                 </TabsContent>
 
                 <TabsContent value="permissoes" className="mt-0 space-y-6">
-                <div className="space-y-3 rounded-lg border border-border p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <Label className="flex items-center gap-2">
-                        <SettingsIcon className="h-4 w-4" />
-                        Permissões por módulo e perfil
-                      </Label>
-                      <p className="text-xs text-muted-foreground">
-                        Libere ou bloqueie o acesso aos módulos por cargo de usuário desta empresa.
-                      </p>
+                  <div className="space-y-3 rounded-lg border border-border p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <Label className="flex items-center gap-2">
+                          <SettingsIcon className="h-4 w-4" />
+                          Permissões por módulo e perfil
+                        </Label>
+                        <p className="text-xs text-muted-foreground">
+                          Libere ou bloqueie o acesso aos módulos por cargo de usuário desta empresa.
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={resetRoleModulePermissions}
+                      >
+                        Restaurar padrão
+                      </Button>
                     </div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={resetRoleModulePermissions}
-                    >
-                      Restaurar padrão
-                    </Button>
-                  </div>
 
-                  <div className="overflow-x-auto rounded-md border">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Módulo</TableHead>
-                          {storeAppRoles.map((roleName) => (
-                            <TableHead key={`role-header-${roleName}`} className="text-center">
-                              {storeRoleLabels[roleName]}
-                            </TableHead>
-                          ))}
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {moduleDefinitions.map((moduleItem) => (
-                          <TableRow key={moduleItem.key}>
-                            <TableCell>
-                              <div className="font-medium">{moduleItem.label}</div>
-                              <div className="text-xs text-muted-foreground">{moduleItem.description}</div>
-                            </TableCell>
-                            {storeAppRoles.map((roleName) => {
-                              const locked = isModuleLockedForRole(roleName, moduleItem.key);
-                              const checked = Boolean(
-                                companyForm.role_module_permissions?.[roleName]?.[moduleItem.key],
-                              );
-
-                              return (
-                                <TableCell key={`${moduleItem.key}-${roleName}`} className="text-center align-middle">
-                                  <div className="flex items-center justify-center gap-2">
-                                    <Checkbox
-                                      id={`module-${moduleItem.key}-${roleName}`}
-                                      checked={checked}
-                                      disabled={locked}
-                                      onCheckedChange={(value) =>
-                                        setRoleModulePermission(roleName, moduleItem.key, value === true)
-                                      }
-                                    />
-                                    {locked && (
-                                      <span className="text-[10px] font-medium text-muted-foreground">
-                                        Obrigatório
-                                      </span>
-                                    )}
-                                  </div>
-                                </TableCell>
-                              );
-                            })}
+                    <div className="overflow-x-auto rounded-md border">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Módulo</TableHead>
+                            {storeAppRoles.map((roleName) => (
+                              <TableHead key={`role-header-${roleName}`} className="text-center">
+                                {storeRoleLabels[roleName]}
+                              </TableHead>
+                            ))}
                           </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                        </TableHeader>
+                        <TableBody>
+                          {moduleDefinitions.map((moduleItem) => (
+                            <TableRow key={moduleItem.key}>
+                              <TableCell>
+                                <div className="font-medium">{moduleItem.label}</div>
+                                <div className="text-xs text-muted-foreground">{moduleItem.description}</div>
+                              </TableCell>
+                              {storeAppRoles.map((roleName) => {
+                                const locked = isModuleLockedForRole(roleName, moduleItem.key);
+                                const checked = Boolean(
+                                  companyForm.role_module_permissions?.[roleName]?.[moduleItem.key],
+                                );
+
+                                return (
+                                  <TableCell key={`${moduleItem.key}-${roleName}`} className="text-center align-middle">
+                                    <div className="flex items-center justify-center gap-2">
+                                      <Checkbox
+                                        id={`module-${moduleItem.key}-${roleName}`}
+                                        checked={checked}
+                                        disabled={locked}
+                                        onCheckedChange={(value) =>
+                                          setRoleModulePermission(roleName, moduleItem.key, value === true)
+                                        }
+                                      />
+                                      {locked && (
+                                        <span className="text-[10px] font-medium text-muted-foreground">
+                                          Obrigatório
+                                        </span>
+                                      )}
+                                    </div>
+                                  </TableCell>
+                                );
+                              })}
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
                   </div>
-                </div>
                 </TabsContent>
               </Tabs>
-                <Button onClick={saveCompany} disabled={savingCompany || hasInvalidMinimumDelivery} className="w-full md:w-auto">
-                  {savingCompany && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Salvar Alterações
-                </Button>
+              <Button onClick={saveCompany} disabled={savingCompany || hasInvalidMinimumDelivery} className="w-full md:w-auto">
+                {savingCompany && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Salvar Alterações
+              </Button>
             </CardContent>
           </Card>
 
