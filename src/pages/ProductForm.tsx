@@ -15,8 +15,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
 import type { PostgrestError } from '@supabase/supabase-js';
 import { useToast } from '@/hooks/use-toast';
-import { Attribute, AttributeValue, Category, Expense, OrderItem, Product, ProductColor, ProductSupply, ProductType, SaleItem, Supply } from '@/types/database';
-import { ArrowLeft, Plus, Trash2, Calculator, Save, Loader2, Upload, Image, Globe, Package, FolderPlus, Tag, CopyPlus, ShieldAlert, ExternalLink } from 'lucide-react';
+import { Attribute, AttributeValue, Category, Expense, OrderItem, Product, ProductColor, ProductSupply, ProductType, SaleItem, Supply, StockControlType } from '@/types/database';
+import { ArrowLeft, Plus, Trash2, Calculator, Save, Loader2, Upload, Image, Globe, Package, FolderPlus, Tag, CopyPlus, ShieldAlert, ExternalLink, PackageX, Layers, Boxes } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useAuth } from '@/contexts/AuthContext';
 import { generateProductDescription } from '@/services/ai';
@@ -25,6 +25,7 @@ import { ensurePublicStorageUrl, getStoragePathFromUrl } from '@/lib/storage';
 import { uploadFile, deleteFile } from '@/lib/upload';
 import { BarcodeSvg } from '@/components/BarcodeSvg';
 import { buildProductProfitabilityRows, buildSoldUnitsMap } from '@/lib/finance';
+import { cn } from '@/lib/utils';
 import {
   buildPriceSimulation,
   calculateEstimatedProfit,
@@ -72,6 +73,7 @@ const productSchema = z
     min_stock: z.number().min(0),
     min_order_quantity: z.number().int().min(1, 'Quantidade mínima deve ser pelo menos 1'),
     track_stock: z.boolean(),
+    stock_control_type: z.enum(['none', 'simple', 'composition']).optional().nullable(),
     promo_price: z.number().min(0, 'Preço promocional deve ser positivo').optional().nullable(),
     promo_start_at: z.string().optional().nullable(),
     promo_end_at: z.string().optional().nullable(),
@@ -576,6 +578,7 @@ type FormSnapshot = {
   minStock: number;
   minOrderQuantity: number;
   trackStock: boolean;
+  stockControlType: StockControlType;
   promoPrice: number | null;
   promoStartAt: string;
   promoEndAt: string;
@@ -649,6 +652,7 @@ export default function ProductForm() {
   const [minStock, setMinStock] = useState(0);
   const [minOrderQuantity, setMinOrderQuantity] = useState(1);
   const [trackStock, setTrackStock] = useState(true);
+  const [stockControlType, setStockControlType] = useState<StockControlType>('none');
   const [promoPrice, setPromoPrice] = useState<number | null>(null);
   const [promoStartAt, setPromoStartAt] = useState<string>('');
   const [promoEndAt, setPromoEndAt] = useState<string>('');
@@ -942,6 +946,7 @@ export default function ProductForm() {
       setMinStock(Number(product.min_stock));
       setMinOrderQuantity(Number(product.catalog_min_order ?? product.min_order_quantity ?? 1));
       setTrackStock(product.track_stock ?? true);
+      setStockControlType(product.stock_control_type as StockControlType || (product.track_stock ? 'simple' : 'none'));
       setPromoPrice(product.promo_price !== null ? Number(product.promo_price) : null);
       setPromoStartAt(product.promo_start_at ? new Date(product.promo_start_at).toISOString().slice(0, 16) : '');
       setPromoEndAt(product.promo_end_at ? new Date(product.promo_end_at).toISOString().slice(0, 16) : '');
@@ -1375,6 +1380,7 @@ export default function ProductForm() {
     minStock,
     minOrderQuantity,
     trackStock,
+    stockControlType,
     promoPrice,
     promoStartAt,
     promoEndAt,
@@ -1440,6 +1446,7 @@ export default function ProductForm() {
     minStock,
     minOrderQuantity,
     trackStock,
+    stockControlType,
     promoPrice,
     promoStartAt,
     promoEndAt,
@@ -2419,6 +2426,7 @@ export default function ProductForm() {
       min_stock: minStock,
       min_order_quantity: minOrderQuantity,
       track_stock: trackStock,
+      stock_control_type: stockControlType,
       promo_price: promoPrice,
       promo_start_at: promoStartAt ? new Date(promoStartAt).toISOString() : null,
       promo_end_at: promoEndAt ? new Date(promoEndAt).toISOString() : null,
@@ -3956,15 +3964,82 @@ export default function ProductForm() {
                     Configure como este produto será controlado no estoque.
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="grid gap-4 md:grid-cols-2">
-                  <div className="md:col-span-2 flex items-center justify-between rounded-lg border p-3">
-                    <div className="space-y-1">
-                      <Label className="text-sm font-medium">Controlar estoque</Label>
-                      <p className="text-xs text-muted-foreground">
-                        Desative para que o produto não apareça no controle de estoque.
-                      </p>
+                <CardContent className="grid gap-6 md:grid-cols-2">
+                  <div className="md:col-span-2 space-y-4">
+                    <Label className="text-base font-semibold">Tipo de Controle de Estoque</Label>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div
+                        onClick={() => {
+                          setStockControlType('none');
+                          setTrackStock(false);
+                        }}
+                        className={cn(
+                          "cursor-pointer rounded-xl border-2 p-4 transition-all hover:border-primary/50 flex flex-col items-center text-center gap-2",
+                          stockControlType === 'none' ? "border-primary bg-primary/5" : "border-muted bg-card"
+                        )}
+                      >
+                        <div className={cn(
+                          "p-2 rounded-full",
+                          stockControlType === 'none' ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground"
+                        )}>
+                          <PackageX className="h-6 w-6" />
+                        </div>
+                        <div className="space-y-1">
+                          <p className="font-medium text-sm">Não controla</p>
+                          <p className="text-xs text-muted-foreground leading-tight">
+                            Ideal para serviços ou produtos digitais sem estoque físico.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div
+                        onClick={() => {
+                          setStockControlType('simple');
+                          setTrackStock(true);
+                        }}
+                        className={cn(
+                          "cursor-pointer rounded-xl border-2 p-4 transition-all hover:border-primary/50 flex flex-col items-center text-center gap-2",
+                          stockControlType === 'simple' ? "border-primary bg-primary/5" : "border-muted bg-card"
+                        )}
+                      >
+                        <div className={cn(
+                          "p-2 rounded-full",
+                          stockControlType === 'simple' ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground"
+                        )}>
+                          <Package className="h-6 w-6" />
+                        </div>
+                        <div className="space-y-1">
+                          <p className="font-medium text-sm">Simples</p>
+                          <p className="text-xs text-muted-foreground leading-tight">
+                            Baixa direta do estoque do próprio produto em cada venda.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div
+                        onClick={() => {
+                          setStockControlType('composition');
+                          setTrackStock(true);
+                        }}
+                        className={cn(
+                          "cursor-pointer rounded-xl border-2 p-4 transition-all hover:border-primary/50 flex flex-col items-center text-center gap-2",
+                          stockControlType === 'composition' ? "border-primary bg-primary/5" : "border-muted bg-card"
+                        )}
+                      >
+                        <div className={cn(
+                          "p-2 rounded-full",
+                          stockControlType === 'composition' ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground"
+                        )}>
+                          <Layers className="h-6 w-6" />
+                        </div>
+                        <div className="space-y-1">
+                          <p className="font-medium text-sm">Insumos usados</p>
+                          <p className="text-xs text-muted-foreground leading-tight">
+                            Baixa os insumos (materiais) cadastrados em cada venda realizada.
+                          </p>
+                        </div>
+                      </div>
                     </div>
-                    <Switch checked={trackStock} onCheckedChange={setTrackStock} />
                   </div>
 
                   <div className="space-y-2">

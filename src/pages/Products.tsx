@@ -152,15 +152,16 @@ export default function Products() {
 
   const toggleCatalogVisibility = async (productId: string, currentStatus: boolean) => {
     try {
+      const newStatus = !currentStatus;
       const { error } = await supabase
         .from('products')
-        .update({ show_in_catalog: !currentStatus })
+        .update({ show_in_catalog: newStatus, catalog_enabled: newStatus })
         .eq('id', productId);
 
       if (error) throw error;
 
       setProducts((prev) =>
-        prev.map((p) => (p.id === productId ? { ...p, show_in_catalog: !currentStatus } : p))
+        prev.map((p) => (p.id === productId ? { ...p, show_in_catalog: newStatus, catalog_enabled: newStatus } : p))
       );
 
       toast({
@@ -686,7 +687,12 @@ export default function Products() {
                     </TableCell>
                     <TableCell className={product.track_stock && product.stock_quantity <= product.min_stock ? 'text-destructive font-medium' : ''}>
                       {product.track_stock ? (
-                        `${product.stock_quantity} ${product.unit}`
+                        <div className="flex flex-col">
+                          <span>{product.stock_quantity} {product.unit}</span>
+                          <span className="text-[10px] text-muted-foreground uppercase">
+                            {product.stock_control_type === 'composition' ? 'INSUMOS' : 'SIMPLES'}
+                          </span>
+                        </div>
                       ) : (
                         <Badge variant="outline" className="border-slate-200 bg-slate-100 text-slate-600">
                           Não controla estoque
@@ -702,10 +708,10 @@ export default function Products() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        title={product.show_in_catalog ? 'Ocultar no catálogo' : 'Mostrar no catálogo'}
-                        onClick={() => toggleCatalogVisibility(product.id, !!product.show_in_catalog)}
+                        title={(product.catalog_enabled ?? product.show_in_catalog) ? 'Ocultar no catálogo' : 'Mostrar no catálogo'}
+                        onClick={() => toggleCatalogVisibility(product.id, !!(product.catalog_enabled ?? product.show_in_catalog))}
                       >
-                        {product.show_in_catalog ? (
+                        {(product.catalog_enabled ?? product.show_in_catalog) ? (
                           <Eye className="h-4 w-4 text-emerald-500" />
                         ) : (
                           <EyeOff className="h-4 w-4 text-slate-400" />
