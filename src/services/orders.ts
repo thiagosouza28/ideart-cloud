@@ -681,6 +681,15 @@ export const updateOrderItems = async (params: {
   orderId: string;
   items: OrderItemUpdate[];
 }) => {
+  const { data, error } = await supabase.rpc('update_order_items' as any, {
+    p_order_id: params.orderId,
+    p_items: params.items,
+  });
+
+  if (!error && data) {
+    return data as Order;
+  }
+
   const payload = { items: params.items };
 
   if (EDGE_FUNCTIONS_ENABLED) {
@@ -688,26 +697,19 @@ export const updateOrderItems = async (params: {
       const response = await invokeEdgeFunction<{ order: Order }>(
         'orders',
         payload,
-        { method: 'PATCH', path: `/${params.orderId}/items` },
+        {
+          method: 'PATCH',
+          path: `/${params.orderId}/items`,
+          resetAuthOn401: false,
+        },
       );
       return response.order;
-    } catch (error) {
-      if (!shouldFallbackToDirectUpdate(error)) {
-        throw error;
-      }
+    } catch (edgeError) {
+      throw edgeError;
     }
   }
 
-  const { data, error } = await supabase.rpc('update_order_items' as any, {
-    p_order_id: params.orderId,
-    p_items: params.items,
-  });
-
-  if (error || !data) {
-    throw error || new Error('Falha ao atualizar itens do pedido');
-  }
-
-  return data as Order;
+  throw error || new Error('Falha ao atualizar itens do pedido');
 };
 
 export const updateOrderStatus = async ({

@@ -6,7 +6,12 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { Customer, PaymentMethod, PriceTier, Product, type OrderStatus } from '@/types/database';
-import { resolveProductPrice } from '@/lib/pricing';
+import {
+  getInitialTierQuantity,
+  getPriceTierValidationMessage,
+  isQuantityAllowedByPriceTiers,
+  resolveProductPrice,
+} from '@/lib/pricing';
 import {
   calculateEstimatedDeliveryInfo,
   normalizeProductionTimeDays,
@@ -181,6 +186,23 @@ export default function OrderForm() {
     const safeQuantity = Number.isFinite(quantity) && quantity > 0 ? quantity : 1;
     const suppliesCost = suppliesCostMap[product.id] || 0;
     return resolveProductPrice(product, safeQuantity, priceTiers, suppliesCost);
+  };
+
+  const validateTierQuantity = (product: Product, quantity: number) => {
+    if (isAreaUnit(product.unit)) {
+      return true;
+    }
+
+    if (isQuantityAllowedByPriceTiers(product.id, quantity, priceTiers)) {
+      return true;
+    }
+
+    toast({
+      title: 'Quantidade fora da faixa permitida',
+      description: getPriceTierValidationMessage(product.id, priceTiers) || undefined,
+      variant: 'destructive',
+    });
+    return false;
   };
 
   const calculateItemTotal = (item: OrderItemForm) =>
@@ -616,12 +638,18 @@ export default function OrderForm() {
   const addItem = (productId: string) => {
     const product = products.find((entry) => entry.id === productId);
     if (!product) return;
+    const initialQuantity = isAreaUnit(product.unit)
+      ? 1
+      : getInitialTierQuantity(product.id, priceTiers);
 
     setItems((prev) => {
       const existingIndex = prev.findIndex((item) => item.product.id === product.id);
       if (existingIndex >= 0) {
         const next = [...prev];
         const nextQty = Math.max(1, Number(next[existingIndex].quantity || 1) + 1);
+        if (!validateTierQuantity(product, nextQty)) {
+          return prev;
+        }
         next[existingIndex] = {
           ...next[existingIndex],
           quantity: nextQty,
@@ -630,7 +658,10 @@ export default function OrderForm() {
         return next;
       }
 
-      const quantity = 1;
+      const quantity = initialQuantity;
+      if (!validateTierQuantity(product, quantity)) {
+        return prev;
+      }
       return [
         ...prev,
         {
@@ -657,6 +688,9 @@ export default function OrderForm() {
       prev.map((item) => {
         if (item.product.id !== productId) return item;
         const nextQty = Math.max(1, Number(item.quantity || 1) + delta);
+        if (!validateTierQuantity(item.product, nextQty)) {
+          return item;
+        }
         return {
           ...item,
           quantity: nextQty,
@@ -671,6 +705,9 @@ export default function OrderForm() {
     setItems((prev) =>
       prev.map((item) => {
         if (item.product.id !== productId) return item;
+        if (!validateTierQuantity(item.product, nextValue)) {
+          return item;
+        }
         return {
           ...item,
           quantity: nextValue,
@@ -766,6 +803,20 @@ export default function OrderForm() {
     }
     if (items.length === 0) {
       toast({ title: 'Adicione ao menos um produto', variant: 'destructive' });
+      return;
+    }
+
+    const invalidTierItems = items.filter((item) => {
+      if (isAreaUnit(item.product.unit)) return false;
+      return !isQuantityAllowedByPriceTiers(item.product.id, item.quantity, priceTiers);
+    });
+
+    if (invalidTierItems.length > 0) {
+      toast({
+        title: 'Quantidade fora da faixa permitida',
+        description: getPriceTierValidationMessage(invalidTierItems[0].product.id, priceTiers) || undefined,
+        variant: 'destructive',
+      });
       return;
     }
 

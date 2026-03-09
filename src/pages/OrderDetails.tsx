@@ -12,7 +12,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
-import { Order, OrderFinalPhoto, OrderArtFile, OrderItem, OrderStatusHistory, OrderStatus, OrderPayment, PaymentMethod, PaymentStatus, Product, Customer } from '@/types/database';
+import { Order, OrderFinalPhoto, OrderArtFile, OrderItem, OrderStatusHistory, OrderStatus, OrderPayment, PaymentMethod, PaymentStatus, Product, Customer, PriceTier } from '@/types/database';
 import { ArrowLeft, Loader2, CheckCircle, Clock, Package, Truck, XCircle, User, FileText, Printer, MessageCircle, Link, Copy, CreditCard, PauseCircle, Trash2, Image as ImageIcon, Upload, Paintbrush, Sparkles } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -38,7 +38,12 @@ import {
   uploadOrderFinalPhoto,
 } from '@/services/orders';
 import { ensurePublicStorageUrl } from '@/lib/storage';
-import { resolveProductPrice } from '@/lib/pricing';
+import {
+  getInitialTierQuantity,
+  getPriceTierValidationMessage,
+  isQuantityAllowedByPriceTiers,
+  resolveProductPrice,
+} from '@/lib/pricing';
 import { useUnsavedChanges } from '@/hooks/use-unsaved-changes';
 import { localizeOrderHistoryNote } from '@/lib/orderHistoryNotes';
 import { extractOrderIdFromParam } from '@/lib/orderRouting';
@@ -237,6 +242,7 @@ export default function OrderDetails() {
   const [editableItems, setEditableItems] = useState<OrderItem[]>([]);
   const [savingItems, setSavingItems] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
+  const [priceTiers, setPriceTiers] = useState<PriceTier[]>([]);
   const [newItemProductId, setNewItemProductId] = useState('');
   const [newItemQuantity, setNewItemQuantity] = useState(1);
   const [newItemWidthCm, setNewItemWidthCm] = useState('');
@@ -323,6 +329,21 @@ export default function OrderDetails() {
 
   const getProductById = (productId?: string | null) =>
     products.find((product) => product.id === productId);
+
+  const getProductPriceForQuantity = (product: Product, quantity: number) =>
+    resolveProductPrice(product, quantity, priceTiers, 0);
+
+  const validateTierQuantity = (product: Product, quantity: number) => {
+    if (isAreaUnit(product.unit)) return true;
+    if (isQuantityAllowedByPriceTiers(product.id, quantity, priceTiers)) return true;
+
+    toast({
+      title: 'Quantidade fora da faixa permitida',
+      description: getPriceTierValidationMessage(product.id, priceTiers) || undefined,
+      variant: 'destructive',
+    });
+    return false;
+  };
 
   const getItemUnit = (item: OrderItem) => getProductById(item.product_id)?.unit;
 
@@ -527,7 +548,9 @@ export default function OrderDetails() {
   };
 
   const ensureProductsLoaded = async () => {
-    if (products.length > 0 || !order?.company_id) return;
+    if (!order?.company_id) return;
+    if (products.length > 0 && priceTiers.length > 0) return;
+
     const { data, error } = await supabase
       .from('products')
       .select('*')
@@ -538,7 +561,28 @@ export default function OrderDetails() {
       toast({ title: 'Erro ao carregar produtos', variant: 'destructive' });
       return;
     }
-    setProducts(data as Product[] || []);
+
+    const loadedProducts = (data as Product[]) || [];
+    setProducts(loadedProducts);
+
+    const productIds = loadedProducts.map((product) => product.id);
+    if (productIds.length === 0) {
+      setPriceTiers([]);
+      return;
+    }
+
+    const { data: tiersData, error: tiersError } = await supabase
+      .from('price_tiers')
+      .select('*')
+      .in('product_id', productIds)
+      .order('min_quantity');
+
+    if (tiersError) {
+      toast({ title: 'Erro ao carregar faixas de preço', variant: 'destructive' });
+      return;
+    }
+
+    setPriceTiers((tiersData as PriceTier[]) || []);
   };
 
   const startEditingItems = async () => {
@@ -580,7 +624,7 @@ export default function OrderDetails() {
             m2.widthCm > 0 &&
             m2.heightCm > 0;
           const area = hasValidDimensions ? calculateAreaM2(m2.widthCm, m2.heightCm) : 0;
-          const unitPrice = resolveProductPrice(product, area > 0 ? area : 1, [], 0);
+          const unitPrice = getProductPriceForQuantity(product, area > 0 ? area : 1);
           const attributes = buildM2Attributes(item.attributes ?? {}, {
             widthCm: m2.widthCm ?? null,
             heightCm: m2.heightCm ?? null,
@@ -597,13 +641,17 @@ export default function OrderDetails() {
           return { ...next, total: calculateItemTotal(next) };
         }
 
-        const quantity = Math.max(1, Number(item.quantity));
-        const unitPrice = resolveProductPrice(product, quantity, [], 0);
+        const requestedQuantity = Math.max(1, Number(item.quantity));
+        const quantity = isQuantityAllowedByPriceTiers(product.id, requestedQuantity, priceTiers)
+          ? requestedQuantity
+          : getInitialTierQuantity(product.id, priceTiers);
+        const unitPrice = getProductPriceForQuantity(product, quantity);
         const cleanedAttributes = stripM2Attributes(item.attributes);
         const next = {
           ...item,
           product_id: product.id,
           product_name: product.name,
+          quantity,
           unit_price: unitPrice,
           attributes: Object.keys(cleanedAttributes).length > 0 ? cleanedAttributes : null,
         };
@@ -618,7 +666,10 @@ export default function OrderDetails() {
       prev.map((item, idx) => {
         if (idx !== index) return item;
         if (isItemM2(item)) return item;
+        const product = getProductById(item.product_id);
+        if (!product || !validateTierQuantity(product, quantity)) return item;
         const next = { ...item, quantity };
+        next.unit_price = product ? getProductPriceForQuantity(product, quantity) : next.unit_price;
         return { ...next, total: calculateItemTotal(next) };
       }),
     );
@@ -644,7 +695,7 @@ export default function OrderDetails() {
         const product = getProductById(item.product_id);
         const quantity = hasValidDimensions ? calculateAreaM2(widthCm, heightCm) : 0;
         const unitPrice = product
-          ? resolveProductPrice(product, quantity > 0 ? quantity : 1, [], 0)
+          ? getProductPriceForQuantity(product, quantity > 0 ? quantity : 1)
           : Number(item.unit_price);
 
         const attributes = buildM2Attributes(nextAttributes, {
@@ -687,8 +738,11 @@ export default function OrderDetails() {
 
     const quantity = isM2
       ? calculateAreaM2(widthCm as number, heightCm as number)
-      : Math.max(1, Number(newItemQuantity) || 1);
-    const unitPrice = resolveProductPrice(product, quantity > 0 ? quantity : 1, [], 0);
+      : Math.max(1, Number(newItemQuantity) || getInitialTierQuantity(product.id, priceTiers));
+    if (!isM2 && !validateTierQuantity(product, quantity)) {
+      return;
+    }
+    const unitPrice = getProductPriceForQuantity(product, quantity > 0 ? quantity : 1);
     const attributes = isM2
       ? buildM2Attributes({}, {
           widthCm: widthCm as number,
@@ -716,6 +770,17 @@ export default function OrderDetails() {
     setNewItemHeightCm('');
   };
 
+  const handleNewItemProductChange = (productId: string) => {
+    setNewItemProductId(productId);
+    const product = products.find((entry) => entry.id === productId);
+    if (!product || isAreaUnit(product.unit)) {
+      setNewItemQuantity(1);
+      return;
+    }
+
+    setNewItemQuantity(getInitialTierQuantity(product.id, priceTiers));
+  };
+
   const handleSaveItems = async () => {
     if (!order) return;
     if (editableItems.length === 0) {
@@ -735,6 +800,24 @@ export default function OrderDetails() {
       toast({
         title: 'Informe largura e altura validas',
         description: invalidM2Items.map((item) => item.product_name).join(', '),
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const invalidTierItems = editableItems.filter((item) => {
+      const product = getProductById(item.product_id);
+      if (!product || isAreaUnit(product.unit)) return false;
+      return !isQuantityAllowedByPriceTiers(product.id, item.quantity, priceTiers);
+    });
+
+    if (invalidTierItems.length > 0) {
+      const firstProduct = getProductById(invalidTierItems[0].product_id);
+      toast({
+        title: 'Quantidade fora da faixa permitida',
+        description: firstProduct
+          ? getPriceTierValidationMessage(firstProduct.id, priceTiers) || undefined
+          : undefined,
         variant: 'destructive',
       });
       return;
@@ -2527,7 +2610,7 @@ const sendWhatsAppMessage = (message: string) => {
                   <div className="grid gap-3 md:grid-cols-[1fr_140px_140px_auto] items-end">
                     <div className={`space-y-2 ${newItemIsM2 ? 'md:col-span-2' : ''}`}>
                       <Label>Produto</Label>
-                      <Select value={newItemProductId} onValueChange={setNewItemProductId}>
+                      <Select value={newItemProductId} onValueChange={handleNewItemProductChange}>
                         <SelectTrigger>
                           <SelectValue placeholder="Selecione um produto" />
                         </SelectTrigger>

@@ -177,3 +177,71 @@ export const resolveProductBasePrice = (
   }
   return getBasePrice(product, quantity, priceTiers, suppliesCost);
 };
+
+export const getProductPriceTiers = (
+  productId: string,
+  priceTiers: PriceTier[] = [],
+) =>
+  priceTiers
+    .filter((tier) => tier.product_id === productId)
+    .sort((a, b) => Number(a.min_quantity) - Number(b.min_quantity));
+
+export const getMatchingPriceTier = (
+  productId: string,
+  quantity: number,
+  priceTiers: PriceTier[] = [],
+) => {
+  const safeQuantity = Number(quantity) || 0;
+  if (safeQuantity <= 0) return null;
+
+  return (
+    getProductPriceTiers(productId, priceTiers).find(
+      (tier) =>
+        safeQuantity >= Number(tier.min_quantity) &&
+        (tier.max_quantity === null || safeQuantity <= Number(tier.max_quantity)),
+    ) || null
+  );
+};
+
+export const hasProductPriceTiers = (
+  productId: string,
+  priceTiers: PriceTier[] = [],
+) => getProductPriceTiers(productId, priceTiers).length > 0;
+
+export const getInitialTierQuantity = (
+  productId: string,
+  priceTiers: PriceTier[] = [],
+) => {
+  const firstTier = getProductPriceTiers(productId, priceTiers)[0];
+  return firstTier ? Math.max(1, Number(firstTier.min_quantity) || 1) : 1;
+};
+
+export const isQuantityAllowedByPriceTiers = (
+  productId: string,
+  quantity: number,
+  priceTiers: PriceTier[] = [],
+) => {
+  if (!hasProductPriceTiers(productId, priceTiers)) {
+    return true;
+  }
+
+  return Boolean(getMatchingPriceTier(productId, quantity, priceTiers));
+};
+
+export const getPriceTierValidationMessage = (
+  productId: string,
+  priceTiers: PriceTier[] = [],
+) => {
+  const tiers = getProductPriceTiers(productId, priceTiers);
+  if (tiers.length === 0) return null;
+
+  const formatted = tiers
+    .map((tier) =>
+      tier.max_quantity === null
+        ? `${tier.min_quantity}+`
+        : `${tier.min_quantity} a ${tier.max_quantity}`,
+    )
+    .join(', ');
+
+  return `Use uma quantidade dentro das faixas configuradas: ${formatted}.`;
+};

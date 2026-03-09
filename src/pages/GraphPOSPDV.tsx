@@ -5,9 +5,14 @@ import GraphPOSCard from '@/components/graphpos/GraphPOSCard';
 import GraphPOSSidebarResumo from '@/components/graphpos/GraphPOSSidebarResumo';
 import { BotaoPrimario } from '@/components/graphpos/GraphPOSButtons';
 import { supabase } from '@/integrations/supabase/client';
-import { Product, CartItem, Customer } from '@/types/database';
+import { Product, CartItem, Customer, PriceTier } from '@/types/database';
 import { ensurePublicStorageUrl } from '@/lib/storage';
-import { resolveProductPrice } from '@/lib/pricing';
+import {
+  getInitialTierQuantity,
+  getPriceTierValidationMessage,
+  isQuantityAllowedByPriceTiers,
+  resolveProductPrice,
+} from '@/lib/pricing';
 import { normalizeBarcode } from '@/lib/barcode';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
@@ -70,6 +75,7 @@ export default function GraphPOSPDV() {
   const [search, setSearch] = useState('');
   const [barcodeInput, setBarcodeInput] = useState('');
   const [products, setProducts] = useState<Product[]>([]);
+  const [priceTiers, setPriceTiers] = useState<PriceTier[]>([]);
   const [productSearchCache, setProductSearchCache] = useState<Product[] | null>(null);
   const [productsLoading, setProductsLoading] = useState(false);
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -97,6 +103,35 @@ export default function GraphPOSPDV() {
   useEffect(() => {
     setProductSearchCache(null);
   }, [profile?.company_id]);
+
+  useEffect(() => {
+    const loadPriceTiers = async () => {
+      let query = supabase.from('price_tiers').select('*').order('min_quantity');
+      if (profile?.company_id) {
+        const { data: companyProducts } = await supabase
+          .from('products')
+          .select('id')
+          .eq('company_id', profile.company_id);
+
+        const productIds = (companyProducts || []).map((product) => product.id);
+        if (productIds.length === 0) {
+          setPriceTiers([]);
+          return;
+        }
+        query = query.in('product_id', productIds);
+      }
+
+      const { data, error } = await query;
+      if (error) {
+        toast({ title: 'Erro ao carregar faixas de preço', variant: 'destructive' });
+        return;
+      }
+
+      setPriceTiers((data as PriceTier[]) || []);
+    };
+
+    void loadPriceTiers();
+  }, [profile?.company_id, toast]);
 
   useEffect(() => {
     const raw = window.localStorage.getItem(draftStorageKey);
@@ -308,8 +343,20 @@ export default function GraphPOSPDV() {
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
   const formatMeasurement = (v: number) =>
     new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 2 }).format(v);
-  const getUnitPrice = (product: Product, quantity = 1) => resolveProductPrice(product, quantity, [], 0);
+  const getUnitPrice = (product: Product, quantity = 1) =>
+    resolveProductPrice(product, quantity, priceTiers, 0);
   const isM2Product = (product: Product) => isAreaUnit(product.unit);
+  const validateTierQuantity = (product: Product, quantity: number) => {
+    if (isM2Product(product)) return true;
+    if (isQuantityAllowedByPriceTiers(product.id, quantity, priceTiers)) return true;
+
+    toast({
+      title: 'Quantidade fora da faixa permitida',
+      description: getPriceTierValidationMessage(product.id, priceTiers) || undefined,
+      variant: 'destructive',
+    });
+    return false;
+  };
 
   const addToCart = (product: Product) => {
     setCart((prev) => {
@@ -329,7 +376,21 @@ export default function GraphPOSPDV() {
 
       const existing = prev.find((i) => i.product.id === product.id);
       if (existing) {
-        return prev.map((i) => i.id === existing.id ? { ...i, quantity: i.quantity + 1 } : i);
+        const nextQuantity = existing.quantity + 1;
+        if (!validateTierQuantity(product, nextQuantity)) {
+          return prev;
+        }
+
+        return prev.map((i) =>
+          i.id === existing.id
+            ? { ...i, quantity: nextQuantity, unit_price: getUnitPrice(product, nextQuantity) }
+            : i,
+        );
+      }
+
+      const initialQuantity = getInitialTierQuantity(product.id, priceTiers);
+      if (!validateTierQuantity(product, initialQuantity)) {
+        return prev;
       }
 
       return [
@@ -337,8 +398,8 @@ export default function GraphPOSPDV() {
         {
           id: createLocalId(),
           product,
-          quantity: 1,
-          unit_price: getUnitPrice(product, 1),
+          quantity: initialQuantity,
+          unit_price: getUnitPrice(product, initialQuantity),
           discount: 0,
           attributes: {},
         },
@@ -351,7 +412,10 @@ export default function GraphPOSPDV() {
       if (i.id !== itemId) return i;
       if (isM2Product(i.product)) return i;
       const newQty = Math.max(1, i.quantity + delta);
-      return { ...i, quantity: newQty };
+      if (!validateTierQuantity(i.product, newQty)) {
+        return i;
+      }
+      return { ...i, quantity: newQty, unit_price: getUnitPrice(i.product, newQty) };
     }));
   };
 
@@ -457,6 +521,20 @@ export default function GraphPOSPDV() {
   const handleFinalize = () => {
     if (cart.length === 0) {
       toast({ title: 'Carrinho vazio', variant: 'destructive' });
+      return;
+    }
+
+    const invalidTierItems = cart.filter((item) => {
+      if (isM2Product(item.product)) return false;
+      return !isQuantityAllowedByPriceTiers(item.product.id, item.quantity, priceTiers);
+    });
+
+    if (invalidTierItems.length > 0) {
+      toast({
+        title: 'Quantidade fora da faixa permitida',
+        description: getPriceTierValidationMessage(invalidTierItems[0].product.id, priceTiers) || undefined,
+        variant: 'destructive',
+      });
       return;
     }
 
