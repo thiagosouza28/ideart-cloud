@@ -24,7 +24,7 @@ import { Separator } from '@/components/ui/separator';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { computeSubscriptionState } from '@/services/subscription';
 import { invokeEdgeFunction } from '@/services/edgeFunctions';
 import { listCaktoOffers } from '@/services/cakto';
@@ -82,7 +82,6 @@ const getPeriodLabel = (period?: string | null) => {
 
 export default function Subscription() {
   const { profile, user } = useAuth();
-  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
   const [plans, setPlans] = useState<Plan[]>([]);
@@ -246,6 +245,8 @@ export default function Subscription() {
           email: user.email ?? '',
           name: profile?.full_name ?? user.email ?? '',
         },
+      }, {
+        resetAuthOn401: false,
       });
 
       const redirectUrl = data?.checkout_url ?? data?.url;
@@ -264,7 +265,7 @@ export default function Subscription() {
         /sess[aã]o inv[aá]lida|expirada/i.test(err?.message ?? '')
       ) {
         toast.error('Sessão inválida. Faça login novamente.');
-        navigate('/auth');
+        console.warn('[subscription] received 401 without forcing logout');
         return;
       }
 

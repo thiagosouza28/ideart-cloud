@@ -177,6 +177,8 @@ export default function SuperAdminImpersonate() {
       const response = await invokeEdgeFunction<ImpersonateResponse>('admin-impersonate', {
         email: trimmedEmail,
         redirect_to: `${window.location.origin}/dashboard`,
+      }, {
+        resetAuthOn401: false,
       });
 
       await startImpersonation();

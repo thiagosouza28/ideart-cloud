@@ -8,6 +8,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Customer, PaymentMethod, PriceTier, Product, type OrderStatus } from '@/types/database';
 import {
   getInitialTierQuantity,
+  getProductPriceTiers,
   getPriceTierValidationMessage,
   isQuantityAllowedByPriceTiers,
   resolveProductPrice,
@@ -203,6 +204,19 @@ export default function OrderForm() {
       variant: 'destructive',
     });
     return false;
+  };
+
+  const getTierRangeLabel = (productId: string) => {
+    const tiers = getProductPriceTiers(productId, priceTiers);
+    if (tiers.length === 0) return null;
+
+    return tiers
+      .map((tier) =>
+        tier.max_quantity === null
+          ? `${tier.min_quantity}+`
+          : `${tier.min_quantity} a ${tier.max_quantity}`,
+      )
+      .join(', ');
   };
 
   const calculateItemTotal = (item: OrderItemForm) =>
@@ -1194,6 +1208,9 @@ export default function OrderForm() {
                                   <strong>{product.name}</strong>
                                   <span>SKU: {product.sku || '-'}</span>
                                   <span>Unidade de venda: {getProductSaleUnitLabel(product.unit_type, { capitalize: true })}</span>
+                                  {getTierRangeLabel(product.id) ? (
+                                    <span>Faixas: {getTierRangeLabel(product.id)}</span>
+                                  ) : null}
                                 </div>
                               </div>
                               <div className="order-product-result-right">
@@ -1248,6 +1265,9 @@ export default function OrderForm() {
                                 <span>
                                   Unidade de venda: {getProductSaleUnitLabel(item.product.unit_type, { capitalize: true })}
                                 </span>
+                                {getTierRangeLabel(item.product.id) ? (
+                                  <span>Faixas válidas: {getTierRangeLabel(item.product.id)}</span>
+                                ) : null}
                                 {getProductSaleEquivalentText(item.product.unit_type, item.quantity, item.product.name) ? (
                                   <span>
                                     Total equivalente:{' '}
@@ -1278,6 +1298,11 @@ export default function OrderForm() {
                                   <Plus className="h-3.5 w-3.5" />
                                 </button>
                               </div>
+                              {getTierRangeLabel(item.product.id) ? (
+                                <div className="mt-1 text-[11px] text-[var(--order-muted)]">
+                                  Faixas: {getTierRangeLabel(item.product.id)}
+                                </div>
+                              ) : null}
                             </td>
                             <td>
                               {fmt(item.unit_price)}

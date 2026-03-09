@@ -184,6 +184,7 @@ export default function SuperAdminCompanies() {
       const response = await invokeEdgeFunction<{ users: CompanyUser[] }>(
         'super-admin-users',
         { action: 'list', companyId },
+        { resetAuthOn401: false },
       );
       setCompanyUsers(response.users || []);
     } catch (error: any) {
@@ -208,6 +209,7 @@ export default function SuperAdminCompanies() {
       const response = await invokeEdgeFunction<{ link: string }>(
         'super-admin-users',
         { action: 'reset', companyId: selectedCompanyUsers.id, userId },
+        { resetAuthOn401: false },
       );
       if (response.link) {
         setResetLinks((prev) => ({ ...prev, [userId]: response.link }));
@@ -233,6 +235,8 @@ export default function SuperAdminCompanies() {
         action: 'reset_email',
         companyId: selectedCompanyUsers.id,
         userId,
+      }, {
+        resetAuthOn401: false,
       });
       toast.success('E-mail de reset enviado');
     } catch (error: any) {

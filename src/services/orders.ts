@@ -720,44 +720,6 @@ export const updateOrderStatus = async ({
   entrada,
   paymentMethod,
 }: UpdateStatusInput) => {
-  if (EDGE_FUNCTIONS_ENABLED) {
-    try {
-      const response = await invokeEdgeFunction<{ order: Order }>(
-        'orders',
-        { status, notes, entrada, payment_method: paymentMethod ?? null },
-        { method: 'PATCH', path: `/${orderId}/status` }
-      );
-
-      if (entrada && entrada > 0) {
-        try {
-          const { data: latestPayment } = await supabase
-            .from('order_payments')
-            .select('*')
-            .eq('order_id', orderId)
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
-
-          if (latestPayment && latestPayment.status !== 'pendente') {
-            await generateReceiptForPayment({
-              orderId,
-              payment: latestPayment as OrderPayment,
-              createdBy: userId || null,
-            });
-          }
-        } catch (error) {
-          console.warn('[receipt] failed to generate receipt after edge update', error);
-        }
-      }
-
-      return response.order;
-    } catch (error) {
-      if (!shouldFallbackToDirectUpdate(error)) {
-        throw error;
-      }
-    }
-  }
-
   const { data: order, error: orderError } = await supabase
     .from('orders')
     .select('id, order_number, company_id, customer_name, status, notes')
@@ -870,7 +832,51 @@ export const updateOrderStatus = async ({
     body: `Status alterado para: ${statusLabels[status]}`,
   });
 
-  return updatedOrder || null;
+  if (updatedOrder) {
+    return updatedOrder;
+  }
+
+  if (EDGE_FUNCTIONS_ENABLED) {
+    try {
+      const response = await invokeEdgeFunction<{ order: Order }>(
+        'orders',
+        { status, notes, entrada, payment_method: paymentMethod ?? null },
+        {
+          method: 'PATCH',
+          path: `/${orderId}/status`,
+          resetAuthOn401: false,
+        }
+      );
+
+      if (entrada && entrada > 0) {
+        try {
+          const { data: latestPayment } = await supabase
+            .from('order_payments')
+            .select('*')
+            .eq('order_id', orderId)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (latestPayment && latestPayment.status !== 'pendente') {
+            await generateReceiptForPayment({
+              orderId,
+              payment: latestPayment as OrderPayment,
+              createdBy: userId || null,
+            });
+          }
+        } catch (error) {
+          console.warn('[receipt] failed to generate receipt after edge update', error);
+        }
+      }
+
+      return response.order;
+    } catch (edgeError) {
+      throw edgeError;
+    }
+  }
+
+  return null;
 };
 
 export const cancelOrder = async ({
@@ -883,15 +889,6 @@ export const cancelOrder = async ({
   confirmPaid?: boolean;
 }) => {
   const payload = { motivo: motivo || null, confirm_paid: Boolean(confirmPaid) };
-  if (EDGE_FUNCTIONS_ENABLED) {
-    const response = await invokeEdgeFunction<{ order: Order }>(
-      'orders',
-      payload,
-      { method: 'PATCH', path: `/${orderId}/cancel` }
-    );
-    return response.order;
-  }
-
   const { data: existingOrder, error: existingOrderError } = await supabase
     .from('orders')
     .select('id, order_number, company_id, status, notes')
@@ -944,27 +941,50 @@ export const cancelOrder = async ({
     body: 'Status alterado para: Cancelado',
   });
 
-  return data as Order;
+  if (data) {
+    return data as Order;
+  }
+
+  if (EDGE_FUNCTIONS_ENABLED) {
+    const response = await invokeEdgeFunction<{ order: Order }>(
+      'orders',
+      payload,
+      {
+        method: 'PATCH',
+        path: `/${orderId}/cancel`,
+        resetAuthOn401: false,
+      }
+    );
+    return response.order;
+  }
+
+  throw new Error('Falha ao cancelar pedido');
 };
 
 export const deleteOrder = async (orderId: string) => {
-  if (EDGE_FUNCTIONS_ENABLED) {
-    await invokeEdgeFunction<{ ok: boolean }>(
-      'orders',
-      null,
-      { method: 'DELETE', path: `/${orderId}` }
-    );
-    return;
-  }
-
   const { error } = await supabase
     .from('orders')
     .update({ deleted_at: new Date().toISOString() })
     .eq('id', orderId);
 
-  if (error) {
-    throw error;
+  if (!error) {
+    return;
   }
+
+  if (EDGE_FUNCTIONS_ENABLED) {
+    await invokeEdgeFunction<{ ok: boolean }>(
+      'orders',
+      null,
+      {
+        method: 'DELETE',
+        path: `/${orderId}`,
+        resetAuthOn401: false,
+      }
+    );
+    return;
+  }
+
+  throw error;
 };
 
 export const fetchPublicOrder = async (token: string) => {

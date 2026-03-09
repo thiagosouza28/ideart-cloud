@@ -318,7 +318,9 @@ export default function SuperAdminPlans() {
       toast.success('Plano importado com sucesso');
     } else {
       try {
-        await invokeEdgeFunction<{ plan: Plan }>('create-plan', planData);
+        await invokeEdgeFunction<{ plan: Plan }>('create-plan', planData, {
+          resetAuthOn401: false,
+        });
         toast.success('Plano criado com sucesso');
       } catch (error: any) {
         const message = error?.message || 'Erro ao criar plano';

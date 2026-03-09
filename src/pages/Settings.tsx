@@ -1012,7 +1012,9 @@ export default function Settings() {
     }
 
     try {
-      await invokeEdgeFunction('reset-company-data', { companyId: profile.company_id });
+      await invokeEdgeFunction('reset-company-data', { companyId: profile.company_id }, {
+        resetAuthOn401: false,
+      });
     } catch (error) {
       console.error('[settings] reset-company-data failed', error);
       setResetLoading(false);

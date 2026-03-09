@@ -152,7 +152,7 @@ export async function invokeEdgeFunction<T>(
     ? `${name}${options.path.startsWith('/') ? options.path : `/${options.path}`}`
     : name;
   const requireAuth = options.requireAuth ?? true;
-  const resetAuthOn401 = options.resetAuthOn401 ?? true;
+  const resetAuthOn401 = options.resetAuthOn401 ?? false;
   const retryOn401WithRefresh = options.retryOn401WithRefresh ?? true;
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
   const publishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;

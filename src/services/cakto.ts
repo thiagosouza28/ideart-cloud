@@ -2,10 +2,14 @@ import { invokeEdgeFunction } from '@/services/edgeFunctions';
 import { invokePublicFunction } from '@/services/publicFunctions';
 
 export const createCaktoPlan = async (payload: Record<string, unknown>) =>
-  invokeEdgeFunction('create-plan', payload);
+  invokeEdgeFunction('create-plan', payload, {
+    resetAuthOn401: false,
+  });
 
 export const createCaktoSubscription = async (payload: Record<string, unknown>) =>
-  invokeEdgeFunction('create-subscription', payload);
+  invokeEdgeFunction('create-subscription', payload, {
+    resetAuthOn401: false,
+  });
 
 export const createCaktoCheckout = async (payload: Record<string, unknown>) =>
   invokePublicFunction('cakto-checkout', payload);

@@ -9,6 +9,7 @@ import { Product, CartItem, Customer, PriceTier } from '@/types/database';
 import { ensurePublicStorageUrl } from '@/lib/storage';
 import {
   getInitialTierQuantity,
+  getProductPriceTiers,
   getPriceTierValidationMessage,
   isQuantityAllowedByPriceTiers,
   resolveProductPrice,
@@ -358,6 +359,19 @@ export default function GraphPOSPDV() {
     return false;
   };
 
+  const getTierRangeLabel = (productId: string) => {
+    const tiers = getProductPriceTiers(productId, priceTiers);
+    if (tiers.length === 0) return null;
+
+    return tiers
+      .map((tier) =>
+        tier.max_quantity === null
+          ? `${tier.min_quantity}+`
+          : `${tier.min_quantity} a ${tier.max_quantity}`,
+      )
+      .join(', ');
+  };
+
   const addToCart = (product: Product) => {
     setCart((prev) => {
       if (isM2Product(product)) {
@@ -665,6 +679,11 @@ export default function GraphPOSPDV() {
                           <p className="text-xs text-muted-foreground">
                             {product.track_stock ? `Estoque: ${product.stock_quantity}` : 'Sem controle de estoque'}
                           </p>
+                          {getTierRangeLabel(product.id) ? (
+                            <p className="text-xs text-muted-foreground">
+                              Faixas: {getTierRangeLabel(product.id)}
+                            </p>
+                          ) : null}
                         </button>
                       ))}
                     </div>
@@ -802,6 +821,11 @@ export default function GraphPOSPDV() {
                                   {isM2 ? ' / m\u00B2' : ''}{' '}
                                   {isM2 ? areaLabel : `x ${item.quantity}`}
                                 </p>
+                                {getTierRangeLabel(item.product.id) && !isM2 && (
+                                  <p className="text-[11px] text-muted-foreground">
+                                    Faixas: {getTierRangeLabel(item.product.id)}
+                                  </p>
+                                )}
                                 {isM2 && hasValidDimensions && (
                                   <p className="text-[11px] text-muted-foreground">
                                     {dimensionLabel}

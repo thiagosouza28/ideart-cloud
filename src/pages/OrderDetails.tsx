@@ -40,6 +40,7 @@ import {
 import { ensurePublicStorageUrl } from '@/lib/storage';
 import {
   getInitialTierQuantity,
+  getProductPriceTiers,
   getPriceTierValidationMessage,
   isQuantityAllowedByPriceTiers,
   resolveProductPrice,
@@ -343,6 +344,20 @@ export default function OrderDetails() {
       variant: 'destructive',
     });
     return false;
+  };
+
+  const getTierRangeLabel = (productId?: string | null) => {
+    if (!productId) return null;
+    const tiers = getProductPriceTiers(productId, priceTiers);
+    if (tiers.length === 0) return null;
+
+    return tiers
+      .map((tier) =>
+        tier.max_quantity === null
+          ? `${tier.min_quantity}+`
+          : `${tier.min_quantity} a ${tier.max_quantity}`,
+      )
+      .join(', ');
   };
 
   const getItemUnit = (item: OrderItem) => getProductById(item.product_id)?.unit;
@@ -2563,6 +2578,11 @@ const sendWhatsAppMessage = (message: string) => {
                             {item.notes && (
                               <p className="text-xs text-muted-foreground mt-1">Obs: {item.notes}</p>
                             )}
+                            {getTierRangeLabel(item.product_id) && !isM2 && (
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                Faixas válidas: {getTierRangeLabel(item.product_id)}
+                              </p>
+                            )}
                           </div>
                         )}
                       </TableCell>
@@ -2583,6 +2603,11 @@ const sendWhatsAppMessage = (message: string) => {
                           )
                         ) : (
                           isM2 ? `${formatAreaM2(item.quantity)} m\u00B2` : item.quantity
+                        )}
+                        {isEditingItems && getTierRangeLabel(item.product_id) && !isM2 && (
+                          <p className="mt-1 text-[11px] text-muted-foreground">
+                            {getTierRangeLabel(item.product_id)}
+                          </p>
                         )}
                       </TableCell>
                       <TableCell className="text-right">{formatCurrency(Number(item.unit_price))}</TableCell>
@@ -2622,6 +2647,11 @@ const sendWhatsAppMessage = (message: string) => {
                           ))}
                         </SelectContent>
                       </Select>
+                      {getTierRangeLabel(newItemProductId) && !newItemIsM2 && (
+                        <p className="text-xs text-muted-foreground">
+                          Faixas válidas: {getTierRangeLabel(newItemProductId)}
+                        </p>
+                      )}
                     </div>
                     {newItemIsM2 ? (
                       <>

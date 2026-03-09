@@ -378,6 +378,8 @@ export default function UserManagement() {
         full_name: normalizedFullName,
         role: newUserData.role,
         company_id: requiresCompany ? targetCompanyId : null,
+      }, {
+        resetAuthOn401: false,
       });
       toast.success(response?.created_now === false
         ? 'Usuário existente atualizado e vinculado com sucesso'
@@ -486,6 +488,8 @@ export default function UserManagement() {
         action: 'reset_password',
         user_id: passwordTargetUser.id,
         password: resetPasswordValue,
+      }, {
+        resetAuthOn401: false,
       });
 
       setPasswordSaved(true);
@@ -518,6 +522,8 @@ export default function UserManagement() {
         action: 'send_reset_email',
         user_id: passwordTargetUser.id,
         redirectTo,
+      }, {
+        resetAuthOn401: false,
       });
 
       toast.success(`Link de redefinição enviado para ${passwordTargetUser.email}`);
