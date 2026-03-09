@@ -369,9 +369,9 @@ function DiscoverySidebar({
                     <span className="block truncate text-xs text-[var(--pc-muted)]">
                       {product.category?.name || 'Produto'}
                     </span>
-                    <span className="mt-0.5 block line-clamp-2 text-sm font-semibold text-[var(--pc-text)]">
+                    <h4 className="mt-0.5 line-clamp-2 text-sm font-bold text-[var(--pc-text)] leading-tight">
                       {product.name}
-                    </span>
+                    </h4>
                     <span className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-[var(--pc-muted)]">
                       {(metrics?.averageRating || 0) > 0 ? (
                         <span className="inline-flex items-center gap-1">
@@ -594,7 +594,7 @@ function ProductGridCard({
     >
       <Link to={href} className="flex flex-1 flex-col" onClick={handleProductOpen}>
         <div className="relative overflow-hidden border-b border-[var(--pc-card-border)] bg-[var(--pc-page-bg)]">
-          <div className="flex h-[140px] sm:h-[208px] items-center justify-center">
+          <div className="flex h-[140px] sm:h-[188px] xl:h-[220px] items-center justify-center">
             {product.image_url ? (
               <img
                 src={product.image_url}
@@ -603,7 +603,7 @@ function ProductGridCard({
                 className="h-full w-full object-contain p-2 sm:p-4 transition duration-300 group-hover:scale-[1.03]"
               />
             ) : (
-              <Package className="h-8 w-8 sm:h-12 sm:w-12 text-[var(--pc-muted)]" />
+              <Package className="h-8 w-8 sm:h-12 text-[var(--pc-muted)]" />
             )}
           </div>
 
@@ -630,9 +630,9 @@ function ProductGridCard({
           ) : null}
         </div>
 
-        <div className="flex min-w-0 flex-1 flex-col gap-2 sm:gap-3 p-3 sm:p-4">
-          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-            <span className="truncate text-[10px] sm:text-sm text-[var(--pc-muted)]">{product.category?.name || 'Produto'}</span>
+        <div className="flex min-w-0 flex-1 flex-col gap-2 p-3 sm:gap-3 sm:p-5">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="truncate text-[10px] sm:text-xs text-[var(--pc-muted)] uppercase tracking-wider font-semibold">{product.category?.name || 'Produto'}</span>
             {product.personalization_enabled ? (
               <span className="rounded-full border border-[var(--pc-badge-bg)]/30 bg-[var(--pc-badge-bg)]/10 px-2.5 py-1 text-[11px] font-semibold text-[var(--pc-badge-text)]">
                 Personalizado
@@ -646,56 +646,52 @@ function ProductGridCard({
             ) : null}
           </div>
 
-          <div className="space-y-1 sm:space-y-2">
-            <h3 className="line-clamp-2 text-sm sm:text-[1.02rem] font-bold leading-tight text-[var(--pc-text)]">{product.name}</h3>
-            <p className="hidden sm:line-clamp-2 text-sm leading-6 text-[var(--pc-muted)]">
+          <div className="space-y-1.5 sm:space-y-2">
+            <h3 className="line-clamp-2 text-sm sm:text-lg font-bold leading-tight text-[var(--pc-text)]">{product.name}</h3>
+            <p className="hidden sm:line-clamp-2 text-sm leading-relaxed text-[var(--pc-muted)]">
               {product.catalog_short_description || product.description || 'Produto disponível no catálogo.'}
             </p>
           </div>
 
-          <div className="flex flex-wrap gap-3 text-xs text-[var(--pc-muted)]">
+          <div className="flex flex-wrap gap-2 text-[10px] sm:text-xs text-[var(--pc-muted)]">
             {Math.max(1, Number(product.catalog_min_order ?? product.min_order_quantity ?? 1)) > 1 ? (
-              <span className="rounded-full border border-[var(--pc-card-border)] px-2.5 py-1">
-                Pedido mínimo: {Math.max(1, Number(product.catalog_min_order ?? product.min_order_quantity ?? 1))}
+              <span className="rounded-lg border border-[var(--pc-card-border)] bg-[var(--pc-page-bg)]/50 px-2 py-0.5">
+                Mínimo: {Math.max(1, Number(product.catalog_min_order ?? product.min_order_quantity ?? 1))}
               </span>
             ) : null}
             {productionTimeDays !== null ? (
-              <span className="rounded-full border border-[var(--pc-card-border)] px-2.5 py-1">
-                Produção: {productionTimeDays} {productionTimeDays === 1 ? 'dia' : 'dias'}
+              <span className="rounded-lg border border-[var(--pc-card-border)] bg-[var(--pc-page-bg)]/50 px-2 py-0.5">
+                Produção: {productionTimeDays} d
               </span>
             ) : null}
-            <span className="rounded-full border border-[var(--pc-card-border)] px-2.5 py-1">
+            <span className="rounded-lg border border-[var(--pc-card-border)] bg-[var(--pc-page-bg)]/50 px-2 py-0.5">
               {Number(product.sales_count || 0)} vendas
             </span>
           </div>
         </div>
       </Link>
 
-      <div className="mt-auto flex flex-col gap-2 sm:gap-3 px-3 sm:px-4 pb-3 sm:px-4">
-        <div className="flex flex-wrap items-end justify-between gap-2 sm:gap-3">
+      <div className="mt-auto flex flex-col gap-3 p-3 sm:p-5 pt-0">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           {showPrices ? (
             <div className="min-w-0 flex-1">
               {inPromotion ? (
-                <p className="truncate text-[10px] sm:text-sm text-[var(--pc-muted)] line-through">
+                <p className="truncate text-xs sm:text-sm text-[var(--pc-muted)] line-through">
                   {asCurrency(getPromotionBasePrice(product))}
                 </p>
               ) : null}
-              <p className="truncate text-base sm:text-xl font-extrabold text-[var(--pc-price)]">
+              <p className="truncate text-base sm:text-2xl font-black text-[var(--pc-price)]">
                 {asCurrency(getProductPrice(product))}
               </p>
             </div>
           ) : (
-            <p className="text-[11px] sm:text-base font-semibold text-[var(--pc-price)]">Preço sob consulta</p>
+            <p className="min-w-0 flex-1 text-sm sm:text-base font-bold text-[var(--pc-price)]">Preço sob consulta</p>
           )}
 
           <Link
             to={href}
             onClick={handleProductOpen}
-            className="inline-flex min-h-[36px] sm:min-h-[42px] items-center justify-center rounded-xl sm:rounded-2xl px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-semibold"
-            style={{
-              backgroundColor: 'var(--pc-button-bg)',
-              color: 'var(--pc-button-text)',
-            }}
+            className="inline-flex min-h-[40px] sm:min-h-[46px] shrink-0 items-center justify-center rounded-xl sm:rounded-2xl bg-[var(--pc-button-bg)] px-5 sm:px-6 py-2 text-xs sm:text-sm font-bold text-[var(--pc-button-text)] shadow-sm transition-all hover:scale-[1.03] active:scale-[0.98]"
           >
             {buttonText}
           </Link>
@@ -703,10 +699,10 @@ function ProductGridCard({
 
         <Link
           to={reviewHref}
-          className="inline-flex min-h-[36px] sm:min-h-[42px] w-full items-center justify-center rounded-xl sm:rounded-2xl border border-[var(--pc-card-border)] bg-[var(--pc-card-bg)] px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-semibold text-[var(--pc-text)] transition hover:border-[var(--pc-filter-bg)] hover:text-[var(--pc-filter-bg)]"
+          className="inline-flex min-h-[36px] items-center justify-center rounded-xl border border-[var(--pc-card-border)] bg-[var(--pc-card-bg)] px-4 py-2 text-xs sm:text-sm font-semibold text-[var(--pc-text)] transition-all hover:border-[var(--pc-filter-bg)] hover:bg-[var(--pc-filter-bg)]/5"
           onClick={handleProductOpen}
         >
-          Avaliar
+          Avaliar produto
         </Link>
       </div>
     </div>

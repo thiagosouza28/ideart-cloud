@@ -209,17 +209,17 @@ export function CatalogTopNav({
           </div>
         </div>
 
-        <div className="flex shrink-0 items-center justify-end gap-1.5 sm:gap-2">
+        <div className="flex shrink-0 items-center justify-end gap-2 md:gap-3">
           {typeof cartCount === 'number' && onCartClick && (
             <button
               type="button"
-              className="inline-flex h-9 items-center gap-2 rounded-full border px-3 sm:px-4 text-sm font-medium"
+              className="inline-flex h-10 items-center gap-2 rounded-full border px-4 text-sm font-medium transition-all hover:scale-[1.02]"
               style={headerOutlineStyle}
               onClick={onCartClick}
             >
-              <ShoppingCart size={14} />
+              <ShoppingCart size={16} />
               <span className="flex items-center gap-1">
-                {cartCount} <span className="hidden xs:inline">{cartCount === 1 ? 'item' : 'itens'}</span>
+                {cartCount} <span className="hidden sm:inline">{cartCount === 1 ? 'item' : 'itens'}</span>
               </span>
             </button>
           )}
@@ -227,24 +227,24 @@ export function CatalogTopNav({
           {showAccount && (
             <Link
               to={accountHref}
-              className="inline-flex h-9 items-center rounded-xl border px-3 sm:px-4 text-xs sm:text-sm font-semibold hover:opacity-90"
+              className="inline-flex h-10 items-center rounded-xl border px-4 text-sm font-semibold transition-all hover:scale-[1.02] hover:opacity-90"
               style={headerOutlineStyle}
             >
-              <span className="hidden xs:inline">{accountLabel}</span>
-              <span className="xs:hidden">Conta</span>
+              <span className="hidden md:inline">{accountLabel}</span>
+              <span className="md:hidden">Conta</span>
             </Link>
           )}
 
           {showContact && hasContact && (
             <button
               type="button"
-              className="inline-flex h-9 items-center gap-2 rounded-xl px-3 sm:px-4 text-xs sm:text-sm font-semibold hover:opacity-90"
+              className="inline-flex h-10 items-center gap-2 rounded-xl px-4 text-sm font-semibold transition-all hover:scale-[1.02] hover:opacity-90"
               style={primaryStyle}
               onClick={() => openCatalogContact(company)}
             >
-              <MessageCircle size={14} />
-              <span className="hidden xs:inline">Falar no WhatsApp</span>
-              <span className="xs:hidden">WhatsApp</span>
+              <MessageCircle size={16} />
+              <span className="hidden md:inline">Falar no WhatsApp</span>
+              <span className="md:hidden">WhatsApp</span>
             </button>
           )}
         </div>
