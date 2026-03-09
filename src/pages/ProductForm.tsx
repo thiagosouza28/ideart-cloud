@@ -1168,30 +1168,7 @@ export default function ProductForm() {
     suppliesCost +
     laborCost +
     (productType === 'servico' ? serviceLinkedProductsCost : 0);
-  const costWithWaste = totalCost * (1 + wastePercentage / 100);
-  const suggestedPrice = costWithWaste * (1 + profitMargin / 100);
-  const markupSimulation = buildPriceSimulation({
-    cost: costWithWaste,
-    expensePercentage,
-    desiredMarginPercentage: profitMargin,
-  });
-  const multiplierPrice = calculatePriceByMultiplier(costWithWaste, pricingMultiplier);
-  const minPrice = costWithWaste * 1.1; // 10% margin minimum
-  const autoCalculatedPrice = pricingMethod === 'multiplier' ? multiplierPrice : suggestedPrice;
-  const defaultUnitPrice = finalPriceTouched
-    ? finalPrice
-    : productType === 'servico'
-      ? Math.max(autoCalculatedPrice, serviceCompositionValue)
-      : autoCalculatedPrice;
-  const defaultPriceLabel = finalPriceTouched
-    ? 'preço final'
-    : productType === 'servico' && serviceCompositionValue > autoCalculatedPrice
-      ? 'preço composto do serviço'
-      : pricingMethod === 'multiplier'
-        ? 'preço por multiplicador'
-        : 'preço sugerido';
-  const estimatedProfit = calculateEstimatedProfit(costWithWaste, finalPrice);
-  const realMargin = calculateRealMargin(costWithWaste, finalPrice);
+  const costWithWaste = totalCost * (1 + (Number(wastePercentage) || 0) / 100);
   const profitabilityProductId = id || '__draft_product__';
   const currentProductRecord = useMemo<Product>(
     () => ({
@@ -1336,6 +1313,36 @@ export default function ProductForm() {
     profitabilitySupplies,
     saleItems,
   ]);
+
+  const costWithExpenses = currentProfitability?.totalRealCost ?? costWithWaste;
+
+  const safeMargin = Math.min(Number(profitMargin) || 0, 99.9);
+  const marginSuggestedPrice = safeMargin > 0 ? costWithExpenses / (1 - safeMargin / 100) : costWithExpenses;
+
+  const markupSimulation = {
+    markupSuggested: costWithExpenses > 0 ? marginSuggestedPrice / costWithExpenses : 1
+  };
+
+  const multiplierPrice = calculatePriceByMultiplier(costWithExpenses, pricingMultiplier);
+  const minPrice = costWithExpenses;
+
+  const autoCalculatedPrice = pricingMethod === 'multiplier' ? multiplierPrice : marginSuggestedPrice;
+  const defaultUnitPrice = finalPriceTouched
+    ? finalPrice
+    : productType === 'servico'
+      ? Math.max(autoCalculatedPrice, serviceCompositionValue)
+      : autoCalculatedPrice;
+  const defaultPriceLabel = finalPriceTouched
+    ? 'preço final'
+    : productType === 'servico' && serviceCompositionValue > autoCalculatedPrice
+      ? 'preço composto do serviço'
+      : pricingMethod === 'multiplier'
+        ? 'preço por multiplicador'
+        : 'preço sugerido';
+
+  const estimatedProfit = Math.max(0, finalPrice - costWithExpenses);
+  const realMargin = finalPrice > 0 ? (estimatedProfit / finalPrice) * 100 : 0;
+  const suggestedPrice = marginSuggestedPrice;
 
   const formSnapshot = useMemo(() => ({
     name,
@@ -3640,7 +3647,11 @@ export default function ProductForm() {
                       </div>
                       <div className="p-2 rounded bg-background">
                         <span className="text-muted-foreground text-xs block">+ Desperdício ({wastePercentage}%)</span>
-                        <span className="font-medium">{formatCurrency(costWithWaste)}</span>
+                        <span className="font-medium text-chart-4">{formatCurrency(costWithWaste)}</span>
+                      </div>
+                      <div className="p-2 rounded bg-background border-l-2 border-primary/50">
+                        <span className="text-primary text-xs font-semibold block">Custo c/ Despesas</span>
+                        <span className="font-bold text-primary">{formatCurrency(costWithExpenses)}</span>
                       </div>
                     </div>
                     <Separator className="my-3" />
