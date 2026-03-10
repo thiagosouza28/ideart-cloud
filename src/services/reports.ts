@@ -326,7 +326,7 @@ const buildCashTransactions = (sources: ReportSources) => {
   };
 
   const paymentTransactions: CashTransaction[] = sources.orderPayments
-    .filter((payment) => payment.status !== 'pendente')
+    .filter((payment) => payment.status !== 'pendente' && payment.source !== 'customer_credit')
     .map((payment) => {
       const order = resolveOrderRef(payment.order_id);
       const orderRef = buildOrderRef(order);
@@ -473,7 +473,7 @@ const calculateOpeningBalance = async (filters: ReportFilters) => {
   const entries = (entriesResult.data as FinancialEntry[] | null) || [];
 
   const paymentTotal = sumBy(
-    paidPayments.filter((payment) => payment.status !== 'pendente'),
+    paidPayments.filter((payment) => payment.status !== 'pendente' && payment.source !== 'customer_credit'),
     (payment) => Number(payment.amount),
   );
   const salesTotal = sumBy(
@@ -529,7 +529,9 @@ const buildCashReport = async (sources: ReportSources, filters: ReportFilters): 
 
 const buildFinancialReport = (sources: ReportSources): FinancialReport => {
   const ignoredOrigins = duplicatedFinancialOrigins;
-  const paidPayments = sources.orderPayments.filter((payment) => payment.status !== 'pendente');
+  const paidPayments = sources.orderPayments.filter(
+    (payment) => payment.status !== 'pendente' && payment.source !== 'customer_credit',
+  );
   const paidEntries = sources.financialEntries.filter((entry) => entry.status === 'pago');
 
   const revenueFromOrders = sumBy(paidPayments, (payment) => Number(payment.amount));
@@ -746,7 +748,7 @@ const buildCustomerReport = (sources: ReportSources): CustomerReport => {
         rows.filter((row) => paidOrderIds.has(row.id)),
         (row) => Number(row.total),
       ),
-      balance: sumBy(rows, (row) => Math.max(0, Number(row.total) - Number(row.amount_paid))),
+      balance: sumBy(rows, (row) => Math.max(0, Number(row.total) - (Number(row.amount_paid) + Number(row.customer_credit_used || 0)))),
       lastOrderAt,
     };
   });
@@ -876,7 +878,7 @@ const loadSources = async (filters: ReportFilters): Promise<ReportSources> => {
 
   let ordersQuery = supabase
     .from('orders')
-    .select('id, order_number, customer_id, customer_name, status, total, subtotal, discount, amount_paid, created_at, payment_status');
+    .select('id, order_number, customer_id, customer_name, status, total, subtotal, discount, amount_paid, customer_credit_used, created_at, payment_status');
 
   if (companyId) {
     ordersQuery = ordersQuery.eq('company_id', companyId);

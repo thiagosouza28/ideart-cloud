@@ -155,13 +155,20 @@ export default function Products() {
       const newStatus = !currentStatus;
       const { error } = await supabase
         .from('products')
-        .update({ show_in_catalog: newStatus, catalog_enabled: newStatus })
+        .update({
+          show_in_catalog: newStatus,
+          catalog_enabled: newStatus
+        })
         .eq('id', productId);
 
       if (error) throw error;
 
       setProducts((prev) =>
-        prev.map((p) => (p.id === productId ? { ...p, show_in_catalog: newStatus, catalog_enabled: newStatus } : p))
+        prev.map((p) => (p.id === productId ? {
+          ...p,
+          show_in_catalog: newStatus,
+          catalog_enabled: newStatus
+        } : p))
       );
 
       toast({
@@ -172,6 +179,33 @@ export default function Products() {
       console.error('Error updating catalog visibility:', error);
       toast({
         title: 'Erro ao atualizar visibilidade',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const toggleProductStatus = async (productId: string, currentStatus: boolean) => {
+    try {
+      const newStatus = !currentStatus;
+      const { error } = await supabase
+        .from('products')
+        .update({ is_active: newStatus })
+        .eq('id', productId);
+
+      if (error) throw error;
+
+      setProducts((prev) =>
+        prev.map((p) => (p.id === productId ? { ...p, is_active: newStatus } : p))
+      );
+
+      toast({
+        title: !currentStatus ? 'Produto ativado' : 'Produto desativado',
+        duration: 2000,
+      });
+    } catch (error) {
+      console.error('Error updating product status:', error);
+      toast({
+        title: 'Erro ao atualizar status',
         variant: 'destructive',
       });
     }
@@ -700,18 +734,24 @@ export default function Products() {
                       )}
                     </TableCell>
                     <TableCell>
-                      <Badge variant={product.is_active ? 'default' : 'secondary'}>
-                        {product.is_active ? 'Ativo' : 'Inativo'}
-                      </Badge>
+                      <button
+                        type="button"
+                        onClick={() => toggleProductStatus(product.id, !!product.is_active)}
+                        className="transition-transform active:scale-95"
+                      >
+                        <Badge variant={product.is_active ? 'default' : 'secondary'} className="cursor-pointer hover:opacity-80">
+                          {product.is_active ? 'Ativo' : 'Inativo'}
+                        </Badge>
+                      </button>
                     </TableCell>
                     <TableCell>
                       <Button
                         variant="ghost"
                         size="icon"
-                        title={(product.catalog_enabled ?? product.show_in_catalog) ? 'Ocultar no catálogo' : 'Mostrar no catálogo'}
-                        onClick={() => toggleCatalogVisibility(product.id, !!(product.catalog_enabled ?? product.show_in_catalog))}
+                        title={(product.catalog_enabled === true || product.show_in_catalog === true) ? 'Ocultar no catálogo' : 'Mostrar no catálogo'}
+                        onClick={() => toggleCatalogVisibility(product.id, product.catalog_enabled === true || product.show_in_catalog === true)}
                       >
-                        {(product.catalog_enabled ?? product.show_in_catalog) ? (
+                        {(product.catalog_enabled === true || product.show_in_catalog === true) ? (
                           <Eye className="h-4 w-4 text-emerald-500" />
                         ) : (
                           <EyeOff className="h-4 w-4 text-slate-400" />

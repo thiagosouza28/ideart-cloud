@@ -99,6 +99,7 @@ export default function CustomerHistory() {
           .in('order_id', orderIds);
 
         const latestByOrder: DeliveryMap = {};
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (deliveries || []).forEach((entry: any) => {
           const existing = latestByOrder[entry.order_id];
           if (!existing || new Date(entry.created_at) > new Date(existing)) {
@@ -177,7 +178,10 @@ export default function CustomerHistory() {
       notes.push('Ticket médio baixo: oportunidade para kits ou adicionais.');
     }
     const pendingBalance = orders.reduce(
-      (sum, order) => sum + Math.max(0, Number(order.total) - Number(order.amount_paid)),
+      (sum, order) => {
+        const paid = Number(order.amount_paid || 0) + Number(order.customer_credit_used || 0);
+        return sum + Math.max(0, Number(order.total) - paid);
+      },
       0,
     );
     if (pendingBalance > 0) {
@@ -356,7 +360,8 @@ export default function CustomerHistory() {
                 </TableRow>
               ) : (
                 orders.map((order) => {
-                  const balance = Number(order.amount_paid || 0) - Number(order.total || 0);
+                  const paidAndCredit = Number(order.amount_paid || 0) + Number(order.customer_credit_used || 0);
+                  const balance = paidAndCredit - Number(order.total || 0);
                   const balanceLabel =
                     balance > 0
                       ? `Saldo a favor: ${formatCurrency(balance)}`

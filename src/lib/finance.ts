@@ -276,7 +276,9 @@ export const buildCashForecastSummary = ({
   const currentBalance = calculateCurrentCashBalance(orders, sales, entries);
 
   const incomingFromOrders = orders.reduce((total, order) => {
-    const balance = Math.max(0, Number(order.total || 0) - Number(order.amount_paid || 0));
+    if (order.payment_status === 'pago') return total;
+    const settledAmount = Number(order.amount_paid || 0) + Number(order.customer_credit_used || 0);
+    const balance = Math.max(0, Number(order.total || 0) - settledAmount);
     if (!balance || !isOpenOrderStatus(order.status)) return total;
     if (!isDateInRange(getForecastDateForOrder(order), start, end)) return total;
     return total + balance;
@@ -352,7 +354,9 @@ export const buildCashForecastSeries = ({
   }
 
   orders.forEach((order) => {
-    const balance = Math.max(0, Number(order.total || 0) - Number(order.amount_paid || 0));
+    if (order.payment_status === 'pago') return;
+    const settledAmount = Number(order.amount_paid || 0) + Number(order.customer_credit_used || 0);
+    const balance = Math.max(0, Number(order.total || 0) - settledAmount);
     const dueDate = getForecastDateForOrder(order);
     if (!balance || !isOpenOrderStatus(order.status) || !isDateInRange(dueDate, start, end)) return;
     ensurePoint(dueDate!).incoming += balance;
@@ -489,9 +493,9 @@ export const calculateProductRealMetrics = ({
   const totalRealCost = directCost + fixedByPercentage + fixedByQuantity + variableShare;
   const resolvedSalePrice = Number(
     salePrice ??
-      product.final_price ??
-      product.catalog_price ??
-      0,
+    product.final_price ??
+    product.catalog_price ??
+    0,
   );
   const profitPerUnit = resolvedSalePrice - totalRealCost;
   const marginPct = resolvedSalePrice > 0 ? (profitPerUnit / resolvedSalePrice) * 100 : 0;

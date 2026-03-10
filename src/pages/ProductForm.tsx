@@ -914,8 +914,8 @@ export default function ProductForm() {
         setSaleUnitPreset(CUSTOM_PRODUCT_SALE_UNIT_VALUE);
         setSaleUnitCustom(resolveProductSaleUnit(CUSTOM_PRODUCT_SALE_UNIT_VALUE, product.unit_type || ''));
       }
-      setIsActive(product.is_active);
-      setShowInCatalog(product.catalog_enabled ?? product.show_in_catalog ?? false);
+      setIsActive(Boolean(product.is_active));
+      setShowInCatalog(product.catalog_enabled === true || product.show_in_catalog === true);
       setCatalogFeatured(product.catalog_featured ?? false);
       setCatalogPrice(product.catalog_price !== null && product.catalog_price !== undefined ? Number(product.catalog_price) : null);
       setCatalogShortDescription(product.catalog_short_description || '');
@@ -2854,12 +2854,18 @@ export default function ProductForm() {
                   </div>
 
                   <div className="flex items-center gap-3 pt-6">
-                    <Switch checked={isActive} onCheckedChange={setIsActive} />
+                    <Switch
+                      checked={isActive}
+                      onCheckedChange={setIsActive}
+                    />
                     <Label>Produto ativo</Label>
                   </div>
 
                   <div className="flex items-center gap-3 pt-6">
-                    <Switch checked={showInCatalog} onCheckedChange={setShowInCatalog} />
+                    <Switch
+                      checked={showInCatalog}
+                      onCheckedChange={setShowInCatalog}
+                    />
                     <Label className="flex items-center gap-2">
                       <Globe className="h-4 w-4" />
                       Exibir no catálogo público

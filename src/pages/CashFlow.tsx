@@ -232,7 +232,7 @@ export default function CashFlow() {
       const [ordersResult, salesResult, entriesResult, expensesResult] = await Promise.all([
         supabase
           .from('orders')
-          .select('id, status, total, amount_paid, created_at, estimated_delivery_date')
+          .select('id, status, total, amount_paid, created_at, estimated_delivery_date, customer_credit_used, payment_status')
           .eq('company_id', companyId)
           .order('created_at', { ascending: false })
           .limit(500),

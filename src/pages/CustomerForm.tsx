@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Save, Wallet } from 'lucide-react';
+import { ArrowLeft, Save, Wallet, Receipt } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -68,6 +68,7 @@ export default function CustomerForm() {
     created_at: string;
     order?: { id: string; order_number: number } | null;
   }>>([]);
+  const [outstandingDebt, setOutstandingDebt] = useState(0);
 
   useEffect(() => {
     setInitialSnapshot(null);
@@ -104,12 +105,32 @@ export default function CustomerForm() {
       .limit(50)
       .then(({ data }) => {
         setCreditTransactions(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (data || []).map((row: any) => ({
             ...row,
             amount: Number(row.amount ?? 0),
             order: Array.isArray(row.order) ? row.order[0] || null : row.order || null,
           })),
         );
+      });
+
+    supabase
+      .from('orders')
+      .select('total, amount_paid, customer_credit_used')
+      .eq('customer_id', id)
+      .neq('status', 'orcamento')
+      .neq('status', 'cancelado')
+      .neq('payment_status', 'pago')
+      .then(({ data }) => {
+        let debt = 0;
+        data?.forEach((order) => {
+          const total = Number(order.total || 0);
+          const paid = Number(order.amount_paid || 0);
+          const credit = Number(order.customer_credit_used || 0);
+          const balance = Math.max(0, total - (paid + credit));
+          debt += balance;
+        });
+        setOutstandingDebt(debt);
       });
   }, [id, isEditing]);
 
@@ -408,23 +429,37 @@ export default function CustomerForm() {
           </CardContent>
         </Card>
 
-        {isEditing && creditBalance > 0 && (
+        {isEditing && (creditBalance > 0 || outstandingDebt > 0) && (
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Wallet className="h-5 w-5" />
-                Saldo de Crédito
+                Saldos Financeiros
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex items-center gap-3">
-                <span className="text-sm text-muted-foreground">Saldo disponível:</span>
-                <Badge variant="outline" className="text-emerald-600 border-emerald-200 bg-emerald-50 text-base px-3 py-1">
-                  {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(creditBalance)}
-                </Badge>
+              <div className="flex flex-wrap items-center gap-6">
+                {creditBalance > 0 && (
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm text-muted-foreground">Crédito disponível:</span>
+                    <Badge variant="outline" className="text-emerald-600 border-emerald-200 bg-emerald-50 text-base px-3 py-1">
+                      {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(creditBalance)}
+                    </Badge>
+                  </div>
+                )}
+                {outstandingDebt > 0 && (
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm text-muted-foreground flex items-center gap-1">
+                      <Receipt className="h-4 w-4" /> Dívida em pedidos:
+                    </span>
+                    <Badge variant="outline" className="text-red-600 border-red-200 bg-red-50 text-base px-3 py-1">
+                      {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(outstandingDebt)}
+                    </Badge>
+                  </div>
+                )}
               </div>
               {creditTransactions.length > 0 && (
-                <div className="space-y-2">
+                <div className="space-y-2 mt-4">
                   <p className="text-sm font-medium">Histórico de créditos</p>
                   <div className="rounded-md border">
                     <Table>

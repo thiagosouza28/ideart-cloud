@@ -106,7 +106,7 @@ export default function Dashboard() {
       const [ordersResult, salesResult, expensesResult, entriesResult, productsResult, catalogEventsResult] = await Promise.all([
         supabase
           .from('orders')
-          .select('id, order_number, customer_name, status, total, amount_paid, created_at, payment_method, payment_status, estimated_delivery_date')
+          .select('id, order_number, customer_name, status, total, amount_paid, customer_credit_used, created_at, payment_method, payment_status, estimated_delivery_date')
           .eq('company_id', profile.company_id)
           .order('created_at', { ascending: false })
           .limit(300),
@@ -144,7 +144,7 @@ export default function Dashboard() {
       const nextSales = (salesResult.data as Sale[]) || [];
       const nextExpenses = (expensesResult.data as Expense[]) || [];
       const nextEntries = (entriesResult.data as FinancialEntry[]) || [];
-      const nextProducts = ((productsResult.data as Array<Product & { product_supplies?: ProductSupply[] }>) || []);
+      const nextProducts = (productsResult.data as unknown as Array<Product & { product_supplies?: ProductSupply[] }>) || [];
 
       setOrders(nextOrders);
       setSales(nextSales);
@@ -169,15 +169,15 @@ export default function Dashboard() {
       const [orderItemsResult, saleItemsResult] = await Promise.all([
         validOrderIds.length
           ? supabase
-              .from('order_items')
-              .select('id, order_id, product_id, product_name, quantity, unit_price, discount, total, attributes, notes, created_at')
-              .in('order_id', validOrderIds)
+            .from('order_items')
+            .select('id, order_id, product_id, product_name, quantity, unit_price, discount, total, attributes, notes, created_at')
+            .in('order_id', validOrderIds)
           : Promise.resolve({ data: [] }),
         saleIds.length
           ? supabase
-              .from('sale_items')
-              .select('id, sale_id, product_id, product_name, quantity, unit_price, discount, total, attributes, created_at')
-              .in('sale_id', saleIds)
+            .from('sale_items')
+            .select('id, sale_id, product_id, product_name, quantity, unit_price, discount, total, attributes, created_at')
+            .in('sale_id', saleIds)
           : Promise.resolve({ data: [] }),
       ]);
 
@@ -218,18 +218,20 @@ export default function Dashboard() {
     orders.forEach((order) => {
       const createdAt = new Date(order.created_at);
       const total = Number(order.total ?? 0);
-      const paidAmount = Math.max(0, Number(order.amount_paid ?? 0));
+      const paidCash = Math.max(0, Number(order.amount_paid ?? 0));
+      const paidCredit = Math.max(0, Number(order.customer_credit_used ?? 0));
+      const paidAmount = paidCash + paidCredit;
       const isRevenueOrder =
         order.status !== 'orcamento' && order.status !== 'pendente' && order.status !== 'cancelado';
 
-      if (isRevenueOrder && paidAmount > 0) {
-        if (createdAt.toDateString() === now.toDateString()) totalToday += paidAmount;
-        if (createdAt >= start7) total7d += paidAmount;
-        if (createdAt >= start30) total30d += paidAmount;
+      if (isRevenueOrder && paidCash > 0) {
+        if (createdAt.toDateString() === now.toDateString()) totalToday += paidCash;
+        if (createdAt >= start7) total7d += paidCash;
+        if (createdAt >= start30) total30d += paidCash;
       }
 
       if (isRevenueOrder) {
-        paidTotal += paidAmount;
+        paidTotal += paidCash;
         pendingTotal += Math.max(0, total - paidAmount);
       }
 
@@ -491,8 +493,8 @@ export default function Dashboard() {
           : 'Sem pagamento';
         const statusTone =
           order.status === 'entregue' || order.status === 'finalizado' || order.status === 'pronto'
-            ? 'success'
-            : 'warning';
+            ? ('success' as const)
+            : ('warning' as const);
 
         return {
           id: `#${formatOrderNumber(order.order_number)}`,
