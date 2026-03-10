@@ -34,7 +34,7 @@ const getCorsHeaders = (req: Request) => {
     "Access-Control-Allow-Origin": allowOrigin,
     "Access-Control-Allow-Headers":
       requestHeaders ??
-        "authorization, x-client-info, apikey, content-type, x-supabase-authorization",
+      "authorization, x-client-info, apikey, content-type, x-supabase-authorization",
     "Access-Control-Allow-Methods": "GET, OPTIONS",
     "Access-Control-Max-Age": "86400",
     "Vary": "Origin",
@@ -70,7 +70,7 @@ const isEligibleOffer = (offer: {
 }) => {
   if (!offer.id) return false;
   const normalizedStatus = offer.status?.trim().toLowerCase() || null;
-  const isActive = !normalizedStatus || normalizedStatus === "active";
+  const isActive = normalizedStatus === "active";
   const isDeleted = offer.deleted || !!offer.deleted_at || normalizedStatus === "deleted";
   return isActive && !isDeleted;
 };

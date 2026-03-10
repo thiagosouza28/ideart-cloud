@@ -337,8 +337,8 @@ const buildCashTransactions = (sources: ReportSources) => {
       return {
         id: payment.id,
         date: payment.paid_at || payment.created_at,
-        type: 'entrada',
-        rawType: 'receita',
+        type: 'entrada' as const,
+        rawType: 'receita' as const,
         origin: 'venda',
         description,
         amount: Number(payment.amount),
@@ -355,8 +355,8 @@ const buildCashTransactions = (sources: ReportSources) => {
     .map((sale) => ({
       id: sale.id,
       date: sale.created_at,
-      type: 'entrada',
-      rawType: 'receita',
+      type: 'entrada' as const,
+      rawType: 'receita' as const,
       origin: 'pdv',
       description: `Venda PDV ${sale.id}`,
       amount: Number(sale.total),
@@ -382,8 +382,8 @@ const buildCashTransactions = (sources: ReportSources) => {
       return {
         id: entry.id,
         date: entry.paid_at || entry.occurred_at,
-        type: entry.type === 'receita' ? 'entrada' : 'saida',
-        rawType: entry.type,
+        type: (entry.type === 'receita' ? 'entrada' : 'saida') as 'entrada' | 'saida',
+        rawType: entry.type as 'receita' | 'despesa',
         origin: normalizedOrigin,
         description: normalizeOrderDescription(
           entry.description || entry.notes,
@@ -679,8 +679,8 @@ const buildSalesReport = (sources: ReportSources): SalesReport => {
     ...paidOrders.map((order) => ({
       id: order.id,
       date: order.created_at,
-      type: 'entrada',
-      rawType: 'receita',
+      type: 'entrada' as const,
+      rawType: 'receita' as const,
       origin: 'pedido',
       description: `Pedido #${formatOrderNumber(order.order_number)}`,
       amount: Number(order.total),
@@ -693,8 +693,8 @@ const buildSalesReport = (sources: ReportSources): SalesReport => {
     ...paidSales.map((sale) => ({
       id: sale.id,
       date: sale.created_at,
-      type: 'entrada',
-      rawType: 'receita',
+      type: 'entrada' as const,
+      rawType: 'receita' as const,
       origin: 'pdv',
       description: `Venda PDV ${sale.id}`,
       amount: Number(sale.total),
@@ -969,7 +969,7 @@ const loadSources = async (filters: ReportFilters): Promise<ReportSources> => {
     entriesQuery = entriesQuery.eq('origin', cashOrigin);
   }
 
-  const [orderItemsResult, paymentsResult, salesResult, entriesResult, categoriesResult, productsResult, expensesResult] =
+  const [orderItemsResult, paymentsResult, salesResult, entriesResult, expensesResult, categoriesResult, productsResult] =
     await Promise.all([
       orderIds.length
         ? supabase.from('order_items').select('*').in('order_id', orderIds)

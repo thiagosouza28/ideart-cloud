@@ -58,7 +58,7 @@ const parseBooleanLike = (value: unknown): boolean | null => {
 
 const isOfferSyncEligible = (offer: CaktoOffer) => {
   const normalizedStatus = offer.status?.trim().toLowerCase() || null;
-  const isActive = !normalizedStatus || normalizedStatus === 'active';
+  const isActive = normalizedStatus === 'active';
   const hasDeletedAt = !!offer.deletedAt?.trim();
   const isDeleted = offer.deleted === true || hasDeletedAt || normalizedStatus === 'deleted';
   return Boolean(offer.id) && isActive && !isDeleted;
@@ -429,6 +429,23 @@ export default function SuperAdminPlans() {
       }
 
       toast.success('Planos da Cakto sincronizados com sucesso');
+
+      // Deactivate local plans that have a cakto_plan_id but were not in the syncable list
+      const syncableOfferIds = new Set(syncableOffers.map(o => o.id));
+      const plansToDeactivate = plans.filter(p => p.cakto_plan_id && !syncableOfferIds.has(p.cakto_plan_id) && p.is_active);
+
+      if (plansToDeactivate.length > 0) {
+        console.log('Deactivating plans no longer in Cakto:', plansToDeactivate.map(p => p.name));
+        const { error: deactivationError } = await supabase
+          .from('plans')
+          .update({ is_active: false })
+          .in('id', plansToDeactivate.map(p => p.id));
+
+        if (deactivationError) {
+          console.error('Failed to deactivate removed Cakto plans', deactivationError);
+        }
+      }
+
       await loadPlans();
     } finally {
       setSyncLoading(false);
@@ -621,7 +638,7 @@ export default function SuperAdminPlans() {
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-              <Label>Preço *</Label>
+                <Label>Preço *</Label>
                 <CurrencyInput
                   value={formData.price || 0}
                   onChange={(value) => setFormData({ ...formData, price: value })}
@@ -653,7 +670,7 @@ export default function SuperAdminPlans() {
               </div>
             </div>
 
-                        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               <div className="space-y-2">
                 <Label>Dias de Teste</Label>
                 <Input
