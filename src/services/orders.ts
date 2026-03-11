@@ -146,6 +146,18 @@ const generateFileId = () => {
   return `${Date.now().toString(16)}-${Math.random().toString(16).slice(2)}`;
 };
 
+const buildOrderStorageUploadPath = (
+  orderId: string,
+  file: File,
+  prefix: 'arte' | 'foto-final',
+) => {
+  const fileName = file.name || prefix;
+  const isSvg = file.type === 'image/svg+xml' || fileName.toLowerCase().endsWith('.svg');
+  const rawExtension = isSvg ? 'svg' : (fileName.split('.').pop() || 'bin').toLowerCase();
+  const extension = rawExtension.replace(/[^a-z0-9]/g, '') || 'bin';
+  return `${orderId}/${prefix}-${Date.now()}-${generateFileId()}.${extension}`;
+};
+
 type ReceiptInfo = {
   number: string;
   path: string;
@@ -1365,7 +1377,9 @@ export const uploadOrderFinalPhoto = async (
   userId?: string | null
 ) => {
   try {
-    const url = await uploadFile(file, 'order-final-photos');
+    const url = await uploadFile(file, 'order-final-photos', {
+      path: buildOrderStorageUploadPath(orderId, file, 'foto-final'),
+    });
 
     const { data: photo, error: dbError } = await supabase
       .from('order_final_photos' as any)
@@ -1378,9 +1392,7 @@ export const uploadOrderFinalPhoto = async (
       .single();
 
     if (dbError) {
-      if (url.startsWith('/uploads/')) {
-        await deleteFile(url);
-      }
+      await deleteFile(url);
       throw dbError;
     }
 
@@ -1406,7 +1418,9 @@ export const uploadOrderArtFile = async (
   );
 
   try {
-    const url = await uploadFile(file, 'order-art-files');
+    const url = await uploadFile(file, 'order-art-files', {
+      path: buildOrderStorageUploadPath(orderId, file, 'arte'),
+    });
 
     const { data: artFile, error: dbError } = await supabase
       .from('order_art_files' as any)
@@ -1422,9 +1436,7 @@ export const uploadOrderArtFile = async (
       .single();
 
     if (dbError) {
-      if (url.startsWith('/uploads/')) {
-        await deleteFile(url);
-      }
+      await deleteFile(url);
       throw dbError;
     }
 
@@ -1433,7 +1445,6 @@ export const uploadOrderArtFile = async (
     throw err;
   }
 };
-
 
 
 

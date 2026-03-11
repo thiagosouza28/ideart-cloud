@@ -1,15 +1,22 @@
 import { supabase } from '@/integrations/supabase/client';
 import { v4 as uuidv4 } from 'uuid';
 
-export async function uploadFile(file: Blob | File, bucketName: string): Promise<string> {
+type UploadFileOptions = {
+    path?: string;
+};
+
+export async function uploadFile(file: Blob | File, bucketName: string, options?: UploadFileOptions): Promise<string> {
     const fileNameStr = file instanceof File ? file.name : 'blob_upload';
     const isSvg = file.type === 'image/svg+xml' || fileNameStr.toLowerCase().endsWith('.svg');
     const ext = isSvg ? 'svg' : (fileNameStr.split('.').pop() || 'webp');
-    const fileName = `${Date.now()}_${uuidv4().substring(0, 8)}.${ext}`;
+    const generatedFileName = `${Date.now()}_${uuidv4().substring(0, 8)}.${ext}`;
+    const filePath = options?.path
+        ? options.path.replace(/^\/+/, '').replace(/\\/g, '/')
+        : generatedFileName;
 
     const { data, error } = await supabase.storage
         .from(bucketName)
-        .upload(fileName, file, {
+        .upload(filePath, file, {
             upsert: false,
             contentType: file.type || undefined,
         });

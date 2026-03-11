@@ -56,7 +56,9 @@ type CaktoOffer = {
   price: number | null;
   intervalType: string | null;
   interval: number | null;
+  recurrence_period?: number | null;
   status: string | null;
+  type?: string | null;
   checkout_url: string | null;
 };
 
@@ -80,6 +82,11 @@ const getPeriodLabel = (period?: string | null) => {
   if (period === 'lifetime') return 'Vitalício';
   return period;
 };
+
+const defaultPlanFeatures = [
+  'Acesso completo ao sistema',
+  'Suporte especializado',
+];
 
 export default function Subscription() {
   const { profile, user } = useAuth();
@@ -310,14 +317,65 @@ export default function Subscription() {
     }
   };
 
-  const getOfferPeriodLabel = (offer: CaktoOffer) => {
+  const resolveOfferPeriodLabel = (offer: CaktoOffer, fallbackPeriod?: string | null) => {
+    const type = (offer.type ?? '').toLowerCase();
+    if (type === 'one_time' || type === 'one-time' || type === 'one time') return 'Vitalício';
+
+    const recurrencePeriod = Number(offer.recurrence_period ?? NaN);
+    if (Number.isFinite(recurrencePeriod) && recurrencePeriod > 0) {
+      if (recurrencePeriod >= 360) return 'Anual';
+      if (recurrencePeriod >= 80) return 'Trimestral';
+      if (recurrencePeriod >= 27) return 'Mensal';
+      if (recurrencePeriod >= 7) return 'Semanal';
+      return 'Diário';
+    }
+
     const intervalType = (offer.intervalType ?? '').toLowerCase();
-    const type = (offer as any).type?.toLowerCase() || '';
-    if (type === 'one_time') return 'Vitalício';
+
+    if (intervalType.includes('year') || intervalType.includes('ano') || intervalType.includes('anual')) return 'Anual';
+    if (intervalType.includes('quarter') || intervalType.includes('trimestre') || intervalType.includes('trimestral')) return 'Trimestral';
+    if (intervalType.includes('month') || intervalType.includes('mes') || intervalType.includes('mensal')) return 'Mensal';
+
+    const isCaktoSubscriptionWithLifetimeIntervalType =
+      type === 'subscription' &&
+      (intervalType.includes('lifetime') || intervalType.includes('infinite'));
+
+    if (!isCaktoSubscriptionWithLifetimeIntervalType) {
+      if (intervalType.includes('lifetime') || intervalType.includes('vitalicio') || intervalType.includes('vitalício') || intervalType.includes('infinite')) return 'Vitalício';
+    }
+
+    if (intervalType.includes('week') || intervalType.includes('semana')) return 'Semanal';
+    if (intervalType.includes('day') || intervalType.includes('dia')) return 'Diário';
+    return getPeriodLabel(fallbackPeriod);
+  };
+
+  const getOfferPeriodLabel = (offer: CaktoOffer) => {
+    const type = (offer.type ?? '').toLowerCase();
+    if (type === 'one_time' || type === 'one-time' || type === 'one time') return 'Vitalício';
+
+    const recurrencePeriod = Number(offer.recurrence_period ?? NaN);
+    if (Number.isFinite(recurrencePeriod) && recurrencePeriod > 0) {
+      if (recurrencePeriod >= 360) return 'Anual';
+      if (recurrencePeriod >= 80) return 'Trimestral';
+      if (recurrencePeriod >= 27) return 'Mensal';
+      if (recurrencePeriod >= 7) return 'Semanal';
+      return 'Diário';
+    }
+
+    const intervalType = (offer.intervalType ?? '').toLowerCase();
+
     if (intervalType.includes('year') || intervalType.includes('ano')) return 'Anual';
     if (intervalType.includes('quarter') || intervalType.includes('trimestre')) return 'Trimestral';
     if (intervalType.includes('month') || intervalType.includes('mes')) return 'Mensal';
-    if (intervalType.includes('lifetime') || intervalType.includes('vitalicio') || intervalType.includes('vitalício') || intervalType.includes('infinite')) return 'Vitalício';
+
+    const isCaktoSubscriptionWithLifetimeIntervalType =
+      type === 'subscription' &&
+      (intervalType.includes('lifetime') || intervalType.includes('infinite'));
+
+    if (!isCaktoSubscriptionWithLifetimeIntervalType) {
+      if (intervalType.includes('lifetime') || intervalType.includes('vitalicio') || intervalType.includes('vitalício') || intervalType.includes('infinite')) return 'Vitalício';
+    }
+
     if (intervalType.includes('week') || intervalType.includes('semana')) return 'Semanal';
     if (intervalType.includes('day') || intervalType.includes('dia')) return 'Diário';
     return 'Mensal';
@@ -368,6 +426,48 @@ export default function Subscription() {
 
   const planStartLabel = formatDate(company?.subscription_start_date ?? null);
   const planEndLabel = formatDate(subscriptionState.expiresAt);
+  const getPlanPeriodLabel = (item: CaktoOffer | Plan) => {
+    const isOffer = (item as CaktoOffer).checkout_url !== undefined;
+
+    if (isOffer) {
+      const offer = item as CaktoOffer;
+      const matchedPlan = plans.find((planItem) => planItem.cakto_plan_id === offer.id);
+      return resolveOfferPeriodLabel(offer, matchedPlan?.billing_period ?? null);
+    }
+
+    const plan = item as Plan;
+    if (plan.billing_period === 'monthly') return 'Mensal';
+    if (plan.billing_period === 'quarterly') return 'Trimestral';
+    if (plan.billing_period === 'lifetime') return 'Vitalício';
+    return 'Anual';
+  };
+
+  const getPlanDisplayOrder = (periodLabel: string) => {
+    if (periodLabel === 'Mensal') return 0;
+    if (periodLabel === 'Anual') return 1;
+    if (periodLabel === 'Trimestral') return 2;
+    if (periodLabel === 'Vitalício') return 3;
+    if (periodLabel === 'Semanal') return 4;
+    if (periodLabel === 'Diário') return 5;
+    return 6;
+  };
+
+  const displayPlanItems = [...(offers.length > 0 ? offers : plans)].sort((itemA, itemB) => {
+    const periodDiff =
+      getPlanDisplayOrder(getPlanPeriodLabel(itemA)) -
+      getPlanDisplayOrder(getPlanPeriodLabel(itemB));
+
+    if (periodDiff !== 0) return periodDiff;
+
+    const priceA = (itemA as CaktoOffer).checkout_url !== undefined
+      ? ((itemA as CaktoOffer).price ?? 0)
+      : (itemA as Plan).price;
+    const priceB = (itemB as CaktoOffer).checkout_url !== undefined
+      ? ((itemB as CaktoOffer).price ?? 0)
+      : (itemB as Plan).price;
+
+    return priceA - priceB;
+  });
 
   /* ======================================================
      RENDER
@@ -554,15 +654,20 @@ export default function Subscription() {
         </>
       )}
 
-      <div className="mb-4">
-        <h2 className="text-xl font-semibold">Planos Disponíveis</h2>
-        <p className="text-muted-foreground text-sm">
-          Escolha o plano ideal para sua empresa
+      <div className="mb-10 space-y-4 text-center">
+        <p className="text-muted-foreground text-sm font-bold uppercase tracking-[0.2em]">
+          Planos
+        </p>
+        <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
+          Escolha o plano certo para escalar a sua gráfica.
+        </h2>
+        <p className="text-muted-foreground mx-auto max-w-2xl text-base">
+          Todos os planos incluem atualizações, segurança e suporte para manter sua operação estável.
         </p>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {(offers.length > 0 ? offers : plans).map((item) => {
+      <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
+        {displayPlanItems.map((item) => {
           const isOffer = (item as CaktoOffer).checkout_url !== undefined;
           const offer = item as CaktoOffer;
           const plan = item as Plan;
@@ -582,54 +687,106 @@ export default function Subscription() {
             subscribing && subscribing === (matchedPlan?.id ?? plan.id)
           );
           const priceValue = isOffer ? offer.price ?? 0 : plan.price;
-          const periodLabel = isOffer
-            ? getOfferPeriodLabel(offer)
-            : plan.billing_period === 'monthly'
-              ? 'Mensal'
-              : plan.billing_period === 'quarterly'
-                ? 'Trimestral'
-                : plan.billing_period === 'lifetime'
-                  ? 'Vitalício'
-                  : 'Anual';
+          const planNameLabel = matchedPlan?.name ?? (isOffer ? offer.name : plan.name) ?? 'Plano';
+          const planDescription =
+            matchedPlan?.description ||
+            (!isOffer ? plan.description : null) ||
+            'Plano completo para acelerar sua operação gráfica.';
+          const planFeatures =
+            matchedPlan?.features && matchedPlan.features.length > 0
+              ? matchedPlan.features
+              : defaultPlanFeatures;
+          const periodLabel = getPlanPeriodLabel(item);
+          const isPopular = periodLabel === 'Anual';
 
           return (
-            <Card key={isOffer ? offer.id : plan.id} className={isActivePlan ? "border-primary/50 shadow-md" : undefined}>
-              <CardHeader className="relative">
+            <Card
+              key={isOffer ? offer.id : plan.id}
+              className={`relative flex flex-col rounded-[2.5rem] border-2 p-10 transition-all duration-500 ${
+                isPopular
+                  ? 'border-primary bg-[#0f172a] text-white shadow-2xl shadow-primary/30'
+                  : isActivePlan
+                    ? 'border-primary bg-white text-slate-900 shadow-2xl shadow-primary/15'
+                    : 'border-slate-100 bg-white text-slate-900 shadow-xl shadow-slate-200/50 hover:border-primary/20'
+              }`}
+            >
+              <CardHeader className="relative p-0">
+                {isPopular && (
+                  <div className="absolute -top-14 left-1/2 -translate-x-1/2">
+                    <span className="rounded-full bg-amber-400 px-6 py-2 text-[0.8rem] font-black uppercase tracking-widest text-amber-950 shadow-lg">
+                      Mais popular
+                    </span>
+                  </div>
+                )}
                 {isActivePlan && (
                   <div className="absolute right-4 top-4 rounded-full bg-primary px-3 py-1 text-[11px] font-semibold text-primary-foreground">
                     Plano atual
                   </div>
                 )}
-                <CardTitle className="flex items-center justify-between">
-                  {isOffer ? offer.name : plan.name}
-                  {(isOffer ? offer.name : plan.name)?.toLowerCase().includes('pro') && (
-                    <Crown className="h-5 w-5 text-yellow-500" />
-                  )}
-                </CardTitle>
+                <div className="mb-8">
+                  <p className={`text-xs font-black uppercase tracking-[0.2em] ${isPopular ? 'text-slate-400' : 'text-primary'}`}>
+                    {planNameLabel}
+                  </p>
+                  <div className="mt-3 flex items-center justify-between gap-3">
+                    <CardTitle className={`text-3xl font-black tracking-tight ${isPopular ? 'text-white' : 'text-slate-900'}`}>
+                      {formatCurrency(priceValue)}
+                    </CardTitle>
+                    {planNameLabel.toLowerCase().includes('pro') && (
+                      <div className={`rounded-full p-2 ${isPopular ? 'bg-amber-400/15' : 'bg-amber-100'}`}>
+                        <Crown className={`h-5 w-5 ${isPopular ? 'text-amber-300' : 'text-amber-500'}`} />
+                      </div>
+                    )}
+                  </div>
+                  <p className={`mt-2 text-sm font-bold ${isPopular ? 'text-slate-400' : 'text-slate-500'}`}>
+                    Faturamento {periodLabel}
+                  </p>
+                  <CardDescription className={`mt-4 text-base leading-relaxed ${isPopular ? 'text-slate-300' : 'text-slate-500'}`}>
+                    {planDescription}
+                  </CardDescription>
+                </div>
                 {isActivePlan && subscriptionState.daysRemaining !== null && subscriptionState.daysRemaining <= 7 && (
-                  <Badge variant="secondary">Vence em {subscriptionState.daysRemaining} {subscriptionState.daysRemaining === 1 ? "dia" : "dias"}</Badge>
-                )}
-                {!isOffer && plan.description && (
-                  <CardDescription>{plan.description}</CardDescription>
-                )}
-                {isOffer && (
-                  <CardDescription>Plano cadastrado na Cakto.</CardDescription>
+                  <Badge
+                    variant="secondary"
+                    className={`mb-6 w-fit ${isPopular ? 'border-slate-700 bg-slate-800 text-slate-100' : ''}`}
+                  >
+                    Vence em {subscriptionState.daysRemaining} {subscriptionState.daysRemaining === 1 ? 'dia' : 'dias'}
+                  </Badge>
                 )}
               </CardHeader>
 
-              <CardContent className="space-y-4">
-                <div className="flex items-baseline gap-1">
-                  <span className="text-3xl font-bold">
-                    {formatCurrency(priceValue)}
-                  </span>
-                  <span className="text-muted-foreground">/{periodLabel}</span>
+              <CardContent className="flex flex-1 flex-col space-y-8 p-0">
+                <ul className="space-y-4">
+                  {planFeatures.map((feature) => (
+                    <li key={`${isOffer ? offer.id : plan.id}-${feature}`} className="flex items-start gap-3 text-sm font-medium">
+                      <div className={`mt-0.5 rounded-full p-1 ${isPopular ? 'bg-primary/20' : 'bg-primary/10'}`}>
+                        <Check className="h-3 w-3 shrink-0 text-primary" />
+                      </div>
+                      <span className={isPopular ? 'text-slate-200' : 'text-slate-600'}>{feature}</span>
+                    </li>
+                  ))}
+                </ul>
+
+                <div className="space-y-3">
+                  <div className={`flex items-center justify-between text-sm ${isPopular ? 'text-slate-300' : 'text-slate-500'}`}>
+                    <span>Checkout</span>
+                    <span>{canCheckout ? 'Disponível' : 'Em configuração'}</span>
+                  </div>
+                  <div className={`flex items-center justify-between text-sm ${isPopular ? 'text-slate-300' : 'text-slate-500'}`}>
+                    <span>Status</span>
+                    <span>{isActivePlan ? 'Plano atual' : 'Disponível'}</span>
+                  </div>
                 </div>
               </CardContent>
 
-              <CardFooter>
+              <CardFooter className="p-0 pt-10">
                 <Button
-                  className={`w-full gap-2 ${!subscriptionState.hasAccess ? 'ring-2 ring-primary/40' : ''}`}
-                  variant={isActivePlan ? 'outline' : 'default'}
+                  className={`h-16 w-full rounded-2xl text-lg font-black shadow-lg transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] ${
+                    isActivePlan
+                      ? 'border border-primary bg-primary/10 text-primary hover:bg-primary/10'
+                      : isPopular
+                        ? 'bg-primary text-primary-foreground hover:bg-primary/90 hover:shadow-primary/40'
+                        : 'bg-slate-100 text-slate-900 hover:bg-primary hover:text-white hover:shadow-primary/30'
+                  } ${!subscriptionState.hasAccess && !isActivePlan ? 'ring-2 ring-primary/30' : ''}`}
                   disabled={!canCheckout || isActivePlan || isProcessing}
                   onClick={() => {
                     if (checkoutUrl) {
@@ -652,7 +809,7 @@ export default function Subscription() {
                       {isActivePlan
                         ? 'Plano Atual'
                         : canCheckout
-                          ? 'Assinar este plano'
+                          ? 'Assinar agora'
                           : 'Em configuração'}
                     </>
                   )}

@@ -35,6 +35,7 @@ type CaktoOffer = {
   price?: number | null;
   intervalType?: string | null;
   interval?: number | null;
+  recurrence_period?: number | null;
   status?: string | null;
   type?: string | null;
   checkoutUrl?: string | null;
@@ -147,6 +148,11 @@ export default function SuperAdminPlans() {
         price: typeof offer.price === 'number' ? offer.price : Number(offer.price ?? 0),
         intervalType: offer.intervalType ? String(offer.intervalType) : null,
         interval: offer.interval ? Number(offer.interval) : null,
+        recurrence_period: typeof offer.recurrence_period === 'number'
+          ? offer.recurrence_period
+          : offer.recurrence_period
+            ? Number(offer.recurrence_period)
+            : null,
         status: offer.status ? String(offer.status) : null,
         type: offer.type ? String(offer.type) : null,
         checkoutUrl: offer.checkout_url ? String(offer.checkout_url) : null,
@@ -207,12 +213,33 @@ export default function SuperAdminPlans() {
     const it = (offer.intervalType || "").toLowerCase();
     const type = (offer.type || "").toLowerCase();
     const name = (offer.name || "").toLowerCase();
-    const billingPeriod: BillingPeriod = 
-      type === 'one_time' ? 'lifetime' :
-      it.includes('year') || it.includes('anual') || it.includes('ano') || name.includes('anual') ? 'yearly' : 
-      it.includes('quarter') || it.includes('trimestr') || name.includes('trimestr') ? 'quarterly' : 
-      it.includes('month') || it.includes('mes') || it.includes('mensal') || name.includes('mensal') || name.includes('mes') ? 'monthly' :
-      it.includes('lifetime') || it.includes('infinite') || it.includes('vitalicio') || it.includes('vitalício') || name.includes('vitalicio') || name.includes('vitalício') ? 'lifetime' : 'monthly';
+    const recurrencePeriod = Number(offer.recurrence_period ?? NaN);
+    const isCaktoSubscriptionWithLifetimeIntervalType =
+      type === 'subscription' &&
+      (it.includes('lifetime') || it.includes('infinite'));
+
+    let billingPeriod: BillingPeriod = 'monthly';
+
+    if (type === 'one_time' || type === 'one-time' || type === 'one time') {
+      billingPeriod = 'lifetime';
+    } else if (Number.isFinite(recurrencePeriod) && recurrencePeriod > 0) {
+      billingPeriod = recurrencePeriod >= 360
+        ? 'yearly'
+        : recurrencePeriod >= 80
+          ? 'quarterly'
+          : 'monthly';
+    } else if (it.includes('year') || it.includes('anual') || it.includes('ano') || name.includes('anual')) {
+      billingPeriod = 'yearly';
+    } else if (it.includes('quarter') || it.includes('trimestr') || name.includes('trimestr')) {
+      billingPeriod = 'quarterly';
+    } else if (it.includes('month') || it.includes('mes') || it.includes('mensal') || name.includes('mensal') || name.includes('mes')) {
+      billingPeriod = 'monthly';
+    } else if (
+      !isCaktoSubscriptionWithLifetimeIntervalType &&
+      (it.includes('lifetime') || it.includes('infinite') || it.includes('vitalicio') || it.includes('vitalício') || name.includes('vitalicio') || name.includes('vitalício'))
+    ) {
+      billingPeriod = 'lifetime';
+    }
     const intervalCount = offer.interval || 1;
     setSelectedPlan(null);
     setSelectedOffer(offer);
@@ -411,15 +438,38 @@ export default function SuperAdminPlans() {
         const it = (offer.intervalType || "").toLowerCase();
         const type = (offer.type || "").toLowerCase();
         const name = (offer.name || "").toLowerCase();
-        const billingPeriod: BillingPeriod = 
-          type === 'one_time' ? 'lifetime' :
-          it.includes('year') || it.includes('anual') || it.includes('ano') || name.includes('anual') ? 'yearly' : 
-          it.includes('quarter') || it.includes('trimestr') || name.includes('trimestr') ? 'quarterly' : 
-          it.includes('month') || it.includes('mes') || it.includes('mensal') || name.includes('mensal') || name.includes('mes') ? 'monthly' :
-          it.includes('lifetime') || it.includes('infinite') || it.includes('vitalicio') || it.includes('vitalício') || name.includes('vitalicio') || name.includes('vitalício') ? 'lifetime' : 'monthly';
+        const recurrencePeriod = Number(offer.recurrence_period ?? NaN);
+        const isCaktoSubscriptionWithLifetimeIntervalType =
+          type === 'subscription' &&
+          (it.includes('lifetime') || it.includes('infinite'));
+
+        let billingPeriod: BillingPeriod = 'monthly';
+
+        if (type === 'one_time' || type === 'one-time' || type === 'one time') {
+          billingPeriod = 'lifetime';
+        } else if (Number.isFinite(recurrencePeriod) && recurrencePeriod > 0) {
+          billingPeriod = recurrencePeriod >= 360
+            ? 'yearly'
+            : recurrencePeriod >= 80
+              ? 'quarterly'
+              : 'monthly';
+        } else if (it.includes('year') || it.includes('anual') || it.includes('ano') || name.includes('anual')) {
+          billingPeriod = 'yearly';
+        } else if (it.includes('quarter') || it.includes('trimestr') || name.includes('trimestr')) {
+          billingPeriod = 'quarterly';
+        } else if (it.includes('month') || it.includes('mes') || it.includes('mensal') || name.includes('mensal') || name.includes('mes')) {
+          billingPeriod = 'monthly';
+        } else if (
+          !isCaktoSubscriptionWithLifetimeIntervalType &&
+          (it.includes('lifetime') || it.includes('infinite') || it.includes('vitalicio') || it.includes('vitalício') || name.includes('vitalicio') || name.includes('vitalício'))
+        ) {
+          billingPeriod = 'lifetime';
+        }
         const intervalCount = offer.interval || 1;
         const baseDays = billingPeriod === 'yearly' ? 365 : billingPeriod === 'quarterly' ? 90 : billingPeriod === 'lifetime' ? 99999 : 30;
-        const periodDays = baseDays * intervalCount;
+        const periodDays = Number.isFinite(recurrencePeriod) && recurrencePeriod > 0
+          ? recurrencePeriod
+          : baseDays * intervalCount;
         return {
           name: offer.name || 'Plano Cakto',
           description: null,
@@ -540,13 +590,35 @@ export default function SuperAdminPlans() {
             const it = (offer?.intervalType || "").toLowerCase();
             const type = (offer?.type || "").toLowerCase();
             const name = (offer?.name || "").toLowerCase();
-            const billingPeriod: BillingPeriod = plan?.billing_period as BillingPeriod || (
-              type === 'one_time' ? 'lifetime' :
-              it.includes('year') || it.includes('anual') || it.includes('ano') || name.includes('anual') ? 'yearly' : 
-              it.includes('quarter') || it.includes('trimestr') || name.includes('trimestr') ? 'quarterly' : 
-              it.includes('month') || it.includes('mes') || it.includes('mensal') || name.includes('mensal') || name.includes('mes') ? 'monthly' :
-              it.includes('lifetime') || it.includes('infinite') || it.includes('vitalicio') || it.includes('vitalício') || name.includes('vitalicio') || name.includes('vitalício') ? 'lifetime' : 'monthly'
-            );
+            const recurrencePeriod = Number(offer?.recurrence_period ?? NaN);
+            const isCaktoSubscriptionWithLifetimeIntervalType =
+              type === 'subscription' &&
+              (it.includes('lifetime') || it.includes('infinite'));
+
+            let offerBillingPeriod: BillingPeriod = 'monthly';
+
+            if (type === 'one_time' || type === 'one-time' || type === 'one time') {
+              offerBillingPeriod = 'lifetime';
+            } else if (Number.isFinite(recurrencePeriod) && recurrencePeriod > 0) {
+              offerBillingPeriod = recurrencePeriod >= 360
+                ? 'yearly'
+                : recurrencePeriod >= 80
+                  ? 'quarterly'
+                  : 'monthly';
+            } else if (it.includes('year') || it.includes('anual') || it.includes('ano') || name.includes('anual')) {
+              offerBillingPeriod = 'yearly';
+            } else if (it.includes('quarter') || it.includes('trimestr') || name.includes('trimestr')) {
+              offerBillingPeriod = 'quarterly';
+            } else if (it.includes('month') || it.includes('mes') || it.includes('mensal') || name.includes('mensal') || name.includes('mes')) {
+              offerBillingPeriod = 'monthly';
+            } else if (
+              !isCaktoSubscriptionWithLifetimeIntervalType &&
+              (it.includes('lifetime') || it.includes('infinite') || it.includes('vitalicio') || it.includes('vitalício') || name.includes('vitalicio') || name.includes('vitalício'))
+            ) {
+              offerBillingPeriod = 'lifetime';
+            }
+
+            const billingPeriod: BillingPeriod = plan?.billing_period as BillingPeriod || offerBillingPeriod;
             const isInactive = plan ? !plan.is_active : false;
             return (
               <Card key={key} className={`border-slate-200 ${isInactive ? 'opacity-60' : ''}`}>
@@ -827,4 +899,3 @@ export default function SuperAdminPlans() {
     </div>
   );
 }
-

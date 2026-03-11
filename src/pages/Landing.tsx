@@ -51,7 +51,9 @@ type CaktoOffer = {
   price?: number | null;
   intervalType?: string | null;
   interval?: number | null;
+  recurrence_period?: number | null;
   status?: string | null;
+  type?: string | null;
   checkoutUrl?: string | null;
 };
 
@@ -159,7 +161,13 @@ export default function Landing() {
           price: typeof offer.price === "number" ? offer.price : Number(offer.price ?? 0),
           intervalType: offer.intervalType ? String(offer.intervalType) : null,
           interval: offer.interval ? Number(offer.interval) : null,
+          recurrence_period: typeof offer.recurrence_period === "number"
+            ? offer.recurrence_period
+            : offer.recurrence_period
+              ? Number(offer.recurrence_period)
+              : null,
           status: offer.status ? String(offer.status) : null,
+          type: offer.type ? String(offer.type) : null,
           checkoutUrl: offer.checkout_url ? String(offer.checkout_url) : null,
         }));
         setOffers(mapped.filter((offer) => offer.id));
@@ -214,19 +222,31 @@ export default function Landing() {
           );
           
           const it = (offer.intervalType || "").toLowerCase();
-          const type = (offer as any).type?.toLowerCase() || "";
+          const type = (offer.type || "").toLowerCase();
+          const recurrencePeriod = Number(offer.recurrence_period ?? NaN);
+
+          const isCaktoSubscriptionWithLifetimeIntervalType =
+            type === "subscription" && (it.includes("lifetime") || it.includes("infinite"));
+
           const billing =
-            matchingPlan?.billing_period || (
-              type === "one_time"
-                ? "lifetime"
+            type === "one_time" || type === "one-time" || type === "one time"
+              ? "lifetime"
+              : Number.isFinite(recurrencePeriod) && recurrencePeriod > 0
+                ? recurrencePeriod >= 360
+                  ? "yearly"
+                  : recurrencePeriod >= 80
+                    ? "quarterly"
+                    : "monthly"
                 : it.includes("year") || it.includes("anual") || it.includes("ano")
-                ? "yearly"
-                : it.includes("quarter") || it.includes("trimestral") || it.includes("trimestre")
-                ? "quarterly"
-                : it.includes("lifetime") || it.includes("infinite") || it.includes("vitalicio") || it.includes("vitalício")
-                ? "lifetime"
-                : "monthly"
-            );
+                  ? "yearly"
+                  : it.includes("quarter") || it.includes("trimestral") || it.includes("trimestre")
+                    ? "quarterly"
+                    : it.includes("month") || it.includes("mes") || it.includes("mensal")
+                      ? "monthly"
+                      : !isCaktoSubscriptionWithLifetimeIntervalType &&
+                          (it.includes("lifetime") || it.includes("infinite") || it.includes("vitalicio") || it.includes("vitalício"))
+                        ? "lifetime"
+                        : matchingPlan?.billing_period || "monthly";
 
           return {
             id: offer.id,

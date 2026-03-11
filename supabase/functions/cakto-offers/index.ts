@@ -107,12 +107,21 @@ serve(async (req) => {
       const deletedAt = rawDeletedAt ? String(rawDeletedAt).trim() : null;
       const rawStatus = offer?.status ?? null;
       const status = rawStatus === null || rawStatus === undefined ? null : String(rawStatus);
+      const rawRecurrencePeriod =
+        offer?.recurrence_period ?? offer?.recurrencePeriod ?? offer?.recurrence_days ?? null;
+      const recurrencePeriod =
+        rawRecurrencePeriod === null || rawRecurrencePeriod === undefined
+          ? null
+          : Number(rawRecurrencePeriod);
+      const normalizedRecurrencePeriod =
+        Number.isFinite(recurrencePeriod) && recurrencePeriod > 0 ? recurrencePeriod : null;
       return ({
         id,
         name: offer?.name ?? null,
         price: typeof offer?.price === "string" ? Number(offer.price) : offer?.price ?? null,
         intervalType: offer?.intervalType ?? offer?.interval_type ?? null,
         interval: offer?.interval ?? offer?.interval_count ?? null,
+        recurrence_period: normalizedRecurrencePeriod,
         status,
         type: offer?.type ?? null,
         checkout_url: checkoutUrl,

@@ -103,8 +103,19 @@ const addDays = (date: Date, days: number) => {
   return next;
 };
 
-const resolvePeriodDays = (planPeriodDays?: number | null, intervalType?: string | null, intervalCount?: number | null) => {
-  if (planPeriodDays && planPeriodDays > 0) return planPeriodDays;
+const resolvePeriodDays = (
+  planPeriodDays?: number | null,
+  recurrencePeriod?: number | null,
+  intervalType?: string | null,
+  intervalCount?: number | null,
+) => {
+  if (planPeriodDays && planPeriodDays > 0) {
+    if (recurrencePeriod && recurrencePeriod > 0 && planPeriodDays > recurrencePeriod * 10) {
+      return recurrencePeriod;
+    }
+    return planPeriodDays;
+  }
+  if (recurrencePeriod && recurrencePeriod > 0) return recurrencePeriod;
   const count = intervalCount && intervalCount > 0 ? intervalCount : 1;
   const normalized = (intervalType ?? 'month').toLowerCase();
   if (normalized.includes('year')) return 365 * count;
@@ -524,8 +535,33 @@ serve(async (req) => {
         const intervalCount = typeof rawIntervalType === 'number'
           ? rawIntervalType
           : Number(data?.offer?.interval ?? data?.offer?.interval_count ?? data?.offer?.intervalCount ?? 1);
-        const isYearly = intervalType.toLowerCase().includes('year');
-        const periodDays = resolvePeriodDays(null, intervalType, intervalCount);
+        const rawRecurrencePeriod = data?.offer?.recurrence_period ?? data?.offer?.recurrencePeriod ?? null;
+        const recurrencePeriod = rawRecurrencePeriod === null || rawRecurrencePeriod === undefined
+          ? null
+          : Number(rawRecurrencePeriod);
+        const normalizedRecurrencePeriod =
+          Number.isFinite(recurrencePeriod) && recurrencePeriod > 0 ? recurrencePeriod : null;
+        const offerType = (data?.offer?.type ?? '').toString().trim().toLowerCase();
+        const normalizedIntervalType = intervalType.toLowerCase();
+        const normalizedOfferName = offerName.toLowerCase();
+
+        const billingPeriod = offerType === 'one_time' || offerType === 'one-time' || offerType === 'one time'
+          ? 'lifetime'
+          : normalizedRecurrencePeriod
+            ? normalizedRecurrencePeriod >= 360
+              ? 'yearly'
+              : normalizedRecurrencePeriod >= 80
+                ? 'quarterly'
+                : 'monthly'
+            : normalizedIntervalType.includes('year') || normalizedOfferName.includes('anual')
+              ? 'yearly'
+              : normalizedIntervalType.includes('quarter') || normalizedOfferName.includes('trimestr')
+                ? 'quarterly'
+                : normalizedIntervalType.includes('month') || normalizedIntervalType.includes('mes') || normalizedOfferName.includes('mensal')
+                  ? 'monthly'
+                  : 'monthly';
+
+        const periodDays = resolvePeriodDays(null, normalizedRecurrencePeriod, intervalType, intervalCount);
 
         const { data: createdPlan } = await supabase
           .from('plans')
@@ -533,7 +569,7 @@ serve(async (req) => {
             name: offerName,
             description: null,
             price: offerPrice,
-            billing_period: isYearly ? 'yearly' : 'monthly',
+            billing_period: billingPeriod,
             period_days: periodDays,
             features: [],
             max_users: null,
@@ -754,7 +790,13 @@ serve(async (req) => {
     const intervalCount = typeof rawIntervalType === 'number'
       ? rawIntervalType
       : Number(data?.offer?.interval ?? data?.offer?.interval_count ?? data?.offer?.intervalCount ?? 1);
-    const periodDays = resolvePeriodDays(planInfo?.period_days ?? null, intervalType, intervalCount);
+    const rawRecurrencePeriod = data?.offer?.recurrence_period ?? data?.offer?.recurrencePeriod ?? null;
+    const recurrencePeriod = rawRecurrencePeriod === null || rawRecurrencePeriod === undefined
+      ? null
+      : Number(rawRecurrencePeriod);
+    const normalizedRecurrencePeriod =
+      Number.isFinite(recurrencePeriod) && recurrencePeriod > 0 ? recurrencePeriod : null;
+    const periodDays = resolvePeriodDays(planInfo?.period_days ?? null, normalizedRecurrencePeriod, intervalType, intervalCount);
 
     const isActiveNow =
       !createdCompany &&
