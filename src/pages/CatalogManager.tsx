@@ -1065,7 +1065,7 @@ export default function CatalogManager() {
                     Compartilhe esse endereço com seus clientes.
                   </p>
                 </div>
-                <div className="overflow-x-auto rounded-xl border border-border bg-background p-3">
+                <div className="overflow-hidden rounded-xl border border-border bg-background p-3">
                   <code className="block min-w-0 whitespace-normal break-all text-sm">
                     {publicCatalogAbsoluteUrl || `${typeof window !== "undefined" ? window.location.origin : ""}/catalogo/slug`}
                   </code>
@@ -1261,5 +1261,4 @@ export default function CatalogManager() {
     </div>
   );
 }
-
 

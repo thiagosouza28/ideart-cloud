@@ -312,9 +312,9 @@ export default function Reports() {
       </Card>
 
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as ReportTab)}>
-        <TabsList className="flex w-full justify-start overflow-x-auto">
+        <TabsList className="grid h-auto w-full grid-cols-2 sm:grid-cols-4">
           {reportTabs.map((tab) => (
-            <TabsTrigger key={tab.value} value={tab.value}>
+            <TabsTrigger key={tab.value} value={tab.value} className="whitespace-normal px-2 py-2 text-xs sm:text-sm">
               {tab.label}
             </TabsTrigger>
           ))}
@@ -373,27 +373,25 @@ export default function Reports() {
               </Select>
             </CardHeader>
             <CardContent>
-              <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-                <ChartContainer
+              <ChartContainer
                 config={{
                   inflow: { label: 'Entradas', color: '#2563eb' },
                   outflow: { label: 'Saídas', color: '#f97316' },
                   net: { label: 'Saldo', color: '#16a34a' },
                 }}
-                className="h-[340px] min-w-[520px] md:h-[280px] md:min-w-0"
+                className="h-[360px] sm:h-[340px] md:h-[280px]"
               >
                 <LineChart data={cashSeries} margin={{ top: 12, right: 12, left: 4, bottom: 12 }}>
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="label" minTickGap={24} tick={{ fontSize: 12 }} tickMargin={8} />
-                  <YAxis width={48} tick={{ fontSize: 12 }} />
+                  <XAxis dataKey="label" interval="preserveStartEnd" minTickGap={12} tick={{ fontSize: 10 }} tickMargin={6} />
+                  <YAxis width={40} tick={{ fontSize: 10 }} />
                   <ChartTooltip content={<ChartTooltipContent />} />
-                  <ChartLegend content={<ChartLegendContent className="flex-wrap gap-2 sm:gap-4" />} />
+                  <ChartLegend content={<ChartLegendContent className="flex-wrap justify-start gap-2 text-[11px] sm:justify-center sm:gap-4 sm:text-xs" />} />
                   <Line type="monotone" dataKey="inflow" stroke="var(--color-inflow)" strokeWidth={2} />
                   <Line type="monotone" dataKey="outflow" stroke="var(--color-outflow)" strokeWidth={2} />
                   <Line type="monotone" dataKey="net" stroke="var(--color-net)" strokeWidth={2} />
                 </LineChart>
-                </ChartContainer>
-              </div>
+              </ChartContainer>
             </CardContent>
           </Card>
 
@@ -483,27 +481,25 @@ export default function Reports() {
                 <CardTitle>Fluxo de caixa</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-                  <ChartContainer
+                <ChartContainer
                   config={{
                     inflow: { label: 'Entradas', color: '#2563eb' },
                     outflow: { label: 'Saídas', color: '#f97316' },
                     net: { label: 'Saldo', color: '#16a34a' },
                   }}
-                  className="h-[340px] min-w-[520px] md:h-[260px] md:min-w-0"
+                  className="h-[360px] sm:h-[340px] md:h-[260px]"
                 >
                   <LineChart data={financialCashflow} margin={{ top: 12, right: 12, left: 4, bottom: 12 }}>
                     <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="label" minTickGap={24} tick={{ fontSize: 12 }} tickMargin={8} />
-                    <YAxis width={48} tick={{ fontSize: 12 }} />
+                    <XAxis dataKey="label" interval="preserveStartEnd" minTickGap={12} tick={{ fontSize: 10 }} tickMargin={6} />
+                    <YAxis width={40} tick={{ fontSize: 10 }} />
                     <ChartTooltip content={<ChartTooltipContent />} />
-                    <ChartLegend content={<ChartLegendContent className="flex-wrap gap-2 sm:gap-4" />} />
+                    <ChartLegend content={<ChartLegendContent className="flex-wrap justify-start gap-2 text-[11px] sm:justify-center sm:gap-4 sm:text-xs" />} />
                     <Line type="monotone" dataKey="inflow" stroke="var(--color-inflow)" strokeWidth={2} />
                     <Line type="monotone" dataKey="outflow" stroke="var(--color-outflow)" strokeWidth={2} />
                     <Line type="monotone" dataKey="net" stroke="var(--color-net)" strokeWidth={2} />
                   </LineChart>
-                  </ChartContainer>
-                </div>
+                </ChartContainer>
               </CardContent>
             </Card>
             <Card>
@@ -532,7 +528,7 @@ export default function Reports() {
                         <Cell key={key} fill={['#2563eb', '#0ea5e9', '#38bdf8'][index % 3]} />
                       ))}
                     </Pie>
-                    <ChartLegend content={<ChartLegendContent className="flex-wrap gap-2 sm:gap-4" />} />
+                    <ChartLegend content={<ChartLegendContent className="flex-wrap justify-start gap-2 text-[11px] sm:justify-center sm:gap-4 sm:text-xs" />} />
                   </PieChart>
                 </ChartContainer>
               </CardContent>
@@ -609,12 +605,11 @@ export default function Reports() {
               <CardTitle>Despesas por categoria</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-                <ChartContainer
+              <ChartContainer
                 config={{
                   value: { label: 'Despesas', color: '#f97316' },
                 }}
-                className="h-[320px] min-w-[520px] md:h-[260px] md:min-w-0"
+                className="h-[340px] sm:h-[320px] md:h-[260px]"
               >
                 <BarChart
                   data={Object.entries(reportData?.financial.expensesByCategory || {}).map(([name, value]) => ({
@@ -624,14 +619,13 @@ export default function Reports() {
                   margin={{ top: 12, right: 12, left: 4, bottom: 12 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" minTickGap={24} tick={{ fontSize: 12 }} tickMargin={8} />
-                  <YAxis width={48} tick={{ fontSize: 12 }} />
+                  <XAxis dataKey="name" interval="preserveStartEnd" minTickGap={12} tick={{ fontSize: 10 }} tickMargin={6} />
+                  <YAxis width={40} tick={{ fontSize: 10 }} />
                   <ChartTooltip content={<ChartTooltipContent />} />
-                  <ChartLegend content={<ChartLegendContent className="flex-wrap gap-2 sm:gap-4" />} />
+                  <ChartLegend content={<ChartLegendContent className="flex-wrap justify-start gap-2 text-[11px] sm:justify-center sm:gap-4 sm:text-xs" />} />
                   <Bar dataKey="value" fill="var(--color-value)" radius={[6, 6, 0, 0]} />
                 </BarChart>
-                </ChartContainer>
-              </div>
+              </ChartContainer>
             </CardContent>
           </Card>
         </TabsContent>
@@ -697,23 +691,21 @@ export default function Reports() {
               </Select>
             </CardHeader>
             <CardContent>
-              <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-                <ChartContainer
+              <ChartContainer
                 config={{
                   total: { label: 'Vendas', color: '#2563eb' },
                 }}
-                className="h-[340px] min-w-[520px] md:h-[260px] md:min-w-0"
+                className="h-[360px] sm:h-[340px] md:h-[260px]"
               >
                 <LineChart data={salesPeriodSeries} margin={{ top: 12, right: 12, left: 4, bottom: 12 }}>
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="label" minTickGap={24} tick={{ fontSize: 12 }} tickMargin={8} />
-                  <YAxis width={48} tick={{ fontSize: 12 }} />
+                  <XAxis dataKey="label" interval="preserveStartEnd" minTickGap={12} tick={{ fontSize: 10 }} tickMargin={6} />
+                  <YAxis width={40} tick={{ fontSize: 10 }} />
                   <ChartTooltip content={<ChartTooltipContent />} />
-                  <ChartLegend content={<ChartLegendContent className="flex-wrap gap-2 sm:gap-4" />} />
+                  <ChartLegend content={<ChartLegendContent className="flex-wrap justify-start gap-2 text-[11px] sm:justify-center sm:gap-4 sm:text-xs" />} />
                   <Line type="monotone" dataKey="total" stroke="var(--color-total)" strokeWidth={2} />
                 </LineChart>
-                </ChartContainer>
-              </div>
+              </ChartContainer>
             </CardContent>
           </Card>
 

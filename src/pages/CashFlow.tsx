@@ -735,27 +735,25 @@ export default function CashFlow() {
             </div>
           </div>
 
-          <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-            <ChartContainer
-              className="h-[340px] min-w-[520px] md:h-[280px] md:min-w-0"
+          <ChartContainer
+            className="h-[360px] sm:h-[340px] md:h-[280px]"
               config={{
                 incoming: { label: 'Entradas previstas', color: '#16a34a' },
                 outgoing: { label: 'Saídas previstas', color: '#f59e0b' },
                 net: { label: 'Saldo líquido', color: '#2563eb' },
               }}
-            >
-              <LineChart data={forecastSeries} margin={{ top: 12, right: 12, left: 4, bottom: 12 }}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="label" minTickGap={24} tick={{ fontSize: 12 }} tickMargin={8} />
-                <YAxis width={48} tick={{ fontSize: 12 }} />
-                <ChartTooltip content={<ChartTooltipContent />} />
-                <ChartLegend content={<ChartLegendContent className="flex-wrap gap-2 sm:gap-4" />} />
-                <Line dataKey="incoming" type="monotone" stroke="var(--color-incoming)" strokeWidth={2} />
-                <Line dataKey="outgoing" type="monotone" stroke="var(--color-outgoing)" strokeWidth={2} />
-                <Line dataKey="net" type="monotone" stroke="var(--color-net)" strokeWidth={2} />
-              </LineChart>
-            </ChartContainer>
-          </div>
+          >
+            <LineChart data={forecastSeries} margin={{ top: 12, right: 12, left: 4, bottom: 12 }}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="label" interval="preserveStartEnd" minTickGap={12} tick={{ fontSize: 10 }} tickMargin={6} />
+              <YAxis width={40} tick={{ fontSize: 10 }} />
+              <ChartTooltip content={<ChartTooltipContent />} />
+              <ChartLegend content={<ChartLegendContent className="flex-wrap justify-start gap-2 text-[11px] sm:justify-center sm:gap-4 sm:text-xs" />} />
+              <Line dataKey="incoming" type="monotone" stroke="var(--color-incoming)" strokeWidth={2} />
+              <Line dataKey="outgoing" type="monotone" stroke="var(--color-outgoing)" strokeWidth={2} />
+              <Line dataKey="net" type="monotone" stroke="var(--color-net)" strokeWidth={2} />
+            </LineChart>
+          </ChartContainer>
         </CardContent>
       </Card>
 
@@ -804,27 +802,25 @@ export default function CashFlow() {
             </Select>
           </CardHeader>
           <CardContent>
-            <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-              <ChartContainer
-                className="h-[340px] min-w-[520px] md:h-[280px] md:min-w-0"
+            <ChartContainer
+              className="h-[360px] sm:h-[340px] md:h-[280px]"
                 config={{
                   inflow: { label: 'Receitas', color: '#2563eb' },
                   outflow: { label: 'Despesas', color: '#ef4444' },
                   net: { label: 'Saldo', color: '#16a34a' },
                 }}
-              >
-                <LineChart data={lineSeries} margin={{ top: 12, right: 12, left: 4, bottom: 12 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="label" minTickGap={24} tick={{ fontSize: 12 }} tickMargin={8} />
-                  <YAxis width={48} tick={{ fontSize: 12 }} />
-                  <ChartTooltip content={<ChartTooltipContent />} />
-                  <ChartLegend content={<ChartLegendContent className="flex-wrap gap-2 sm:gap-4" />} />
-                  <Line dataKey="inflow" type="monotone" stroke="var(--color-inflow)" strokeWidth={2} />
-                  <Line dataKey="outflow" type="monotone" stroke="var(--color-outflow)" strokeWidth={2} />
-                  <Line dataKey="net" type="monotone" stroke="var(--color-net)" strokeWidth={2} />
-                </LineChart>
-              </ChartContainer>
-            </div>
+            >
+              <LineChart data={lineSeries} margin={{ top: 12, right: 12, left: 4, bottom: 12 }}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="label" interval="preserveStartEnd" minTickGap={12} tick={{ fontSize: 10 }} tickMargin={6} />
+                <YAxis width={40} tick={{ fontSize: 10 }} />
+                <ChartTooltip content={<ChartTooltipContent />} />
+                <ChartLegend content={<ChartLegendContent className="flex-wrap justify-start gap-2 text-[11px] sm:justify-center sm:gap-4 sm:text-xs" />} />
+                <Line dataKey="inflow" type="monotone" stroke="var(--color-inflow)" strokeWidth={2} />
+                <Line dataKey="outflow" type="monotone" stroke="var(--color-outflow)" strokeWidth={2} />
+                <Line dataKey="net" type="monotone" stroke="var(--color-net)" strokeWidth={2} />
+              </LineChart>
+            </ChartContainer>
           </CardContent>
         </Card>
 
@@ -841,7 +837,7 @@ export default function CashFlow() {
                   ))}
                 </Pie>
                 <ChartTooltip content={<ChartTooltipContent />} />
-                <ChartLegend content={<ChartLegendContent className="flex-wrap gap-2 sm:gap-4" nameKey="name" />} />
+                <ChartLegend content={<ChartLegendContent className="flex-wrap justify-start gap-2 text-[11px] sm:justify-center sm:gap-4 sm:text-xs" nameKey="name" />} />
               </PieChart>
             </ChartContainer>
           </CardContent>
@@ -853,25 +849,23 @@ export default function CashFlow() {
           <CardTitle>Comparativo mensal</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-            <ChartContainer
-              className="h-[320px] min-w-[520px] md:h-[260px] md:min-w-0"
+          <ChartContainer
+            className="h-[340px] sm:h-[320px] md:h-[260px]"
               config={{
                 inflow: { label: 'Entradas', color: '#2563eb' },
                 outflow: { label: 'Saídas', color: '#f97316' },
               }}
-            >
-              <BarChart data={monthlyBars} margin={{ top: 12, right: 12, left: 4, bottom: 12 }}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="label" minTickGap={24} tick={{ fontSize: 12 }} tickMargin={8} />
-                <YAxis width={48} tick={{ fontSize: 12 }} />
-                <ChartTooltip content={<ChartTooltipContent />} />
-                <ChartLegend content={<ChartLegendContent className="flex-wrap gap-2 sm:gap-4" />} />
-                <Bar dataKey="inflow" fill="var(--color-inflow)" radius={[6, 6, 0, 0]} />
-                <Bar dataKey="outflow" fill="var(--color-outflow)" radius={[6, 6, 0, 0]} />
-              </BarChart>
-            </ChartContainer>
-          </div>
+          >
+            <BarChart data={monthlyBars} margin={{ top: 12, right: 12, left: 4, bottom: 12 }}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="label" interval="preserveStartEnd" minTickGap={12} tick={{ fontSize: 10 }} tickMargin={6} />
+              <YAxis width={40} tick={{ fontSize: 10 }} />
+              <ChartTooltip content={<ChartTooltipContent />} />
+              <ChartLegend content={<ChartLegendContent className="flex-wrap justify-start gap-2 text-[11px] sm:justify-center sm:gap-4 sm:text-xs" />} />
+              <Bar dataKey="inflow" fill="var(--color-inflow)" radius={[6, 6, 0, 0]} />
+              <Bar dataKey="outflow" fill="var(--color-outflow)" radius={[6, 6, 0, 0]} />
+            </BarChart>
+          </ChartContainer>
         </CardContent>
       </Card>
 
