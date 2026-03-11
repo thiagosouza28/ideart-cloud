@@ -235,13 +235,13 @@ export default function Reports() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h1 className="text-3xl font-bold text-slate-900">Relatórios</h1>
           <p className="text-sm text-slate-500">Central de indicadores e financeiro.</p>
         </div>
         <Button
-          className="rounded-2xl bg-sky-500 shadow-sm hover:bg-sky-600"
+          className="w-full rounded-2xl bg-sky-500 shadow-sm hover:bg-sky-600 sm:w-auto"
           onClick={() => setExportOpen(true)}
           disabled={!reportData}
         >
@@ -312,7 +312,7 @@ export default function Reports() {
       </Card>
 
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as ReportTab)}>
-        <TabsList>
+        <TabsList className="flex w-full justify-start overflow-x-auto">
           {reportTabs.map((tab) => (
             <TabsTrigger key={tab.value} value={tab.value}>
               {tab.label}
@@ -364,7 +364,7 @@ export default function Reports() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="daily">Diario</SelectItem>
+                  <SelectItem value="daily">Diário</SelectItem>
                   <SelectItem value="shift">Por turno</SelectItem>
                   <SelectItem value="weekly">Semanal</SelectItem>
                   <SelectItem value="monthly">Mensal</SelectItem>
@@ -373,25 +373,27 @@ export default function Reports() {
               </Select>
             </CardHeader>
             <CardContent>
-              <ChartContainer
+              <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+                <ChartContainer
                 config={{
                   inflow: { label: 'Entradas', color: '#2563eb' },
                   outflow: { label: 'Saídas', color: '#f97316' },
                   net: { label: 'Saldo', color: '#16a34a' },
                 }}
-                className="h-[280px]"
+                className="h-[340px] min-w-[520px] md:h-[280px] md:min-w-0"
               >
-                <LineChart data={cashSeries}>
+                <LineChart data={cashSeries} margin={{ top: 12, right: 12, left: 4, bottom: 12 }}>
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="label" />
-                  <YAxis />
+                  <XAxis dataKey="label" minTickGap={24} tick={{ fontSize: 12 }} tickMargin={8} />
+                  <YAxis width={48} tick={{ fontSize: 12 }} />
                   <ChartTooltip content={<ChartTooltipContent />} />
-                  <ChartLegend content={<ChartLegendContent />} />
+                  <ChartLegend content={<ChartLegendContent className="flex-wrap gap-2 sm:gap-4" />} />
                   <Line type="monotone" dataKey="inflow" stroke="var(--color-inflow)" strokeWidth={2} />
                   <Line type="monotone" dataKey="outflow" stroke="var(--color-outflow)" strokeWidth={2} />
                   <Line type="monotone" dataKey="net" stroke="var(--color-net)" strokeWidth={2} />
                 </LineChart>
-              </ChartContainer>
+                </ChartContainer>
+              </div>
             </CardContent>
           </Card>
 
@@ -481,24 +483,27 @@ export default function Reports() {
                 <CardTitle>Fluxo de caixa</CardTitle>
               </CardHeader>
               <CardContent>
-                <ChartContainer
+                <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+                  <ChartContainer
                   config={{
                     inflow: { label: 'Entradas', color: '#2563eb' },
                     outflow: { label: 'Saídas', color: '#f97316' },
                     net: { label: 'Saldo', color: '#16a34a' },
                   }}
-                  className="h-[260px]"
+                  className="h-[340px] min-w-[520px] md:h-[260px] md:min-w-0"
                 >
-                  <LineChart data={financialCashflow}>
+                  <LineChart data={financialCashflow} margin={{ top: 12, right: 12, left: 4, bottom: 12 }}>
                     <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="label" />
-                    <YAxis />
+                    <XAxis dataKey="label" minTickGap={24} tick={{ fontSize: 12 }} tickMargin={8} />
+                    <YAxis width={48} tick={{ fontSize: 12 }} />
                     <ChartTooltip content={<ChartTooltipContent />} />
+                    <ChartLegend content={<ChartLegendContent className="flex-wrap gap-2 sm:gap-4" />} />
                     <Line type="monotone" dataKey="inflow" stroke="var(--color-inflow)" strokeWidth={2} />
                     <Line type="monotone" dataKey="outflow" stroke="var(--color-outflow)" strokeWidth={2} />
                     <Line type="monotone" dataKey="net" stroke="var(--color-net)" strokeWidth={2} />
                   </LineChart>
-                </ChartContainer>
+                  </ChartContainer>
+                </div>
               </CardContent>
             </Card>
             <Card>
@@ -510,7 +515,7 @@ export default function Reports() {
                   config={{
                     value: { label: 'Receita', color: '#2563eb' },
                   }}
-                  className="h-[260px]"
+                  className="h-[340px] md:h-[260px]"
                 >
                   <PieChart>
                     <ChartTooltip content={<ChartTooltipContent hideLabel />} />
@@ -521,13 +526,13 @@ export default function Reports() {
                       }))}
                       dataKey="value"
                       nameKey="name"
-                      outerRadius={90}
+                      outerRadius={80}
                     >
                       {Object.keys(reportData?.financial.revenueByOrigin || {}).map((key, index) => (
                         <Cell key={key} fill={['#2563eb', '#0ea5e9', '#38bdf8'][index % 3]} />
                       ))}
                     </Pie>
-                    <ChartLegend content={<ChartLegendContent />} />
+                    <ChartLegend content={<ChartLegendContent className="flex-wrap gap-2 sm:gap-4" />} />
                   </PieChart>
                 </ChartContainer>
               </CardContent>
@@ -604,25 +609,29 @@ export default function Reports() {
               <CardTitle>Despesas por categoria</CardTitle>
             </CardHeader>
             <CardContent>
-              <ChartContainer
+              <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+                <ChartContainer
                 config={{
                   value: { label: 'Despesas', color: '#f97316' },
                 }}
-                className="h-[260px]"
+                className="h-[320px] min-w-[520px] md:h-[260px] md:min-w-0"
               >
                 <BarChart
                   data={Object.entries(reportData?.financial.expensesByCategory || {}).map(([name, value]) => ({
                     name,
                     value,
                   }))}
+                  margin={{ top: 12, right: 12, left: 4, bottom: 12 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" />
-                  <YAxis />
+                  <XAxis dataKey="name" minTickGap={24} tick={{ fontSize: 12 }} tickMargin={8} />
+                  <YAxis width={48} tick={{ fontSize: 12 }} />
                   <ChartTooltip content={<ChartTooltipContent />} />
+                  <ChartLegend content={<ChartLegendContent className="flex-wrap gap-2 sm:gap-4" />} />
                   <Bar dataKey="value" fill="var(--color-value)" radius={[6, 6, 0, 0]} />
                 </BarChart>
-              </ChartContainer>
+                </ChartContainer>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
@@ -639,7 +648,7 @@ export default function Reports() {
             </Card>
             <Card>
               <CardContent className="pt-6 space-y-2">
-                <p className="text-sm text-muted-foreground">Ticket medio</p>
+                <p className="text-sm text-muted-foreground">Ticket médio</p>
                 <p className="text-2xl font-semibold">
                   {reportData ? currency(reportData.sales.ticketAverage) : 'R$ 0,00'}
                 </p>
@@ -680,7 +689,7 @@ export default function Reports() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="daily">Diario</SelectItem>
+                  <SelectItem value="daily">Diário</SelectItem>
                   <SelectItem value="weekly">Semanal</SelectItem>
                   <SelectItem value="monthly">Mensal</SelectItem>
                   <SelectItem value="annual">Anual</SelectItem>
@@ -688,20 +697,23 @@ export default function Reports() {
               </Select>
             </CardHeader>
             <CardContent>
-              <ChartContainer
+              <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+                <ChartContainer
                 config={{
                   total: { label: 'Vendas', color: '#2563eb' },
                 }}
-                className="h-[260px]"
+                className="h-[340px] min-w-[520px] md:h-[260px] md:min-w-0"
               >
-                <LineChart data={salesPeriodSeries}>
+                <LineChart data={salesPeriodSeries} margin={{ top: 12, right: 12, left: 4, bottom: 12 }}>
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="label" />
-                  <YAxis />
+                  <XAxis dataKey="label" minTickGap={24} tick={{ fontSize: 12 }} tickMargin={8} />
+                  <YAxis width={48} tick={{ fontSize: 12 }} />
                   <ChartTooltip content={<ChartTooltipContent />} />
+                  <ChartLegend content={<ChartLegendContent className="flex-wrap gap-2 sm:gap-4" />} />
                   <Line type="monotone" dataKey="total" stroke="var(--color-total)" strokeWidth={2} />
                 </LineChart>
-              </ChartContainer>
+                </ChartContainer>
+              </div>
             </CardContent>
           </Card>
 

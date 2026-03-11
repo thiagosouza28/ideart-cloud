@@ -560,12 +560,12 @@ export default function CatalogManager() {
           <h1 className="page-title">Configurações do Catálogo</h1>
           <p className="text-sm text-muted-foreground">Defina link público, layout, vitrine e apresentação do catálogo.</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
           {publicCatalogUrl && (
             <Button
               size="sm"
               variant="outline"
-              className="h-9 border-border"
+              className="h-9 w-full border-border sm:w-auto"
               onClick={() => window.open(publicCatalogUrl, "_blank")}
             >
               Ver catálogo
@@ -1013,17 +1013,17 @@ export default function CatalogManager() {
           </div>
 
           <div className="grid gap-4 xl:grid-cols-2 xl:items-stretch">
-            <div className="space-y-4 rounded-2xl border border-border bg-card p-4 flex flex-col">
+            <div className="flex flex-col space-y-4 rounded-2xl border border-border bg-card p-4">
               <div>
-                <h3 className="text-lg font-semibold whitespace-nowrap">URL e status do catálogo</h3>
-                <p className="mt-1 text-sm text-muted-foreground whitespace-nowrap">
+                <h3 className="text-lg font-semibold">URL e status do catálogo</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
                   Configure o endereço público e controle a visibilidade.
                 </p>
               </div>
 
-              <div className="flex flex-col gap-4 mt-auto">
+              <div className="mt-auto flex flex-col gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="catalog-slug" className="whitespace-nowrap">Slug do catálogo</Label>
+                  <Label htmlFor="catalog-slug">Slug do catálogo</Label>
                   <Input
                     id="catalog-slug"
                     value={catalogSlug}
@@ -1031,7 +1031,7 @@ export default function CatalogManager() {
                     className="border-border"
                     placeholder="ex: ideart"
                   />
-                  <p className="text-xs text-muted-foreground whitespace-nowrap">
+                  <p className="break-all text-xs text-muted-foreground">
                     Endereço: <span className="font-medium text-foreground">/catalogo/{normalizedCatalogSlug || "slug"}</span>
                   </p>
                   {slugCheckState === "checking" && (
@@ -1045,10 +1045,10 @@ export default function CatalogManager() {
                   )}
                 </div>
 
-                <div className="flex items-center justify-between rounded-xl border border-border p-3">
-                  <div className="mr-4">
-                    <p className="text-sm font-semibold whitespace-nowrap">Catálogo ativo</p>
-                    <p className="text-xs text-muted-foreground whitespace-nowrap">
+                <div className="flex flex-col gap-3 rounded-xl border border-border p-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="sm:mr-4">
+                    <p className="text-sm font-semibold">Catálogo ativo</p>
+                    <p className="text-xs text-muted-foreground">
                       {catalogStatus ? "Visível." : "Oculto."}
                     </p>
                   </div>
@@ -1057,21 +1057,21 @@ export default function CatalogManager() {
               </div>
             </div>
 
-            <div className="space-y-4 rounded-2xl border border-border bg-card p-4 flex flex-col justify-between">
+            <div className="flex flex-col justify-between space-y-4 rounded-2xl border border-border bg-card p-4">
               <div className="space-y-3">
                 <div>
-                  <p className="text-sm font-semibold whitespace-nowrap">Link público do catálogo</p>
-                  <p className="mt-1 text-xs text-muted-foreground whitespace-nowrap">
+                  <p className="text-sm font-semibold">Link público do catálogo</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
                     Compartilhe esse endereço com seus clientes.
                   </p>
                 </div>
                 <div className="overflow-x-auto rounded-xl border border-border bg-background p-3">
-                  <code className="block whitespace-nowrap text-sm">
+                  <code className="block min-w-0 whitespace-normal break-all text-sm">
                     {publicCatalogAbsoluteUrl || `${typeof window !== "undefined" ? window.location.origin : ""}/catalogo/slug`}
                   </code>
                 </div>
               </div>
-              <div className="flex flex-wrap gap-2 pt-2">
+              <div className="flex flex-col gap-2 pt-2 sm:flex-row sm:flex-wrap">
                 <Button
                   type="button"
                   variant="outline"
@@ -1081,12 +1081,12 @@ export default function CatalogManager() {
                     await navigator.clipboard.writeText(publicCatalogAbsoluteUrl);
                     toast.success("Link do catálogo copiado.");
                   }}
-                  className="whitespace-nowrap"
+                  className="w-full sm:w-auto"
                 >
                   Copiar link
                 </Button>
                 {publicCatalogUrl && (
-                  <Button type="button" variant="outline" onClick={() => window.open(publicCatalogUrl, "_blank")} className="whitespace-nowrap">
+                  <Button type="button" variant="outline" onClick={() => window.open(publicCatalogUrl, "_blank")} className="w-full sm:w-auto">
                     Ver catálogo
                   </Button>
                 )}
@@ -1238,8 +1238,9 @@ export default function CatalogManager() {
                 product={products.find((product) => isCatalogVisible(product)) || products[0] || null}
               />
 
-              <div className="flex justify-end pt-2">
+              <div className="flex justify-stretch pt-2 sm:justify-end">
                 <Button
+                  className="w-full sm:w-auto"
                   onClick={saveSettings}
                   disabled={
                     savingSettings ||
@@ -1260,6 +1261,5 @@ export default function CatalogManager() {
     </div>
   );
 }
-
 
 

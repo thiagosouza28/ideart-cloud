@@ -79,7 +79,7 @@ export function CatalogManagerPreview({
       <div className="mt-4 overflow-hidden rounded-[24px] border border-border bg-[#d9dce3] shadow-sm">
         <div className="min-h-[620px]">
           <div
-            className="border-b px-5 py-4"
+            className="border-b px-4 py-4 sm:px-5"
             style={{
               backgroundColor: settings.header_bg_color,
               borderBottomColor: toolbarBorder,
@@ -154,7 +154,7 @@ export function CatalogManagerPreview({
           </div>
 
           <div
-            className="relative overflow-hidden px-5 py-7"
+            className="relative overflow-hidden px-4 py-6 sm:px-5 sm:py-7"
             style={{
               background: `linear-gradient(115deg, ${settings.header_bg_color} 0%, ${settings.button_bg_color} 100%)`,
               color: settings.header_text_color,
@@ -173,7 +173,7 @@ export function CatalogManagerPreview({
               style={{ borderColor: withAlpha(settings.header_text_color, "2B", "rgba(255,255,255,0.2)") }}
             />
 
-            <div className="relative z-10 max-w-4xl">
+            <div className="relative z-10 max-w-4xl min-w-0">
               <span
                 className="inline-flex rounded-full px-4 py-1.5 text-xs font-semibold"
                 style={{
@@ -183,7 +183,7 @@ export function CatalogManagerPreview({
               >
                 Catálogo de produtos
               </span>
-              <h3 className="mt-4 text-[42px] font-extrabold leading-none">
+              <h3 className="mt-4 break-words text-[32px] font-extrabold leading-none sm:text-[42px]">
                 {settings.catalog_title || "Catálogo"}
               </h3>
               <p className="mt-4 max-w-3xl text-sm" style={{ color: headerSubtle }}>
@@ -211,7 +211,7 @@ export function CatalogManagerPreview({
             </div>
           </div>
 
-          <div className="px-5 py-4" style={{ backgroundColor: settings.header_bg_color }}>
+          <div className="px-4 py-4 sm:px-5" style={{ backgroundColor: settings.header_bg_color }}>
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex flex-wrap items-center gap-2">
                 <span
@@ -224,7 +224,7 @@ export function CatalogManagerPreview({
                   Todos (1)
                 </span>
                 <span
-                  className="inline-flex h-10 min-w-[130px] items-center rounded-full border px-4 text-sm font-medium"
+                  className="inline-flex h-10 w-full min-w-0 items-center justify-center rounded-full border px-4 text-sm font-medium sm:w-auto sm:min-w-[130px]"
                   style={{
                     borderColor: settings.button_outline_color,
                     backgroundColor: settings.card_bg_color,
@@ -235,9 +235,9 @@ export function CatalogManagerPreview({
                 </span>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
                 <span
-                  className="inline-flex h-10 min-w-[170px] items-center rounded-xl border px-4 text-sm"
+                  className="inline-flex h-10 w-full min-w-0 items-center rounded-xl border px-4 text-sm sm:w-auto sm:min-w-[170px]"
                   style={{
                     borderColor: settings.button_outline_color,
                     backgroundColor: settings.card_bg_color,
@@ -285,7 +285,7 @@ export function CatalogManagerPreview({
             </div>
           </div>
 
-          <div className="bg-[#d9dce3] px-5 py-6">
+          <div className="bg-[#d9dce3] px-4 py-6 sm:px-5">
             <div
               className={`rounded-[22px] border ${settings.catalog_layout === "grid" ? "max-w-[360px]" : ""}`}
               style={{

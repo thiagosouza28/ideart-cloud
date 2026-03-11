@@ -479,27 +479,27 @@ export default function CashFlow() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h1 className="text-3xl font-bold text-slate-900">Fluxo de Caixa</h1>
           <p className="text-sm text-slate-500">Entradas, saídas, saldos e relatórios com filtros avançados.</p>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={() => loadCash(filters)} disabled={reportLoading}>
+        <div className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap lg:w-auto lg:justify-end">
+          <Button className="w-full sm:w-auto" variant="outline" onClick={() => loadCash(filters)} disabled={reportLoading}>
             <RefreshCw className="mr-2 h-4 w-4" />
             Atualizar
           </Button>
-          <Button variant="outline" onClick={() => openPdfPreview('Fluxo de Caixa', exportRows)} disabled={!exportRows.length}>
+          <Button className="w-full sm:w-auto" variant="outline" onClick={() => openPdfPreview('Fluxo de Caixa', exportRows)} disabled={!exportRows.length}>
             Preview PDF
           </Button>
-          <Button variant="outline" onClick={() => printPdf('Fluxo de Caixa', exportRows)} disabled={!exportRows.length}>
+          <Button className="w-full sm:w-auto" variant="outline" onClick={() => printPdf('Fluxo de Caixa', exportRows)} disabled={!exportRows.length}>
             Exportar PDF
           </Button>
-          <Button variant="outline" onClick={() => exportToCsv(exportRows, 'fluxo_caixa.csv')} disabled={!exportRows.length}>
+          <Button className="w-full sm:w-auto" variant="outline" onClick={() => exportToCsv(exportRows, 'fluxo_caixa.csv')} disabled={!exportRows.length}>
             Exportar CSV
           </Button>
           {canManage && (
-            <Button onClick={openCreateDialog}>
+            <Button className="w-full sm:w-auto" onClick={openCreateDialog}>
               <Plus className="mr-2 h-4 w-4" />
               Novo lançamento
             </Button>
@@ -672,9 +672,10 @@ export default function CashFlow() {
               Entradas e saídas previstas com base em pedidos, vendas, lançamentos e despesas futuras.
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap">
             <Button
               type="button"
+              className="w-full sm:w-auto"
               size="sm"
               variant={forecastPeriod === 'today' ? 'default' : 'outline'}
               onClick={() => setForecastPeriod('today')}
@@ -683,6 +684,7 @@ export default function CashFlow() {
             </Button>
             <Button
               type="button"
+              className="w-full sm:w-auto"
               size="sm"
               variant={forecastPeriod === 'week' ? 'default' : 'outline'}
               onClick={() => setForecastPeriod('week')}
@@ -691,6 +693,7 @@ export default function CashFlow() {
             </Button>
             <Button
               type="button"
+              className="w-full sm:w-auto"
               size="sm"
               variant={forecastPeriod === 'month' ? 'default' : 'outline'}
               onClick={() => setForecastPeriod('month')}
@@ -732,25 +735,27 @@ export default function CashFlow() {
             </div>
           </div>
 
-          <ChartContainer
-            className="h-[280px]"
-            config={{
-              incoming: { label: 'Entradas previstas', color: '#16a34a' },
-              outgoing: { label: 'Saídas previstas', color: '#f59e0b' },
-              net: { label: 'Saldo líquido', color: '#2563eb' },
-            }}
-          >
-            <LineChart data={forecastSeries}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="label" />
-              <YAxis />
-              <ChartTooltip content={<ChartTooltipContent />} />
-              <ChartLegend content={<ChartLegendContent />} />
-              <Line dataKey="incoming" type="monotone" stroke="var(--color-incoming)" strokeWidth={2} />
-              <Line dataKey="outgoing" type="monotone" stroke="var(--color-outgoing)" strokeWidth={2} />
-              <Line dataKey="net" type="monotone" stroke="var(--color-net)" strokeWidth={2} />
-            </LineChart>
-          </ChartContainer>
+          <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+            <ChartContainer
+              className="h-[340px] min-w-[520px] md:h-[280px] md:min-w-0"
+              config={{
+                incoming: { label: 'Entradas previstas', color: '#16a34a' },
+                outgoing: { label: 'Saídas previstas', color: '#f59e0b' },
+                net: { label: 'Saldo líquido', color: '#2563eb' },
+              }}
+            >
+              <LineChart data={forecastSeries} margin={{ top: 12, right: 12, left: 4, bottom: 12 }}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="label" minTickGap={24} tick={{ fontSize: 12 }} tickMargin={8} />
+                <YAxis width={48} tick={{ fontSize: 12 }} />
+                <ChartTooltip content={<ChartTooltipContent />} />
+                <ChartLegend content={<ChartLegendContent className="flex-wrap gap-2 sm:gap-4" />} />
+                <Line dataKey="incoming" type="monotone" stroke="var(--color-incoming)" strokeWidth={2} />
+                <Line dataKey="outgoing" type="monotone" stroke="var(--color-outgoing)" strokeWidth={2} />
+                <Line dataKey="net" type="monotone" stroke="var(--color-net)" strokeWidth={2} />
+              </LineChart>
+            </ChartContainer>
+          </div>
         </CardContent>
       </Card>
 
@@ -799,25 +804,27 @@ export default function CashFlow() {
             </Select>
           </CardHeader>
           <CardContent>
-            <ChartContainer
-              className="h-[280px]"
-              config={{
-                inflow: { label: 'Receitas', color: '#2563eb' },
-                outflow: { label: 'Despesas', color: '#ef4444' },
-                net: { label: 'Saldo', color: '#16a34a' },
-              }}
-            >
-              <LineChart data={lineSeries}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="label" />
-                <YAxis />
-                <ChartTooltip content={<ChartTooltipContent />} />
-                <ChartLegend content={<ChartLegendContent />} />
-                <Line dataKey="inflow" type="monotone" stroke="var(--color-inflow)" strokeWidth={2} />
-                <Line dataKey="outflow" type="monotone" stroke="var(--color-outflow)" strokeWidth={2} />
-                <Line dataKey="net" type="monotone" stroke="var(--color-net)" strokeWidth={2} />
-              </LineChart>
-            </ChartContainer>
+            <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+              <ChartContainer
+                className="h-[340px] min-w-[520px] md:h-[280px] md:min-w-0"
+                config={{
+                  inflow: { label: 'Receitas', color: '#2563eb' },
+                  outflow: { label: 'Despesas', color: '#ef4444' },
+                  net: { label: 'Saldo', color: '#16a34a' },
+                }}
+              >
+                <LineChart data={lineSeries} margin={{ top: 12, right: 12, left: 4, bottom: 12 }}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="label" minTickGap={24} tick={{ fontSize: 12 }} tickMargin={8} />
+                  <YAxis width={48} tick={{ fontSize: 12 }} />
+                  <ChartTooltip content={<ChartTooltipContent />} />
+                  <ChartLegend content={<ChartLegendContent className="flex-wrap gap-2 sm:gap-4" />} />
+                  <Line dataKey="inflow" type="monotone" stroke="var(--color-inflow)" strokeWidth={2} />
+                  <Line dataKey="outflow" type="monotone" stroke="var(--color-outflow)" strokeWidth={2} />
+                  <Line dataKey="net" type="monotone" stroke="var(--color-net)" strokeWidth={2} />
+                </LineChart>
+              </ChartContainer>
+            </div>
           </CardContent>
         </Card>
 
@@ -826,15 +833,15 @@ export default function CashFlow() {
             <CardTitle>Receita por forma de pagamento</CardTitle>
           </CardHeader>
           <CardContent>
-            <ChartContainer className="h-[280px]" config={paymentMethodChartConfig}>
+            <ChartContainer className="h-[340px] md:h-[280px]" config={paymentMethodChartConfig}>
               <PieChart>
-                <Pie data={methodPie} dataKey="value" nameKey="name" outerRadius={95} innerRadius={45} label>
+                <Pie data={methodPie} dataKey="value" nameKey="name" outerRadius={80} innerRadius={42}>
                   {methodPie.map((entry) => (
                     <Cell key={entry.name} fill={entry.fill} />
                   ))}
                 </Pie>
                 <ChartTooltip content={<ChartTooltipContent />} />
-                <ChartLegend content={<ChartLegendContent nameKey="name" />} />
+                <ChartLegend content={<ChartLegendContent className="flex-wrap gap-2 sm:gap-4" nameKey="name" />} />
               </PieChart>
             </ChartContainer>
           </CardContent>
@@ -846,22 +853,25 @@ export default function CashFlow() {
           <CardTitle>Comparativo mensal</CardTitle>
         </CardHeader>
         <CardContent>
-          <ChartContainer
-            className="h-[260px]"
-            config={{
-              inflow: { label: 'Entradas', color: '#2563eb' },
-              outflow: { label: 'Saidas', color: '#f97316' },
-            }}
-          >
-            <BarChart data={monthlyBars}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="label" />
-              <YAxis />
-              <ChartTooltip content={<ChartTooltipContent />} />
-              <Bar dataKey="inflow" fill="var(--color-inflow)" radius={[6, 6, 0, 0]} />
-              <Bar dataKey="outflow" fill="var(--color-outflow)" radius={[6, 6, 0, 0]} />
-            </BarChart>
-          </ChartContainer>
+          <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+            <ChartContainer
+              className="h-[320px] min-w-[520px] md:h-[260px] md:min-w-0"
+              config={{
+                inflow: { label: 'Entradas', color: '#2563eb' },
+                outflow: { label: 'Saídas', color: '#f97316' },
+              }}
+            >
+              <BarChart data={monthlyBars} margin={{ top: 12, right: 12, left: 4, bottom: 12 }}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="label" minTickGap={24} tick={{ fontSize: 12 }} tickMargin={8} />
+                <YAxis width={48} tick={{ fontSize: 12 }} />
+                <ChartTooltip content={<ChartTooltipContent />} />
+                <ChartLegend content={<ChartLegendContent className="flex-wrap gap-2 sm:gap-4" />} />
+                <Bar dataKey="inflow" fill="var(--color-inflow)" radius={[6, 6, 0, 0]} />
+                <Bar dataKey="outflow" fill="var(--color-outflow)" radius={[6, 6, 0, 0]} />
+              </BarChart>
+            </ChartContainer>
+          </div>
         </CardContent>
       </Card>
 
