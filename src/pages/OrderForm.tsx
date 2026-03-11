@@ -16,6 +16,7 @@ import {
 import {
   calculateEstimatedDeliveryInfo,
   normalizeProductionTimeDays,
+  resolveCompanyDeliveryTimeDays,
 } from '@/lib/productionTime';
 import { normalizeDigits } from '@/components/ui/masked-input';
 import { useUnsavedChanges } from '@/hooks/use-unsaved-changes';
@@ -74,6 +75,7 @@ interface OrderItemForm {
 
 type DocumentType = 'orcamento' | 'pedido_venda' | 'pedido_compra';
 type PriorityLevel = 'baixa' | 'normal' | 'alta';
+type DeliveryDateMode = 'auto' | 'manual';
 
 type SalespersonOption = {
   id: string;
@@ -155,6 +157,7 @@ export default function OrderForm() {
   const [notes, setNotes] = useState('');
   const [showNotesOnPdf, setShowNotesOnPdf] = useState(true);
   const [deliveryDate, setDeliveryDate] = useState('');
+  const [deliveryDateMode, setDeliveryDateMode] = useState<DeliveryDateMode>('auto');
   const [deliveryMethod, setDeliveryMethod] = useState('retirada');
   const [discount, setDiscount] = useState(0);
   const [freight, setFreight] = useState(0);
@@ -268,6 +271,7 @@ export default function OrderForm() {
       notes,
       showNotesOnPdf,
       deliveryDate,
+      deliveryDateMode,
       deliveryMethod,
       discount,
       freight,
@@ -286,6 +290,7 @@ export default function OrderForm() {
       notes,
       showNotesOnPdf,
       deliveryDate,
+      deliveryDateMode,
       deliveryMethod,
       discount,
       freight,
@@ -439,6 +444,7 @@ export default function OrderForm() {
         notes?: string;
         showNotesOnPdf?: boolean;
         deliveryDate?: string;
+        deliveryDateMode?: DeliveryDateMode;
         deliveryMethod?: string;
         discount?: number;
         freight?: number;
@@ -464,6 +470,9 @@ export default function OrderForm() {
       if (parsed.notes) setNotes(parsed.notes);
       if (typeof parsed.showNotesOnPdf === 'boolean') setShowNotesOnPdf(parsed.showNotesOnPdf);
       if (parsed.deliveryDate) setDeliveryDate(parsed.deliveryDate);
+      if (parsed.deliveryDateMode) {
+        setDeliveryDateMode(parsed.deliveryDateMode);
+      }
       if (parsed.deliveryMethod) setDeliveryMethod(parsed.deliveryMethod);
       if (typeof parsed.discount === 'number') setDiscount(parsed.discount);
       if (typeof parsed.freight === 'number') setFreight(parsed.freight);
@@ -516,6 +525,7 @@ export default function OrderForm() {
       notes: notes.trim() || undefined,
       showNotesOnPdf,
       deliveryDate: deliveryDate || undefined,
+      deliveryDateMode,
       deliveryMethod: deliveryMethod || undefined,
       discount,
       freight,
@@ -558,6 +568,7 @@ export default function OrderForm() {
     customerPhone,
     customerEmail,
     deliveryDate,
+    deliveryDateMode,
     deliveryMethod,
     discount,
     documentType,
@@ -643,6 +654,47 @@ export default function OrderForm() {
     () => items.reduce((sum, item) => sum + Number(item.quantity || 0), 0),
     [items],
   );
+
+  const companyDeliveryTimeDays = useMemo(
+    () => resolveCompanyDeliveryTimeDays(company),
+    [company],
+  );
+
+  const productionInfo = useMemo(() => {
+    let maxProductionDays: number | null = null;
+
+    items.forEach((item) => {
+      const productDays = normalizeProductionTimeDays(item.product.production_time_days);
+      if (productDays === null) return;
+      maxProductionDays =
+        maxProductionDays === null ? productDays : Math.max(maxProductionDays, productDays);
+    });
+
+    const estimatedDeliveryInfo = calculateEstimatedDeliveryInfo({
+      productionTimeDays: maxProductionDays,
+      companyDeliveryDays: companyDeliveryTimeDays,
+    });
+
+    return {
+      productionTimeDaysUsed: maxProductionDays,
+      estimatedDeliveryDate: estimatedDeliveryInfo?.isoDate ?? null,
+    };
+  }, [companyDeliveryTimeDays, items]);
+
+  const autoDeliveryDateDescription = useMemo(() => {
+    if (companyDeliveryTimeDays > 0) {
+      return `Data calculada automaticamente com base no maior prazo dos produtos + ${companyDeliveryTimeDays} dia(s) de entrega da loja.`;
+    }
+
+    return 'Data calculada automaticamente com base no maior prazo dos produtos selecionados.';
+  }, [companyDeliveryTimeDays]);
+
+  useEffect(() => {
+    if (deliveryDateMode !== 'auto') return;
+
+    const nextDeliveryDate = productionInfo.estimatedDeliveryDate ?? '';
+    setDeliveryDate((current) => (current === nextDeliveryDate ? current : nextDeliveryDate));
+  }, [deliveryDateMode, productionInfo.estimatedDeliveryDate]);
 
   const setType = (type: DocumentType) => {
     setDocumentType(type);
@@ -796,6 +848,7 @@ export default function OrderForm() {
       notes: notes.trim() || undefined,
       showNotesOnPdf,
       deliveryDate: deliveryDate || undefined,
+      deliveryDateMode,
       deliveryMethod: deliveryMethod || undefined,
       discount,
       freight,
@@ -823,31 +876,6 @@ export default function OrderForm() {
   const buildOrderNotes = () => {
     const sanitizedNotes = notes.trim();
     return sanitizedNotes.length > 0 ? sanitizedNotes : null;
-  };
-
-  const resolveOrderProductionInfo = () => {
-    let maxProductionDays: number | null = null;
-
-    items.forEach((item) => {
-      const isCustomProduct =
-        item.product.personalization_enabled === true ||
-        item.product.product_type === 'confeccionado';
-      if (!isCustomProduct) return;
-
-      const productDays = normalizeProductionTimeDays(item.product.production_time_days);
-      if (productDays === null) return;
-      maxProductionDays =
-        maxProductionDays === null ? productDays : Math.max(maxProductionDays, productDays);
-    });
-
-    const estimatedDeliveryInfo = calculateEstimatedDeliveryInfo({
-      productionTimeDays: maxProductionDays,
-    });
-
-    return {
-      productionTimeDaysUsed: maxProductionDays,
-      estimatedDeliveryDate: estimatedDeliveryInfo?.isoDate ?? null,
-    };
   };
 
   const handleSubmit = async () => {
@@ -914,8 +942,6 @@ export default function OrderForm() {
       }
 
       const status: OrderStatus = documentType === 'orcamento' ? 'orcamento' : 'pendente';
-      const productionInfo = resolveOrderProductionInfo();
-
       const { data: createdOrder, error: orderError } = await supabase
         .from('orders')
         .insert({
@@ -932,7 +958,7 @@ export default function OrderForm() {
           notes: buildOrderNotes(),
           show_notes_on_pdf: showNotesOnPdf,
           production_time_days_used: productionInfo.productionTimeDaysUsed,
-          estimated_delivery_date: productionInfo.estimatedDeliveryDate,
+          estimated_delivery_date: deliveryDate || productionInfo.estimatedDeliveryDate,
           created_by: user.id,
         })
         .select('id, order_number, customer_name')
@@ -1465,9 +1491,22 @@ export default function OrderForm() {
                       id="delivery-date"
                       type="date"
                       value={deliveryDate}
-                      onChange={(event) => setDeliveryDate(event.target.value)}
+                      onChange={(event) => {
+                        const nextValue = event.target.value;
+                        setDeliveryDate(nextValue);
+                        setDeliveryDateMode(
+                          nextValue && nextValue !== (productionInfo.estimatedDeliveryDate ?? '')
+                            ? 'manual'
+                            : 'auto',
+                        );
+                      }}
                       className="order-input"
                     />
+                    <p className="mt-2 text-xs text-[var(--order-muted)]">
+                      {deliveryDateMode === 'manual'
+                        ? 'Data ajustada manualmente. Limpe o campo para recalcular automaticamente.'
+                        : autoDeliveryDateDescription}
+                    </p>
                   </div>
                   <div className="order-field-group">
                     <label className="order-field-label" htmlFor="delivery-method">
