@@ -334,6 +334,7 @@ export type Database = {
           order_status_customization: Json | null
           role_module_permissions: Json | null
           birthday_message_template: string | null
+          dashboard_quick_access: string[] | null
         }
         Insert: {
           address?: string | null
@@ -401,6 +402,7 @@ export type Database = {
           order_status_customization?: Json | null
           role_module_permissions?: Json | null
           birthday_message_template?: string | null
+          dashboard_quick_access?: string[] | null
         }
         Update: {
           address?: string | null
@@ -468,6 +470,7 @@ export type Database = {
           order_status_customization?: Json | null
           role_module_permissions?: Json | null
           birthday_message_template?: string | null
+          dashboard_quick_access?: string[] | null
         }
         Relationships: [
           {

@@ -28,7 +28,7 @@ import { useSearchParams } from 'react-router-dom';
 import { computeSubscriptionState } from '@/services/subscription';
 import { invokeEdgeFunction } from '@/services/edgeFunctions';
 import { listCaktoOffers } from '@/services/cakto';
-import { Plan, Company } from '@/types/database';
+import { Plan, Company, BillingPeriod } from '@/types/database';
 
 /* ======================================================
    TIPOS DE LEITURA (DTOs) - NAO use tipos crus do banco
@@ -74,9 +74,10 @@ const formatDate = (value?: string | Date | null) => {
 };
 
 const getPeriodLabel = (period?: string | null) => {
-  if (!period) return 'Mensal';
+  if (!period || period === 'monthly') return 'Mensal';
+  if (period === 'quarterly') return 'Trimestral';
   if (period === 'yearly') return 'Anual';
-  if (period === 'monthly') return 'Mensal';
+  if (period === 'lifetime') return 'Vitalício';
   return period;
 };
 
@@ -311,11 +312,15 @@ export default function Subscription() {
 
   const getOfferPeriodLabel = (offer: CaktoOffer) => {
     const intervalType = (offer.intervalType ?? '').toLowerCase();
-    if (intervalType.includes('year') || intervalType.includes('ano')) return 'ano';
-    if (intervalType.includes('month') || intervalType.includes('mes')) return 'mes';
-    if (intervalType.includes('week') || intervalType.includes('semana')) return 'semana';
-    if (intervalType.includes('day') || intervalType.includes('dia')) return 'dia';
-    return 'mes';
+    const type = (offer as any).type?.toLowerCase() || '';
+    if (type === 'one_time') return 'Vitalício';
+    if (intervalType.includes('year') || intervalType.includes('ano')) return 'Anual';
+    if (intervalType.includes('quarter') || intervalType.includes('trimestre')) return 'Trimestral';
+    if (intervalType.includes('month') || intervalType.includes('mes')) return 'Mensal';
+    if (intervalType.includes('lifetime') || intervalType.includes('vitalicio') || intervalType.includes('vitalício') || intervalType.includes('infinite')) return 'Vitalício';
+    if (intervalType.includes('week') || intervalType.includes('semana')) return 'Semanal';
+    if (intervalType.includes('day') || intervalType.includes('dia')) return 'Diário';
+    return 'Mensal';
   };
 
   const activeOfferFromLink = useMemo(() => {
@@ -358,11 +363,7 @@ export default function Subscription() {
   const planPeriod = activePlan
     ? getPeriodLabel(activePlan?.billing_period ?? null)
     : activeOffer
-      ? (getOfferPeriodLabel(activeOffer) === 'ano'
-        ? 'Anual'
-        : getOfferPeriodLabel(activeOffer) === 'mes'
-          ? 'Mensal'
-          : getOfferPeriodLabel(activeOffer))
+      ? getOfferPeriodLabel(activeOffer)
       : '—';
 
   const planStartLabel = formatDate(company?.subscription_start_date ?? null);
@@ -584,8 +585,12 @@ export default function Subscription() {
           const periodLabel = isOffer
             ? getOfferPeriodLabel(offer)
             : plan.billing_period === 'monthly'
-              ? 'mes'
-              : 'ano';
+              ? 'Mensal'
+              : plan.billing_period === 'quarterly'
+                ? 'Trimestral'
+                : plan.billing_period === 'lifetime'
+                  ? 'Vitalício'
+                  : 'Anual';
 
           return (
             <Card key={isOffer ? offer.id : plan.id} className={isActivePlan ? "border-primary/50 shadow-md" : undefined}>

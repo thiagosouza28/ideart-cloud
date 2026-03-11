@@ -36,6 +36,7 @@ type CaktoOffer = {
   intervalType?: string | null;
   interval?: number | null;
   status?: string | null;
+  type?: string | null;
   checkoutUrl?: string | null;
   deleted?: boolean | null;
   deletedAt?: string | null;
@@ -147,6 +148,7 @@ export default function SuperAdminPlans() {
         intervalType: offer.intervalType ? String(offer.intervalType) : null,
         interval: offer.interval ? Number(offer.interval) : null,
         status: offer.status ? String(offer.status) : null,
+        type: offer.type ? String(offer.type) : null,
         checkoutUrl: offer.checkout_url ? String(offer.checkout_url) : null,
         deleted: parseBooleanLike(offer.deleted ?? offer.is_deleted ?? offer.isDeleted),
         deletedAt: offer.deleted_at || offer.deletedAt ? String(offer.deleted_at ?? offer.deletedAt) : null,
@@ -176,8 +178,11 @@ export default function SuperAdminPlans() {
   };
 
   const openEditDialog = (plan: Plan) => {
-    const periodDaysBase = plan.billing_period === 'yearly' ? 365 : 30;
-    const intervalCount = Math.round((plan.period_days || periodDaysBase) / periodDaysBase);
+    const periodDaysBase = 
+      plan.billing_period === 'yearly' ? 365 : 
+      plan.billing_period === 'quarterly' ? 90 : 
+      plan.billing_period === 'lifetime' ? 99999 : 30;
+    const intervalCount = plan.billing_period === 'lifetime' ? 1 : Math.round((plan.period_days || periodDaysBase) / periodDaysBase);
 
     setSelectedPlan(plan);
     setSelectedOffer(null);
@@ -199,7 +204,15 @@ export default function SuperAdminPlans() {
   };
 
   const openOfferDialog = (offer: CaktoOffer) => {
-    const billingPeriod = offer.intervalType === 'year' || offer.intervalType === 'yearly' ? 'yearly' : 'monthly';
+    const it = (offer.intervalType || "").toLowerCase();
+    const type = (offer.type || "").toLowerCase();
+    const name = (offer.name || "").toLowerCase();
+    const billingPeriod: BillingPeriod = 
+      type === 'one_time' ? 'lifetime' :
+      it.includes('year') || it.includes('anual') || it.includes('ano') || name.includes('anual') ? 'yearly' : 
+      it.includes('quarter') || it.includes('trimestr') || name.includes('trimestr') ? 'quarterly' : 
+      it.includes('month') || it.includes('mes') || it.includes('mensal') || name.includes('mensal') || name.includes('mes') ? 'monthly' :
+      it.includes('lifetime') || it.includes('infinite') || it.includes('vitalicio') || it.includes('vitalício') || name.includes('vitalicio') || name.includes('vitalício') ? 'lifetime' : 'monthly';
     const intervalCount = offer.interval || 1;
     setSelectedPlan(null);
     setSelectedOffer(offer);
@@ -247,14 +260,18 @@ export default function SuperAdminPlans() {
       return;
     }
 
-    const periodDays = (formData.billing_period || 'monthly') === 'yearly' ? 365 : 30;
-    const intervalCount = (formData as any).interval_count || 1;
+    const bp = formData.billing_period || 'monthly';
+    const periodDays = 
+      bp === 'yearly' ? 365 : 
+      bp === 'quarterly' ? 90 : 
+      bp === 'lifetime' ? 99999 : 30;
+    const intervalCount = bp === 'lifetime' ? 1 : ((formData as any).interval_count || 1);
 
     const planData = {
       name: formData.name,
       description: formData.description || null,
       price: formData.price || 0,
-      interval: (formData.billing_period || 'monthly') === 'yearly' ? 'year' : 'month',
+      interval: bp === 'yearly' ? 'year' : bp === 'quarterly' ? 'quarter' : bp === 'lifetime' ? 'infinite' : 'month',
       interval_count: intervalCount,
       billing_period: formData.billing_period || 'monthly',
       period_days: periodDays * intervalCount,
@@ -391,9 +408,18 @@ export default function SuperAdminPlans() {
     setSyncLoading(true);
     try {
       const payload = syncableOffers.map((offer) => {
-        const billingPeriod = offer.intervalType === 'year' || offer.intervalType === 'yearly' ? 'yearly' : 'monthly';
+        const it = (offer.intervalType || "").toLowerCase();
+        const type = (offer.type || "").toLowerCase();
+        const name = (offer.name || "").toLowerCase();
+        const billingPeriod: BillingPeriod = 
+          type === 'one_time' ? 'lifetime' :
+          it.includes('year') || it.includes('anual') || it.includes('ano') || name.includes('anual') ? 'yearly' : 
+          it.includes('quarter') || it.includes('trimestr') || name.includes('trimestr') ? 'quarterly' : 
+          it.includes('month') || it.includes('mes') || it.includes('mensal') || name.includes('mensal') || name.includes('mes') ? 'monthly' :
+          it.includes('lifetime') || it.includes('infinite') || it.includes('vitalicio') || it.includes('vitalício') || name.includes('vitalicio') || name.includes('vitalício') ? 'lifetime' : 'monthly';
         const intervalCount = offer.interval || 1;
-        const periodDays = (billingPeriod === 'yearly' ? 365 : 30) * intervalCount;
+        const baseDays = billingPeriod === 'yearly' ? 365 : billingPeriod === 'quarterly' ? 90 : billingPeriod === 'lifetime' ? 99999 : 30;
+        const periodDays = baseDays * intervalCount;
         return {
           name: offer.name || 'Plano Cakto',
           description: null,
@@ -469,12 +495,12 @@ export default function SuperAdminPlans() {
           <LayoutGrid className="h-5 w-5" />
           <div>
             <h1 className="text-2xl font-semibold text-slate-900">Planos de Assinatura</h1>
-            <p className="text-sm text-slate-500">Configure os planos disponiveis para as empresas</p>
+            <p className="text-sm text-slate-500">Configure os planos disponíveis para as empresas</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2">
-            <span className="text-xs text-slate-500">Sincronizacao automatica a cada 5 min</span>
+            <span className="text-xs text-slate-500">Sincronização automática a cada 5 min</span>
             <Switch
               checked={autoSyncEnabled}
               onCheckedChange={(checked) => setAutoSyncEnabled(checked)}
@@ -510,7 +536,17 @@ export default function SuperAdminPlans() {
             const title = plan?.name || offer?.name || 'Plano Cakto';
             const description = plan?.description || (offer ? 'Plano cadastrado na Cakto' : null);
             const price = plan?.price ?? (typeof offer?.price === 'number' ? offer.price : 0);
-            const billingPeriod = plan?.billing_period || (offer?.intervalType === 'year' || offer?.intervalType === 'yearly' ? 'yearly' : 'monthly');
+            
+            const it = (offer?.intervalType || "").toLowerCase();
+            const type = (offer?.type || "").toLowerCase();
+            const name = (offer?.name || "").toLowerCase();
+            const billingPeriod: BillingPeriod = plan?.billing_period as BillingPeriod || (
+              type === 'one_time' ? 'lifetime' :
+              it.includes('year') || it.includes('anual') || it.includes('ano') || name.includes('anual') ? 'yearly' : 
+              it.includes('quarter') || it.includes('trimestr') || name.includes('trimestr') ? 'quarterly' : 
+              it.includes('month') || it.includes('mes') || it.includes('mensal') || name.includes('mensal') || name.includes('mes') ? 'monthly' :
+              it.includes('lifetime') || it.includes('infinite') || it.includes('vitalicio') || it.includes('vitalício') || name.includes('vitalicio') || name.includes('vitalício') ? 'lifetime' : 'monthly'
+            );
             const isInactive = plan ? !plan.is_active : false;
             return (
               <Card key={key} className={`border-slate-200 ${isInactive ? 'opacity-60' : ''}`}>
@@ -550,7 +586,7 @@ export default function SuperAdminPlans() {
                   <div className="mb-4">
                     <span className="text-3xl font-bold">{formatCurrency(price)}</span>
                     <span className="text-slate-500">
-                      /{billingPeriod === 'monthly' ? 'mes' : 'ano'}
+                      /{billingPeriod === 'monthly' ? 'Mensal' : billingPeriod === 'quarterly' ? 'Trimestral' : billingPeriod === 'lifetime' ? 'Vitalício' : 'Anual'}
                     </span>
                   </div>
 
@@ -588,7 +624,7 @@ export default function SuperAdminPlans() {
                   )}
                   {plan?.max_orders_per_month && (
                     <p className="text-sm text-slate-500 mb-3">
-                      Até {plan.max_orders_per_month} pedido{plan.max_orders_per_month > 1 ? 's' : ''} por mes
+                      Até {plan.max_orders_per_month} pedido{plan.max_orders_per_month > 1 ? 's' : ''} por mês
                     </p>
                   )}
 
@@ -647,13 +683,14 @@ export default function SuperAdminPlans() {
               <div className="space-y-2">
                 <Label>Duração do Ciclo</Label>
                 <div className="flex gap-2">
-                  <Input
-                    type="number"
-                    min="1"
-                    className="w-20"
-                    value={(formData as any).interval_count || 1}
-                    onChange={(e) => setFormData({ ...formData, ['interval_count' as any]: parseInt(e.target.value) || 1 })}
-                  />
+                    <Input
+                      type="number"
+                      min="1"
+                      className="w-20"
+                      disabled={formData.billing_period === 'lifetime'}
+                      value={formData.billing_period === 'lifetime' ? 1 : ((formData as any).interval_count || 1)}
+                      onChange={(e) => setFormData({ ...formData, ['interval_count' as any]: parseInt(e.target.value) || 1 })}
+                    />
                   <Select
                     value={formData.billing_period || 'monthly'}
                     onValueChange={(value) => setFormData({ ...formData, billing_period: value as BillingPeriod })}
@@ -662,8 +699,10 @@ export default function SuperAdminPlans() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="monthly">Mes(es)</SelectItem>
-                      <SelectItem value="yearly">Ano(s)</SelectItem>
+                      <SelectItem value="monthly">Mensal</SelectItem>
+                      <SelectItem value="quarterly">Trimestral</SelectItem>
+                      <SelectItem value="yearly">Anual</SelectItem>
+                      <SelectItem value="lifetime">Vitalício</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

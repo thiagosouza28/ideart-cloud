@@ -58,6 +58,7 @@ const Onboarding = lazy(() => import("./pages/Onboarding"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const SuperAdminCompanies = lazy(() => import("./pages/SuperAdminCompanies"));
 const SuperAdminPlans = lazy(() => import("./pages/SuperAdminPlans"));
+const SuperAdminDashboard = lazy(() => import("./pages/SuperAdminDashboard"));
 const SuperAdminImpersonate = lazy(() => import("./pages/SuperAdminImpersonate"));
 const Profile = lazy(() => import("./pages/Profile"));
 const Reports = lazy(() => import("./pages/Reports"));
@@ -67,6 +68,10 @@ const Receipts = lazy(() => import("./pages/Receipts"));
 const BannerManagement = lazy(() => import("./pages/BannerManagement"));
 const CatalogManager = lazy(() => import("./pages/CatalogManager"));
 const Landing = lazy(() => import("./pages/Landing"));
+const Contact = lazy(() => import("./pages/Contact"));
+const Terms = lazy(() => import("./pages/Terms"));
+const Privacy = lazy(() => import("./pages/Privacy"));
+const Compliance = lazy(() => import("./pages/Compliance"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -94,7 +99,7 @@ const App = () => (
         <ConfirmProvider>
           <Toaster />
           <Sonner />
-          <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+          <BrowserRouter>
             <AuthProvider>
               <CompanyThemeProvider>
                 <CookieConsent />
@@ -111,6 +116,11 @@ const App = () => (
                 )}
               />
               <Route path="/" element={withSuspense(<Landing />)} />
+              <Route path="/contato" element={withSuspense(<Contact />)} />
+              <Route path="/suporte" element={withSuspense(<Contact />)} />
+              <Route path="/termos" element={withSuspense(<Terms />)} />
+              <Route path="/privacidade" element={withSuspense(<Privacy />)} />
+              <Route path="/compliance" element={withSuspense(<Compliance />)} />
 
               <Route
                 path="/dashboard"
@@ -496,7 +506,7 @@ const App = () => (
                 path="/super-admin"
                 element={(
                   <ProtectedRoute allowedRoles={["super_admin"]}>
-                    <Navigate to={SUPER_ADMIN_HOME_PATH} replace />
+                    <AppLayout>{withSuspense(<SuperAdminDashboard />)}</AppLayout>
                   </ProtectedRoute>
                 )}
               />

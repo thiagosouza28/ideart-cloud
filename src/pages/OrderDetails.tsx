@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 import { formatOrderNumber } from '@/lib/utils';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -13,7 +15,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { Order, OrderFinalPhoto, OrderArtFile, OrderItem, OrderStatusHistory, OrderStatus, OrderPayment, PaymentMethod, PaymentStatus, Product, Customer, PriceTier } from '@/types/database';
-import { ArrowLeft, Loader2, CheckCircle, Clock, Package, Truck, XCircle, User, FileText, Printer, MessageCircle, Link, Copy, CreditCard, PauseCircle, Trash2, Image as ImageIcon, Upload, Paintbrush, Sparkles, Wallet } from 'lucide-react';
+import { ArrowLeft, Loader2, CheckCircle, Clock, Package, Truck, XCircle, User, FileText, Printer, MessageCircle, Link, Copy, CreditCard, PauseCircle, Trash2, Image as ImageIcon, Upload, Paintbrush, Sparkles, Wallet, FileDown } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -241,7 +243,7 @@ export default function OrderDetails() {
   const [creditSaving, setCreditSaving] = useState(false);
   const [customerAvailableCredit, setCustomerAvailableCredit] = useState(0);
   const [paymentActionId, setPaymentActionId] = useState<string | null>(null);
-  const [paymentActionType, setPaymentActionType] = useState<'cancel' | 'delete' | null>(null);
+  const [paymentActionType, setPaymentActionType] = useState<'cancel' | 'delete' | 'download' | null>(null);
   const [receiptDialogOpen, setReceiptDialogOpen] = useState(false);
   const [receiptPayment, setReceiptPayment] = useState<OrderPayment | null>(null);
   const [paymentReceiptHtml, setPaymentReceiptHtml] = useState('');
@@ -326,7 +328,7 @@ export default function OrderDetails() {
       : '';
     return {
       '{cliente_nome}': order.customer?.name || order.customer_name || 'cliente',
-      '{cliente_telefone}': order.customer?.phone || order.customer_phone || '',
+      '{cliente_telefone}': order.customer?.phone || (order as any).customer_phone || '',
       '{pedido_numero}': formatOrderNumber(order.order_number),
       '{pedido_id}': order.id,
       '{pedido_status}': statusLabels[order.status] ?? order.status,
@@ -340,7 +342,7 @@ export default function OrderDetails() {
   };
 
   const applyTemplateReplacements = (template: string, replacements: Record<string, string>) =>
-    Object.entries(replacements).reduce((acc, [key, value]) => acc.replaceAll(key, value), template);
+    Object.entries(replacements).reduce((acc, [key, value]) => acc.split(key).join(value), template);
 
   const getProductById = (productId?: string | null) =>
     products.find((product) => product.id === productId);
@@ -591,7 +593,7 @@ export default function OrderDetails() {
       return;
     }
 
-    const loadedProducts = (data as Product[]) || [];
+    const loadedProducts = (data as unknown as Product[]) || [];
     setProducts(loadedProducts);
 
     const productIds = loadedProducts.map((product) => product.id);
@@ -1155,6 +1157,57 @@ export default function OrderDetails() {
     printReceipt(receiptRef.current, `Recibo - Pedido #${formatOrderNumber(order?.order_number)}`);
   };
 
+  const handleDownloadOrderPdf = async () => {
+    if (!receiptRef.current || !order) return;
+    
+    setLoading(true);
+    try {
+      const container = document.createElement('div');
+      container.style.position = 'fixed';
+      container.style.left = '-9999px';
+      container.style.top = '0';
+      container.style.width = '794px';
+      container.style.background = '#ffffff';
+      container.innerHTML = receiptRef.current.innerHTML;
+      document.body.appendChild(container);
+
+      const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
+        .map((node) => node.outerHTML)
+        .join('\n');
+      
+      const shadow = container.attachShadow ? container.attachShadow({ mode: 'open' }) : null;
+      if (shadow) {
+        shadow.innerHTML = `${styles}${receiptRef.current.innerHTML}`;
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      const elementToCapture = shadow ? (shadow.querySelector('.receipt-root') as HTMLElement) : (container.querySelector('.receipt-root') as HTMLElement);
+      
+      const canvas = await html2canvas(elementToCapture || container, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+      });
+
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
+      const imgData = canvas.toDataURL('image/png');
+      const imgWidth = 595.28 - 40;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      
+      pdf.addImage(imgData, 'PNG', 20, 20, imgWidth, imgHeight);
+      pdf.save(`pedido-${formatOrderNumber(order.order_number)}.pdf`);
+      
+      document.body.removeChild(container);
+      toast({ title: 'PDF do pedido baixado' });
+    } catch (error: any) {
+      console.error(error);
+      toast({ title: 'Erro ao gerar PDF', description: error.message, variant: 'destructive' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const printDeliveryReceipt = (
     deliveryOrder: Order,
     paymentInfo?: DeliveryReceiptPaymentInfo | null,
@@ -1257,6 +1310,77 @@ export default function OrderDetails() {
     printDeliveryReceipt(printableOrder, sourcePayment);
   };
 
+  const handleDownloadDeliveryReceipt = async () => {
+    const sourceOrder =
+      deliveryReceiptOrder ||
+      (order?.status === 'entregue' && order ? buildDeliveredOrderSnapshot(order) : null);
+    const printableOrder = sourceOrder ? buildDeliveredOrderSnapshot(sourceOrder) : null;
+    const sourcePayment =
+      deliveryReceiptPayment ||
+      (printableOrder ? buildDeliveryReceiptPaymentInfo(printableOrder, latestPaidPayment) : null);
+
+    if (!printableOrder || printableOrder.status !== 'entregue') {
+      toast({ title: 'Comprovante indisponível', variant: 'destructive' });
+      return;
+    }
+
+    setDeliverySaving(true);
+    try {
+      const markup = renderToStaticMarkup(
+        <DeliveryReceipt
+          order={printableOrder}
+          items={items}
+          deliveredAt={printableOrder.delivered_at}
+          payment={sourcePayment || undefined}
+        />,
+      );
+
+      const container = document.createElement('div');
+      container.style.position = 'fixed';
+      container.style.left = '-9999px';
+      container.style.top = '0';
+      container.style.width = '794px';
+      container.style.background = '#ffffff';
+      container.innerHTML = markup;
+      document.body.appendChild(container);
+
+      const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
+        .map((node) => node.outerHTML)
+        .join('\n');
+      
+      const shadow = container.attachShadow ? container.attachShadow({ mode: 'open' }) : null;
+      if (shadow) {
+        shadow.innerHTML = `${styles}${markup}`;
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      const elementToCapture = shadow ? (shadow.querySelector('.receipt-root') as HTMLElement) : (container.querySelector('.receipt-root') as HTMLElement);
+      
+      const canvas = await html2canvas(elementToCapture || container, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+      });
+
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
+      const imgData = canvas.toDataURL('image/png');
+      const imgWidth = 595.28 - 40;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      
+      pdf.addImage(imgData, 'PNG', 20, 20, imgWidth, imgHeight);
+      pdf.save(`comprovante-entrega-${formatOrderNumber(printableOrder.order_number)}.pdf`);
+      
+      document.body.removeChild(container);
+      toast({ title: 'Comprovante baixado com sucesso!' });
+    } catch (error: any) {
+      console.error(error);
+      toast({ title: 'Erro ao gerar PDF', description: error.message, variant: 'destructive' });
+    } finally {
+      setDeliverySaving(false);
+    }
+  };
+
   const handleConfirmDelivery = async () => {
     if (!order) return;
     if (!['pronto', 'finalizado', 'aguardando_retirada'].includes(order.status)) {
@@ -1351,6 +1475,39 @@ export default function OrderDetails() {
     }
   };
 
+  const downloadReceiptFromStorage = async (path: string, fileName: string) => {
+    try {
+      if (path.startsWith('http')) {
+        const response = await fetch(path);
+        const blob = await response.blob();
+        const blobUrl = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.setTimeout(() => window.URL.revokeObjectURL(blobUrl), 0);
+        return;
+      }
+
+      const { data, error } = await supabase.storage.from('payment-receipts').download(path);
+      if (error) throw error;
+
+      const blobUrl = window.URL.createObjectURL(data);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => window.URL.revokeObjectURL(blobUrl), 0);
+    } catch (error: any) {
+      console.error('Erro ao baixar arquivo:', error);
+      toast({ title: 'Erro ao baixar comprovante', description: error.message, variant: 'destructive' });
+    }
+  };
+
   const handlePrintPaymentReceipt = () => {
     if (!order || !receiptPayment || !paymentReceiptPayload) {
       toast({ title: 'Recibo indisponível', variant: 'destructive' });
@@ -1375,6 +1532,36 @@ export default function OrderDetails() {
         });
       })
       .finally(() => setPaymentReceiptLoading(false));
+  };
+
+  const handleDownloadPaymentReceipt = async () => {
+    if (!order || !receiptPayment || !paymentReceiptPayload) {
+      toast({ title: 'Recibo indisponível', variant: 'destructive' });
+      return;
+    }
+
+    const safeCompanyId = order.company_id || 'company';
+    const receiptNumber = paymentReceiptPayload.numeroRecibo;
+    const path = `${safeCompanyId}/${order.id}/recibo-${receiptNumber}.pdf`;
+    const fileName = `comprovante-pedido-${formatOrderNumber(order.order_number)}.pdf`;
+
+    setPaymentReceiptLoading(true);
+    try {
+      const receipt = await generateAndUploadPaymentReceipt(paymentReceiptPayload, {
+        bucket: 'payment-receipts',
+        path,
+      });
+      await downloadReceiptFromStorage(receipt.path, fileName);
+      toast({ title: 'Comprovante baixado com sucesso' });
+    } catch (error: any) {
+      toast({
+        title: 'Erro ao gerar comprovante',
+        description: error?.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setPaymentReceiptLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -1625,7 +1812,7 @@ export default function OrderDetails() {
   const resolveMessageForSend = (url: string) => {
     if (!messageDirty) return buildWhatsAppMessage(url);
     const resolved = applyTemplateReplacements(messageText, getWhatsAppTemplateReplacements(url));
-    return resolved.replaceAll('[link]', url);
+    return resolved.split('[link]').join(url);
   };
 
   const clientMessage = messageDirty ? messageText : buildWhatsAppMessage(messageLink);
@@ -1991,7 +2178,7 @@ export default function OrderDetails() {
       const { uploadOrderFinalPhoto } = await import('@/services/orders');
       const photo = await uploadOrderFinalPhoto(order.id, file, user.id);
 
-      setFinalPhotos(prev => [photo, ...prev]);
+      setFinalPhotos(prev => [photo as any as OrderFinalPhoto, ...prev]);
       toast({ title: 'Foto enviada com sucesso!' });
     } catch (error: any) {
       console.error(error);
@@ -2082,7 +2269,7 @@ export default function OrderDetails() {
           customerId: order.customer_id || null,
           displayFileName: item.displayName,
         });
-        uploaded.push(artFile as OrderArtFile);
+        uploaded.push(artFile as any as OrderArtFile);
       }
 
       if (uploaded.length > 0) {
@@ -2117,7 +2304,7 @@ export default function OrderDetails() {
           continue;
         }
         const artFile = await uploadOrderArtFile(order.id, file, user.id);
-        uploaded.push(artFile as OrderArtFile);
+        uploaded.push(artFile as any as OrderArtFile);
       }
 
       if (uploaded.length > 0) {
@@ -2413,6 +2600,10 @@ export default function OrderDetails() {
           <Button variant="outline" onClick={handlePrint} className="w-full sm:w-auto">
             <Printer className="mr-2 h-4 w-4" />
             Imprimir
+          </Button>
+          <Button variant="outline" onClick={handleDownloadOrderPdf} className="w-full sm:w-auto">
+            <FileDown className="mr-2 h-4 w-4" />
+            Baixar PDF
           </Button>
           <Button variant="outline" onClick={handleWhatsApp} disabled={!order?.customer?.phone} className="w-full sm:w-auto">
             <MessageCircle className="mr-2 h-4 w-4" />
@@ -3099,14 +3290,63 @@ export default function OrderDetails() {
                           {getPaymentStatusLabel(payment.status)}
                         </Badge>
                         {payment.status !== 'pendente' && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            aria-label="Abrir recibo"
-                            onClick={() => handleOpenPaymentReceipt(payment)}
-                          >
-                            <FileText className="h-4 w-4" />
-                          </Button>
+                          <div className="flex gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              title="Imprimir"
+                              onClick={() => {
+                                const payload = buildPaymentReceiptPayload(payment);
+                                if (payload) {
+                                  setPaymentReceiptPayload(payload);
+                                  setReceiptPayment(payment);
+                                  const receiptA5Url = buildReceiptA5Url(payload);
+                                  window.open(receiptA5Url, '_blank', 'noopener,noreferrer');
+                                }
+                              }}
+                            >
+                              <Printer className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              title="Baixar PDF"
+                              onClick={async () => {
+                                const payload = buildPaymentReceiptPayload(payment);
+                                if (payload) {
+                                  setPaymentReceiptPayload(payload);
+                                  setReceiptPayment(payment);
+                                  const safeCompanyId = order.company_id || 'company';
+                                  const receiptNumber = payload.numeroRecibo;
+                                  const path = `${safeCompanyId}/${order.id}/recibo-${receiptNumber}.pdf`;
+                                  const fileName = `comprovante-pedido-${formatOrderNumber(order.order_number)}.pdf`;
+                                  
+                                  setPaymentActionId(payment.id);
+                                  setPaymentActionType('download');
+                                  try {
+                                    const receipt = await generateAndUploadPaymentReceipt(payload, {
+                                      bucket: 'payment-receipts',
+                                      path,
+                                    });
+                                    await downloadReceiptFromStorage(receipt.path, fileName);
+                                    toast({ title: 'Comprovante baixado' });
+                                  } catch (error: any) {
+                                    toast({ title: 'Erro ao baixar', description: error.message, variant: 'destructive' });
+                                  } finally {
+                                    setPaymentActionId(null);
+                                    setPaymentActionType(null);
+                                  }
+                                }
+                              }}
+                              disabled={paymentActionId === payment.id && paymentActionType === 'download'}
+                            >
+                              {paymentActionId === payment.id && paymentActionType === 'download' ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <FileDown className="h-4 w-4" />
+                              )}
+                            </Button>
+                          </div>
                         )}
                         {payment.status !== 'pendente' && (
                           <Button
@@ -3367,7 +3607,17 @@ export default function OrderDetails() {
             <Button variant="outline" onClick={() => handleReceiptDialogChange(false)}>
               Fechar
             </Button>
-            <Button onClick={handlePrintPaymentReceipt} disabled={!receiptPayment || paymentReceiptLoading}>
+            <Button
+              variant="outline"
+              onClick={handleDownloadPaymentReceipt}
+              disabled={!receiptPayment || paymentReceiptLoading}
+              className="gap-2"
+            >
+              <FileDown className="h-4 w-4" />
+              {paymentReceiptLoading ? 'Gerando...' : 'Baixar PDF'}
+            </Button>
+            <Button onClick={handlePrintPaymentReceipt} disabled={!receiptPayment || paymentReceiptLoading} className="gap-2">
+              <Printer className="h-4 w-4" />
               {paymentReceiptLoading ? 'Gerando...' : 'Abrir A5'}
             </Button>
           </DialogFooter>
@@ -3498,10 +3748,16 @@ export default function OrderDetails() {
               {deliveryCompleted ? 'Fechar' : 'Cancelar'}
             </Button>
             {deliveryCompleted ? (
-              <Button onClick={handlePrintDeliveryReceipt}>
-                <Printer className="mr-2 h-4 w-4" />
-                Imprimir comprovante de entrega
-              </Button>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={handleDownloadDeliveryReceipt} disabled={deliverySaving} className="gap-2">
+                  <FileDown className="h-4 w-4" />
+                  Baixar PDF
+                </Button>
+                <Button onClick={handlePrintDeliveryReceipt} disabled={deliverySaving} className="gap-2">
+                  <Printer className="h-4 w-4" />
+                  Imprimir Comprovante
+                </Button>
+              </div>
             ) : (
               <Button onClick={handleConfirmDelivery} disabled={deliveryConfirmDisabled}>
                 {deliverySaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

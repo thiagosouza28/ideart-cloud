@@ -1,7 +1,32 @@
-﻿import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { Check, Loader2 } from "lucide-react";
+import {
+  Activity,
+  ArrowDownCircle,
+  BarChart2,
+  BarChart3,
+  Barcode,
+  Boxes,
+  Calculator,
+  Check,
+  ClipboardList,
+  CreditCard,
+  Factory,
+  FileText,
+  FolderTree,
+  Gift,
+  Image as ImageIcon,
+  Kanban,
+  Layers,
+  LayoutDashboard,
+  Loader2,
+  Package,
+  Settings,
+  ShoppingCart,
+  Tags,
+  Users,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -182,38 +207,58 @@ export default function Landing() {
   const displayPlans = useMemo<DisplayPlan[]>(() => {
     const activeOffers = offers.filter((offer) => offer.status !== "inactive" && offer.status !== "disabled");
 
-    if (activeOffers.length) {
-      return activeOffers.map((offer) => {
-        const matchingPlan = plans.find(
-          (plan) => normalizeOfferId(plan.cakto_plan_id ?? undefined) === offer.id
-        );
-        const billing =
-          offer.intervalType === "year" || offer.intervalType === "yearly"
-            ? "yearly"
-            : "monthly";
-        return {
-          id: offer.id,
-          name: matchingPlan?.name ?? offer.name ?? "Plano Cakto",
-          description: matchingPlan?.description ?? null,
-          price: typeof offer.price === "number" ? offer.price : 0,
-          billing_period: billing,
-          features: matchingPlan?.features ?? [],
-          planId: matchingPlan?.id ?? null,
-          checkoutUrl: offer.checkoutUrl ?? `https://pay.cakto.com.br/${offer.id}`,
-        };
-      });
-    }
+    const result = activeOffers.length 
+      ? activeOffers.map((offer) => {
+          const matchingPlan = plans.find(
+            (plan) => normalizeOfferId(plan.cakto_plan_id ?? undefined) === offer.id
+          );
+          
+          const it = (offer.intervalType || "").toLowerCase();
+          const type = (offer as any).type?.toLowerCase() || "";
+          const billing =
+            matchingPlan?.billing_period || (
+              type === "one_time"
+                ? "lifetime"
+                : it.includes("year") || it.includes("anual") || it.includes("ano")
+                ? "yearly"
+                : it.includes("quarter") || it.includes("trimestral") || it.includes("trimestre")
+                ? "quarterly"
+                : it.includes("lifetime") || it.includes("infinite") || it.includes("vitalicio") || it.includes("vitalício")
+                ? "lifetime"
+                : "monthly"
+            );
 
-    return plans.map((plan) => ({
-      id: plan.id,
-      name: plan.name,
-      description: plan.description ?? null,
-      price: plan.price,
-      billing_period: plan.billing_period,
-      features: plan.features ?? [],
-      planId: plan.id,
-      checkoutUrl: null,
-    }));
+          return {
+            id: offer.id,
+            name: matchingPlan?.name ?? offer.name ?? "Plano Cakto",
+            description: matchingPlan?.description ?? null,
+            price: typeof offer.price === "number" ? offer.price : 0,
+            billing_period: billing,
+            features: matchingPlan?.features ?? [],
+            planId: matchingPlan?.id ?? null,
+            checkoutUrl: offer.checkoutUrl ?? `https://pay.cakto.com.br/${offer.id}`,
+          };
+        })
+      : plans.map((plan) => ({
+          id: plan.id,
+          name: plan.name,
+          description: plan.description ?? null,
+          price: plan.price,
+          billing_period: plan.billing_period,
+          features: plan.features ?? [],
+          planId: plan.id,
+          checkoutUrl: null,
+        }));
+
+    // Reorder: Mensal (monthly) -> Anual (yearly) -> Trimestral (quarterly)
+    const orderMap: Record<string, number> = {
+      monthly: 1,
+      yearly: 2,
+      quarterly: 3,
+      lifetime: 4
+    };
+
+    return result.sort((a, b) => (orderMap[a.billing_period] || 99) - (orderMap[b.billing_period] || 99));
   }, [plans, offers]);
 
   const maxPrice = useMemo(() => {
@@ -310,265 +355,330 @@ export default function Landing() {
         </div>
       </header>
 
-      <main className="overflow-hidden">
-        <section id="inicio" className="landing-hero-grid relative isolate pt-20">
-          <div className="pointer-events-none absolute inset-0 -z-10">
-            <div className="landing-blob absolute left-[8%] top-24 h-64 w-64 rounded-full bg-primary" />
-            <div className="landing-blob absolute right-[10%] top-28 h-72 w-72 rounded-full bg-info" />
-          </div>
-
-          <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 pb-14 pt-20 sm:pt-24">
-            <span className="landing-hero-anim landing-hero-delay-1 inline-flex w-fit items-center gap-2 rounded-full border border-foreground/10 bg-card/85 px-4 py-2 text-[0.72rem] font-bold uppercase tracking-[0.22em] text-muted-foreground">
-              <span className="h-2 w-2 rounded-full bg-primary" />
-              Novo - versão 2.6 disponível
-            </span>
-
-            <div className="space-y-5">
-              <h1 className="landing-heading landing-hero-title landing-hero-anim landing-hero-delay-2 max-w-4xl text-foreground">
-                Gestão completa para gráfica com{" "}
-                <span className="landing-gradient-text">controle em tempo real</span>.
-              </h1>
-              <p className="landing-copy landing-hero-anim landing-hero-delay-3 max-w-[560px] text-muted-foreground">
-                Organize pedidos, produção, estoque e vendas em um fluxo único, com clareza visual e
-                velocidade para equipes que precisam entregar mais todos os dias.
-              </p>
-            </div>
-
-            <div className="landing-hero-anim landing-hero-delay-4 flex flex-wrap items-center gap-3">
-              <Button asChild className="landing-btn h-12 rounded-full px-7 text-primary-foreground">
-                <Link to={trialSignupLink}>Testar por 3 dias</Link>
-              </Button>
-              <Button
-                asChild
-                variant="outline"
-                className="landing-btn h-12 rounded-full border-foreground/20 bg-transparent px-7 text-foreground hover:bg-foreground/5"
-              >
-                <a href="#interface">Ver interface</a>
-              </Button>
-            </div>
-            <p className="landing-hero-anim landing-hero-delay-5 text-sm text-muted-foreground">
-              Comece agora com teste grátis de 3 dias e cadastro rápido.
-            </p>
-
-            <div className="landing-hero-anim landing-hero-delay-5 grid w-full max-w-3xl gap-3 sm:grid-cols-3">
-              {heroStats.map((stat) => (
-                <div
-                  key={stat.label}
-                  className="rounded-2xl border border-foreground/10 bg-card/90 px-4 py-3 shadow-[0_12px_32px_rgba(15,23,42,0.06)]"
-                >
-                  <p className="landing-heading text-2xl font-extrabold leading-tight text-foreground">
-                    {stat.value}
-                  </p>
-                  <p className="mt-1 text-[0.83rem] uppercase tracking-[0.18em] text-muted-foreground">
-                    {stat.label}
-                  </p>
+      <main className="overflow-hidden pt-20">
+        {/* HERO SECTION */}
+        <section id="inicio" className="relative flex min-h-[80vh] items-center py-20">
+          <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.1),transparent_50%),radial-gradient(circle_at_bottom_left,rgba(59,130,246,0.05),transparent_50%)]" />
+          <div className="mx-auto w-full max-w-7xl px-4">
+            <div className="grid grid-cols-1 items-center gap-12 lg:grid-cols-2">
+              <div className="space-y-8 text-center lg:text-left">
+                <div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-4 py-2 text-sm font-semibold text-primary">
+                  <span className="h-2 w-2 animate-pulse rounded-full bg-primary" />
+                  Plataforma completa para o seu negócio
                 </div>
-              ))}
+                
+                <h1 className="text-4xl font-black tracking-tight text-foreground sm:text-6xl">
+                  IDEART CLOUD
+                  <span className="block text-2xl font-bold text-muted-foreground sm:text-3xl mt-2">
+                    Sistema completo para gráficas, papelarias e personalizados
+                  </span>
+                </h1>
+                
+                <p className="text-lg text-muted-foreground sm:text-xl max-w-xl mx-auto lg:mx-0">
+                  Gerencie pedidos, produção, clientes, catálogo e financeiro em um único sistema de forma simples e eficiente.
+                </p>
+                
+                <div className="flex flex-wrap items-center justify-center gap-4 lg:justify-start">
+                  <Button asChild size="lg" className="h-14 rounded-xl px-8 text-lg font-bold shadow-lg shadow-primary/25">
+                    <Link to={trialSignupLink}>Criar conta</Link>
+                  </Button>
+                  <Button asChild variant="ghost" size="lg" className="h-14 rounded-xl px-8 text-lg font-bold border border-primary/20 text-primary hover:bg-primary/5 hover:text-primary transition-all">
+                    <Link to="/auth">Entrar no sistema</Link>
+                  </Button>
+                </div>
+              </div>
+              
+              <div className="relative">
+                <div className="relative z-10 space-y-4">
+                  <div className="relative h-64 w-full overflow-hidden rounded-xl border bg-card shadow-2xl transition-all hover:scale-[1.02] sm:h-80">
+                    <img 
+                      src="/landing/painel.png" 
+                      alt="Painel Administrativo" 
+                      className="h-full w-full object-cover object-top"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="relative h-40 overflow-hidden rounded-xl border bg-card shadow-xl transition-all hover:scale-[1.02] sm:h-48">
+                      <img 
+                        src="/landing/pedidos.png" 
+                        alt="Tela de Pedidos" 
+                        className="h-full w-full object-cover object-top"
+                      />
+                    </div>
+                    <div className="relative h-40 overflow-hidden rounded-xl border bg-card shadow-xl transition-all hover:scale-[1.02] sm:h-48">
+                      <img 
+                        src="/landing/catalogo.png" 
+                        alt="Catálogo Online" 
+                        className="h-full w-full object-cover object-top"
+                      />
+                    </div>
+                  </div>
+                </div>
+                <div className="absolute -bottom-6 -left-6 -right-6 -top-6 -z-10 rounded-3xl bg-primary/5 blur-3xl" />
+              </div>
             </div>
           </div>
         </section>
 
-        <section id="interface" className="mx-auto w-full max-w-6xl px-4 pb-20">
-          <div className="reveal space-y-4">
-            <p className="landing-section-label text-muted-foreground">Interface real do sistema</p>
-            <h2 className="landing-heading landing-section-title max-w-3xl text-foreground">
-              Veja pedidos, indicadores e operação em uma única tela.
+        {/* SEÇÃO DEMONSTRAÇÃO DO SISTEMA */}
+        <section id="interface" className="bg-slate-50/50 py-24 dark:bg-slate-950/20">
+          <div className="mx-auto w-full max-w-7xl px-4 text-center">
+            <h2 className="mb-4 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
+              Veja o IDEART Cloud em ação
             </h2>
-          </div>
-
-          <div className="reveal reveal-delay-1 mt-8 rounded-[30px] border border-foreground/10 bg-card/80 p-3 shadow-[0_26px_70px_rgba(15,23,42,0.14)]">
-            <div className="overflow-hidden rounded-[24px] border border-white/10 bg-[#14181f] shadow-[0_30px_90px_rgba(2,6,23,0.55)] [transform:perspective(1200px)_rotateX(3deg)] transition-transform duration-500 hover:[transform:perspective(1200px)_rotateX(0deg)]">
-              <div className="flex items-center gap-3 border-b border-white/10 bg-[#1c2230] px-4 py-3">
-                <div className="flex items-center gap-1.5">
-                  <span className="h-2.5 w-2.5 rounded-full bg-[#ff5f57]" />
-                  <span className="h-2.5 w-2.5 rounded-full bg-[#febc2e]" />
-                  <span className="h-2.5 w-2.5 rounded-full bg-[#28c840]" />
+            <p className="mb-16 text-muted-foreground max-w-2xl mx-auto">
+              Uma interface pensada para produtividade, com tudo que você precisa ao alcance de um clique.
+            </p>
+            
+            <div className="grid gap-12 md:grid-cols-3">
+              {/* PAINEL FINANCEIRO */}
+              <Card className="overflow-hidden border-none bg-transparent shadow-none">
+                <div className="group relative h-48 overflow-hidden rounded-3xl border bg-card shadow-lg transition-all hover:scale-[1.03] hover:shadow-2xl sm:h-64">
+                  <img src="/landing/painel.png" alt="Painel Financeiro" className="h-full w-full object-cover object-top" />
+                  <div className="absolute inset-0 bg-primary/10 opacity-0 transition-opacity group-hover:opacity-100" />
                 </div>
-                <div className="ml-2 flex-1 rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-[0.72rem] text-slate-300">
-                  app.graficaerp.com/dashboard
+                <CardContent className="pt-8 px-0">
+                  <h3 className="mb-3 text-2xl font-black">Painel Financeiro</h3>
+                  <p className="text-muted-foreground leading-relaxed">Acompanhe faturamento, fluxo de caixa e o desempenho geral da sua empresa em um só lugar.</p>
+                </CardContent>
+              </Card>
+
+              {/* GESTÃO DE PEDIDOS */}
+              <Card className="overflow-hidden border-none bg-transparent shadow-none">
+                <div className="group relative h-48 overflow-hidden rounded-3xl border bg-card shadow-lg transition-all hover:scale-[1.03] hover:shadow-2xl sm:h-64">
+                  <img src="/landing/pedidos.png" alt="Gestão de Pedidos" className="h-full w-full object-cover object-top" />
+                  <div className="absolute inset-0 bg-primary/10 opacity-0 transition-opacity group-hover:opacity-100" />
                 </div>
-              </div>
+                <CardContent className="pt-8 px-0">
+                  <h3 className="mb-3 text-2xl font-black">Gestão de Pedidos</h3>
+                  <p className="text-muted-foreground leading-relaxed">Controle status, produção e pagamento de cada pedido em tempo real com total organização.</p>
+                </CardContent>
+              </Card>
 
-              <div className="grid min-h-[380px] grid-cols-1 lg:grid-cols-[220px_1fr]">
-                <aside className="border-r border-white/10 bg-[#171d29] p-4">
-                  <div className="mb-6 flex items-center gap-2 text-white">
-                    <span className="h-7 w-7 rounded-md bg-primary" />
-                    <span className="landing-heading text-sm font-bold tracking-[0.08em]">IDEART CLOUD</span>
-                  </div>
-                  <div className="space-y-2 text-[0.86rem] text-slate-400">
-                    {["Painel", "Pedidos", "Clientes", "Estoque", "Financeiro"].map((item, index) => (
-                      <div
-                        key={item}
-                        className={`rounded-lg px-3 py-2 ${
-                          index === 1 ? "bg-primary/20 text-primary-foreground" : "hover:bg-white/5"
-                        }`}
-                      >
-                        {item}
-                      </div>
-                    ))}
-                  </div>
-                </aside>
-
-                <div className="bg-[#0f141f] p-4 lg:p-5">
-                  <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                    <div className="w-full max-w-[280px] rounded-lg border border-white/10 bg-[#151b29] px-3 py-2 text-[0.82rem] text-slate-400">
-                      Buscar pedido, cliente ou produto...
-                    </div>
-                    <div className="flex items-center gap-2 text-sm text-slate-300">
-                      <span className="h-8 w-8 rounded-full bg-primary/30" />
-                      Iane Teles
-                    </div>
-                  </div>
-
-                  <div className="grid gap-3 md:grid-cols-3">
-                    {previewMetrics.map((metric) => (
-                      <div key={metric.label} className="rounded-xl border border-white/10 bg-[#141b29] p-3">
-                        <p className="text-[0.72rem] uppercase tracking-[0.16em] text-slate-400">{metric.label}</p>
-                        <p className="landing-heading mt-1 text-xl font-bold text-white">{metric.value}</p>
-                        <p className="text-[0.78rem] text-emerald-400">{metric.trend}</p>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="mt-4 overflow-hidden rounded-xl border border-white/10">
-                    <table className="w-full border-collapse text-left text-[0.84rem] text-slate-300">
-                      <thead className="bg-white/5 text-[0.7rem] uppercase tracking-[0.16em] text-slate-400">
-                        <tr>
-                          <th className="px-4 py-3 font-medium">Pedido</th>
-                          <th className="px-4 py-3 font-medium">Cliente</th>
-                          <th className="px-4 py-3 font-medium">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {previewRows.map((row) => (
-                          <tr key={row.order} className="border-t border-white/10">
-                            <td className="px-4 py-3">{row.order}</td>
-                            <td className="px-4 py-3">{row.customer}</td>
-                            <td className="px-4 py-3">
-                              <span className={`inline-flex rounded-full px-2.5 py-1 text-[0.72rem] font-medium ${row.badge}`}>
-                                {row.status}
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+              {/* CATÁLOGO ONLINE */}
+              <Card className="overflow-hidden border-none bg-transparent shadow-none">
+                <div className="group relative h-48 overflow-hidden rounded-3xl border bg-card shadow-lg transition-all hover:scale-[1.03] hover:shadow-2xl sm:h-64">
+                  <img src="/landing/catalogo.png" alt="Catálogo Online" className="h-full w-full object-cover object-top" />
+                  <div className="absolute inset-0 bg-primary/10 opacity-0 transition-opacity group-hover:opacity-100" />
                 </div>
-              </div>
+                <CardContent className="pt-8 px-0">
+                  <h3 className="mb-3 text-2xl font-black">Catálogo Online</h3>
+                  <p className="text-muted-foreground leading-relaxed">Seus clientes podem visualizar produtos e fazer pedidos online de forma prática e rápida.</p>
+                </CardContent>
+              </Card>
             </div>
           </div>
         </section>
 
-        <section id="funcionalidades" className="bg-[#0f131b] py-20 text-slate-100">
-          <div className="mx-auto w-full max-w-6xl px-4">
-            <div className="reveal space-y-4">
-              <p className="landing-section-label text-slate-400">Funcionalidades</p>
-              <h2 className="landing-heading landing-section-title max-w-3xl text-slate-100">
-                Tudo que uma operação gráfica precisa para crescer sem perder controle.
+        {/* SEÇÃO FUNCIONALIDADES */}
+        <section id="funcionalidades" className="py-24">
+          <div className="mx-auto w-full max-w-7xl px-4">
+            <div className="mb-16 text-center">
+              <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
+                Funcionalidades do sistema
               </h2>
+              <p className="mt-4 text-muted-foreground">O módulo ideal para cada necessidade da sua operação.</p>
             </div>
 
-            <div className="mt-10 grid gap-5 md:grid-cols-2">
-              {featureCards.map((feature, index) => (
-                <Card
-                  key={feature.title}
-                  className={`landing-feature-card reveal border border-white/10 bg-white/5 shadow-none ${
-                    index === 1 ? "reveal-delay-1" : index === 2 ? "reveal-delay-2" : index === 3 ? "reveal-delay-3" : ""
-                  }`}
-                >
-                  <CardContent className="space-y-4 p-6">
-                    <span className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-white/10 text-xl">
-                      {feature.icon}
-                    </span>
-                    <h3 className="landing-heading text-xl font-bold text-white">{feature.title}</h3>
-                    <p className="landing-card-copy text-slate-300">{feature.description}</p>
-                    <span className="inline-flex rounded-full border border-white/15 px-3 py-1 text-[0.72rem] uppercase tracking-[0.14em] text-slate-300">
-                      {feature.tag}
-                    </span>
-                  </CardContent>
-                </Card>
-              ))}
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-5">
+              {[
+                { title: 'Painel', icon: LayoutDashboard, color: 'text-blue-600', bg: 'bg-blue-50' },
+                { title: 'Pedidos', icon: ClipboardList, color: 'text-blue-600', bg: 'bg-blue-50' },
+                { title: 'Produção', icon: Factory, color: 'text-orange-600', bg: 'bg-orange-50' },
+                { title: 'Fluxo de Caixa', icon: CreditCard, color: 'text-indigo-600', bg: 'bg-indigo-50' },
+                { title: 'Despesas', icon: ArrowDownCircle, color: 'text-red-500', bg: 'bg-red-50' },
+                { title: 'Relatórios', icon: BarChart3, color: 'text-purple-600', bg: 'bg-purple-50' },
+                { title: 'Produtos', icon: Package, color: 'text-amber-600', bg: 'bg-amber-50' },
+                { title: 'Categorias', icon: FolderTree, color: 'text-blue-600', bg: 'bg-blue-50' },
+                { title: 'Banners', icon: ImageIcon, color: 'text-orange-600', bg: 'bg-orange-50' },
+                { title: 'Atributos', icon: Tags, color: 'text-indigo-600', bg: 'bg-indigo-50' },
+                { title: 'Gestão Catálogo', icon: Settings, color: 'text-slate-600', bg: 'bg-slate-50' },
+                { title: 'PDV / Balcão', icon: ShoppingCart, color: 'text-green-600', bg: 'bg-green-50' },
+                { title: 'Comprovantes', icon: FileText, color: 'text-slate-600', bg: 'bg-slate-50' },
+                { title: 'Kanban', icon: Kanban, color: 'text-sky-600', bg: 'bg-sky-50' },
+                { title: 'Insumos', icon: Layers, color: 'text-amber-600', bg: 'bg-amber-50' },
+                { title: 'Estoque', icon: Boxes, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+                { title: 'Clientes', icon: Users, color: 'text-rose-600', bg: 'bg-rose-50' },
+                { title: 'Aniversariantes', icon: Gift, color: 'text-pink-500', bg: 'bg-pink-50' },
+                { title: 'Simulador', icon: Calculator, color: 'text-violet-600', bg: 'bg-violet-50' },
+                { title: 'Etiquetas', icon: Barcode, color: 'text-cyan-600', bg: 'bg-cyan-50' },
+              ].map((item) => {
+                const Icon = item.icon;
+                return (
+                  <div key={item.title} className="flex flex-col items-center gap-3 rounded-2xl border bg-card p-6 transition-all hover:border-primary/50 hover:shadow-md">
+                    <div className={`flex h-12 w-12 items-center justify-center rounded-xl ${item.bg} ${item.color}`}>
+                      <Icon className="h-6 w-6" />
+                    </div>
+                    <span className="text-center text-sm font-semibold">{item.title}</span>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </section>
 
-        <section id="planos" className="mx-auto w-full max-w-6xl px-4 py-20">
-          <div className="reveal space-y-4">
-            <p className="landing-section-label text-muted-foreground">Planos</p>
-            <h2 className="landing-heading landing-section-title max-w-3xl text-foreground">
+        {/* SEÇÃO BENEFÍCIOS */}
+        <section className="bg-primary/5 py-24">
+          <div className="mx-auto w-full max-w-7xl px-4">
+            <h2 className="mb-16 text-center text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
+              Mais organização para sua empresa
+            </h2>
+            
+            <div className="grid gap-8 md:grid-cols-3">
+              <div className="rounded-3xl border bg-card p-8 shadow-sm transition-all hover:shadow-lg">
+                <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-100 text-blue-600">
+                  <Activity className="h-8 w-8" />
+                </div>
+                <h3 className="mb-4 text-2xl font-bold">Automatize seus pedidos</h3>
+                <p className="text-muted-foreground leading-relaxed">
+                  Receba pedidos do catálogo direto no painel e mantenha o cliente informado automaticamente via WhatsApp.
+                </p>
+              </div>
+
+              <div className="rounded-3xl border bg-card p-8 shadow-sm transition-all hover:shadow-lg">
+                <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-green-100 text-green-600">
+                  <Boxes className="h-8 w-8" />
+                </div>
+                <h3 className="mb-4 text-2xl font-bold">Organize produção e estoque</h3>
+                <p className="text-muted-foreground leading-relaxed">
+                  Saiba exatamente o que deve ser produzido hoje e mantenha o estoque de insumos sempre em dia.
+                </p>
+              </div>
+
+              <div className="rounded-3xl border bg-card p-8 shadow-sm transition-all hover:shadow-lg">
+                <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-purple-100 text-purple-600">
+                  <BarChart2 className="h-8 w-8" />
+                </div>
+                <h3 className="mb-4 text-2xl font-bold">Controle financeiro completo</h3>
+                <p className="text-muted-foreground leading-relaxed">
+                  Fluxo de caixa, contas a pagar e receber, e relatórios detalhados para você decidir melhor sobre seu negócio.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* SEÇÃO PLANOS */}
+        <section id="planos" className="mx-auto w-full max-w-7xl px-4 py-24">
+          <div className="reveal space-y-4 text-center">
+            <p className="landing-section-label text-muted-foreground uppercase tracking-widest text-sm font-bold">Planos</p>
+            <h2 className="landing-heading text-3xl font-bold tracking-tight text-foreground sm:text-5xl">
               Escolha o plano certo para escalar a sua gráfica.
             </h2>
-            <p className="landing-copy max-w-[560px] text-muted-foreground">
+            <p className="landing-copy max-w-2xl mx-auto text-muted-foreground text-lg">
               Todos os planos incluem atualizações, segurança e suporte para manter sua operação estável.
             </p>
           </div>
 
-          {offersLoading && (
-            <p className="mt-4 text-sm text-muted-foreground">Carregando planos da Cakto...</p>
-          )}
+          <div className="mt-16 grid gap-8 md:grid-cols-3">
+            {displayPlans.map((plan) => {
+              const isPopular = plan.billing_period === "yearly";
+              const periodLabel = 
+                plan.billing_period === "yearly" ? "Anual" : 
+                plan.billing_period === "quarterly" ? "Trimestral" : 
+                plan.billing_period === "lifetime" ? "Vitalício" : 
+                "Mensal";
 
-          <div className="mt-10 grid gap-5 md:grid-cols-2 xl:grid-cols-4">
-            {displayPlans.map((plan, index) => {
-              const isPopular = maxPrice > 0 && plan.price === maxPrice;
               return (
                 <Card
                   key={plan.id}
-                  className={`landing-plan-card reveal border ${
-                    isPopular
-                      ? "border-primary/35 bg-[#101827] text-slate-100 shadow-[0_20px_50px_hsl(var(--primary)/0.22)]"
-                      : "border-border bg-card/90 text-foreground"
-                  } ${index === 1 ? "reveal-delay-1" : index === 2 ? "reveal-delay-2" : index === 3 ? "reveal-delay-3" : ""}`}
+                  className={`relative flex flex-col rounded-[2.5rem] p-10 transition-all duration-500 border-2 ${
+                    isPopular 
+                      ? "border-primary bg-[#0f172a] text-white shadow-2xl shadow-primary/30 scale-105 z-10" 
+                      : "border-slate-100 bg-white text-slate-900 shadow-xl shadow-slate-200/50 hover:border-primary/20"
+                  }`}
                 >
-                  <CardContent className="relative p-6">
-                    {isPopular && (
-                      <span className="absolute right-6 top-5 rounded-full bg-amber-400 px-3 py-1 text-[0.68rem] font-bold uppercase tracking-[0.14em] text-amber-950">
-                        Popular
+                  {isPopular && (
+                    <div className="absolute -top-4 left-1/2 -translate-x-1/2">
+                      <span className="rounded-full bg-amber-400 px-6 py-2 text-[0.8rem] font-black uppercase tracking-widest text-amber-950 shadow-lg">
+                        Mais Popular
                       </span>
-                    )}
-
-                    <p className={`landing-heading text-[0.78rem] font-semibold uppercase tracking-[0.2em] ${isPopular ? "text-slate-400" : "text-muted-foreground"}`}>
+                    </div>
+                  )}
+                  
+                  <div className="mb-8">
+                    <p className={`text-xs font-black uppercase tracking-[0.2em] ${isPopular ? "text-slate-400" : "text-primary"}`}>
                       {plan.name}
                     </p>
-                    <p className={`landing-card-copy mt-3 ${isPopular ? "text-slate-300" : "text-muted-foreground"}`}>
-                      {plan.description || "Plano cadastrado na Cakto."}
+                    <p className={`mt-3 text-base leading-relaxed ${isPopular ? "text-slate-400" : "text-slate-500"}`}>
+                      {plan.description || "Plano completo para acelerar sua operação gráfica."}
                     </p>
+                  </div>
 
-                    <div className="mt-6">
-                      <p className={`landing-heading text-4xl font-extrabold ${isPopular ? "text-white" : "text-foreground"}`}>
+                  <div className="mb-10">
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-5xl font-black tracking-tight">
                         {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(plan.price)}
-                      </p>
-                      <p className={`mt-1 text-[0.84rem] ${isPopular ? "text-slate-400" : "text-muted-foreground"}`}>
-                        por {plan.billing_period === "monthly" ? "mês" : "ano"}
-                      </p>
+                      </span>
                     </div>
+                    <p className={`mt-2 text-sm font-bold ${isPopular ? "text-slate-400" : "text-slate-500"}`}>
+                      Faturamento {periodLabel}
+                    </p>
+                  </div>
 
-                    <ul className="mt-5 space-y-2.5">
-                      {(plan.features || []).map((feature) => (
-                        <li key={feature} className={`flex items-start gap-2.5 text-[0.88rem] ${isPopular ? "text-slate-200" : "text-foreground"}`}>
-                          <span className="mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary/20 text-primary">
-                            <Check className="h-3.5 w-3.5" />
-                          </span>
-                          <span>{feature}</span>
+                  <ul className="mb-12 space-y-4 flex-1">
+                    {(plan.features || []).length > 0 ? (
+                      plan.features.map((feature) => (
+                        <li key={feature} className="flex items-start gap-3 text-sm font-medium">
+                          <div className={`mt-0.5 rounded-full p-1 ${isPopular ? "bg-primary/20" : "bg-primary/10"}`}>
+                            <Check className={`h-3 w-3 shrink-0 ${isPopular ? "text-primary" : "text-primary"}`} />
+                          </div>
+                          <span className={isPopular ? "text-slate-200" : "text-slate-600"}>{feature}</span>
                         </li>
-                      ))}
-                    </ul>
+                      ))
+                    ) : (
+                      <>
+                        <li className="flex items-start gap-3 text-sm font-medium">
+                          <div className={`mt-0.5 rounded-full p-1 ${isPopular ? "bg-primary/20" : "bg-primary/10"}`}>
+                             <Check className={`h-3 w-3 shrink-0 ${isPopular ? "text-primary" : "text-primary"}`} />
+                          </div>
+                          <span className={isPopular ? "text-slate-200" : "text-slate-600"}>Acesso completo ao sistema</span>
+                        </li>
+                        <li className="flex items-start gap-3 text-sm font-medium">
+                          <div className={`mt-0.5 rounded-full p-1 ${isPopular ? "bg-primary/20" : "bg-primary/10"}`}>
+                             <Check className={`h-3 w-3 shrink-0 ${isPopular ? "text-primary" : "text-primary"}`} />
+                          </div>
+                          <span className={isPopular ? "text-slate-200" : "text-slate-600"}>Suporte especializado</span>
+                        </li>
+                      </>
+                    )}
+                  </ul>
 
-                    <Button
-                      className="landing-btn mt-7 h-11 w-full rounded-xl bg-primary text-primary-foreground hover:bg-primary/90"
-                      onClick={() => openCheckout(plan.planId, plan.checkoutUrl)}
-                      disabled={!plan.planId && !plan.checkoutUrl}
-                    >
-                      {!plan.planId && plan.checkoutUrl
-                        ? "Assinar agora"
-                        : plan.planId
-                          ? "Assinar agora"
-                          : "Em configuração"}
-                    </Button>
-                  </CardContent>
+                  <Button
+                    className={`h-16 w-full rounded-2xl text-xl font-black shadow-lg transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] ${
+                      isPopular 
+                        ? "bg-primary text-primary-foreground hover:bg-primary/90 hover:shadow-primary/40" 
+                        : "bg-slate-100 text-slate-900 hover:bg-primary hover:text-white hover:shadow-primary/30"
+                    }`}
+                    onClick={() => openCheckout(plan.planId, plan.checkoutUrl)}
+                  >
+                    Assinar agora
+                  </Button>
                 </Card>
               );
             })}
+          </div>
+        </section>
+
+        {/* CALL TO ACTION FINAL */}
+        <section className="py-24">
+          <div className="mx-auto w-full max-w-5xl px-4">
+            <div className="rounded-[40px] bg-primary px-8 py-16 text-center text-primary-foreground shadow-2xl shadow-primary/40 sm:px-16">
+              <h2 className="mb-6 text-3xl font-black sm:text-5xl">
+                Comece agora a usar o IDEART Cloud
+              </h2>
+              <p className="mb-10 text-lg opacity-90 sm:text-xl">
+                Junte-se a centenas de empresas que já transformaram sua forma de trabalhar.
+              </p>
+              <div className="flex flex-col items-center justify-center gap-4 sm:flex-row">
+                <Button asChild size="lg" variant="secondary" className="h-16 rounded-2xl px-12 text-xl font-black shadow-lg shadow-white/10 hover:shadow-white/20">
+                  <Link to={trialSignupLink}>Criar conta grátis</Link>
+                </Button>
+              </div>
+              <p className="mt-8 text-sm opacity-80">
+                Teste grátis por 3 dias • Sem cartão de crédito • Suporte em português
+              </p>
+            </div>
           </div>
         </section>
       </main>
@@ -595,16 +705,16 @@ export default function Landing() {
 
             <div className="space-y-3">
               <h4 className="landing-heading text-sm font-semibold uppercase tracking-[0.16em] text-slate-100">Empresa</h4>
-              <a href="#contato" className="block text-sm text-slate-400 transition-colors hover:text-primary">Contato</a>
-              <a href="#contato" className="block text-sm text-slate-400 transition-colors hover:text-primary">Suporte</a>
-              <a href="#contato" className="block text-sm text-slate-400 transition-colors hover:text-primary">Parcerias</a>
+              <Link to="/contato" className="block text-sm text-slate-400 transition-colors hover:text-primary">Contato</Link>
+              <Link to="/suporte" className="block text-sm text-slate-400 transition-colors hover:text-primary">Suporte</Link>
+              <Link to="/contato" className="block text-sm text-slate-400 transition-colors hover:text-primary">Parcerias</Link>
             </div>
 
             <div className="space-y-3">
               <h4 className="landing-heading text-sm font-semibold uppercase tracking-[0.16em] text-slate-100">Legal</h4>
-              <a href="#contato" className="block text-sm text-slate-400 transition-colors hover:text-primary">Termos de uso</a>
-              <a href="#contato" className="block text-sm text-slate-400 transition-colors hover:text-primary">Privacidade</a>
-              <a href="#contato" className="block text-sm text-slate-400 transition-colors hover:text-primary">Compliance</a>
+              <Link to="/termos" className="block text-sm text-slate-400 transition-colors hover:text-primary">Termos de uso</Link>
+              <Link to="/privacidade" className="block text-sm text-slate-400 transition-colors hover:text-primary">Privacidade</Link>
+              <Link to="/compliance" className="block text-sm text-slate-400 transition-colors hover:text-primary">Compliance</Link>
             </div>
           </div>
         </div>

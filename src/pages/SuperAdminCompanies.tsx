@@ -107,7 +107,7 @@ export default function SuperAdminCompanies() {
     setPlans(plansData);
 
     const profiles = profilesResult.data || [];
-    const companiesData = (companiesResult.data || []).map((company: Company) => ({
+    const companiesData = ((companiesResult.data as any[]) || []).map((company: any) => ({
       ...company,
       logo_url: ensurePublicStorageUrl('product-images', company.logo_url),
       plan: plansData.find(p => p.id === company.plan_id),
@@ -150,7 +150,7 @@ export default function SuperAdminCompanies() {
 
     const { error } = await supabase
       .from('companies')
-      .update(updateData)
+      .update(updateData as any)
       .eq('id', selectedCompany.id);
 
     if (error) {
@@ -431,7 +431,11 @@ export default function SuperAdminCompanies() {
                       <div>
                         <p className="font-medium">{company.plan.name}</p>
                         <p className="text-sm text-slate-500">
-                          {formatCurrency(company.plan.price)}/{company.plan.billing_period === 'monthly' ? 'mes' : 'ano'}
+                          {formatCurrency(company.plan.price)}/{
+                            company.plan.billing_period === 'monthly' ? 'Mensal' : 
+                            company.plan.billing_period === 'quarterly' ? 'Trimestral' : 
+                            company.plan.billing_period === 'lifetime' ? 'Vitalício' : 'Anual'
+                          }
                         </p>
                       </div>
                     ) : (
@@ -510,7 +514,11 @@ export default function SuperAdminCompanies() {
                 <SelectContent>
                   {plans.map((plan) => (
                     <SelectItem key={plan.id} value={plan.id}>
-                      {plan.name} - {formatCurrency(plan.price)}/{plan.billing_period === 'monthly' ? 'mes' : 'ano'}
+                      {plan.name} - {formatCurrency(plan.price)}/{
+                        plan.billing_period === 'monthly' ? 'Mensal' : 
+                        plan.billing_period === 'quarterly' ? 'Trimestral' : 
+                        plan.billing_period === 'lifetime' ? 'Vitalício' : 'Anual'
+                      }
                     </SelectItem>
                   ))}
                 </SelectContent>

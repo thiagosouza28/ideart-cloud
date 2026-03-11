@@ -52,7 +52,7 @@ export type FinancialEntryOrigin =
   | 'order_payment_delete'
   | 'outros';
 export type SubscriptionStatus = 'trial' | 'active' | 'cancelled' | 'expired' | 'canceled' | 'past_due' | 'unpaid' | 'incomplete';
-export type BillingPeriod = 'monthly' | 'yearly';
+export type BillingPeriod = 'monthly' | 'quarterly' | 'yearly' | 'lifetime';
 export type CompanyThemeMode = 'light' | 'dark' | 'system';
 export type CompanyThemeButtonStyle = 'soft' | 'modern' | 'solid' | 'outline';
 export type CompanyThemeBorderRadius = 'small' | 'medium' | 'large';
@@ -213,6 +213,7 @@ export interface Company {
   trial_active?: boolean | null;
   trial_ends_at?: string | null;
   completed?: boolean | null;
+  dashboard_quick_access?: string[] | null;
   created_at: string;
   updated_at: string;
   plan?: Plan;

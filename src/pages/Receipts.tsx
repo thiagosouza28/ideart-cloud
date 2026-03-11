@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronDown, ExternalLink, FileDown, RefreshCw, Search } from 'lucide-react';
+import { ChevronDown, ExternalLink, FileDown, Printer, RefreshCw, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -661,25 +661,28 @@ export default function Receipts() {
     onPreview: () => void,
     onDownload: () => void,
   ) => (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button size="sm" disabled={runningKey === key}>
-          <FileDown className="mr-1 h-4 w-4" />
-          {runningKey === key ? 'Gerando...' : 'Comprovante'}
-          <ChevronDown className="ml-1 h-4 w-4" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-52">
-        <DropdownMenuItem onClick={onPreview}>
-          <ExternalLink className="mr-2 h-4 w-4" />
-          Visualizar / imprimir
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={onDownload}>
-          <FileDown className="mr-2 h-4 w-4" />
-          Baixar PDF
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <div className="flex items-center gap-2">
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={runningKey === key}
+        onClick={onPreview}
+        title="Visualizar / Imprimir"
+      >
+        <Printer className="h-4 w-4" />
+        <span className="ml-1 hidden sm:inline">Imprimir</span>
+      </Button>
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={runningKey === key}
+        onClick={onDownload}
+        title="Baixar PDF"
+      >
+        <FileDown className="h-4 w-4" />
+        <span className="ml-1 hidden sm:inline">Baixar</span>
+      </Button>
+    </div>
   );
 
   if (!companyId) {

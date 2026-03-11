@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useLayoutEffect } from 'react';
 import {
@@ -98,6 +98,7 @@ import {
   storeAppRoles,
   storeRoleLabels,
 } from '@/lib/modulePermissions';
+import { allQuickModules, defaultQuickAccess } from '@/lib/dashboard';
 
 const categorySchema = z.object({ name: z.string().min(2).max(50) });
 const supplySchema = z.object({
@@ -299,6 +300,7 @@ export default function Settings() {
     catalog_filter_bg_color: "#3b82f6",
     catalog_filter_text_color: "#ffffff",
     catalog_layout: "grid" as "grid" | "list",
+    dashboard_quick_access: [] as string[],
   });
   const [copied, setCopied] = useState(false);
   const [nameError, setNameError] = useState(false);
@@ -324,7 +326,7 @@ export default function Settings() {
   const themeCompanyRef = useRef<string | null>(null);
   // Controla a aba por estado para evitar reload e manter o estado dos formulários.
   const [activeTab, setActiveTab] = useState<'company' | 'theme'>('company');
-  const [companySettingsTab, setCompanySettingsTab] = useState<'geral' | 'contato' | 'mensagens' | 'permissoes'>('geral');
+  const [companySettingsTab, setCompanySettingsTab] = useState<'geral' | 'dashboard' | 'contato' | 'mensagens' | 'permissoes'>('geral');
 
   // Dialogs
   const [categoryDialog, setCategoryDialog] = useState(false);
@@ -382,7 +384,7 @@ export default function Settings() {
       supabase.from('attribute_values').select('*').order('value'),
     ]);
     setCategories(cat.data as Category[] || []);
-    setSupplies(sup.data as Supply[] || []);
+    setSupplies(sup.data as unknown as Supply[] || []);
     setAttributes(attr.data as Attribute[] || []);
     setAttributeValues(val.data as AttributeValue[] || []);
   }, []);
@@ -471,6 +473,7 @@ export default function Settings() {
           order_status_customization: buildOrderStatusCustomization(data.order_status_customization),
           role_module_permissions: normalizeRoleModulePermissions(data.role_module_permissions),
           birthday_message_template: data.birthday_message_template || "",
+          dashboard_quick_access: (data.dashboard_quick_access as string[]) || defaultQuickAccess,
         };
         setCompanyForm(formData);
         setOriginalForm(formData);
@@ -798,6 +801,7 @@ export default function Settings() {
           catalog_badge_bg_color: companyForm.catalog_badge_bg_color,
           catalog_badge_text_color: companyForm.catalog_badge_text_color,
           catalog_button_bg_color: companyForm.catalog_button_bg_color,
+          dashboard_quick_access: companyForm.dashboard_quick_access,
           catalog_button_text_color: companyForm.catalog_button_text_color,
           catalog_button_outline_color: companyForm.catalog_button_outline_color,
           catalog_card_bg_color: companyForm.catalog_card_bg_color,
@@ -1118,6 +1122,7 @@ export default function Settings() {
               >
                 <TabsList className="h-auto flex-wrap justify-start gap-2">
                   <TabsTrigger value="geral" type="button">Geral</TabsTrigger>
+                  <TabsTrigger value="dashboard" type="button">Painel</TabsTrigger>
                   <TabsTrigger value="contato" type="button">Contato</TabsTrigger>
                   <TabsTrigger value="mensagens" type="button">Mensagens</TabsTrigger>
                   <TabsTrigger value="permissoes" type="button">Permissões</TabsTrigger>
@@ -1281,6 +1286,61 @@ export default function Settings() {
                     Esses valores são independentes: um controla o pedido mínimo geral e o outro apenas a entrega.
                   </p>
 
+                </TabsContent>
+
+                <TabsContent value="dashboard" className="mt-0 space-y-6">
+                  <div className="space-y-4">
+                    <div>
+                      <h3 className="text-lg font-medium">Configurações do Painel</h3>
+                      <p className="text-sm text-muted-foreground">Personalize o que é exibido na tela inicial.</p>
+                    </div>
+
+                    <div className="space-y-4">
+                      <Label className="text-base">Módulos de Acesso Rápido</Label>
+                      <p className="text-sm text-muted-foreground">
+                        Selecione os módulos que aparecerão na seção "Acesso Rápido" do painel inicial.
+                      </p>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {allQuickModules.map((module) => {
+                          const Icon = module.icon;
+                          const isChecked = companyForm.dashboard_quick_access.includes(module.id);
+                          
+                          return (
+                            <div 
+                              key={module.id} 
+                              className={`flex items-center gap-3 p-3 rounded-xl border transition-all cursor-pointer hover:bg-muted/30 ${isChecked ? 'border-primary bg-primary/5' : 'border-border'}`}
+                              onClick={() => {
+                                const current = companyForm.dashboard_quick_access;
+                                const next = isChecked 
+                                  ? current.filter(id => id !== module.id)
+                                  : [...current, module.id];
+                                setCompanyForm({ ...companyForm, dashboard_quick_access: next });
+                              }}
+                            >
+                              <div className="flex h-5 w-5 items-center justify-center">
+                                <Checkbox 
+                                  checked={isChecked}
+                                  onCheckedChange={(checked) => {
+                                    const current = companyForm.dashboard_quick_access;
+                                    const next = checked 
+                                      ? [...current, module.id]
+                                      : current.filter(id => id !== module.id);
+                                    setCompanyForm({ ...companyForm, dashboard_quick_access: next });
+                                  }}
+                                  onClick={(e) => e.stopPropagation()}
+                                />
+                              </div>
+                              <div className={`p-2 rounded-lg ${module.bg} ${module.color}`}>
+                                <Icon className="h-5 w-5" />
+                              </div>
+                              <span className="font-medium text-sm">{module.title}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
                 </TabsContent>
 
                 <TabsContent value="contato" className="mt-0 space-y-6">

@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Building2, CreditCard, LayoutGrid, TrendingUp, AlertTriangle } from 'lucide-react';
+import { Building2, CreditCard, LayoutGrid, TrendingUp, AlertTriangle, Mail, FileCheck, Trash2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 import type { Company, SubscriptionStatus } from '@/types/database';
 
 interface Stats {
@@ -44,6 +46,7 @@ export default function SuperAdminDashboard() {
     totalPlans: 0,
   });
   const [recentCompanies, setRecentCompanies] = useState<Company[]>([]);
+  const [contactMessages, setContactMessages] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -51,13 +54,15 @@ export default function SuperAdminDashboard() {
   }, []);
 
   const loadData = async () => {
-    const [companiesResult, plansResult] = await Promise.all([
+    const [companiesResult, plansResult, messagesResult] = await Promise.all([
       supabase.from('companies').select('*').order('created_at', { ascending: false }),
       supabase.from('plans').select('*').eq('is_active', true),
+      supabase.from('order_notifications').select('*').eq('type', 'contact_form').order('created_at', { ascending: false }).limit(5)
     ]);
 
     const companies = (companiesResult.data || []) as Company[];
     const plans = plansResult.data || [];
+    const messages = messagesResult.data || [];
 
     setStats({
       totalCompanies: companies.length,
@@ -67,11 +72,49 @@ export default function SuperAdminDashboard() {
     });
 
     setRecentCompanies(companies.slice(0, 5));
+    setContactMessages(messages);
     setLoading(false);
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('pt-BR');
+    return new Date(dateString).toLocaleDateString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  const markAsRead = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('order_notifications')
+        .update({ read_at: new Date().toISOString() })
+        .eq('id', id);
+
+      if (error) throw error;
+      setContactMessages(prev => prev.map(m => m.id === id ? { ...m, read_at: new Date().toISOString() } : m));
+      toast.success("Mensagem marcada como lida");
+    } catch (error) {
+      toast.error("Erro ao atualizar mensagem");
+    }
+  };
+
+  const deleteMessage = async (id: string) => {
+    if (!confirm("Deseja realmente excluir esta mensagem?")) return;
+    try {
+      const { error } = await supabase
+        .from('order_notifications')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      setContactMessages(prev => prev.filter(m => m.id !== id));
+      toast.success("Mensagem excluída");
+    } catch (error) {
+      toast.error("Erro ao excluir mensagem");
+    }
   };
 
   if (loading) {
@@ -156,48 +199,128 @@ export default function SuperAdminDashboard() {
         </Card>
       </div>
 
-      <Card className="border-slate-200">
-        <CardHeader>
-          <CardTitle className="text-base">Empresas Recentes</CardTitle>
-          <CardDescription>Últimas empresas cadastradas no sistema</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {recentCompanies.length === 0 ? (
-            <p className="text-slate-500 text-center py-8">Nenhuma empresa cadastrada</p>
-          ) : (
-            <div className="space-y-4">
-              {recentCompanies.map((company) => (
-                <div
-                  key={company.id}
-                  className="flex items-center justify-between p-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 cursor-pointer transition-colors"
-                  onClick={() => navigate('/super-admin/empresas')}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                      <Building2 className="h-5 w-5 text-primary" />
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card className="border-slate-200">
+          <CardHeader>
+            <CardTitle className="text-base">Empresas Recentes</CardTitle>
+            <CardDescription>Últimas empresas cadastradas no sistema</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {recentCompanies.length === 0 ? (
+              <p className="text-slate-500 text-center py-8">Nenhuma empresa cadastrada</p>
+            ) : (
+              <div className="space-y-4">
+                {recentCompanies.map((company) => (
+                  <div
+                    key={company.id}
+                    className="flex items-center justify-between p-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 cursor-pointer transition-colors"
+                    onClick={() => navigate('/super-admin/empresas')}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                        <Building2 className="h-5 w-5 text-primary" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-slate-900">{company.name}</p>
+                        <p className="text-sm text-slate-500">{company.slug}</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-medium text-slate-900">{company.name}</p>
-                      <p className="text-sm text-slate-500">{company.slug}</p>
+                    <div className="flex items-center gap-3">
+                      <Badge
+                        variant="outline"
+                        className={statusColors[company.subscription_status as SubscriptionStatus || 'trial']}
+                      >
+                        {statusLabels[company.subscription_status as SubscriptionStatus || 'trial']}
+                      </Badge>
+                      <span className="text-sm text-slate-500">
+                        {formatDate(company.created_at)}
+                      </span>
                     </div>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <Badge
-                      variant="outline"
-                      className={statusColors[company.subscription_status as SubscriptionStatus || 'trial']}
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="border-slate-200">
+          <CardHeader>
+            <CardTitle className="text-base">Mensagens de Contato</CardTitle>
+            <CardDescription>Mensagens recebidas via formulário do site</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {contactMessages.length === 0 ? (
+              <p className="text-slate-500 text-center py-8">Nenhuma mensagem recebida</p>
+            ) : (
+              <div className="space-y-4">
+                {contactMessages.map((msg) => {
+                  const data = JSON.parse(msg.body || '{}');
+                  const isRead = !!msg.read_at;
+                  return (
+                    <div
+                      key={msg.id}
+                      className={`p-4 rounded-lg border border-slate-200 bg-white hover:border-primary/30 transition-all ${isRead ? 'opacity-60 grayscale-[0.5]' : 'border-l-4 border-l-primary shadow-sm'}`}
                     >
-                      {statusLabels[company.subscription_status as SubscriptionStatus || 'trial']}
-                    </Badge>
-                    <span className="text-sm text-slate-500">
-                      {formatDate(company.created_at)}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-slate-900">{data.name}</span>
+                          {!isRead && <Badge className="bg-primary text-[10px] h-4">Nova</Badge>}
+                        </div>
+                        <span className="text-xs text-slate-400">{formatDate(msg.created_at)}</span>
+                      </div>
+                      <div className="text-sm text-slate-600 mb-1">
+                        <span className="font-semibold">Assunto:</span> {data.subject}
+                      </div>
+                      <div className="text-sm text-slate-500 mb-3 whitespace-pre-wrap line-clamp-3">
+                        {data.message}
+                      </div>
+                      <div className="flex items-center justify-between gap-4">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-[11px] bg-slate-100 px-2 py-0.5 rounded text-slate-500">{data.email}</span>
+                          <Badge variant="secondary" className="text-[10px] uppercase font-bold py-0">
+                            {data.company}
+                          </Badge>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-8 w-8 text-slate-400 hover:text-blue-600"
+                            asChild
+                          >
+                            <a href={`mailto:${data.email}?subject=Re: ${data.subject}`}>
+                              <Mail className="h-4 w-4" />
+                            </a>
+                          </Button>
+                          {!isRead && (
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-8 w-8 text-slate-400 hover:text-emerald-600"
+                              onClick={() => markAsRead(msg.id)}
+                            >
+                              <FileCheck className="h-4 w-4" />
+                            </Button>
+                          )}
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-8 w-8 text-slate-400 hover:text-rose-600"
+                            onClick={() => deleteMessage(msg.id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
+

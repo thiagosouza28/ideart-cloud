@@ -6,15 +6,34 @@ import {
   ArrowUpCircle,
   BadgeDollarSign,
   BarChart2,
+  BarChart3,
+  Barcode,
+  Boxes,
+  Calculator,
   ClipboardCheck,
+  ClipboardList,
+  CreditCard,
   Eye,
+  Factory,
+  FileText,
+  FolderTree,
+  Gift,
+  HandCoins,
+  Image as ImageIcon,
+  Kanban,
+  Layers,
+  Package,
   Plus,
+  Settings,
   ShoppingBag,
   ShoppingCart,
+  Tags,
   Users,
   Wallet,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
+import { allQuickModules, defaultQuickAccess } from '@/lib/dashboard';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { StatCard } from '@/components/dashboard/StatCard';
@@ -22,7 +41,6 @@ import { SummaryCard } from '@/components/dashboard/SummaryCard';
 import { OrdersList } from '@/components/dashboard/OrdersList';
 import { EmptyStateCard } from '@/components/dashboard/EmptyStateCard';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
 import {
   buildCashForecastSummary,
   buildExpenseAlertSummary,
@@ -44,6 +62,9 @@ import type {
   Sale,
   SaleItem,
   CatalogEventLog,
+  Supply,
+  Category,
+  Attribute,
 } from '@/types/database';
 import { buildOrderDetailsPath } from '@/lib/orderRouting';
 
@@ -73,7 +94,7 @@ const formatCurrency = (value: number) =>
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { profile } = useAuth();
+  const { profile, company, hasPermission, hasModulePermission } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -508,6 +529,13 @@ export default function Dashboard() {
     [orders],
   );
 
+  const quickModules = useMemo(() => {
+    const activeIds = company?.dashboard_quick_access || defaultQuickAccess;
+    return allQuickModules
+      .filter((m) => activeIds.includes(m.id))
+      .filter((m) => hasPermission(m.roles as any) && hasModulePermission(m.moduleKey as any));
+  }, [company?.dashboard_quick_access, hasPermission, hasModulePermission]);
+
   const productionQueue = useMemo(
     () =>
       orders.filter((order) =>
@@ -548,6 +576,24 @@ export default function Dashboard() {
             icon={card.icon}
           />
         ))}
+      </div>
+
+      <div className="space-y-4">
+        <h2 className="text-xl font-bold text-foreground">Acesso Rápido</h2>
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8">
+          {quickModules.map((module) => (
+            <button
+              key={module.title}
+              onClick={() => navigate(module.url)}
+              className="group flex flex-col items-center justify-center gap-3 rounded-2xl border border-border bg-card p-4 transition-all hover:border-primary/50 hover:bg-primary/5 hover:shadow-md"
+            >
+              <div className={`flex h-14 w-14 items-center justify-center rounded-2xl ${module.bg} ${module.color} transition-transform group-hover:scale-110`}>
+                <module.icon className="h-6 w-6" />
+              </div>
+              <span className="text-center text-xs font-semibold text-foreground">{module.title}</span>
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">

@@ -1,4 +1,4 @@
-﻿import {
+import {
   LayoutDashboard,
   ShoppingCart,
   Package,
@@ -88,6 +88,7 @@ const settingsMenu: MenuItem[] = [
 ];
 
 const superAdminMenu: MenuItem[] = [
+  { title: 'Painel', url: '/super-admin', icon: LayoutDashboard, roles: ['super_admin'], moduleKey: 'dashboard' },
   { title: 'Empresas / Lojas', url: '/super-admin/empresas', icon: Building2, roles: ['super_admin'], moduleKey: 'empresas' },
   { title: 'Planos', url: '/super-admin/planos', icon: Crown, roles: ['super_admin'], moduleKey: 'assinatura' },
   { title: 'Entrar como cliente', url: '/admin/entrar-como-cliente', icon: Shield, roles: ['super_admin'], moduleKey: 'usuarios' },

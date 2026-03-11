@@ -140,12 +140,17 @@ serve(async (req) => {
     if (!Number.isFinite(price) || price < 0) return jsonResponse(corsHeaders, 400, { error: "Preço inválido" });
 
     const billingPeriodRaw = (body.billing_period || body.interval || 'month').toString().toLowerCase();
-    const billingPeriod = billingPeriodRaw === 'year' || billingPeriodRaw === 'yearly'
-      ? 'yearly'
-      : 'monthly';
+    const billingPeriod = 
+      billingPeriodRaw === 'year' || billingPeriodRaw === 'yearly' ? 'yearly' :
+      billingPeriodRaw === 'quarter' || billingPeriodRaw === 'quarterly' ? 'quarterly' :
+      billingPeriodRaw === 'lifetime' || billingPeriodRaw === 'infinite' ? 'lifetime' :
+      'monthly';
     const intervalCount = Number(body.interval_count) || 1;
     const providedPeriodDays = Number(body.period_days);
-    const periodDaysBase = billingPeriod === 'yearly' ? 365 : 30;
+    const periodDaysBase = 
+      billingPeriod === 'yearly' ? 365 : 
+      billingPeriod === 'quarterly' ? 90 : 
+      billingPeriod === 'lifetime' ? 99999 : 30;
     const periodDays = Number.isFinite(providedPeriodDays) && providedPeriodDays > 0
       ? providedPeriodDays
       : periodDaysBase * intervalCount;
@@ -189,8 +194,8 @@ serve(async (req) => {
         description: body.description ?? null,
         price: Math.round(price * 100),
         status: isActive ? 'active' : 'inactive',
-        type: 'recurring',
-        intervalType: billingPeriod === 'yearly' ? 'year' : 'month',
+        type: billingPeriod === 'lifetime' ? 'one_time' : 'recurring',
+        intervalType: billingPeriod === 'yearly' ? 'year' : (billingPeriod === 'quarterly' ? 'quarter' : 'month'),
         interval: intervalCount,
         recurrence_period: periodDays,
       } as Record<string, unknown>;
