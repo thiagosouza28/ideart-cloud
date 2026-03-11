@@ -30,6 +30,7 @@ import {
   ChartTooltipContent,
   type ChartConfig,
 } from '@/components/ui/chart';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -136,6 +137,16 @@ const fromDateTimeLocal = (value: string) => {
 
 const currency = (value: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+const compactAxisValue = (value: number) =>
+  new Intl.NumberFormat('pt-BR', {
+    notation: 'compact',
+    maximumFractionDigits: 1,
+  }).format(value);
+const shortenTickLabel = (value: string | number, maxLength: number) => {
+  const safe = String(value ?? '').trim();
+  if (safe.length <= maxLength) return safe;
+  return `${safe.slice(0, Math.max(1, maxLength - 1))}…`;
+};
 
 const dateTimeLabel = (value: string) => new Date(value).toLocaleString('pt-BR');
 
@@ -171,6 +182,7 @@ const mapTransactionToForm = (tx: CashTransaction): EntryFormState => ({
 export default function CashFlow() {
   const { toast } = useToast();
   const { profile, role, hasPermission } = useAuth();
+  const isMobile = useIsMobile();
   const ranges = useMemo(() => defaultRange(), []);
   const canManage = hasPermission(['admin', 'financeiro']);
   const isSuperAdmin = role === 'super_admin';
@@ -702,7 +714,7 @@ export default function CashFlow() {
             </Button>
           </div>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-4 px-3 pb-4 sm:px-6">
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <div className="rounded-xl border border-border bg-background p-4">
               <p className="text-sm text-muted-foreground">Saldo atual</p>
@@ -736,7 +748,7 @@ export default function CashFlow() {
           </div>
 
           <ChartContainer
-            className="h-[360px] sm:h-[340px] md:h-[280px]"
+            className="aspect-auto h-[360px] sm:h-[340px] md:h-[280px]"
               config={{
                 incoming: { label: 'Entradas previstas', color: '#16a34a' },
                 outgoing: { label: 'Saídas previstas', color: '#f59e0b' },
@@ -745,8 +757,19 @@ export default function CashFlow() {
           >
             <LineChart data={forecastSeries} margin={{ top: 12, right: 12, left: 4, bottom: 12 }}>
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="label" interval="preserveStartEnd" minTickGap={12} tick={{ fontSize: 10 }} tickMargin={6} />
-              <YAxis width={40} tick={{ fontSize: 10 }} />
+              <XAxis
+                dataKey="label"
+                interval="preserveStartEnd"
+                minTickGap={isMobile ? 8 : 12}
+                tick={{ fontSize: isMobile ? 9 : 10 }}
+                tickMargin={6}
+                tickFormatter={(value) => shortenTickLabel(value, isMobile ? 7 : 14)}
+              />
+              <YAxis
+                width={isMobile ? 34 : 40}
+                tick={{ fontSize: isMobile ? 9 : 10 }}
+                tickFormatter={(value) => compactAxisValue(Number(value))}
+              />
               <ChartTooltip content={<ChartTooltipContent />} />
               <ChartLegend content={<ChartLegendContent className="flex-wrap justify-start gap-2 text-[11px] sm:justify-center sm:gap-4 sm:text-xs" />} />
               <Line dataKey="incoming" type="monotone" stroke="var(--color-incoming)" strokeWidth={2} />
@@ -801,9 +824,9 @@ export default function CashFlow() {
               </SelectContent>
             </Select>
           </CardHeader>
-          <CardContent>
+          <CardContent className="px-3 pb-4 sm:px-6">
             <ChartContainer
-              className="h-[360px] sm:h-[340px] md:h-[280px]"
+              className="aspect-auto h-[360px] sm:h-[340px] md:h-[280px]"
                 config={{
                   inflow: { label: 'Receitas', color: '#2563eb' },
                   outflow: { label: 'Despesas', color: '#ef4444' },
@@ -812,8 +835,19 @@ export default function CashFlow() {
             >
               <LineChart data={lineSeries} margin={{ top: 12, right: 12, left: 4, bottom: 12 }}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="label" interval="preserveStartEnd" minTickGap={12} tick={{ fontSize: 10 }} tickMargin={6} />
-                <YAxis width={40} tick={{ fontSize: 10 }} />
+                <XAxis
+                  dataKey="label"
+                  interval="preserveStartEnd"
+                  minTickGap={isMobile ? 8 : 12}
+                  tick={{ fontSize: isMobile ? 9 : 10 }}
+                  tickMargin={6}
+                  tickFormatter={(value) => shortenTickLabel(value, isMobile ? 7 : 14)}
+                />
+                <YAxis
+                  width={isMobile ? 34 : 40}
+                  tick={{ fontSize: isMobile ? 9 : 10 }}
+                  tickFormatter={(value) => compactAxisValue(Number(value))}
+                />
                 <ChartTooltip content={<ChartTooltipContent />} />
                 <ChartLegend content={<ChartLegendContent className="flex-wrap justify-start gap-2 text-[11px] sm:justify-center sm:gap-4 sm:text-xs" />} />
                 <Line dataKey="inflow" type="monotone" stroke="var(--color-inflow)" strokeWidth={2} />
@@ -828,8 +862,8 @@ export default function CashFlow() {
           <CardHeader>
             <CardTitle>Receita por forma de pagamento</CardTitle>
           </CardHeader>
-          <CardContent>
-            <ChartContainer className="h-[340px] md:h-[280px]" config={paymentMethodChartConfig}>
+          <CardContent className="px-3 pb-4 sm:px-6">
+            <ChartContainer className="aspect-auto h-[360px] sm:h-[340px] md:h-[280px]" config={paymentMethodChartConfig}>
               <PieChart>
                 <Pie data={methodPie} dataKey="value" nameKey="name" outerRadius={80} innerRadius={42}>
                   {methodPie.map((entry) => (
@@ -848,9 +882,9 @@ export default function CashFlow() {
         <CardHeader>
           <CardTitle>Comparativo mensal</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-3 pb-4 sm:px-6">
           <ChartContainer
-            className="h-[340px] sm:h-[320px] md:h-[260px]"
+            className="aspect-auto h-[340px] sm:h-[320px] md:h-[260px]"
               config={{
                 inflow: { label: 'Entradas', color: '#2563eb' },
                 outflow: { label: 'Saídas', color: '#f97316' },
@@ -858,8 +892,19 @@ export default function CashFlow() {
           >
             <BarChart data={monthlyBars} margin={{ top: 12, right: 12, left: 4, bottom: 12 }}>
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="label" interval="preserveStartEnd" minTickGap={12} tick={{ fontSize: 10 }} tickMargin={6} />
-              <YAxis width={40} tick={{ fontSize: 10 }} />
+              <XAxis
+                dataKey="label"
+                interval="preserveStartEnd"
+                minTickGap={isMobile ? 8 : 12}
+                tick={{ fontSize: isMobile ? 9 : 10 }}
+                tickMargin={6}
+                tickFormatter={(value) => shortenTickLabel(value, isMobile ? 7 : 14)}
+              />
+              <YAxis
+                width={isMobile ? 34 : 40}
+                tick={{ fontSize: isMobile ? 9 : 10 }}
+                tickFormatter={(value) => compactAxisValue(Number(value))}
+              />
               <ChartTooltip content={<ChartTooltipContent />} />
               <ChartLegend content={<ChartLegendContent className="flex-wrap justify-start gap-2 text-[11px] sm:justify-center sm:gap-4 sm:text-xs" />} />
               <Bar dataKey="inflow" fill="var(--color-inflow)" radius={[6, 6, 0, 0]} />

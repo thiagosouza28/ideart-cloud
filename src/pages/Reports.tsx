@@ -21,6 +21,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 import { useToast } from '@/hooks/use-toast';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { buildPeriodSeries, loadReports, type ReportBundle, type ReportFilters, type SalesPeriod } from '@/services/reports';
 import { exportToCsv, exportToExcel, openPdfPreview, printPdf, type ExportRow } from '@/lib/report-export';
 import { OrderStatus } from '@/types/database';
@@ -55,6 +56,16 @@ const currency = (value: number) =>
 const percent = (value: number) => `${value.toFixed(1)}%`;
 
 const formatDateTime = (value: string) => new Date(value).toLocaleString('pt-BR');
+const compactAxisValue = (value: number) =>
+  new Intl.NumberFormat('pt-BR', {
+    notation: 'compact',
+    maximumFractionDigits: 1,
+  }).format(value);
+const shortenTickLabel = (value: string | number, maxLength: number) => {
+  const safe = String(value ?? '').trim();
+  if (safe.length <= maxLength) return safe;
+  return `${safe.slice(0, Math.max(1, maxLength - 1))}…`;
+};
 
 const toExportFilename = (title: string) => {
   const slug = title
@@ -171,6 +182,7 @@ const buildExportRows = (tab: ReportTab, data: ReportBundle | null): ExportRow[]
 export default function Reports() {
   const { toast } = useToast();
   const { profile } = useAuth();
+  const isMobile = useIsMobile();
   const defaults = useMemo(() => defaultDateRange(), []);
   const [filters, setFilters] = useState<ReportFilters>({
     startDate: defaults.start,
@@ -372,19 +384,30 @@ export default function Reports() {
                 </SelectContent>
               </Select>
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-3 pb-4 sm:px-6">
               <ChartContainer
                 config={{
                   inflow: { label: 'Entradas', color: '#2563eb' },
                   outflow: { label: 'Saídas', color: '#f97316' },
                   net: { label: 'Saldo', color: '#16a34a' },
                 }}
-                className="h-[360px] sm:h-[340px] md:h-[280px]"
+                className="aspect-auto h-[360px] sm:h-[340px] md:h-[280px]"
               >
                 <LineChart data={cashSeries} margin={{ top: 12, right: 12, left: 4, bottom: 12 }}>
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="label" interval="preserveStartEnd" minTickGap={12} tick={{ fontSize: 10 }} tickMargin={6} />
-                  <YAxis width={40} tick={{ fontSize: 10 }} />
+                  <XAxis
+                    dataKey="label"
+                    interval="preserveStartEnd"
+                    minTickGap={isMobile ? 8 : 12}
+                    tick={{ fontSize: isMobile ? 9 : 10 }}
+                    tickMargin={6}
+                    tickFormatter={(value) => shortenTickLabel(value, isMobile ? 7 : 14)}
+                  />
+                  <YAxis
+                    width={isMobile ? 34 : 40}
+                    tick={{ fontSize: isMobile ? 9 : 10 }}
+                    tickFormatter={(value) => compactAxisValue(Number(value))}
+                  />
                   <ChartTooltip content={<ChartTooltipContent />} />
                   <ChartLegend content={<ChartLegendContent className="flex-wrap justify-start gap-2 text-[11px] sm:justify-center sm:gap-4 sm:text-xs" />} />
                   <Line type="monotone" dataKey="inflow" stroke="var(--color-inflow)" strokeWidth={2} />
@@ -399,7 +422,7 @@ export default function Reports() {
             <CardHeader>
               <CardTitle>Movimentações</CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-3 pb-4 sm:px-6">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -480,19 +503,30 @@ export default function Reports() {
               <CardHeader>
                 <CardTitle>Fluxo de caixa</CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="px-3 pb-4 sm:px-6">
                 <ChartContainer
                   config={{
                     inflow: { label: 'Entradas', color: '#2563eb' },
                     outflow: { label: 'Saídas', color: '#f97316' },
                     net: { label: 'Saldo', color: '#16a34a' },
                   }}
-                  className="h-[360px] sm:h-[340px] md:h-[260px]"
+                  className="aspect-auto h-[360px] sm:h-[340px] md:h-[260px]"
                 >
                   <LineChart data={financialCashflow} margin={{ top: 12, right: 12, left: 4, bottom: 12 }}>
                     <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="label" interval="preserveStartEnd" minTickGap={12} tick={{ fontSize: 10 }} tickMargin={6} />
-                    <YAxis width={40} tick={{ fontSize: 10 }} />
+                    <XAxis
+                      dataKey="label"
+                      interval="preserveStartEnd"
+                      minTickGap={isMobile ? 8 : 12}
+                      tick={{ fontSize: isMobile ? 9 : 10 }}
+                      tickMargin={6}
+                      tickFormatter={(value) => shortenTickLabel(value, isMobile ? 7 : 14)}
+                    />
+                    <YAxis
+                      width={isMobile ? 34 : 40}
+                      tick={{ fontSize: isMobile ? 9 : 10 }}
+                      tickFormatter={(value) => compactAxisValue(Number(value))}
+                    />
                     <ChartTooltip content={<ChartTooltipContent />} />
                     <ChartLegend content={<ChartLegendContent className="flex-wrap justify-start gap-2 text-[11px] sm:justify-center sm:gap-4 sm:text-xs" />} />
                     <Line type="monotone" dataKey="inflow" stroke="var(--color-inflow)" strokeWidth={2} />
@@ -506,12 +540,12 @@ export default function Reports() {
               <CardHeader>
                 <CardTitle>Receita por origem</CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="px-3 pb-4 sm:px-6">
                 <ChartContainer
                   config={{
                     value: { label: 'Receita', color: '#2563eb' },
                   }}
-                  className="h-[340px] md:h-[260px]"
+                  className="aspect-auto h-[360px] sm:h-[340px] md:h-[260px]"
                 >
                   <PieChart>
                     <ChartTooltip content={<ChartTooltipContent hideLabel />} />
@@ -604,12 +638,12 @@ export default function Reports() {
             <CardHeader>
               <CardTitle>Despesas por categoria</CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-3 pb-4 sm:px-6">
               <ChartContainer
                 config={{
                   value: { label: 'Despesas', color: '#f97316' },
                 }}
-                className="h-[340px] sm:h-[320px] md:h-[260px]"
+                className="aspect-auto h-[340px] sm:h-[320px] md:h-[260px]"
               >
                 <BarChart
                   data={Object.entries(reportData?.financial.expensesByCategory || {}).map(([name, value]) => ({
@@ -619,8 +653,19 @@ export default function Reports() {
                   margin={{ top: 12, right: 12, left: 4, bottom: 12 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" interval="preserveStartEnd" minTickGap={12} tick={{ fontSize: 10 }} tickMargin={6} />
-                  <YAxis width={40} tick={{ fontSize: 10 }} />
+                  <XAxis
+                    dataKey="name"
+                    interval="preserveStartEnd"
+                    minTickGap={isMobile ? 8 : 12}
+                    tick={{ fontSize: isMobile ? 9 : 10 }}
+                    tickMargin={6}
+                    tickFormatter={(value) => shortenTickLabel(value, isMobile ? 8 : 16)}
+                  />
+                  <YAxis
+                    width={isMobile ? 34 : 40}
+                    tick={{ fontSize: isMobile ? 9 : 10 }}
+                    tickFormatter={(value) => compactAxisValue(Number(value))}
+                  />
                   <ChartTooltip content={<ChartTooltipContent />} />
                   <ChartLegend content={<ChartLegendContent className="flex-wrap justify-start gap-2 text-[11px] sm:justify-center sm:gap-4 sm:text-xs" />} />
                   <Bar dataKey="value" fill="var(--color-value)" radius={[6, 6, 0, 0]} />
@@ -695,12 +740,23 @@ export default function Reports() {
                 config={{
                   total: { label: 'Vendas', color: '#2563eb' },
                 }}
-                className="h-[360px] sm:h-[340px] md:h-[260px]"
+                className="aspect-auto h-[360px] sm:h-[340px] md:h-[260px]"
               >
                 <LineChart data={salesPeriodSeries} margin={{ top: 12, right: 12, left: 4, bottom: 12 }}>
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="label" interval="preserveStartEnd" minTickGap={12} tick={{ fontSize: 10 }} tickMargin={6} />
-                  <YAxis width={40} tick={{ fontSize: 10 }} />
+                  <XAxis
+                    dataKey="label"
+                    interval="preserveStartEnd"
+                    minTickGap={isMobile ? 8 : 12}
+                    tick={{ fontSize: isMobile ? 9 : 10 }}
+                    tickMargin={6}
+                    tickFormatter={(value) => shortenTickLabel(value, isMobile ? 7 : 14)}
+                  />
+                  <YAxis
+                    width={isMobile ? 34 : 40}
+                    tick={{ fontSize: isMobile ? 9 : 10 }}
+                    tickFormatter={(value) => compactAxisValue(Number(value))}
+                  />
                   <ChartTooltip content={<ChartTooltipContent />} />
                   <ChartLegend content={<ChartLegendContent className="flex-wrap justify-start gap-2 text-[11px] sm:justify-center sm:gap-4 sm:text-xs" />} />
                   <Line type="monotone" dataKey="total" stroke="var(--color-total)" strokeWidth={2} />
