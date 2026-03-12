@@ -372,11 +372,16 @@ export const buildPaymentReceiptHtml = (
         border-radius: 10px;
         padding: 12px;
         font-size: 11px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
       }
 
       .receipt-signature-image {
         min-height: 64px;
         display: flex;
+        width: 100%;
         align-items: flex-end;
         justify-content: center;
       }
@@ -389,12 +394,14 @@ export const buildPaymentReceiptHtml = (
 
       .receipt-signature-line {
         width: 100%;
+        max-width: 220px;
         border-top: 1px dashed #cbd5e1;
         min-height: 56px;
       }
 
       .receipt-signature-text {
         margin-top: 8px;
+        width: 100%;
         text-align: center;
       }
 

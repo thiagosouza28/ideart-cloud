@@ -354,20 +354,20 @@ const SaleReceipt = forwardRef<HTMLDivElement, SaleReceiptProps>(
         </div>
 
         <div className="receipt-block mt-6 grid gap-4 sm:grid-cols-2">
-          <div className="rounded-lg border border-slate-200 p-3 text-[11px]">
-            <p className="text-[10px] uppercase tracking-wide text-slate-500">Assinatura da loja</p>
-            <div className="mt-2 flex min-h-[64px] items-end">
-              <div className="w-full border-b border-dashed border-slate-300" />
+          <div className="flex flex-col items-center rounded-lg border border-slate-200 p-3 text-center text-[11px]">
+            <p className="w-full text-[10px] uppercase tracking-wide text-slate-500">Assinatura da loja</p>
+            <div className="mt-2 flex min-h-[64px] w-full items-end justify-center">
+              <div className="w-full max-w-[220px] border-b border-dashed border-slate-300" />
             </div>
-            <p className="mt-2 text-sm font-medium italic text-slate-900">{company?.name || 'Loja'}</p>
+            <p className="mt-2 text-center text-sm font-medium italic text-slate-900">{company?.name || 'Loja'}</p>
           </div>
 
-          <div className="rounded-lg border border-slate-200 p-3 text-[11px]">
-            <p className="text-[10px] uppercase tracking-wide text-slate-500">Assinatura do cliente</p>
-            <div className="mt-2 flex min-h-[64px] items-end">
-              <div className="w-full border-b border-dashed border-slate-300" />
+          <div className="flex flex-col items-center rounded-lg border border-slate-200 p-3 text-center text-[11px]">
+            <p className="w-full text-[10px] uppercase tracking-wide text-slate-500">Assinatura do cliente</p>
+            <div className="mt-2 flex min-h-[64px] w-full items-end justify-center">
+              <div className="w-full max-w-[220px] border-b border-dashed border-slate-300" />
             </div>
-            <p className="mt-2 text-sm font-medium text-slate-900">{customerLabel}</p>
+            <p className="mt-2 text-center text-sm font-medium text-slate-900">{customerLabel}</p>
           </div>
         </div>
 
