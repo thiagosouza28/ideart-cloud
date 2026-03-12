@@ -16,6 +16,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { buildProductProfitabilityRows, buildSoldUnitsMap } from '@/lib/finance';
 import { isPromotionActive } from '@/lib/pricing';
 import { isValidCode128, isValidEan13, normalizeBarcode } from '@/lib/barcode';
+import { isLowDirectStock, usesDirectProductStock, usesSupplyStock } from '@/lib/stockControl';
 import { ensurePublicStorageUrl } from '@/lib/storage';
 import { deleteFile } from '@/lib/upload';
 import {
@@ -719,14 +720,18 @@ export default function Products() {
                         </p>
                       </div>
                     </TableCell>
-                    <TableCell className={product.track_stock && product.stock_quantity <= product.min_stock ? 'text-destructive font-medium' : ''}>
-                      {product.track_stock ? (
+                    <TableCell className={isLowDirectStock(product) ? 'text-destructive font-medium' : ''}>
+                      {usesDirectProductStock(product) ? (
                         <div className="flex flex-col">
                           <span>{product.stock_quantity} {product.unit}</span>
                           <span className="text-[10px] text-muted-foreground uppercase">
-                            {product.stock_control_type === 'composition' ? 'INSUMOS' : 'SIMPLES'}
+                            SIMPLES
                           </span>
                         </div>
+                      ) : usesSupplyStock(product) ? (
+                        <Badge variant="outline" className="border-sky-200 bg-sky-50 text-sky-700">
+                          Baixa por insumos
+                        </Badge>
                       ) : (
                         <Badge variant="outline" className="border-slate-200 bg-slate-100 text-slate-600">
                           Não controla estoque

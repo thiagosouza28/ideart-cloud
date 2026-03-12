@@ -23,6 +23,7 @@ import { normalizeDigits } from '@/components/ui/masked-input';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useUnsavedChanges } from '@/hooks/use-unsaved-changes';
 import { M2_ATTRIBUTE_KEYS, calculateAreaM2, formatAreaM2, isAreaUnit, parseM2Attributes, parseMeasurementInput } from '@/lib/measurements';
+import { usesDirectProductStock, usesSupplyStock } from '@/lib/stockControl';
 import { cn } from '@/lib/utils';
 
 const createLocalId = () => {
@@ -935,7 +936,11 @@ export default function GraphPOSPDV() {
                             {isM2Product(product) ? ' / m\u00B2' : ''}
                           </p>
                           <p className="text-xs text-muted-foreground">
-                            {product.track_stock ? `Estoque: ${product.stock_quantity}` : 'Sem controle de estoque'}
+                            {usesDirectProductStock(product)
+                              ? `Estoque: ${product.stock_quantity}`
+                              : usesSupplyStock(product)
+                                ? 'Baixa por insumos'
+                                : 'Sem controle de estoque'}
                           </p>
                           {getTierRangeLabel(product.id) ? (
                             <p className="text-xs text-muted-foreground">

@@ -50,6 +50,7 @@ import {
   isProductSaleUnitPreset,
   resolveProductSaleUnit,
 } from '@/lib/productSaleUnit';
+import { usesDirectProductStock, usesSupplyStock } from '@/lib/stockControl';
 import { useUnsavedChanges } from '@/hooks/use-unsaved-changes';
 
 const productSchema = z
@@ -695,6 +696,14 @@ export default function ProductForm() {
     () => resolveProductSaleUnit(saleUnitPreset, saleUnitCustom),
     [saleUnitCustom, saleUnitPreset],
   );
+  const managesOwnStock = useMemo(
+    () => usesDirectProductStock({ track_stock: trackStock, stock_control_type: stockControlType }),
+    [stockControlType, trackStock],
+  );
+  const usesSuppliesStockControl = useMemo(
+    () => usesSupplyStock({ track_stock: trackStock, stock_control_type: stockControlType }),
+    [stockControlType, trackStock],
+  );
   const isProductOwner = !isEditing || (Boolean(currentUserId) && productOwnerId === currentUserId);
   const isReadOnlyPublicProduct = isEditing && isPublicProduct && !isProductOwner;
   const canCreateCopy = isReadOnlyPublicProduct;
@@ -1215,8 +1224,8 @@ export default function ProductForm() {
       promo_start_at: promoStartAt || null,
       promo_end_at: promoEndAt || null,
       final_price: finalPrice,
-      stock_quantity: stockQuantity,
-      min_stock: minStock,
+      stock_quantity: managesOwnStock ? stockQuantity : 0,
+      min_stock: managesOwnStock ? minStock : 0,
       min_order_quantity: minOrderQuantity,
       track_stock: trackStock,
       created_at: draftCreatedAtRef.current,
@@ -1260,6 +1269,7 @@ export default function ProductForm() {
       promoStartAt,
       promoEndAt,
       finalPrice,
+      managesOwnStock,
       stockQuantity,
       minStock,
       trackStock,
@@ -2422,8 +2432,8 @@ export default function ProductForm() {
       waste_percentage: wastePercentage,
       profit_margin: profitMargin,
       final_price: finalPrice,
-      stock_quantity: stockQuantity,
-      min_stock: minStock,
+      stock_quantity: managesOwnStock ? stockQuantity : 0,
+      min_stock: managesOwnStock ? minStock : 0,
       min_order_quantity: minOrderQuantity,
       track_stock: trackStock,
       stock_control_type: stockControlType,
@@ -4135,35 +4145,37 @@ export default function ProductForm() {
                     )}
                   </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="stockQuantity">Quantidade em Estoque</Label>
-                    <Input
-                      id="stockQuantity"
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={stockQuantity}
-                      onChange={(e) => setStockQuantity(parseFloat(e.target.value) || 0)}
-                      disabled={!trackStock}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="minStock">Estoque Mínimo (alerta)</Label>
-                    <Input
-                      id="minStock"
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={minStock}
-                      onChange={(e) => setMinStock(parseFloat(e.target.value) || 0)}
-                      disabled={!trackStock}
-                    />
-                  </div>
-
-                  {!trackStock && (
-                    <p className="md:col-span-2 text-xs text-muted-foreground">
-                      Este produto ficará marcado como "Não controla estoque" na listagem.
-                    </p>
+                  {managesOwnStock ? (
+                    <>
+                      <div className="space-y-2">
+                        <Label htmlFor="stockQuantity">Quantidade em Estoque</Label>
+                        <Input
+                          id="stockQuantity"
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={stockQuantity}
+                          onChange={(e) => setStockQuantity(parseFloat(e.target.value) || 0)}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="minStock">Estoque Mínimo (alerta)</Label>
+                        <Input
+                          id="minStock"
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={minStock}
+                          onChange={(e) => setMinStock(parseFloat(e.target.value) || 0)}
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    <div className="md:col-span-2 rounded-xl border border-dashed border-muted-foreground/30 bg-muted/20 p-4 text-sm text-muted-foreground">
+                      {usesSuppliesStockControl
+                        ? 'Este produto não usa estoque próprio. A baixa será feita apenas nos insumos cadastrados.'
+                        : 'Este produto não terá controle de estoque próprio.'}
+                    </div>
                   )}
                 </CardContent>
               </Card>

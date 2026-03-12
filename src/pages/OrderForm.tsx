@@ -73,6 +73,18 @@ interface OrderItemForm {
   notes: string;
 }
 
+type ProductAttributeOption = {
+  id: string;
+  value: string;
+  priceModifier: number;
+};
+
+type ProductAttributeGroup = {
+  attributeId: string;
+  attributeName: string;
+  options: ProductAttributeOption[];
+};
+
 type DocumentType = 'orcamento' | 'pedido_venda' | 'pedido_compra';
 type PriorityLevel = 'baixa' | 'normal' | 'alta';
 type DeliveryDateMode = 'auto' | 'manual';
@@ -142,6 +154,7 @@ export default function OrderForm() {
 
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [productAttributeMap, setProductAttributeMap] = useState<Record<string, ProductAttributeGroup[]>>({});
   const [priceTiers, setPriceTiers] = useState<PriceTier[]>([]);
   const [suppliesCostMap, setSuppliesCostMap] = useState<Record<string, number>>({});
   const [salespeople, setSalespeople] = useState<SalespersonOption[]>([]);
@@ -195,6 +208,46 @@ export default function OrderForm() {
     const safeQuantity = Number.isFinite(quantity) && quantity > 0 ? quantity : 1;
     const suppliesCost = suppliesCostMap[product.id] || 0;
     return resolveProductPrice(product, safeQuantity, priceTiers, suppliesCost);
+  };
+
+  const getProductAttributeGroups = (productId: string) => productAttributeMap[productId] || [];
+
+  const ensureSelectedAttributes = (
+    productId: string,
+    attributes: Record<string, string> = {},
+  ): Record<string, string> => {
+    const nextAttributes = { ...attributes };
+    const productGroups = getProductAttributeGroups(productId);
+
+    productGroups.forEach((group) => {
+      const selectedValue = String(nextAttributes[group.attributeName] || '').trim();
+      const hasValidSelection = group.options.some((option) => option.value === selectedValue);
+      if (!hasValidSelection && group.options[0]?.value) {
+        nextAttributes[group.attributeName] = group.options[0].value;
+      }
+    });
+
+    return nextAttributes;
+  };
+
+  const getAttributePriceModifier = (
+    productId: string,
+    attributes: Record<string, string> = {},
+  ): number =>
+    getProductAttributeGroups(productId).reduce((sum, group) => {
+      const selectedValue = String(attributes[group.attributeName] || '').trim();
+      const selectedOption = group.options.find((option) => option.value === selectedValue);
+      return sum + Number(selectedOption?.priceModifier || 0);
+    }, 0);
+
+  const calculateUnitPriceWithAttributes = (
+    product: Product,
+    quantity: number,
+    attributes: Record<string, string> = {},
+  ) => {
+    const basePrice = getProductPrice(product, quantity);
+    const attributeModifier = getAttributePriceModifier(product.id, attributes);
+    return Math.max(0, basePrice + attributeModifier);
   };
 
   const validateTierQuantity = (product: Product, quantity: number) => {
@@ -355,9 +408,71 @@ export default function OrderForm() {
         if (salespeopleResult.error) throw salespeopleResult.error;
 
         setCustomers((custResult.data as Customer[]) || []);
-        setProducts((prodResult.data as unknown as Product[]) || []);
+        const loadedProducts = (prodResult.data as unknown as Product[]) || [];
+        setProducts(loadedProducts);
         setPriceTiers((tiersResult.data as PriceTier[]) || []);
         setSalespeople((salespeopleResult.data as SalespersonOption[]) || []);
+
+        const productIds = loadedProducts.map((product) => product.id).filter(Boolean);
+        const nextProductAttributeMap: Record<string, ProductAttributeGroup[]> = {};
+
+        if (productIds.length > 0) {
+          const { data: productAttributesResult, error: productAttributesError } = await supabase
+            .from('product_attributes')
+            .select(
+              'product_id, price_modifier, attribute_value_id, attribute_value:attribute_values(id, value, attribute_id, attribute:attributes(id, name))',
+            )
+            .in('product_id', productIds);
+
+          if (productAttributesError) throw productAttributesError;
+
+          (productAttributesResult || []).forEach((row) => {
+            const productId = row.product_id;
+            const attributeValue = Array.isArray(row.attribute_value)
+              ? row.attribute_value[0]
+              : row.attribute_value;
+            const attribute = Array.isArray(attributeValue?.attribute)
+              ? attributeValue.attribute[0]
+              : attributeValue?.attribute;
+            const attributeId = String(attribute?.id || attributeValue?.attribute_id || '').trim();
+            const attributeName = String(attribute?.name || '').trim();
+            const valueId = String(attributeValue?.id || row.attribute_value_id || '').trim();
+            const valueLabel = String(attributeValue?.value || '').trim();
+
+            if (!productId || !attributeId || !attributeName || !valueId || !valueLabel) return;
+
+            const productGroups = nextProductAttributeMap[productId] || [];
+            let group = productGroups.find((item) => item.attributeId === attributeId);
+
+            if (!group) {
+              group = {
+                attributeId,
+                attributeName,
+                options: [],
+              };
+              productGroups.push(group);
+            }
+
+            if (!group.options.some((option) => option.id === valueId)) {
+              group.options.push({
+                id: valueId,
+                value: valueLabel,
+                priceModifier: Number(row.price_modifier || 0),
+              });
+            }
+
+            nextProductAttributeMap[productId] = productGroups;
+          });
+
+          Object.values(nextProductAttributeMap).forEach((groups) => {
+            groups.sort((left, right) => left.attributeName.localeCompare(right.attributeName, 'pt-BR'));
+            groups.forEach((group) => {
+              group.options.sort((left, right) => left.value.localeCompare(right.value, 'pt-BR'));
+            });
+          });
+        }
+
+        setProductAttributeMap(nextProductAttributeMap);
 
         const suppliesCostByProduct: Record<string, number> = {};
         const suppliesRows = (suppliesResult.data || []) as Array<{
@@ -486,12 +601,14 @@ export default function OrderForm() {
           .map((item) => {
             const product = products.find((productEntry) => productEntry.id === item.productId);
             if (!product) return null;
+            const nextAttributes = ensureSelectedAttributes(product.id, item.attributes || {});
+            const nextQuantity = Number(item.quantity) || 1;
             return {
               product,
-              quantity: Number(item.quantity) || 1,
-              unit_price: Number(item.unit_price) || getProductPrice(product, Number(item.quantity) || 1),
+              quantity: nextQuantity,
+              unit_price: calculateUnitPriceWithAttributes(product, nextQuantity, nextAttributes),
               discount: Number(item.discount) || 0,
-              attributes: item.attributes || {},
+              attributes: nextAttributes,
               notes: item.notes || '',
             } as OrderItemForm;
           })
@@ -714,6 +831,7 @@ export default function OrderForm() {
     const initialQuantity = isAreaUnit(product.unit)
       ? 1
       : getInitialTierQuantity(product.id, priceTiers);
+    const nextAttributes = ensureSelectedAttributes(product.id);
 
     setItems((prev) => {
       const existingIndex = prev.findIndex((item) => item.product.id === product.id);
@@ -723,10 +841,12 @@ export default function OrderForm() {
         if (!validateTierQuantity(product, nextQty)) {
           return prev;
         }
+        const existingAttributes = ensureSelectedAttributes(product.id, next[existingIndex].attributes);
         next[existingIndex] = {
           ...next[existingIndex],
           quantity: nextQty,
-          unit_price: getProductPrice(product, nextQty),
+          attributes: existingAttributes,
+          unit_price: calculateUnitPriceWithAttributes(product, nextQty, existingAttributes),
         };
         return next;
       }
@@ -740,9 +860,9 @@ export default function OrderForm() {
         {
           product,
           quantity,
-          unit_price: getProductPrice(product, quantity),
+          unit_price: calculateUnitPriceWithAttributes(product, quantity, nextAttributes),
           discount: 0,
-          attributes: {},
+          attributes: nextAttributes,
           notes: '',
         },
       ];
@@ -764,10 +884,12 @@ export default function OrderForm() {
         if (!validateTierQuantity(item.product, nextQty)) {
           return item;
         }
+        const nextAttributes = ensureSelectedAttributes(item.product.id, item.attributes);
         return {
           ...item,
           quantity: nextQty,
-          unit_price: getProductPrice(item.product, nextQty),
+          attributes: nextAttributes,
+          unit_price: calculateUnitPriceWithAttributes(item.product, nextQty, nextAttributes),
         };
       }),
     );
@@ -781,10 +903,12 @@ export default function OrderForm() {
         if (!validateTierQuantity(item.product, nextValue)) {
           return item;
         }
+        const nextAttributes = ensureSelectedAttributes(item.product.id, item.attributes);
         return {
           ...item,
           quantity: nextValue,
-          unit_price: getProductPrice(item.product, nextValue),
+          attributes: nextAttributes,
+          unit_price: calculateUnitPriceWithAttributes(item.product, nextValue, nextAttributes),
         };
       }),
     );
@@ -807,13 +931,33 @@ export default function OrderForm() {
           areaM2 = calculateAreaM2(widthCm, heightCm);
         }
 
+        const normalizedAttributes = ensureSelectedAttributes(item.product.id, nextAttributes);
+        return {
+          ...item,
+          attributes: normalizedAttributes,
+          quantity: areaM2,
+          unit_price: calculateUnitPriceWithAttributes(item.product, areaM2, normalizedAttributes),
+        };
+      })
+    );
+  };
+
+  const changeItemAttribute = (productId: string, attributeName: string, value: string) => {
+    setItems((prev) =>
+      prev.map((item) => {
+        if (item.product.id !== productId) return item;
+
+        const nextAttributes = ensureSelectedAttributes(item.product.id, {
+          ...(item.attributes || {}),
+          [attributeName]: value,
+        });
+
         return {
           ...item,
           attributes: nextAttributes,
-          quantity: areaM2,
-          unit_price: getProductPrice(item.product, areaM2),
+          unit_price: calculateUnitPriceWithAttributes(item.product, item.quantity, nextAttributes),
         };
-      })
+      }),
     );
   };
 
@@ -898,6 +1042,22 @@ export default function OrderForm() {
       toast({
         title: 'Quantidade fora da faixa permitida',
         description: getPriceTierValidationMessage(invalidTierItems[0].product.id, priceTiers) || undefined,
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const invalidAttributeItems = items.filter((item) =>
+      getProductAttributeGroups(item.product.id).some((group) => {
+        const selectedValue = String(item.attributes?.[group.attributeName] || '').trim();
+        return !group.options.some((option) => option.value === selectedValue);
+      }),
+    );
+
+    if (invalidAttributeItems.length > 0) {
+      toast({
+        title: 'Selecione os atributos do produto',
+        description: invalidAttributeItems[0]?.product.name || undefined,
         variant: 'destructive',
       });
       return;
@@ -1349,6 +1509,35 @@ export default function OrderForm() {
                                     Total equivalente:{' '}
                                     {getProductSaleEquivalentText(item.product.unit_type, item.quantity, item.product.name)}
                                   </span>
+                                ) : null}
+                                {getProductAttributeGroups(item.product.id).length > 0 ? (
+                                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                                    {getProductAttributeGroups(item.product.id).map((group) => (
+                                      <div key={`${item.product.id}-${group.attributeId}`} className="space-y-1">
+                                        <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--order-muted)]">
+                                          {group.attributeName}
+                                        </span>
+                                        <div className="order-select-wrap">
+                                          <select
+                                            value={item.attributes?.[group.attributeName] || group.options[0]?.value || ''}
+                                            onChange={(event) =>
+                                              changeItemAttribute(item.product.id, group.attributeName, event.target.value)
+                                            }
+                                            className="order-input order-select h-auto py-2 text-sm"
+                                          >
+                                            {group.options.map((option) => (
+                                              <option key={option.id} value={option.value}>
+                                                {option.value}
+                                                {option.priceModifier > 0 ? ` (+${fmt(option.priceModifier)})` : ''}
+                                                {option.priceModifier < 0 ? ` (-${fmt(Math.abs(option.priceModifier))})` : ''}
+                                              </option>
+                                            ))}
+                                          </select>
+                                          <ChevronDown className="order-select-icon" />
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
                                 ) : null}
                               </div>
                             </td>

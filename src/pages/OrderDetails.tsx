@@ -80,6 +80,9 @@ import {
   getOrderStatusLabel,
 } from '@/lib/orderStatusConfig';
 
+const PDF_MARGIN = 20;
+const PDF_SINGLE_PAGE_TOLERANCE = 1.08;
+
 const statusConfig: Record<OrderStatus, { label: string; icon: React.ComponentType<any>; color: string; next: OrderStatus[] }> = {
   orcamento: {
     label: 'Orçamento',
@@ -1157,49 +1160,99 @@ export default function OrderDetails() {
     printReceipt(receiptRef.current, `Recibo - Pedido #${formatOrderNumber(order?.order_number)}`);
   };
 
-  const handleDownloadOrderPdf = async () => {
-    if (!receiptRef.current || !order) return;
-    
-    setLoading(true);
-    try {
-      const container = document.createElement('div');
-      container.style.position = 'fixed';
-      container.style.left = '-9999px';
-      container.style.top = '0';
-      container.style.width = '794px';
-      container.style.background = '#ffffff';
-      container.innerHTML = receiptRef.current.innerHTML;
-      document.body.appendChild(container);
+  const saveCanvasAsPdf = (canvas: HTMLCanvasElement, fileName: string) => {
+    const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const availableWidth = pageWidth - PDF_MARGIN * 2;
+    const availableHeight = pageHeight - PDF_MARGIN * 2;
+    const widthScale = availableWidth / canvas.width;
+    const heightScale = availableHeight / canvas.height;
+    const scaledHeightAtFullWidth = canvas.height * widthScale;
+    const imgData = canvas.toDataURL('image/png');
 
+    if (scaledHeightAtFullWidth <= availableHeight * PDF_SINGLE_PAGE_TOLERANCE) {
+      const scale = Math.min(widthScale, heightScale);
+      const renderWidth = canvas.width * scale;
+      const renderHeight = canvas.height * scale;
+      const renderX = (pageWidth - renderWidth) / 2;
+
+      pdf.addImage(imgData, 'PNG', renderX, PDF_MARGIN, renderWidth, renderHeight);
+      pdf.save(fileName);
+      return;
+    }
+
+    let heightLeft = scaledHeightAtFullWidth;
+    let positionY = PDF_MARGIN;
+
+    pdf.addImage(imgData, 'PNG', PDF_MARGIN, positionY, availableWidth, scaledHeightAtFullWidth);
+    heightLeft -= availableHeight;
+
+    while (heightLeft > 0) {
+      pdf.addPage();
+      positionY = PDF_MARGIN - (scaledHeightAtFullWidth - heightLeft);
+      pdf.addImage(imgData, 'PNG', PDF_MARGIN, positionY, availableWidth, scaledHeightAtFullWidth);
+      heightLeft -= availableHeight;
+    }
+
+    pdf.save(fileName);
+  };
+
+  const downloadReceiptMarkupAsPdf = async (
+    markup: string,
+    fileName: string,
+    successTitle: string,
+  ) => {
+    const container = document.createElement('div');
+    container.style.position = 'fixed';
+    container.style.left = '-9999px';
+    container.style.top = '0';
+    container.style.width = '794px';
+    container.style.background = '#ffffff';
+    container.innerHTML = markup;
+    document.body.appendChild(container);
+
+    try {
       const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
         .map((node) => node.outerHTML)
         .join('\n');
-      
+
       const shadow = container.attachShadow ? container.attachShadow({ mode: 'open' }) : null;
       if (shadow) {
-        shadow.innerHTML = `${styles}${receiptRef.current.innerHTML}`;
+        shadow.innerHTML = `${styles}${markup}`;
       }
 
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
-      const elementToCapture = shadow ? (shadow.querySelector('.receipt-root') as HTMLElement) : (container.querySelector('.receipt-root') as HTMLElement);
-      
+      const elementToCapture = shadow
+        ? (shadow.querySelector('.receipt-root') as HTMLElement | null)
+        : (container.querySelector('.receipt-root') as HTMLElement | null);
+
       const canvas = await html2canvas(elementToCapture || container, {
         scale: 2,
         useCORS: true,
         backgroundColor: '#ffffff',
       });
 
-      const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
-      const imgData = canvas.toDataURL('image/png');
-      const imgWidth = 595.28 - 40;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      
-      pdf.addImage(imgData, 'PNG', 20, 20, imgWidth, imgHeight);
-      pdf.save(`pedido-${formatOrderNumber(order.order_number)}.pdf`);
-      
-      document.body.removeChild(container);
-      toast({ title: 'PDF do pedido baixado' });
+      saveCanvasAsPdf(canvas, fileName);
+      toast({ title: successTitle });
+    } finally {
+      if (container.parentNode) {
+        container.parentNode.removeChild(container);
+      }
+    }
+  };
+
+  const handleDownloadOrderPdf = async () => {
+    if (!receiptRef.current || !order) return;
+    
+    setLoading(true);
+    try {
+      await downloadReceiptMarkupAsPdf(
+        receiptRef.current.outerHTML,
+        `pedido-${formatOrderNumber(order.order_number)}.pdf`,
+        'PDF do pedido baixado',
+      );
     } catch (error: any) {
       console.error(error);
       toast({ title: 'Erro ao gerar PDF', description: error.message, variant: 'destructive' });
@@ -1335,44 +1388,11 @@ export default function OrderDetails() {
         />,
       );
 
-      const container = document.createElement('div');
-      container.style.position = 'fixed';
-      container.style.left = '-9999px';
-      container.style.top = '0';
-      container.style.width = '794px';
-      container.style.background = '#ffffff';
-      container.innerHTML = markup;
-      document.body.appendChild(container);
-
-      const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
-        .map((node) => node.outerHTML)
-        .join('\n');
-      
-      const shadow = container.attachShadow ? container.attachShadow({ mode: 'open' }) : null;
-      if (shadow) {
-        shadow.innerHTML = `${styles}${markup}`;
-      }
-
-      await new Promise(resolve => setTimeout(resolve, 500));
-
-      const elementToCapture = shadow ? (shadow.querySelector('.receipt-root') as HTMLElement) : (container.querySelector('.receipt-root') as HTMLElement);
-      
-      const canvas = await html2canvas(elementToCapture || container, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: '#ffffff',
-      });
-
-      const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
-      const imgData = canvas.toDataURL('image/png');
-      const imgWidth = 595.28 - 40;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      
-      pdf.addImage(imgData, 'PNG', 20, 20, imgWidth, imgHeight);
-      pdf.save(`comprovante-entrega-${formatOrderNumber(printableOrder.order_number)}.pdf`);
-      
-      document.body.removeChild(container);
-      toast({ title: 'Comprovante baixado com sucesso!' });
+      await downloadReceiptMarkupAsPdf(
+        markup,
+        `comprovante-entrega-${formatOrderNumber(printableOrder.order_number)}.pdf`,
+        'Comprovante baixado com sucesso!',
+      );
     } catch (error: any) {
       console.error(error);
       toast({ title: 'Erro ao gerar PDF', description: error.message, variant: 'destructive' });
@@ -4062,8 +4082,6 @@ export default function OrderDetails() {
     </div>
   );
 }
-
-
 
 
 

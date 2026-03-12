@@ -12,6 +12,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { StockMovement, Product, StockMovementType } from '@/types/database';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import { isLowDirectStock, usesDirectProductStock } from '@/lib/stockControl';
 import { cn } from '@/lib/utils';
 
 const typeLabels: Record<StockMovementType, string> = { entrada: 'Entrada', saida: 'Saída', ajuste: 'Ajuste' };
@@ -72,7 +73,7 @@ export default function Stock() {
       return;
     }
 
-    const trackedProducts = ((p.data as Product[]) || []).filter((product) => product.track_stock === true);
+    const trackedProducts = ((p.data as Product[]) || []).filter((product) => usesDirectProductStock(product));
     const trackedProductIds = new Set(trackedProducts.map((product) => product.id));
     const trackedMovements = ((m.data as StockMovement[]) || []).filter((movement) => trackedProductIds.has(movement.product_id));
 
@@ -447,8 +448,8 @@ export default function Stock() {
                       <TableCell>{p.stock_quantity} {p.unit}</TableCell>
                       <TableCell>{p.min_stock} {p.unit}</TableCell>
                       <TableCell>
-                        <Badge variant={p.stock_quantity <= p.min_stock ? 'destructive' : 'default'}>
-                          {p.stock_quantity <= p.min_stock ? 'Baixo' : 'OK'}
+                        <Badge variant={isLowDirectStock(p) ? 'destructive' : 'default'}>
+                          {isLowDirectStock(p) ? 'Baixo' : 'OK'}
                         </Badge>
                       </TableCell>
                       <TableCell>

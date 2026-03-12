@@ -34,6 +34,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { allQuickModules, defaultQuickAccess } from '@/lib/dashboard';
+import { isLowDirectStock } from '@/lib/stockControl';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { StatCard } from '@/components/dashboard/StatCard';
@@ -346,11 +347,7 @@ export default function Dashboard() {
   const lowStockProducts = useMemo(
     () =>
       products
-        .filter(
-          (product) =>
-            Boolean(product.track_stock) &&
-            Number(product.stock_quantity || 0) <= Number(product.min_stock || 0),
-        )
+        .filter((product) => isLowDirectStock(product))
         .sort(
           (a, b) =>
             Number(a.stock_quantity || 0) - Number(b.stock_quantity || 0) ||

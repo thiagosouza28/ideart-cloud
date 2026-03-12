@@ -17,6 +17,7 @@ import {
   getActiveCompanyPaymentMethods,
   type CompanyPaymentMethodConfig,
 } from '@/lib/paymentMethods';
+import { usesDirectProductStock } from '@/lib/stockControl';
 import { consumeProductSupplies } from '@/lib/supplyConsumption';
 
 const formatCurrency = (v: number) =>
@@ -359,14 +360,14 @@ export default function GraphPOSPagamento() {
                     const productIds = Object.keys(quantitiesByProduct);
                     let productsStockQuery = supabase
                       .from('products')
-                      .select('id, track_stock, stock_quantity')
+                      .select('id, track_stock, stock_control_type, stock_quantity')
                       .in('id', productIds);
                     if (companyId) {
                       productsStockQuery = productsStockQuery.eq('company_id', companyId);
                     }
                     const { data: productsData } = await productsStockQuery;
 
-                    const trackedProducts = (productsData || []).filter((p) => p.track_stock);
+                    const trackedProducts = (productsData || []).filter((p) => usesDirectProductStock(p));
                     if (trackedProducts.length > 0) {
                       await Promise.all(trackedProducts.map((product) => {
                         const qty = quantitiesByProduct[product.id] || 0;
