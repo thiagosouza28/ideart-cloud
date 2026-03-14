@@ -42,6 +42,7 @@ export default function Orders() {
     supabase
       .from('orders')
       .select('*')
+      .is('deleted_at', null)
       .order('created_at', { ascending: false })
       .then(({ data }) => {
         setOrders((data as Order[]) || []);
@@ -124,11 +125,23 @@ export default function Orders() {
     );
   };
 
+  const canDeleteOrder = (order: Order) =>
+    order.status === 'orcamento' || order.status === 'pendente';
+
   const handleDeleteOrder = async (event: React.MouseEvent, orderId: string) => {
     event.stopPropagation();
+    const targetOrder = orders.find((item) => item.id === orderId);
+    if (!targetOrder || !canDeleteOrder(targetOrder)) {
+      toast({
+        title: 'Exclusão indisponível',
+        description: 'Somente pedidos em orçamento ou pendente podem ser excluídos.',
+        variant: 'destructive',
+      });
+      return;
+    }
     const approved = await confirm({
       title: 'Excluir pedido',
-      description: 'Deseja excluir este pedido?',
+      description: 'Deseja excluir este pedido? Essa ação não pode ser desfeita.',
       confirmText: 'Excluir',
       cancelText: 'Cancelar',
       destructive: true,
@@ -229,7 +242,7 @@ export default function Orders() {
                         className="status-badge shrink-0"
                         style={getOrderStatusBadgeStyle(order.status, statusCustomization)}
                       >
-                        {getOrderStatusLabel(order.status, statusCustomization)}
+                        {getOrderStatusLabel(order.status, statusCustomization, order.payment_status)}
                       </span>
                       {getPendingDetailLabel(order) && (
                         <span className="text-[11px] text-muted-foreground">{getPendingDetailLabel(order)}</span>
@@ -263,15 +276,17 @@ export default function Orders() {
                         <Eye className="mr-1 h-4 w-4" />
                         Abrir
                       </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-destructive"
-                        onClick={(event) => handleDeleteOrder(event, order.id)}
-                        disabled={deletingId === order.id}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      {canDeleteOrder(order) && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-destructive"
+                          onClick={(event) => handleDeleteOrder(event, order.id)}
+                          disabled={deletingId === order.id}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -342,7 +357,7 @@ export default function Orders() {
                             className="status-badge"
                             style={getOrderStatusBadgeStyle(order.status, statusCustomization)}
                           >
-                            {getOrderStatusLabel(order.status, statusCustomization)}
+                            {getOrderStatusLabel(order.status, statusCustomization, order.payment_status)}
                           </span>
                           {getPendingDetailLabel(order) && (
                             <span className="text-[11px] text-muted-foreground">
@@ -372,15 +387,18 @@ export default function Orders() {
                           >
                             <Eye className="h-4 w-4" />
                           </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="text-destructive"
-                            onClick={(event) => handleDeleteOrder(event, order.id)}
-                            disabled={deletingId === order.id}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          {canDeleteOrder(order) && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="text-destructive"
+                              onClick={(event) => handleDeleteOrder(event, order.id)}
+                              disabled={deletingId === order.id}
+                              title="Excluir pedido"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -394,4 +412,3 @@ export default function Orders() {
     </div>
   );
 }
-

@@ -1,7 +1,7 @@
 import { forwardRef } from 'react';
 import { formatOrderNumber } from '@/lib/utils';
 import { formatAreaM2, parseM2Attributes, stripM2Attributes } from '@/lib/measurements';
-import type { Order, OrderItem, PaymentMethod } from '@/types/database';
+import type { Order, OrderItem, PaymentMethod, PaymentStatus } from '@/types/database';
 
 type DeliveryReceiptProps = {
   order: Order;
@@ -44,6 +44,12 @@ const paymentMethodLabels: Record<PaymentMethod, string> = {
   outro: 'Outro',
 };
 
+const paymentStatusLabels: Record<PaymentStatus, string> = {
+  pendente: 'Pendente',
+  parcial: 'Pagamento parcial',
+  pago: 'Pago',
+};
+
 const DeliveryReceipt = forwardRef<HTMLDivElement, DeliveryReceiptProps>(
   ({ order, items, deliveredAt, payment }, ref) => {
     const deliveryMoment = deliveredAt || order.delivered_at || new Date().toISOString();
@@ -56,13 +62,20 @@ const DeliveryReceipt = forwardRef<HTMLDivElement, DeliveryReceiptProps>(
     const companyAddress = [order.company?.address, [order.company?.city, order.company?.state].filter(Boolean).join(' - ')]
       .filter(Boolean)
       .join(', ');
+    const orderTotal = Number(order.total || 0);
+    const amountPaid = Number(order.amount_paid || 0);
+    const creditUsed = Number(order.customer_credit_used || 0);
+    const settledTotal = amountPaid + creditUsed;
+    const pendingAmount = Math.max(0, orderTotal - settledTotal);
+    const hasPendingAmount = order.payment_status !== 'pago' && pendingAmount > 0.009;
     const paymentMethodLabel = payment?.method ? paymentMethodLabels[payment.method] || payment.method : 'Não informado';
     const paymentMoment = payment?.paidAt || null;
+    const receiptTotalPaid = Math.max(Number(payment?.totalPaid || 0), settledTotal);
 
     return (
       <div
         ref={ref}
-        className="receipt-root w-full max-w-[794px] mx-auto rounded-xl border border-slate-200 bg-white p-6 text-slate-900 shadow-sm"
+        className="receipt-root mx-auto w-full max-w-[794px] rounded-xl border border-slate-200 bg-white p-6 text-slate-900 shadow-sm"
       >
         <div className="receipt-block border-b border-slate-200 pb-4">
           <div className="flex items-start justify-between gap-4">
@@ -111,7 +124,7 @@ const DeliveryReceipt = forwardRef<HTMLDivElement, DeliveryReceiptProps>(
           </div>
           <div>
             <p className="uppercase tracking-wide text-slate-500">Valor total</p>
-            <p className="font-semibold text-slate-900">{formatCurrency(Number(order.total || 0))}</p>
+            <p className="font-semibold text-slate-900">{formatCurrency(orderTotal)}</p>
           </div>
           <div>
             <p className="uppercase tracking-wide text-slate-500">Data da entrega</p>
@@ -177,7 +190,7 @@ const DeliveryReceipt = forwardRef<HTMLDivElement, DeliveryReceiptProps>(
         {payment && (
           <div className="receipt-block mt-4 grid gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] sm:grid-cols-3">
             <div>
-              <p className="uppercase tracking-wide text-slate-500">Pagamento registrado</p>
+              <p className="uppercase tracking-wide text-slate-500">Último pagamento registrado</p>
               <p className="font-semibold text-slate-900">{formatCurrency(Number(payment.amount || 0))}</p>
             </div>
             <div>
@@ -186,7 +199,7 @@ const DeliveryReceipt = forwardRef<HTMLDivElement, DeliveryReceiptProps>(
             </div>
             <div>
               <p className="uppercase tracking-wide text-slate-500">Total pago no pedido</p>
-              <p className="font-semibold text-slate-900">{formatCurrency(Number(payment.totalPaid || 0))}</p>
+              <p className="font-semibold text-slate-900">{formatCurrency(receiptTotalPaid)}</p>
             </div>
             <div>
               <p className="uppercase tracking-wide text-slate-500">Data do pagamento</p>
@@ -198,6 +211,43 @@ const DeliveryReceipt = forwardRef<HTMLDivElement, DeliveryReceiptProps>(
             </div>
           </div>
         )}
+
+        <div
+          className={[
+            'receipt-block mt-4 grid gap-2 rounded-lg border px-3 py-2 text-[11px] sm:grid-cols-3',
+            hasPendingAmount
+              ? 'border-amber-200 bg-amber-50'
+              : 'border-slate-200 bg-slate-50',
+          ].join(' ')}
+        >
+          <div>
+            <p className="uppercase tracking-wide text-slate-500">Situação do pagamento</p>
+            <p className="font-semibold text-slate-900">
+              {paymentStatusLabels[order.payment_status] || order.payment_status}
+            </p>
+          </div>
+          <div>
+            <p className="uppercase tracking-wide text-slate-500">Total recebido no pedido</p>
+            <p className="font-semibold text-slate-900">{formatCurrency(settledTotal)}</p>
+          </div>
+          <div>
+            <p className="uppercase tracking-wide text-slate-500">Saldo pendente</p>
+            <p className="font-semibold text-slate-900">{formatCurrency(pendingAmount)}</p>
+          </div>
+          {creditUsed > 0 && (
+            <div>
+              <p className="uppercase tracking-wide text-slate-500">Crédito utilizado</p>
+              <p className="font-medium text-slate-900">{formatCurrency(creditUsed)}</p>
+            </div>
+          )}
+          {hasPendingAmount && (
+            <div className="sm:col-span-3">
+              <p className="font-semibold text-slate-900">
+                Pedido entregue com saldo pendente de {formatCurrency(pendingAmount)}.
+              </p>
+            </div>
+          )}
+        </div>
 
         <div className="receipt-block mt-5 rounded-lg border border-slate-200 p-4 text-[12px]">
           <p className="font-semibold text-slate-900">

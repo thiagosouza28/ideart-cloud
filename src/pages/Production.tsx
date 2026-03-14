@@ -53,6 +53,7 @@ export default function Production() {
     const { data } = await supabase
       .from('orders')
       .select('*')
+      .is('deleted_at', null)
       .in('status', ['pendente', 'produzindo_arte', 'arte_aprovada', 'em_producao'])
       .order('created_at');
     setOrders((data as Order[]) || []);

@@ -578,6 +578,8 @@ export interface Order {
   payment_link_url?: string | null;
   status: OrderStatus;
   subtotal: number;
+  discount_type: 'fixed' | 'percent';
+  discount_value: number;
   discount: number;
   total: number;
   payment_method: PaymentMethod | null;
@@ -786,6 +788,8 @@ export interface OrderItem {
   product_name: string;
   quantity: number;
   unit_price: number;
+  discount_type: 'fixed' | 'percent';
+  discount_value: number;
   discount: number;
   total: number;
   attributes: Record<string, string> | null;

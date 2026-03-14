@@ -608,6 +608,7 @@ type CreatePaymentInput = {
   amount: number;
   method: PaymentMethod | null;
   status?: PaymentStatus;
+  paidAt?: string | null;
   notes?: string;
   createdBy?: string | null;
 };
@@ -617,6 +618,7 @@ export const createOrderPayment = async ({
   amount,
   method,
   status = 'pago',
+  paidAt,
   notes,
   createdBy,
 }: CreatePaymentInput): Promise<{
@@ -662,7 +664,7 @@ export const createOrderPayment = async ({
     throw new Error('Valor excede o saldo restante');
   }
 
-  const paidAt = status === 'pendente' ? null : new Date().toISOString();
+  const resolvedPaidAt = status === 'pendente' ? null : paidAt || new Date().toISOString();
 
   const { data: payment, error: insertError } = await supabase
     .from('order_payments')
@@ -672,7 +674,7 @@ export const createOrderPayment = async ({
       amount,
       status,
       method,
-      paid_at: paidAt,
+      paid_at: resolvedPaidAt,
       created_by: createdBy || null,
       notes: notes || null,
     })
@@ -694,7 +696,7 @@ export const createOrderPayment = async ({
         status: 'pago',
         payment_method: method,
         description: `Receita de pedido ${formatOrderReference(order.order_number)}`,
-        occurred_at: paidAt || new Date().toISOString(),
+        occurred_at: resolvedPaidAt || new Date().toISOString(),
         related_id: orderId,
         is_automatic: true,
         created_by: createdBy || null,
@@ -767,6 +769,7 @@ export const createOrderPaymentWithCredit = async ({
   amount,
   method,
   status = 'pago',
+  paidAt,
   notes,
   createdBy,
 }: CreatePaymentInput): Promise<{
@@ -785,6 +788,7 @@ export const createOrderPaymentWithCredit = async ({
     p_method: method,
     p_status: status,
     p_notes: notes || null,
+    p_paid_at: status === 'pendente' ? null : paidAt || null,
   });
 
   if (error) {
@@ -857,23 +861,58 @@ type UpdateStatusInput = {
 
 type OrderItemUpdate = Pick<
   OrderItem,
-  'id' | 'product_id' | 'product_name' | 'quantity' | 'unit_price' | 'discount' | 'notes' | 'attributes'
+  | 'id'
+  | 'product_id'
+  | 'product_name'
+  | 'quantity'
+  | 'unit_price'
+  | 'discount_type'
+  | 'discount_value'
+  | 'discount'
+  | 'notes'
+  | 'attributes'
 >;
+
+const shouldFallbackToOrderEdgeRpc = (error: unknown) => {
+  const code = String((error as { code?: string } | undefined)?.code || '');
+  const message =
+    error instanceof Error ? error.message.toLowerCase() : String(error || '').toLowerCase();
+
+  return (
+    code === 'PGRST202' ||
+    code === '42883' ||
+    message.includes('could not find the function') ||
+    message.includes('schema cache') ||
+    message.includes('function public.update_order_items')
+  );
+};
 
 export const updateOrderItems = async (params: {
   orderId: string;
   items: OrderItemUpdate[];
+  orderDiscountType?: Order['discount_type'];
+  orderDiscountValue?: number;
 }) => {
   const { data, error } = await supabase.rpc('update_order_items' as any, {
     p_order_id: params.orderId,
     p_items: params.items,
+    p_order_discount_type: params.orderDiscountType ?? 'fixed',
+    p_order_discount_value: params.orderDiscountValue ?? 0,
   });
 
   if (!error && data) {
     return data as Order;
   }
 
-  const payload = { items: params.items };
+  if (error && (!EDGE_FUNCTIONS_ENABLED || !shouldFallbackToOrderEdgeRpc(error))) {
+    throw error;
+  }
+
+  const payload = {
+    items: params.items,
+    order_discount_type: params.orderDiscountType ?? 'fixed',
+    order_discount_value: params.orderDiscountValue ?? 0,
+  };
 
   if (EDGE_FUNCTIONS_ENABLED) {
     try {
@@ -1152,9 +1191,39 @@ export const cancelOrder = async ({
 };
 
 export const deleteOrder = async (orderId: string) => {
+  const { data: existingOrder, error: existingOrderError } = await supabase
+    .from('orders')
+    .select('id, status, deleted_at')
+    .eq('id', orderId)
+    .maybeSingle();
+
+  if (existingOrderError) {
+    throw existingOrderError;
+  }
+
+  if (!existingOrder) {
+    throw new Error('Pedido não encontrado');
+  }
+
+  if (existingOrder.deleted_at) {
+    return;
+  }
+
+  if (!['orcamento', 'pendente'].includes(existingOrder.status)) {
+    throw new Error('Somente pedidos em orçamento ou pendente podem ser excluídos');
+  }
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
   const { error } = await supabase
     .from('orders')
-    .update({ deleted_at: new Date().toISOString() } as any)
+    .update({
+      deleted_at: new Date().toISOString(),
+      deleted_by: user?.id || null,
+      updated_by: user?.id || null,
+    } as any)
     .eq('id', orderId);
 
   if (!error) {
@@ -1445,6 +1514,4 @@ export const uploadOrderArtFile = async (
     throw err;
   }
 };
-
-
 

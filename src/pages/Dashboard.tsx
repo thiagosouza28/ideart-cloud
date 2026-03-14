@@ -51,6 +51,7 @@ import {
   getExpenseAmount,
   resolveExpenseDueDate,
 } from '@/lib/finance';
+import { getOrderStatusLabel } from '@/lib/orderStatusConfig';
 import { formatOrderNumber } from '@/lib/utils';
 import type {
   Expense,
@@ -68,19 +69,6 @@ import type {
   Attribute,
 } from '@/types/database';
 import { buildOrderDetailsPath } from '@/lib/orderRouting';
-
-const statusLabels: Record<OrderStatus, string> = {
-  orcamento: 'Orçamento',
-  pendente: 'Pendente',
-  produzindo_arte: 'Produzindo arte',
-  arte_aprovada: 'Arte aprovada',
-  em_producao: 'Em Produção',
-  finalizado: 'Finalizado',
-  pronto: 'Finalizado',
-  aguardando_retirada: 'Aguardando retirada',
-  entregue: 'Entregue',
-  cancelado: 'Cancelado',
-};
 
 const paymentMethodLabels: Record<string, string> = {
   dinheiro: 'Dinheiro',
@@ -130,6 +118,7 @@ export default function Dashboard() {
           .from('orders')
           .select('id, order_number, customer_name, status, total, amount_paid, customer_credit_used, created_at, payment_method, payment_status, estimated_delivery_date')
           .eq('company_id', profile.company_id)
+          .is('deleted_at', null)
           .order('created_at', { ascending: false })
           .limit(300),
         supabase
@@ -518,7 +507,7 @@ export default function Dashboard() {
           id: `#${formatOrderNumber(order.order_number)}`,
           customer: order.customer_name || 'Cliente',
           details: `Pagamento: ${method}`,
-          status: statusLabels[order.status],
+          status: getOrderStatusLabel(order.status, null, order.payment_status),
           statusTone,
           amount: formatCurrency(Number(order.total ?? 0)),
         };
@@ -634,14 +623,14 @@ export default function Dashboard() {
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between gap-4">
+          <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <CardTitle>Painel Financeiro</CardTitle>
               <p className="text-sm text-muted-foreground">
                 Alertas de contas, projeção do mês e rentabilidade média dos produtos.
               </p>
             </div>
-            <Button variant="outline" onClick={() => navigate('/financeiro/fluxo-caixa')}>
+            <Button variant="outline" onClick={() => navigate('/financeiro/fluxo-caixa')} className="w-full sm:w-auto">
               Ver fluxo de caixa
             </Button>
           </CardHeader>
@@ -659,7 +648,7 @@ export default function Dashboard() {
                     onClick={() => navigate('/financeiro/despesas')}
                     className="flex w-full items-start justify-between gap-4 rounded-2xl border border-border px-4 py-3 text-left transition hover:bg-muted/40"
                   >
-                    <div>
+                    <div className="min-w-0">
                       <p className="font-medium text-foreground">{item.title}</p>
                       <p className="text-xs text-muted-foreground">
                         {item.dueStatus === 'vencida' ? 'Conta vencida' : 'Vencendo em até 5 dias'}
@@ -757,7 +746,7 @@ export default function Dashboard() {
                     </div>
                     <div className="flex items-center gap-3">
                       <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700 dark:bg-amber-500/20 dark:text-amber-300">
-                        {statusLabels[order.status]}
+                        {getOrderStatusLabel(order.status, null, order.payment_status)}
                       </span>
                       <span className="text-muted-foreground/70 group-hover:text-foreground">→</span>
                     </div>
@@ -770,14 +759,14 @@ export default function Dashboard() {
         )}
 
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between gap-4">
+          <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <CardTitle>Produtos mais rentáveis</CardTitle>
               <p className="text-sm text-muted-foreground">
                 Lucro real por unidade considerando insumos, despesas e rateio fixo.
               </p>
             </div>
-            <Button variant="outline" onClick={() => navigate('/relatorios')}>
+            <Button variant="outline" onClick={() => navigate('/relatorios')} className="w-full sm:w-auto">
               Abrir relatórios
             </Button>
           </CardHeader>
@@ -813,14 +802,14 @@ export default function Dashboard() {
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(340px,0.8fr)]">
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between gap-4">
+          <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <CardTitle>Funil do Catálogo</CardTitle>
               <p className="text-sm text-muted-foreground">
                 Visualizações, carrinhos, pedidos iniciados e compras concluídas nos últimos 30 dias.
               </p>
             </div>
-            <span className="rounded-full border border-border bg-muted/30 px-3 py-1 text-xs font-semibold text-muted-foreground">
+            <span className="w-fit rounded-full border border-border bg-muted/30 px-3 py-1 text-xs font-semibold text-muted-foreground">
               Conversão total {catalogFunnel.overallConversion.toFixed(1)}%
             </span>
           </CardHeader>
@@ -888,14 +877,14 @@ export default function Dashboard() {
         </Card>
 
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between gap-4">
+          <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <CardTitle>Estoque baixo</CardTitle>
               <p className="text-sm text-muted-foreground">
                 Produtos com estoque atual menor ou igual ao estoque mínimo configurado.
               </p>
             </div>
-            <Button variant="outline" onClick={() => navigate('/produtos')}>
+            <Button variant="outline" onClick={() => navigate('/produtos')} className="w-full sm:w-auto">
               Ver produtos
             </Button>
           </CardHeader>

@@ -193,10 +193,14 @@ type ItemsUpdatePayload = {
     product_name?: string;
     quantity?: number;
     unit_price?: number;
+    discount_type?: "fixed" | "percent";
+    discount_value?: number;
     discount?: number;
     notes?: string | null;
     attributes?: Record<string, string> | null;
   }>;
+  order_discount_type?: "fixed" | "percent";
+  order_discount_value?: number;
 };
 
 Deno.serve(async (req) => {
@@ -284,7 +288,7 @@ Deno.serve(async (req) => {
       .from("user_roles")
       .select("role")
       .eq("user_id", userId)
-      .in("role", ["admin", "atendente", "caixa", "producao"])
+      .in("role", ["admin", "financeiro", "atendente", "caixa", "producao"])
       .maybeSingle();
 
     if (!roleData) {
@@ -307,9 +311,9 @@ Deno.serve(async (req) => {
         return jsonResponse(corsHeaders, 400, { error: "Pedido já excluído" });
       }
 
-      if (order.status !== "orcamento") {
+      if (!["orcamento", "pendente"].includes(order.status)) {
         return jsonResponse(corsHeaders, 403, {
-          error: "Somente orçamentos podem ser excluídos",
+          error: "Somente pedidos em orçamento ou pendente podem ser excluídos",
         });
       }
 
@@ -421,6 +425,10 @@ Deno.serve(async (req) => {
     if (action === "items") {
       const body = (await req.json().catch(() => ({}))) as ItemsUpdatePayload;
       const items = Array.isArray(body.items) ? body.items : [];
+      const orderDiscountType =
+        body.order_discount_type === "percent" ? "percent" : "fixed";
+      const orderDiscountValue =
+        typeof body.order_discount_value === "number" ? body.order_discount_value : 0;
 
       if (items.length === 0) {
         return jsonResponse(corsHeaders, 400, { error: "Itens obrigatórios" });
@@ -428,7 +436,7 @@ Deno.serve(async (req) => {
 
       const { data: order, error: orderError } = await supabase
         .from("orders")
-        .select("id, status")
+        .select("id, status, deleted_at")
         .eq("id", orderId)
         .single();
 
@@ -436,9 +444,13 @@ Deno.serve(async (req) => {
         return jsonResponse(corsHeaders, 404, { error: "Pedido não encontrado" });
       }
 
-      if (order.status !== "orcamento") {
+      if (order.deleted_at) {
+        return jsonResponse(corsHeaders, 400, { error: "Pedido excluído" });
+      }
+
+      if (!["orcamento", "pendente"].includes(order.status)) {
         return jsonResponse(corsHeaders, 403, {
-          error: "Pedido não pode ser alterado após sair do status Orçamento",
+          error: "Pedido não pode ser alterado após sair do status Orçamento/Pendente",
         });
       }
 
@@ -447,6 +459,8 @@ Deno.serve(async (req) => {
         {
           p_order_id: orderId,
           p_items: items,
+          p_order_discount_type: orderDiscountType,
+          p_order_discount_value: orderDiscountValue,
         },
       );
 

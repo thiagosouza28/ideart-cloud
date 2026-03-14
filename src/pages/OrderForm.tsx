@@ -1110,6 +1110,8 @@ export default function OrderForm() {
           customer_name: customerName.trim() || null,
           status,
           subtotal: totals.subtotal,
+          discount_type: 'fixed',
+          discount_value: discount,
           discount,
           total: totals.total,
           amount_paid: 0,
@@ -1120,7 +1122,7 @@ export default function OrderForm() {
           production_time_days_used: productionInfo.productionTimeDaysUsed,
           estimated_delivery_date: deliveryDate || productionInfo.estimatedDeliveryDate,
           created_by: user.id,
-        })
+        } as any)
         .select('id, order_number, customer_name')
         .single();
 
@@ -1136,13 +1138,15 @@ export default function OrderForm() {
         product_name: item.product.name,
         quantity: item.quantity,
         unit_price: item.unit_price,
+        discount_type: 'fixed',
+        discount_value: item.discount,
         discount: item.discount,
         total: calculateItemTotal(item),
         attributes: item.attributes,
         notes: item.notes || null,
       }));
 
-      const { error: itemsError } = await supabase.from('order_items').insert(orderItemsPayload);
+      const { error: itemsError } = await supabase.from('order_items').insert(orderItemsPayload as any);
       if (itemsError) throw itemsError;
 
       const { error: historyError } = await supabase.from('order_status_history').insert({

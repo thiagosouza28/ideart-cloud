@@ -12,6 +12,8 @@ interface OrderReceiptProps {
   payment?: OrderPayment | null;
   summary?: {
     paidTotal: number;
+    creditUsedTotal?: number;
+    settledTotal?: number;
     remaining: number;
     paymentStatus: PaymentStatus;
   } | null;
@@ -62,15 +64,17 @@ const paymentMethodLabels: Record<PaymentMethod, string> = {
 const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
   ({ order, items, payment, summary }, ref) => {
     const paidTotal = Number(summary?.paidTotal ?? order.amount_paid ?? 0);
-    const remaining = Math.max(0, Number(summary?.remaining ?? Number(order.total) - paidTotal));
+    const creditUsedTotal = Number(summary?.creditUsedTotal ?? order.customer_credit_used ?? 0);
+    const settledTotal = Number(summary?.settledTotal ?? paidTotal + creditUsedTotal);
+    const remaining = Math.max(0, Number(summary?.remaining ?? Number(order.total) - settledTotal));
     const paymentStatus =
       summary?.paymentStatus ??
-      (paidTotal >= Number(order.total)
+      (settledTotal >= Number(order.total)
         ? 'pago'
-        : paidTotal > 0
+        : settledTotal > 0
           ? 'parcial'
           : 'pendente');
-    const receiptTitle = payment ? 'Comprovante de pagamento' : 'Comprovante do pedido';
+    const receiptTitle = 'Comprovante do pedido';
     const receiptDate = payment?.paid_at || payment?.created_at || order.created_at;
     const paymentMethodValue = payment?.method || order.payment_method;
     const paymentMethodLabel = paymentMethodValue ? paymentMethodLabels[paymentMethodValue] : '-';
@@ -104,7 +108,7 @@ const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
     return (
       <div
         ref={ref}
-        className="receipt-root w-full max-w-[794px] mx-auto rounded-xl border border-slate-200 bg-white p-6 text-slate-900 shadow-sm"
+        className="receipt-root mx-auto w-full max-w-[794px] rounded-2xl border border-slate-200 bg-white p-5 text-slate-900 shadow-none"
       >
         <div className="receipt-block border-b border-slate-200 pb-4">
           <div className="flex items-start justify-between gap-4">
@@ -114,12 +118,14 @@ const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
                   <img
                     src={company.logo_url}
                     alt="Logo da loja"
-                    className="h-12 w-12 rounded-md border border-slate-200 bg-white object-contain p-1"
+                    className="h-11 w-11 rounded-md border border-slate-200 bg-white object-contain p-1"
                   />
                 )}
                 <div>
-                  <p className="text-lg font-semibold leading-tight">{companyName}</p>
-                  <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500">{receiptTitle}</p>
+                  <p className="text-lg font-semibold leading-tight text-slate-800">{companyName}</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+                    {receiptTitle}
+                  </p>
                 </div>
               </div>
               <div className="mt-2 space-y-0.5 text-[11px] text-slate-600">
@@ -132,16 +138,16 @@ const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
                 {company?.email && <p>{company.email}</p>}
               </div>
             </div>
-            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-right text-[11px]">
-              <p className="uppercase tracking-wide text-slate-500">Pedido</p>
-              <p className="text-sm font-semibold">#{formatOrderNumber(order.order_number)}</p>
-              <p className="mt-1 uppercase tracking-wide text-slate-500">Emitido em</p>
-              <p className="font-medium">{formatDate(receiptDate)}</p>
+            <div className="min-w-[132px] rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-right text-[11px]">
+              <p className="uppercase tracking-wide text-slate-400">Pedido</p>
+              <p className="text-base font-semibold text-slate-800">#{formatOrderNumber(order.order_number)}</p>
+              <p className="mt-1 uppercase tracking-wide text-slate-400">Emitido em</p>
+              <p className="font-medium text-slate-700">{formatDate(receiptDate)}</p>
             </div>
           </div>
         </div>
 
-        <div className="receipt-block mt-4 grid gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] sm:grid-cols-4">
+        <div className="receipt-block mt-4 grid gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] sm:grid-cols-4">
           <div>
             <p className="uppercase tracking-wide text-slate-500">Cliente</p>
             <p className="font-semibold text-slate-900">{customerLabel}</p>
@@ -161,7 +167,7 @@ const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
         </div>
 
         {(order.customer || order.customer_name) && (
-          <div className="receipt-block mt-4 rounded-lg border border-slate-200 px-3 py-2 text-[11px]">
+          <div className="receipt-block mt-4 rounded-xl border border-slate-200 px-3 py-2 text-[11px]">
             <div className="grid gap-2 sm:grid-cols-3">
               <div>
                 <p className="uppercase tracking-wide text-slate-500">Cliente</p>
@@ -180,7 +186,7 @@ const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
         )}
 
         {(productionTimeDays !== null || estimatedDeliveryDateLabel) && (
-          <div className="receipt-block mt-4 rounded-lg border border-slate-200 px-3 py-2 text-[11px]">
+          <div className="receipt-block mt-4 rounded-xl border border-slate-200 px-3 py-2 text-[11px]">
             <div className="grid gap-2 sm:grid-cols-2">
               <div>
                 <p className="uppercase tracking-wide text-slate-500">Tempo de produção</p>
@@ -198,7 +204,7 @@ const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
           </div>
         )}
 
-        <div className="receipt-block mt-4 overflow-hidden rounded-lg border border-slate-200">
+        <div className="receipt-block mt-4 overflow-hidden rounded-xl border border-slate-200">
           <table className="receipt-table w-full text-[11px]">
             <thead className="bg-slate-100 text-slate-600">
               <tr>
@@ -257,7 +263,7 @@ const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
         </div>
 
         <div className="receipt-block mt-4 grid gap-3 sm:grid-cols-2">
-          <div className="rounded-lg border border-slate-200 p-3 text-[11px]">
+          <div className="rounded-xl border border-slate-200 p-3 text-[11px]">
             <div className="space-y-1">
               <div className="flex justify-between">
                 <span className="text-slate-500">Subtotal</span>
@@ -276,7 +282,7 @@ const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
             </div>
           </div>
 
-          <div className="rounded-lg border border-slate-200 p-3 text-[11px]">
+          <div className="rounded-xl border border-slate-200 p-3 text-[11px]">
             <div className="space-y-1">
               <div className="flex justify-between">
                 <span className="text-slate-500">Status do pagamento</span>
@@ -286,6 +292,12 @@ const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
                 <span className="text-slate-500">Total pago</span>
                 <span className="font-medium">{formatCurrency(paidTotal)}</span>
               </div>
+              {creditUsedTotal > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Crédito usado</span>
+                  <span className="font-medium">{formatCurrency(creditUsedTotal)}</span>
+                </div>
+              )}
               {remaining > 0 && (
                 <div className="flex justify-between">
                   <span className="text-slate-500">Saldo restante</span>
@@ -296,27 +308,21 @@ const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
                 <span className="text-slate-500">Forma</span>
                 <span className="font-medium">{paymentMethodLabel}</span>
               </div>
-              {payment && (
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Pagamento atual</span>
-                  <span className="font-medium">{formatCurrency(Number(payment.amount))}</span>
-                </div>
-              )}
             </div>
           </div>
         </div>
 
         {visibleOrderNotes && (
-          <div className="receipt-block mt-4 rounded-lg border border-slate-200 p-3 text-[11px] space-y-1">
+          <div className="receipt-block mt-4 rounded-xl border border-slate-200 p-3 text-[11px] space-y-1">
             <p className="text-[10px] uppercase tracking-wide text-slate-500">Observações</p>
             <p className="text-slate-700 whitespace-pre-line">{visibleOrderNotes}</p>
           </div>
         )}
 
         <div className="receipt-block mt-6 grid gap-4 sm:grid-cols-2">
-          <div className="flex flex-col items-center rounded-lg border border-slate-200 p-3 text-center text-[11px]">
+          <div className="flex min-h-[138px] flex-col items-center rounded-xl border border-slate-200 px-4 py-3 text-center text-[11px]">
             <p className="w-full text-[10px] uppercase tracking-wide text-slate-500">Assinatura da loja</p>
-            <div className="mt-2 flex min-h-[64px] w-full items-end justify-center">
+            <div className="mt-3 flex min-h-[64px] w-full items-end justify-center">
               {company?.signature_image_url ? (
                 <img
                   src={company.signature_image_url}
@@ -327,7 +333,7 @@ const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
                 <div className="h-14 w-full max-w-[220px] border-b border-dashed border-slate-300" />
               )}
             </div>
-            <p className="mt-2 text-center text-sm font-medium italic text-slate-900">
+            <p className="mt-3 text-center text-sm font-medium italic text-slate-900">
               {company?.signature_responsible || companyName}
             </p>
             {company?.signature_role && (
@@ -335,12 +341,12 @@ const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
             )}
           </div>
 
-          <div className="flex flex-col items-center rounded-lg border border-slate-200 p-3 text-center text-[11px]">
+          <div className="flex min-h-[138px] flex-col items-center rounded-xl border border-slate-200 px-4 py-3 text-center text-[11px]">
             <p className="w-full text-[10px] uppercase tracking-wide text-slate-500">Assinatura do cliente</p>
-            <div className="mt-2 flex min-h-[64px] w-full items-end justify-center">
+            <div className="mt-3 flex min-h-[64px] w-full items-end justify-center">
               <div className="w-full max-w-[220px] border-b border-dashed border-slate-300" />
             </div>
-            <p className="mt-2 text-center text-sm font-medium text-slate-900">
+            <p className="mt-3 text-center text-sm font-medium text-slate-900">
               {order.customer?.name || order.customer_name || 'Cliente'}
             </p>
           </div>

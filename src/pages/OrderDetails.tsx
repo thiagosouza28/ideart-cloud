@@ -21,11 +21,9 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import OrderReceipt from '@/components/OrderReceipt';
+import PaymentReceipt from '@/components/PaymentReceipt';
 import DeliveryReceipt, { type DeliveryReceiptPaymentInfo } from '@/components/DeliveryReceipt';
 import CustomerSearch from '@/components/CustomerSearch';
-import { buildPaymentReceiptHtml, type PaymentReceiptPayload } from '@/templates/paymentReceiptTemplate';
-import { generateAndUploadPaymentReceipt } from '@/services/paymentReceipts';
-import { buildReceiptA5Url } from '@/lib/receiptA5';
 import { M2_ATTRIBUTE_KEYS, buildM2Attributes, calculateAreaM2, formatAreaM2, isAreaUnit, parseM2Attributes, parseMeasurementInput, stripM2Attributes } from '@/lib/measurements';
 import { useConfirm } from '@/components/ui/confirm-dialog';
 import {
@@ -79,6 +77,17 @@ import {
   getOrderStatusBadgeStyle,
   getOrderStatusLabel,
 } from '@/lib/orderStatusConfig';
+import {
+  calculateBaseAmount,
+  calculateDiscountAmount,
+  calculateDiscountValueFromAmount,
+  calculateLineTotal,
+  normalizeDiscountType,
+  normalizeDiscountValue,
+  roundCurrency,
+  resolveDiscountState,
+  type DiscountType,
+} from '@/lib/orderDiscounts';
 
 const PDF_MARGIN = 20;
 const PDF_SINGLE_PAGE_TOLERANCE = 1.08;
@@ -192,6 +201,12 @@ const resolveOrderStatusMessageTemplates = (
   return resolved;
 };
 
+type EditableOrderItem = OrderItem & {
+  discount_type: DiscountType;
+  discount_value: number;
+  price_mode: 'catalog' | 'manual';
+};
+
 export default function OrderDetails() {
   const { id: routeParam } = useParams<{ id: string }>();
   const orderId = useMemo(() => extractOrderIdFromParam(routeParam), [routeParam]);
@@ -236,6 +251,7 @@ export default function OrderDetails() {
 
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState(0);
+  const [paymentDate, setPaymentDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | ''>('');
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('pago');
   const [paymentNotes, setPaymentNotes] = useState('');
@@ -249,8 +265,6 @@ export default function OrderDetails() {
   const [paymentActionType, setPaymentActionType] = useState<'cancel' | 'delete' | 'download' | null>(null);
   const [receiptDialogOpen, setReceiptDialogOpen] = useState(false);
   const [receiptPayment, setReceiptPayment] = useState<OrderPayment | null>(null);
-  const [paymentReceiptHtml, setPaymentReceiptHtml] = useState('');
-  const [paymentReceiptPayload, setPaymentReceiptPayload] = useState<PaymentReceiptPayload | null>(null);
   const [paymentReceiptLoading, setPaymentReceiptLoading] = useState(false);
 
   const [publicLinkToken, setPublicLinkToken] = useState<string | null>(null);
@@ -259,7 +273,9 @@ export default function OrderDetails() {
   const [messageText, setMessageText] = useState('');
   const [messageDirty, setMessageDirty] = useState(false);
   const [isEditingItems, setIsEditingItems] = useState(false);
-  const [editableItems, setEditableItems] = useState<OrderItem[]>([]);
+  const [editableItems, setEditableItems] = useState<EditableOrderItem[]>([]);
+  const [orderDiscountType, setOrderDiscountType] = useState<DiscountType>('fixed');
+  const [orderDiscountValue, setOrderDiscountValue] = useState(0);
   const [savingItems, setSavingItems] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
   const [priceTiers, setPriceTiers] = useState<PriceTier[]>([]);
@@ -284,6 +300,13 @@ export default function OrderDetails() {
 
   const formatCurrency = (v: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
+
+  const resolvePaidAtIso = (value: string) => {
+    const raw = value.trim();
+    if (!raw) return new Date().toISOString();
+    const parsed = new Date(`${raw}T12:00:00`);
+    return Number.isNaN(parsed.getTime()) ? new Date().toISOString() : parsed.toISOString();
+  };
 
   useEffect(() => {
     let active = true;
@@ -379,6 +402,41 @@ export default function OrderDetails() {
       .join(', ');
   };
 
+  const inferPriceMode = (
+    productId: string | null | undefined,
+    quantity: number,
+    unitPrice: number,
+  ): 'catalog' | 'manual' => {
+    const product = getProductById(productId);
+    if (!product) return 'manual';
+    const suggestedPrice = getProductPriceForQuantity(product, quantity > 0 ? quantity : 1);
+    return Math.abs(Number(unitPrice || 0) - suggestedPrice) > 0.009 ? 'manual' : 'catalog';
+  };
+
+  const buildEditableItem = (item: OrderItem): EditableOrderItem => {
+    const discountState = getItemDiscountState(item);
+    return {
+      ...item,
+      discount_type: discountState.discountType,
+      discount_value: discountState.discountValue,
+      discount: discountState.discountAmount,
+      total: calculateItemTotal({
+        ...item,
+        discount_type: discountState.discountType,
+        discount_value: discountState.discountValue,
+      }),
+      price_mode: inferPriceMode(item.product_id, Number(item.quantity || 0), Number(item.unit_price || 0)),
+    };
+  };
+
+  const getSavedOrderDiscountState = () =>
+    resolveDiscountState({
+      baseAmount: calculateSubtotal(items),
+      discountAmount: Number(order?.discount || 0),
+      discountType: normalizeDiscountType(order?.discount_type),
+      discountValue: order?.discount_value ?? undefined,
+    });
+
   const getItemUnit = (item: OrderItem) => getProductById(item.product_id)?.unit;
 
   const getItemM2Data = (item: OrderItem) => parseM2Attributes(item.attributes);
@@ -433,14 +491,69 @@ export default function OrderDetails() {
     [notesSourceForDisplay],
   );
 
-  const calculateItemTotal = (item: Pick<OrderItem, 'quantity' | 'unit_price' | 'discount'>) =>
-    Math.max(0, Number(item.quantity) * Number(item.unit_price) - Number(item.discount || 0));
+  const getItemDiscountState = (
+    item: Pick<OrderItem, 'quantity' | 'unit_price' | 'discount'> &
+      Partial<Pick<OrderItem, 'discount_type' | 'discount_value'>>,
+  ) =>
+    resolveDiscountState({
+      baseAmount: calculateBaseAmount(Number(item.quantity || 0), Number(item.unit_price || 0)),
+      discountAmount: Number(item.discount || 0),
+      discountType: normalizeDiscountType(item.discount_type),
+      discountValue: item.discount_value ?? undefined,
+    });
 
-  const calculateSubtotal = (itemsList: OrderItem[]) =>
-    itemsList.reduce((sum, item) => sum + Number(item.total || 0), 0);
+  const calculateItemDiscountAmount = (
+    item: Pick<OrderItem, 'quantity' | 'unit_price' | 'discount'> &
+      Partial<Pick<OrderItem, 'discount_type' | 'discount_value'>>,
+  ) =>
+    getItemDiscountState(item).discountAmount;
 
-  const calculateOrderTotal = (subtotalValue: number) =>
-    Math.max(0, subtotalValue - Number(order?.discount || 0));
+  const calculateItemTotal = (
+    item: Pick<OrderItem, 'quantity' | 'unit_price' | 'discount'> &
+      Partial<Pick<OrderItem, 'discount_type' | 'discount_value'>>,
+  ) =>
+    calculateLineTotal({
+      quantity: Number(item.quantity || 0),
+      unitPrice: Number(item.unit_price || 0),
+      discountType: item.discount_type,
+      discountValue:
+        item.discount_value ?? getItemDiscountState(item).discountValue,
+    });
+
+  const calculateSubtotal = (
+    itemsList: Array<
+      Pick<OrderItem, 'quantity' | 'unit_price' | 'discount'> &
+      Partial<Pick<OrderItem, 'discount_type' | 'discount_value'>>
+    >,
+  ) => itemsList.reduce((sum, item) => sum + calculateItemTotal(item), 0);
+
+  const calculateGrossSubtotal = (
+    itemsList: Array<Pick<OrderItem, 'quantity' | 'unit_price'>>,
+  ) => itemsList.reduce((sum, item) => sum + calculateBaseAmount(Number(item.quantity || 0), Number(item.unit_price || 0)), 0);
+
+  const calculateItemsDiscountTotal = (
+    itemsList: Array<
+      Pick<OrderItem, 'quantity' | 'unit_price' | 'discount'> &
+      Partial<Pick<OrderItem, 'discount_type' | 'discount_value'>>
+    >,
+  ) => itemsList.reduce((sum, item) => sum + calculateItemDiscountAmount(item), 0);
+
+  const calculateOrderDiscountAmount = (
+    subtotalValue: number,
+    discountType: DiscountType,
+    discountValue: number,
+  ) =>
+    calculateDiscountAmount({
+      baseAmount: subtotalValue,
+      discountType,
+      discountValue,
+    });
+
+  const calculateOrderTotal = (
+    subtotalValue: number,
+    discountType: DiscountType,
+    discountValue: number,
+  ) => Math.max(0, subtotalValue - calculateOrderDiscountAmount(subtotalValue, discountType, discountValue));
 
   const paymentReceiptMethodLabels: Record<PaymentMethod, string> = {
     dinheiro: 'Dinheiro',
@@ -471,12 +584,14 @@ export default function OrderDetails() {
     sourceOrder: Order,
     payment?: OrderPayment | null,
   ): DeliveryReceiptPaymentInfo | null => {
+    const settledTotal = Number(sourceOrder.amount_paid || 0) + Number(sourceOrder.customer_credit_used || 0);
+
     if (payment) {
       return {
         amount: Number(payment.amount || 0),
         method: payment.method || null,
         paidAt: payment.paid_at || payment.created_at || null,
-        totalPaid: Number(sourceOrder.amount_paid || payment.amount || 0),
+        totalPaid: settledTotal || Number(payment.amount || 0),
       };
     }
 
@@ -488,7 +603,7 @@ export default function OrderDetails() {
       amount: Number(sourceOrder.amount_paid || 0),
       method: sourceOrder.payment_method || null,
       paidAt: sourceOrder.paid_at || null,
-      totalPaid: Number(sourceOrder.amount_paid || 0),
+      totalPaid: settledTotal,
     };
   };
 
@@ -508,77 +623,83 @@ export default function OrderDetails() {
     };
   };
 
-  const buildReceiptNumber = (orderNumber: number, paymentId: string) => {
-    const suffix = paymentId.replace(/-/g, '').slice(0, 8).toUpperCase();
-    return `REC-${orderNumber}-${suffix}`;
-  };
-
-  const buildReceiptDescription = (itemsList: OrderItem[], orderNumber: number) => {
-    const description = itemsList
-      .map((item) => `${item.quantity}x ${item.product_name}`)
-      .filter(Boolean)
-      .join(', ');
-    const fallback = `Pedido #${orderNumber}`;
-    const result = description || fallback;
-    return result.length > 160 ? `${result.slice(0, 157)}...` : result;
-  };
-
-  const buildCompanyAddress = (company?: Order['company'] | null) => {
-    const parts = [company?.address, [company?.city, company?.state].filter(Boolean).join(' - ')]
-      .filter(Boolean);
-    return parts.length > 0 ? parts.join(', ') : '-';
-  };
-
-  const buildPaymentReceiptPayload = (payment: OrderPayment): PaymentReceiptPayload | null => {
+  const buildPaymentReceiptSummary = (payment: OrderPayment) => {
     if (!order) return null;
-    const company = order.company || null;
-    const receiptNumber = buildReceiptNumber(order.order_number, payment.id);
-    const description = buildReceiptDescription(items, order.order_number);
-    const address = buildCompanyAddress(company);
-    const logoUrl = company?.logo_url
-      ? ensurePublicStorageUrl('product-images', company.logo_url)
-      : null;
-    const signatureImageUrl = company?.signature_image_url
-      ? ensurePublicStorageUrl('product-images', company.signature_image_url)
-      : null;
-    const responsibleName = company?.signature_responsible || company?.name || 'Responsável';
-    const responsibleRole = company?.signature_role || 'Responsável';
-    const methodLabel = payment.method
-      ? paymentReceiptMethodLabels[payment.method] || String(payment.method)
-      : 'Não informado';
-    const paidAt = payment.paid_at || payment.created_at || new Date().toISOString();
+
+    const orderedPayments = payments
+      .filter((entry) => entry.status !== 'pendente')
+      .slice()
+      .sort((a, b) => {
+        const paidAtA = new Date(a.paid_at || a.created_at || 0).getTime();
+        const paidAtB = new Date(b.paid_at || b.created_at || 0).getTime();
+        if (paidAtA !== paidAtB) return paidAtA - paidAtB;
+
+        const createdAtA = new Date(a.created_at || 0).getTime();
+        const createdAtB = new Date(b.created_at || 0).getTime();
+        if (createdAtA !== createdAtB) return createdAtA - createdAtB;
+
+        return a.id.localeCompare(b.id);
+      });
+
+    let paidTotal = 0;
+    let creditUsedTotal = 0;
+    let found = false;
+
+    for (const entry of orderedPayments) {
+      if (isCustomerCreditPayment(entry)) {
+        creditUsedTotal += Number(entry.amount || 0);
+      } else {
+        paidTotal += Number(entry.amount || 0);
+      }
+
+      if (entry.id === payment.id) {
+        found = true;
+        break;
+      }
+    }
+
+    if (!found) {
+      const currentCashPaid = Number(order.amount_paid || 0);
+      const currentCreditUsed = Number(order.customer_credit_used || 0);
+
+      if (isCustomerCreditPayment(payment)) {
+        paidTotal = currentCashPaid;
+        creditUsedTotal = Math.max(currentCreditUsed, Number(payment.amount || 0));
+      } else {
+        paidTotal = currentCashPaid + Number(payment.amount || 0);
+        creditUsedTotal = currentCreditUsed;
+      }
+    }
+
+    const settledTotal = paidTotal + creditUsedTotal;
+    const remaining = Math.max(0, Number(order.total || 0) - settledTotal);
+    const paymentStatus: PaymentStatus =
+      settledTotal >= Number(order.total || 0)
+        ? 'pago'
+        : settledTotal > 0
+          ? 'parcial'
+          : 'pendente';
 
     return {
-      cliente: {
-        nome: order.customer?.name || order.customer_name || 'Cliente',
-        documento: order.customer?.document || null,
-      },
-      pagamento: {
-        valor: Number(payment.amount || 0),
-        forma: methodLabel,
-        descricao: description,
-        data: paidAt,
-      },
-      loja: {
-        nome: company?.name || 'Loja',
-        documento: company?.document || null,
-        endereco: address,
-        logo: logoUrl,
-        assinaturaImagem: signatureImageUrl,
-        responsavel: responsibleName,
-        cargo: responsibleRole,
-      },
-      numeroRecibo: receiptNumber,
-      referencia: {
-        tipo: 'pedido',
-        numero: `#${formatOrderNumber(order.order_number)}`,
-        codigo: payment.id.slice(0, 8).toUpperCase(),
-      },
-      pedido: {
-        tempoProducaoDias: order.production_time_days_used ?? null,
-        previsaoEntrega: order.estimated_delivery_date ?? null,
-      },
+      paidTotal,
+      creditUsedTotal,
+      settledTotal,
+      remaining,
+      paymentStatus,
     };
+  };
+
+  const buildPaymentReceiptMarkup = (payment: OrderPayment) => {
+    if (!order) return null;
+
+    return renderToStaticMarkup(
+      <PaymentReceipt
+        order={order}
+        items={items}
+        payment={payment}
+        summary={buildPaymentReceiptSummary(payment)}
+      />,
+    );
   };
 
   const ensureProductsLoaded = async () => {
@@ -622,11 +743,11 @@ export default function OrderDetails() {
   const startEditingItems = async () => {
     if (!isBudget) return;
     await ensureProductsLoaded();
-    const mapped = (items || []).map((item) => ({
-      ...item,
-      total: calculateItemTotal(item),
-    }));
+    const mapped = (items || []).map(buildEditableItem);
+    const savedOrderDiscount = getSavedOrderDiscountState();
     setEditableItems(mapped);
+    setOrderDiscountType(savedOrderDiscount.discountType);
+    setOrderDiscountValue(savedOrderDiscount.discountValue);
     setNewItemProductId('');
     setNewItemQuantity(1);
     setNewItemWidthCm('');
@@ -636,6 +757,9 @@ export default function OrderDetails() {
 
   const cancelEditingItems = () => {
     setEditableItems([]);
+    const savedOrderDiscount = getSavedOrderDiscountState();
+    setOrderDiscountType(savedOrderDiscount.discountType);
+    setOrderDiscountValue(savedOrderDiscount.discountValue);
     setIsEditingItems(false);
     setNewItemProductId('');
     setNewItemQuantity(1);
@@ -671,8 +795,12 @@ export default function OrderDetails() {
             quantity: area,
             unit_price: unitPrice,
             attributes,
+            price_mode: 'catalog' as const,
           };
-          return { ...next, total: calculateItemTotal(next) };
+          return {
+            ...next,
+            total: calculateItemTotal(next),
+          };
         }
 
         const requestedQuantity = Math.max(1, Number(item.quantity));
@@ -688,6 +816,7 @@ export default function OrderDetails() {
           quantity,
           unit_price: unitPrice,
           attributes: Object.keys(cleanedAttributes).length > 0 ? cleanedAttributes : null,
+          price_mode: 'catalog' as const,
         };
         return { ...next, total: calculateItemTotal(next) };
       }),
@@ -703,7 +832,9 @@ export default function OrderDetails() {
         const product = getProductById(item.product_id);
         if (!product || !validateTierQuantity(product, quantity)) return item;
         const next = { ...item, quantity };
-        next.unit_price = product ? getProductPriceForQuantity(product, quantity) : next.unit_price;
+        if (item.price_mode !== 'manual') {
+          next.unit_price = getProductPriceForQuantity(product, quantity);
+        }
         return { ...next, total: calculateItemTotal(next) };
       }),
     );
@@ -729,7 +860,9 @@ export default function OrderDetails() {
         const product = getProductById(item.product_id);
         const quantity = hasValidDimensions ? calculateAreaM2(widthCm, heightCm) : 0;
         const unitPrice = product
-          ? getProductPriceForQuantity(product, quantity > 0 ? quantity : 1)
+          ? item.price_mode === 'manual'
+            ? Number(item.unit_price)
+            : getProductPriceForQuantity(product, quantity > 0 ? quantity : 1)
           : Number(item.unit_price);
 
         const attributes = buildM2Attributes(nextAttributes, {
@@ -743,6 +876,112 @@ export default function OrderDetails() {
           attributes,
           quantity,
           unit_price: unitPrice,
+        };
+        return { ...next, total: calculateItemTotal(next) };
+      }),
+    );
+  };
+
+  const handleChangeItemUnitPrice = (index: number, value: number) => {
+    setEditableItems((prev) =>
+      prev.map((item, idx) => {
+        if (idx !== index) return item;
+        const next = {
+          ...item,
+          unit_price: Math.max(0, Number(value || 0)),
+          price_mode: 'manual' as const,
+        };
+        return { ...next, total: calculateItemTotal(next) };
+      }),
+    );
+  };
+
+  const handleChangeItemTotal = (index: number, value: number) => {
+    setEditableItems((prev) =>
+      prev.map((item, idx) => {
+        if (idx !== index) return item;
+
+        const quantity = Math.max(0, Number(item.quantity || 0));
+        if (quantity <= 0) {
+          return item;
+        }
+
+        const targetTotal = normalizeDiscountValue(value);
+
+        if (targetTotal <= 0) {
+          const next = {
+            ...item,
+            unit_price: 0,
+            discount_type: 'fixed' as const,
+            discount_value: 0,
+            price_mode: 'manual' as const,
+          };
+          return { ...next, total: 0 };
+        }
+
+        const rawUnitPrice = targetTotal / quantity;
+        const nextUnitPrice = roundCurrency(Math.ceil((rawUnitPrice - 0.000001) * 100) / 100);
+        const nextBaseAmount = calculateBaseAmount(quantity, nextUnitPrice);
+        const nextDiscountAmount = normalizeDiscountValue(nextBaseAmount - targetTotal);
+        const next = {
+          ...item,
+          unit_price: nextUnitPrice,
+          discount_type: 'fixed' as const,
+          discount_value: nextDiscountAmount,
+          price_mode: 'manual' as const,
+        };
+
+        return { ...next, total: calculateItemTotal(next) };
+      }),
+    );
+  };
+
+  const handleResetItemUnitPrice = (index: number) => {
+    setEditableItems((prev) =>
+      prev.map((item, idx) => {
+        if (idx !== index) return item;
+        const product = getProductById(item.product_id);
+        if (!product) return item;
+        const next = {
+          ...item,
+          unit_price: getProductPriceForQuantity(product, Number(item.quantity || 0) > 0 ? Number(item.quantity) : 1),
+          price_mode: 'catalog' as const,
+        };
+        return { ...next, total: calculateItemTotal(next) };
+      }),
+    );
+  };
+
+  const handleChangeItemDiscountType = (index: number, value: DiscountType) => {
+    setEditableItems((prev) =>
+      prev.map((item, idx) => {
+        if (idx !== index) return item;
+        const nextType = normalizeDiscountType(value);
+        const currentDiscountAmount = calculateItemDiscountAmount(item);
+        const next = {
+          ...item,
+          discount_type: nextType,
+          discount_value: calculateDiscountValueFromAmount({
+            baseAmount: calculateBaseAmount(Number(item.quantity || 0), Number(item.unit_price || 0)),
+            discountAmount: currentDiscountAmount,
+            discountType: nextType,
+          }),
+        };
+        return {
+          ...next,
+          total: calculateItemTotal(next),
+        };
+      }),
+    );
+  };
+
+  const handleChangeItemDiscountValue = (index: number, value: number) => {
+    setEditableItems((prev) =>
+      prev.map((item, idx) => {
+        if (idx !== index) return item;
+        const next = {
+          ...item,
+          discount_value: normalizeDiscountValue(value),
         };
         return { ...next, total: calculateItemTotal(next) };
       }),
@@ -784,18 +1023,27 @@ export default function OrderDetails() {
         areaM2: quantity,
       })
       : null;
-    const newItem: OrderItem = {
+    const newItem: EditableOrderItem = {
       id: crypto.randomUUID(),
       order_id: order?.id || '',
       product_id: product.id,
       product_name: product.name,
       quantity,
       unit_price: unitPrice,
+      discount_type: 'fixed',
+      discount_value: 0,
       discount: 0,
-      total: Math.max(0, quantity * unitPrice),
+      total: calculateItemTotal({
+        quantity,
+        unit_price: unitPrice,
+        discount_type: 'fixed',
+        discount_value: 0,
+        discount: 0,
+      }),
       attributes,
       notes: null,
       created_at: new Date().toISOString(),
+      price_mode: 'catalog',
     };
     setEditableItems((prev) => [...prev, newItem]);
     setNewItemProductId('');
@@ -865,19 +1113,27 @@ export default function OrderDetails() {
         product_name: item.product_name,
         quantity: Number(item.quantity),
         unit_price: Number(item.unit_price),
-        discount: Number(item.discount || 0),
+        discount_type: normalizeDiscountType(item.discount_type),
+        discount_value: Number(item.discount_value || 0),
+        discount: calculateItemDiscountAmount(item),
         notes: item.notes ?? null,
         attributes: item.attributes ?? null,
       }));
-      const updatedOrder = await updateOrderItems({ orderId: order.id, items: payload });
+      const updatedOrder = await updateOrderItems({
+        orderId: order.id,
+        items: payload,
+        orderDiscountType,
+        orderDiscountValue,
+      });
       const refreshedItems = editableItems.map((item) => ({
         ...item,
+        discount: calculateItemDiscountAmount(item),
         total: calculateItemTotal(item),
       }));
-      setOrder(updatedOrder);
+      setOrder((prev) => (prev ? { ...prev, ...updatedOrder } : updatedOrder));
       setItems(refreshedItems);
       setIsEditingItems(false);
-      toast({ title: 'Orçamento atualizado com sucesso!' });
+      toast({ title: 'Pedido atualizado com sucesso!' });
     } catch (error: any) {
       toast({
         title: 'Erro ao salvar alterações',
@@ -1328,7 +1584,7 @@ export default function OrderDetails() {
       setDeliveryReceiptOrder(null);
       setDeliveryReceiptPayment(null);
       setDeliveryPaymentAmount(remainingAmount);
-      setDeliveryPaymentMethod(order?.payment_method || '');
+      setDeliveryPaymentMethod('');
     }
     setDeliveryDialogOpen(true);
   };
@@ -1422,12 +1678,12 @@ export default function OrderDetails() {
         order,
         latestPaidPayment,
       );
+      const shouldRegisterPaymentOnDelivery =
+        pendingAmount > 0 &&
+        Boolean(deliveryPaymentMethod) &&
+        Number(deliveryPaymentAmount) > 0.009;
 
-      if (pendingAmount > 0) {
-        if (!deliveryPaymentMethod) {
-          throw new Error('Selecione a forma de pagamento para quitar o saldo antes da entrega.');
-        }
-
+      if (shouldRegisterPaymentOnDelivery) {
         if (Math.abs(Number(deliveryPaymentAmount) - pendingAmount) > 0.009) {
           throw new Error(`O pagamento precisa quitar o saldo pendente de ${formatCurrency(pendingAmount)}.`);
         }
@@ -1479,7 +1735,13 @@ export default function OrderDetails() {
         printWindow,
       );
 
-      toast({ title: 'Entrega confirmada com sucesso!' });
+      toast({
+        title: shouldRegisterPaymentOnDelivery
+          ? 'Entrega confirmada com pagamento registrado!'
+          : pendingAmount > 0
+            ? 'Entrega confirmada. Pedido aguardando pagamento.'
+            : 'Entrega confirmada com sucesso!',
+      });
       await fetchOrder(order.id);
     } catch (error: any) {
       if (printWindow && !printWindow.closed) {
@@ -1495,84 +1757,33 @@ export default function OrderDetails() {
     }
   };
 
-  const downloadReceiptFromStorage = async (path: string, fileName: string) => {
-    try {
-      if (path.startsWith('http')) {
-        const response = await fetch(path);
-        const blob = await response.blob();
-        const blobUrl = window.URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = blobUrl;
-        link.download = fileName;
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-        window.setTimeout(() => window.URL.revokeObjectURL(blobUrl), 0);
-        return;
-      }
-
-      const { data, error } = await supabase.storage.from('payment-receipts').download(path);
-      if (error) throw error;
-
-      const blobUrl = window.URL.createObjectURL(data);
-      const link = document.createElement('a');
-      link.href = blobUrl;
-      link.download = fileName;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.setTimeout(() => window.URL.revokeObjectURL(blobUrl), 0);
-    } catch (error: any) {
-      console.error('Erro ao baixar arquivo:', error);
-      toast({ title: 'Erro ao baixar comprovante', description: error.message, variant: 'destructive' });
-    }
-  };
-
   const handlePrintPaymentReceipt = () => {
-    if (!order || !receiptPayment || !paymentReceiptPayload) {
+    if (!order || !receiptPayment || !paymentReceiptRef.current) {
       toast({ title: 'Recibo indisponível', variant: 'destructive' });
       return;
     }
 
-    const safeCompanyId = order.company_id || 'company';
-    const receiptNumber = paymentReceiptPayload.numeroRecibo;
-    const path = `${safeCompanyId}/${order.id}/recibo-${receiptNumber}.pdf`;
-
-    setPaymentReceiptLoading(true);
-    generateAndUploadPaymentReceipt(paymentReceiptPayload, { bucket: 'payment-receipts', path })
-      .then(() => {
-        const receiptA5Url = buildReceiptA5Url(paymentReceiptPayload);
-        window.open(receiptA5Url, '_blank', 'noopener,noreferrer');
-      })
-      .catch((error: any) => {
-        toast({
-          title: 'Erro ao gerar recibo',
-          description: error?.message,
-          variant: 'destructive',
-        });
-      })
-      .finally(() => setPaymentReceiptLoading(false));
+    printReceipt(
+      paymentReceiptRef.current,
+      `Comprovante de pagamento - Pedido #${formatOrderNumber(order.order_number)}`,
+    );
   };
 
   const handleDownloadPaymentReceipt = async () => {
-    if (!order || !receiptPayment || !paymentReceiptPayload) {
+    if (!order || !receiptPayment || !paymentReceiptRef.current) {
       toast({ title: 'Recibo indisponível', variant: 'destructive' });
       return;
     }
 
-    const safeCompanyId = order.company_id || 'company';
-    const receiptNumber = paymentReceiptPayload.numeroRecibo;
-    const path = `${safeCompanyId}/${order.id}/recibo-${receiptNumber}.pdf`;
-    const fileName = `comprovante-pedido-${formatOrderNumber(order.order_number)}.pdf`;
+    const fileName = `comprovante-pagamento-pedido-${formatOrderNumber(order.order_number)}.pdf`;
 
     setPaymentReceiptLoading(true);
     try {
-      const receipt = await generateAndUploadPaymentReceipt(paymentReceiptPayload, {
-        bucket: 'payment-receipts',
-        path,
-      });
-      await downloadReceiptFromStorage(receipt.path, fileName);
-      toast({ title: 'Comprovante baixado com sucesso' });
+      await downloadReceiptMarkupAsPdf(
+        paymentReceiptRef.current.outerHTML,
+        fileName,
+        'Comprovante baixado com sucesso',
+      );
     } catch (error: any) {
       toast({
         title: 'Erro ao gerar comprovante',
@@ -1939,7 +2150,7 @@ export default function OrderDetails() {
     setDeleteLoading(true);
     try {
       await deleteOrder(order.id);
-      toast({ title: 'Orçamento excluído com sucesso!' });
+      toast({ title: 'Pedido excluído com sucesso!' });
       setDeleteDialogOpen(false);
       navigate('/pedidos');
     } catch (error: any) {
@@ -1952,14 +2163,6 @@ export default function OrderDetails() {
 
   const handleOpenPaymentReceipt = (payment: OrderPayment) => {
     if (!order) return;
-    const payload = buildPaymentReceiptPayload(payment);
-    if (payload) {
-      setPaymentReceiptPayload(payload);
-      setPaymentReceiptHtml(buildPaymentReceiptHtml(payload));
-    } else {
-      setPaymentReceiptPayload(null);
-      setPaymentReceiptHtml('');
-    }
     setReceiptPayment(payment);
     setReceiptDialogOpen(true);
   };
@@ -1973,6 +2176,7 @@ export default function OrderDetails() {
       return;
     }
     setPaymentAmount(remaining);
+    setPaymentDate(new Date().toISOString().slice(0, 10));
     setPaymentMethod(order.payment_method || '');
     setPaymentStatus('pago');
     setPaymentNotes('');
@@ -2069,6 +2273,7 @@ export default function OrderDetails() {
         amount: paymentAmount,
         method: paymentMethod as PaymentMethod,
         status: paymentStatus,
+        paidAt: paymentStatus === 'pendente' ? null : resolvePaidAtIso(paymentDate),
         notes: paymentNotes || undefined,
         createdBy: user.id,
       });
@@ -2080,13 +2285,6 @@ export default function OrderDetails() {
         toast({ title: 'Pagamento registrado com sucesso!' });
       }
       setPaymentDialogOpen(false);
-      if (result.payment) {
-        const payload = buildPaymentReceiptPayload(result.payment);
-        if (payload) {
-          setPaymentReceiptPayload(payload);
-          setPaymentReceiptHtml(buildPaymentReceiptHtml(payload));
-        }
-      }
       setReceiptPayment(result.payment);
       setReceiptDialogOpen(true);
       fetchOrder();
@@ -2363,8 +2561,6 @@ export default function OrderDetails() {
     setReceiptDialogOpen(open);
     if (!open) {
       setReceiptPayment(null);
-      setPaymentReceiptPayload(null);
-      setPaymentReceiptHtml('');
       setPaymentReceiptLoading(false);
     }
   };
@@ -2422,20 +2618,30 @@ export default function OrderDetails() {
       product_id: item.product_id,
       quantity: item.quantity,
       unit_price: item.unit_price,
-      discount: item.discount,
+      discount_type: item.discount_type,
+      discount_value: item.discount_value,
       attributes: item.attributes,
     }))
   ), [editableItems]);
   const itemsSnapshot = useMemo(() => (
-    items.map((item) => ({
-      product_id: item.product_id,
-      quantity: item.quantity,
-      unit_price: item.unit_price,
-      discount: item.discount,
-      attributes: item.attributes,
-    }))
+    items.map((item) => {
+      const discountState = getItemDiscountState(item);
+      return {
+        product_id: item.product_id,
+        quantity: item.quantity,
+        unit_price: item.unit_price,
+        discount_type: discountState.discountType,
+        discount_value: discountState.discountValue,
+        attributes: item.attributes,
+      };
+    })
   ), [items]);
-  const itemsDirty = isEditingItems && JSON.stringify(editableItemsSnapshot) !== JSON.stringify(itemsSnapshot);
+  const savedOrderDiscount = getSavedOrderDiscountState();
+  const itemsDirty = isEditingItems && (
+    JSON.stringify(editableItemsSnapshot) !== JSON.stringify(itemsSnapshot) ||
+    orderDiscountType !== savedOrderDiscount.discountType ||
+    Math.abs(orderDiscountValue - savedOrderDiscount.discountValue) > 0.009
+  );
   const pendingItemInput = isEditingItems && (newItemProductId || newItemQuantity !== 1);
   const statusDirty = statusDialogOpen && (newStatus || statusNotes.trim() || entryDialogOpen || entryAmount > 0 || entryMethod);
   const paymentDirty = paymentDialogOpen && (paymentNotes.trim() || paymentMethod || paymentAmount > 0);
@@ -2479,7 +2685,11 @@ export default function OrderDetails() {
 
   const config = statusConfig[order.status];
   const StatusIcon = config.icon;
-  const currentStatusLabel = getOrderStatusLabel(order.status, orderStatusCustomization);
+  const currentStatusLabel = getOrderStatusLabel(
+    order.status,
+    orderStatusCustomization,
+    order.payment_status,
+  );
   const currentStatusBadgeStyle = getOrderStatusBadgeStyle(order.status, orderStatusCustomization);
   const canSendWhatsApp = Boolean(order?.customer?.phone);
   const canManageDelivery =
@@ -2494,14 +2704,15 @@ export default function OrderDetails() {
   const deliveryCustomerName = order.customer?.name || order.customer_name || 'Cliente não informado';
   const deliveryCustomerPhone = order.customer?.phone || '-';
   const deliveryPendingAmount = deliveryCompleted ? 0 : remainingAmount;
-  const needsPaymentBeforeDelivery = !deliveryCompleted && deliveryPendingAmount > 0;
+  const hasPendingPaymentAtDelivery = !deliveryCompleted && deliveryPendingAmount > 0;
+  const shouldRegisterPaymentOnDelivery =
+    hasPendingPaymentAtDelivery &&
+    Boolean(deliveryPaymentMethod) &&
+    Number(deliveryPaymentAmount) > 0.009;
   const deliveryPaymentInfo =
     deliveryReceiptPayment ||
     (deliveryReceiptSource ? buildDeliveryReceiptPaymentInfo(deliveryReceiptSource, latestPaidPayment) : null);
-  const deliveryConfirmDisabled =
-    deliverySaving ||
-    (needsPaymentBeforeDelivery &&
-      (!deliveryPaymentMethod || Math.abs(Number(deliveryPaymentAmount) - deliveryPendingAmount) > 0.009));
+  const deliveryConfirmDisabled = deliverySaving;
   const publicLinkLabel = linkLoading
     ? 'Gerando...'
     : publicLinkToken
@@ -2525,8 +2736,22 @@ export default function OrderDetails() {
     isImage: file.file_type ? file.file_type.startsWith('image/') : false,
   }));
   const artFilesReady = artFilesWithUrls.filter((file) => file.url);
-  const editingSubtotal = calculateSubtotal(isEditingItems ? editableItems : items);
-  const editingTotal = calculateOrderTotal(editingSubtotal);
+  const pricingItems = isEditingItems ? editableItems : items;
+  const editingGrossSubtotal = calculateGrossSubtotal(pricingItems);
+  const editingItemsDiscount = calculateItemsDiscountTotal(pricingItems);
+  const activeOrderDiscountType = isEditingItems ? orderDiscountType : savedOrderDiscount.discountType;
+  const activeOrderDiscountValue = isEditingItems ? orderDiscountValue : savedOrderDiscount.discountValue;
+  const editingSubtotal = calculateSubtotal(pricingItems);
+  const editingOrderDiscount = calculateOrderDiscountAmount(
+    editingSubtotal,
+    activeOrderDiscountType,
+    activeOrderDiscountValue,
+  );
+  const editingTotal = calculateOrderTotal(
+    editingSubtotal,
+    activeOrderDiscountType,
+    activeOrderDiscountValue,
+  );
   const newItemProduct = products.find((product) => product.id === newItemProductId);
   const newItemIsM2 = newItemProduct ? isAreaUnit(newItemProduct.unit) : false;
   const newItemWidthValue = parseMeasurementInput(newItemWidthCm);
@@ -2603,7 +2828,7 @@ export default function OrderDetails() {
               Cancelar
             </Button>
           )}
-          {order.status === 'orcamento' && (
+          {['orcamento', 'pendente'].includes(order.status) && (
             <Button
               variant="destructive"
               onClick={() => setDeleteDialogOpen(true)}
@@ -2770,7 +2995,7 @@ export default function OrderDetails() {
               <CardTitle>Itens do Pedido</CardTitle>
               {isBudget && !isEditingItems && (
                 <Button variant="outline" size="sm" onClick={startEditingItems} className="w-full sm:w-auto">
-                  Editar orçamento
+                  Editar pedido
                 </Button>
               )}
               {isBudget && isEditingItems && (
@@ -2787,12 +3012,13 @@ export default function OrderDetails() {
             </CardHeader>
             <CardContent>
               <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-                <Table className="min-w-[720px]">
+                <Table className="min-w-[980px]">
                   <TableHeader>
                     <TableRow>
                       <TableHead>Produto</TableHead>
                       <TableHead className="text-center">Qtd</TableHead>
                       <TableHead className="text-right">Preço Unit.</TableHead>
+                      <TableHead className="text-right">Desconto</TableHead>
                       <TableHead className="text-right">Total</TableHead>
                       {isEditingItems && <TableHead className="text-right">Açãoes</TableHead>}
                     </TableRow>
@@ -2802,6 +3028,7 @@ export default function OrderDetails() {
                       const m2Data = parseM2Attributes(item.attributes);
                       const isM2 = isItemM2(item);
                       const displayAttributes = stripM2Attributes(item.attributes);
+                      const discountState = getItemDiscountState(item);
                       const widthRaw = item.attributes?.[M2_ATTRIBUTE_KEYS.widthCm] ?? '';
                       const heightRaw = item.attributes?.[M2_ATTRIBUTE_KEYS.heightCm] ?? '';
                       const hasValidDimensions =
@@ -2910,8 +3137,95 @@ export default function OrderDetails() {
                               </p>
                             )}
                           </TableCell>
-                          <TableCell className="text-right py-2">{formatCurrency(Number(item.unit_price))}</TableCell>
-                          <TableCell className="text-right font-medium py-2">{formatCurrency(Number(item.total))}</TableCell>
+                          <TableCell className="py-2 align-top">
+                            {isEditingItems ? (
+                              <div className="ml-auto w-[150px] space-y-2">
+                                <CurrencyInput
+                                  value={Number(item.unit_price || 0)}
+                                  onChange={(value) => handleChangeItemUnitPrice(index, value)}
+                                />
+                                {'price_mode' in item && item.price_mode === 'manual' && (
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-auto px-2 py-1 text-xs"
+                                    onClick={() => handleResetItemUnitPrice(index)}
+                                  >
+                                    Usar tabela
+                                  </Button>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="text-right">
+                                {formatCurrency(Number(item.unit_price))}
+                              </div>
+                            )}
+                          </TableCell>
+                          <TableCell className="py-2 align-top">
+                            {isEditingItems ? (
+                              <div className="ml-auto w-[180px] space-y-2">
+                                <Select
+                                  value={discountState.discountType}
+                                  onValueChange={(value) => handleChangeItemDiscountType(index, value as DiscountType)}
+                                >
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Tipo" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="fixed">R$</SelectItem>
+                                    <SelectItem value="percent">%</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                                {discountState.discountType === 'percent' ? (
+                                  <Input
+                                    type="number"
+                                    min={0}
+                                    max={100}
+                                    step="0.01"
+                                    value={discountState.discountValue}
+                                    onChange={(e) => handleChangeItemDiscountValue(index, Number(e.target.value))}
+                                    className="text-right"
+                                  />
+                                ) : (
+                                  <CurrencyInput
+                                    value={discountState.discountValue}
+                                    onChange={(value) => handleChangeItemDiscountValue(index, value)}
+                                  />
+                                )}
+                                <p className="text-right text-xs text-muted-foreground">
+                                  {formatCurrency(discountState.discountAmount)}
+                                </p>
+                              </div>
+                            ) : (
+                              <div className="text-right">
+                                {discountState.discountAmount > 0 ? (
+                                  <>
+                                    <p className="text-destructive">-{formatCurrency(discountState.discountAmount)}</p>
+                                    <p className="text-xs text-muted-foreground">
+                                      {discountState.discountType === 'percent'
+                                        ? `${discountState.discountValue}%`
+                                        : 'R$'}
+                                    </p>
+                                  </>
+                                ) : (
+                                  <span className="text-muted-foreground">-</span>
+                                )}
+                              </div>
+                            )}
+                          </TableCell>
+                          <TableCell className="py-2">
+                            {isEditingItems ? (
+                              <div className="ml-auto w-[140px]">
+                                <CurrencyInput
+                                  value={calculateItemTotal(item)}
+                                  onChange={(value) => handleChangeItemTotal(index, value)}
+                                />
+                              </div>
+                            ) : (
+                              <div className="text-right font-medium">{formatCurrency(calculateItemTotal(item))}</div>
+                            )}
+                          </TableCell>
                           {isEditingItems && (
                             <TableCell className="text-right py-1">
                               <Button
@@ -2995,15 +3309,86 @@ export default function OrderDetails() {
                 </div>
               )}
 
+              {isEditingItems && (
+                <div className="mt-4 rounded-lg border p-4">
+                  <div className="grid gap-3 md:grid-cols-[180px_minmax(0,220px)]">
+                    <div className="space-y-2">
+                      <Label>Desconto geral</Label>
+                      <Select
+                        value={orderDiscountType}
+                        onValueChange={(value) => {
+                          const nextType = value as DiscountType;
+                          const currentDiscountAmount = calculateOrderDiscountAmount(
+                            editingSubtotal,
+                            orderDiscountType,
+                            orderDiscountValue,
+                          );
+                          setOrderDiscountType(nextType);
+                          setOrderDiscountValue(
+                            calculateDiscountValueFromAmount({
+                              baseAmount: editingSubtotal,
+                              discountAmount: currentDiscountAmount,
+                              discountType: nextType,
+                            }),
+                          );
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Tipo" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="fixed">R$</SelectItem>
+                          <SelectItem value="percent">%</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Valor do desconto</Label>
+                      {orderDiscountType === 'percent' ? (
+                        <Input
+                          type="number"
+                          min={0}
+                          max={100}
+                          step="0.01"
+                          value={orderDiscountValue}
+                          onChange={(e) => setOrderDiscountValue(normalizeDiscountValue(Number(e.target.value)))}
+                          className="text-right"
+                        />
+                      ) : (
+                        <CurrencyInput
+                          value={orderDiscountValue}
+                          onChange={(value) => setOrderDiscountValue(normalizeDiscountValue(value))}
+                        />
+                      )}
+                    </div>
+                  </div>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    O desconto geral é aplicado após os descontos individuais dos itens.
+                  </p>
+                </div>
+              )}
+
               <div className="mt-4 pt-4 border-t space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Subtotal bruto</span>
+                  <span>{formatCurrency(editingGrossSubtotal)}</span>
+                </div>
+                {editingItemsDiscount > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Desconto dos itens</span>
+                    <span className="text-destructive">-{formatCurrency(editingItemsDiscount)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Subtotal</span>
                   <span>{formatCurrency(editingSubtotal)}</span>
                 </div>
-                {Number(order.discount) > 0 && (
+                {editingOrderDiscount > 0 && (
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Desconto</span>
-                    <span className="text-destructive">-{formatCurrency(Number(order.discount))}</span>
+                    <span className="text-muted-foreground">
+                      Desconto geral ({activeOrderDiscountType === 'percent' ? `${activeOrderDiscountValue}%` : 'R$'})
+                    </span>
+                    <span className="text-destructive">-{formatCurrency(editingOrderDiscount)}</span>
                   </div>
                 )}
                 <Separator />
@@ -3316,13 +3701,12 @@ export default function OrderDetails() {
                               size="icon"
                               title="Imprimir"
                               onClick={() => {
-                                const payload = buildPaymentReceiptPayload(payment);
-                                if (payload) {
-                                  setPaymentReceiptPayload(payload);
-                                  setReceiptPayment(payment);
-                                  const receiptA5Url = buildReceiptA5Url(payload);
-                                  window.open(receiptA5Url, '_blank', 'noopener,noreferrer');
-                                }
+                                const markup = buildPaymentReceiptMarkup(payment);
+                                if (!markup) return;
+                                printMarkup(
+                                  markup,
+                                  `Comprovante de pagamento - Pedido #${formatOrderNumber(order.order_number)}`,
+                                );
                               }}
                             >
                               <Printer className="h-4 w-4" />
@@ -3332,30 +3716,22 @@ export default function OrderDetails() {
                               size="icon"
                               title="Baixar PDF"
                               onClick={async () => {
-                                const payload = buildPaymentReceiptPayload(payment);
-                                if (payload) {
-                                  setPaymentReceiptPayload(payload);
-                                  setReceiptPayment(payment);
-                                  const safeCompanyId = order.company_id || 'company';
-                                  const receiptNumber = payload.numeroRecibo;
-                                  const path = `${safeCompanyId}/${order.id}/recibo-${receiptNumber}.pdf`;
-                                  const fileName = `comprovante-pedido-${formatOrderNumber(order.order_number)}.pdf`;
-                                  
-                                  setPaymentActionId(payment.id);
-                                  setPaymentActionType('download');
-                                  try {
-                                    const receipt = await generateAndUploadPaymentReceipt(payload, {
-                                      bucket: 'payment-receipts',
-                                      path,
-                                    });
-                                    await downloadReceiptFromStorage(receipt.path, fileName);
-                                    toast({ title: 'Comprovante baixado' });
-                                  } catch (error: any) {
-                                    toast({ title: 'Erro ao baixar', description: error.message, variant: 'destructive' });
-                                  } finally {
-                                    setPaymentActionId(null);
-                                    setPaymentActionType(null);
-                                  }
+                                const markup = buildPaymentReceiptMarkup(payment);
+                                if (!markup) return;
+
+                                setPaymentActionId(payment.id);
+                                setPaymentActionType('download');
+                                try {
+                                  await downloadReceiptMarkupAsPdf(
+                                    markup,
+                                    `comprovante-pagamento-pedido-${formatOrderNumber(order.order_number)}.pdf`,
+                                    'Comprovante baixado',
+                                  );
+                                } catch (error: any) {
+                                  toast({ title: 'Erro ao baixar', description: error.message, variant: 'destructive' });
+                                } finally {
+                                  setPaymentActionId(null);
+                                  setPaymentActionType(null);
                                 }
                               }}
                               disabled={paymentActionId === payment.id && paymentActionType === 'download'}
@@ -3497,6 +3873,20 @@ export default function OrderDetails() {
               <CurrencyInput value={paymentAmount} onChange={setPaymentAmount} />
             </div>
             <div className="space-y-2">
+              <Label>Data do pagamento</Label>
+              <Input
+                type="date"
+                value={paymentDate}
+                onChange={(event) => setPaymentDate(event.target.value)}
+                disabled={paymentStatus === 'pendente'}
+              />
+              {paymentStatus === 'pendente' && (
+                <p className="text-xs text-muted-foreground">
+                  A data fica disponivel quando o status for pago ou parcial.
+                </p>
+              )}
+            </div>
+            <div className="space-y-2">
               <Label>Forma de pagamento</Label>
               <Select value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as PaymentMethod)}>
                 <SelectTrigger>
@@ -3612,11 +4002,13 @@ export default function OrderDetails() {
           </DialogHeader>
           <div className="max-h-[calc(92vh-190px)] overflow-y-auto overflow-x-hidden pr-1">
             <div className="flex justify-center">
-              {paymentReceiptHtml ? (
-                <div
+              {receiptPayment ? (
+                <PaymentReceipt
                   ref={paymentReceiptRef}
-                  className="w-full max-w-[560px]"
-                  dangerouslySetInnerHTML={{ __html: paymentReceiptHtml }}
+                  order={order}
+                  items={items}
+                  payment={receiptPayment}
+                  summary={buildPaymentReceiptSummary(receiptPayment)}
                 />
               ) : (
                 <p className="text-sm text-muted-foreground">Recibo indisponível.</p>
@@ -3638,7 +4030,7 @@ export default function OrderDetails() {
             </Button>
             <Button onClick={handlePrintPaymentReceipt} disabled={!receiptPayment || paymentReceiptLoading} className="gap-2">
               <Printer className="h-4 w-4" />
-              {paymentReceiptLoading ? 'Gerando...' : 'Abrir A5'}
+              {paymentReceiptLoading ? 'Gerando...' : 'Imprimir'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -3657,32 +4049,35 @@ export default function OrderDetails() {
           }
         }}
       >
-        <DialogContent aria-describedby={undefined} className="max-w-lg">
-          <DialogHeader>
+        <DialogContent
+          aria-describedby={undefined}
+          className="w-[calc(100vw-1.5rem)] max-w-[560px] overflow-hidden sm:w-full"
+        >
+          <DialogHeader className="pr-8">
             <DialogTitle>{deliveryCompleted ? 'Comprovante de entrega' : 'Confirmar entrega'}</DialogTitle>
             <DialogDescription>
               {deliveryCompleted
                 ? 'A entrega ja foi registrada. Use esta tela para consultar ou reimprimir o comprovante.'
-                : 'Ao confirmar, o pedido sera marcado como entregue e o sistema registrara a data e a hora da entrega.'}
+                : 'Ao confirmar, o pedido sera marcado como entregue e o sistema registrara a data e a hora da entrega, mesmo se ainda houver pagamento pendente.'}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
-            <div className="rounded-lg border bg-muted/30 p-4 text-sm">
-              <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0 space-y-4">
+            <div className="min-w-0 rounded-lg border bg-muted/30 p-4 text-sm">
+              <div className="grid grid-cols-[96px_minmax(0,1fr)] items-start gap-3">
                 <span className="text-muted-foreground">Pedido</span>
-                <span className="font-medium">#{formatOrderNumber(order.order_number)}</span>
+                <span className="min-w-0 font-medium text-right break-words">#{formatOrderNumber(order.order_number)}</span>
               </div>
-              <div className="mt-2 flex items-center justify-between gap-3">
+              <div className="mt-2 grid grid-cols-[96px_minmax(0,1fr)] items-start gap-3">
                 <span className="text-muted-foreground">Cliente</span>
-                <span className="font-medium text-right">{deliveryCustomerName}</span>
+                <span className="min-w-0 font-medium text-right break-words">{deliveryCustomerName}</span>
               </div>
-              <div className="mt-2 flex items-center justify-between gap-3">
+              <div className="mt-2 grid grid-cols-[96px_minmax(0,1fr)] items-start gap-3">
                 <span className="text-muted-foreground">Telefone</span>
-                <span className="font-medium text-right">{deliveryCustomerPhone}</span>
+                <span className="min-w-0 font-medium text-right break-all">{deliveryCustomerPhone}</span>
               </div>
-              <div className="mt-2 flex items-center justify-between gap-3">
+              <div className="mt-2 grid grid-cols-[96px_minmax(0,1fr)] items-start gap-3">
                 <span className="text-muted-foreground">Valor total</span>
-                <span className="font-medium text-right">{formatCurrency(Number(order.total || 0))}</span>
+                <span className="min-w-0 font-medium text-right break-words">{formatCurrency(Number(order.total || 0))}</span>
               </div>
             </div>
 
@@ -3695,7 +4090,7 @@ export default function OrderDetails() {
                   </p>
                 </div>
                 {deliveryPaymentInfo && (
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm">
+                  <div className="min-w-0 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm">
                     <p className="font-medium text-slate-900">Pagamento vinculado ao comprovante</p>
                     <div className="mt-2 space-y-1 text-slate-700">
                       <p>Valor pago: {formatCurrency(deliveryPaymentInfo.amount)}</p>
@@ -3707,24 +4102,24 @@ export default function OrderDetails() {
               </div>
             ) : (
               <div className="space-y-3">
-                {needsPaymentBeforeDelivery ? (
-                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+                {hasPendingPaymentAtDelivery ? (
+                  <div className="min-w-0 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
                     <p className="font-medium">Pagamento pendente</p>
                     <p className="mt-1">
-                      Há um saldo pendente de {formatCurrency(deliveryPendingAmount)}. Registre o pagamento antes de concluir a entrega.
+                      Há um saldo pendente de {formatCurrency(deliveryPendingAmount)}. Você pode registrar esse pagamento agora ou concluir a entrega e deixar o pedido aguardando pagamento.
                     </p>
                     <div className="mt-4 space-y-3">
                       <div className="space-y-2">
-                        <Label>Valor pendente</Label>
+                        <Label>Valor para quitar agora</Label>
                         <CurrencyInput value={deliveryPaymentAmount} onChange={setDeliveryPaymentAmount} disabled />
                       </div>
                       <div className="space-y-2">
-                        <Label>Forma de pagamento</Label>
+                        <Label>Forma de pagamento (opcional)</Label>
                         <Select
                           value={deliveryPaymentMethod}
                           onValueChange={(value) => setDeliveryPaymentMethod(value as PaymentMethod)}
                         >
-                          <SelectTrigger>
+                          <SelectTrigger className="w-full min-w-0">
                             <SelectValue placeholder="Selecione a forma de pagamento" />
                           </SelectTrigger>
                           <SelectContent>
@@ -3759,30 +4154,48 @@ export default function OrderDetails() {
               </div>
             ))}
           </div>
-          <DialogFooter>
+          <DialogFooter className="gap-2 sm:gap-2">
             <Button
               variant="outline"
               onClick={() => setDeliveryDialogOpen(false)}
               disabled={deliverySaving}
+              className="w-full sm:w-auto"
             >
               {deliveryCompleted ? 'Fechar' : 'Cancelar'}
             </Button>
             {deliveryCompleted ? (
-              <div className="flex gap-2">
-                <Button variant="outline" onClick={handleDownloadDeliveryReceipt} disabled={deliverySaving} className="gap-2">
+              <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+                <Button
+                  variant="outline"
+                  onClick={handleDownloadDeliveryReceipt}
+                  disabled={deliverySaving}
+                  className="w-full gap-2 sm:w-auto"
+                >
                   <FileDown className="h-4 w-4" />
                   Baixar PDF
                 </Button>
-                <Button onClick={handlePrintDeliveryReceipt} disabled={deliverySaving} className="gap-2">
+                <Button
+                  onClick={handlePrintDeliveryReceipt}
+                  disabled={deliverySaving}
+                  className="w-full gap-2 sm:w-auto"
+                >
                   <Printer className="h-4 w-4" />
                   Imprimir Comprovante
                 </Button>
               </div>
             ) : (
-              <Button onClick={handleConfirmDelivery} disabled={deliveryConfirmDisabled}>
+              <Button
+                onClick={handleConfirmDelivery}
+                disabled={deliveryConfirmDisabled}
+                className="w-full min-w-0 sm:flex-1"
+              >
                 {deliverySaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 <Truck className="mr-2 h-4 w-4" />
-                {needsPaymentBeforeDelivery ? 'Registrar pagamento e confirmar entrega' : 'Confirmar Entrega'}
+                {shouldRegisterPaymentOnDelivery
+                  ? 'Quitar e entregar'
+                  : hasPendingPaymentAtDelivery
+                    ? 'Entregar com saldo pendente'
+                    : 'Confirmar entrega'}
               </Button>
             )}
           </DialogFooter>
@@ -4037,10 +4450,10 @@ export default function OrderDetails() {
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <DialogContent aria-describedby={undefined} className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Excluir orçamento</DialogTitle>
+            <DialogTitle>Excluir pedido</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            Tem certeza que deseja excluir este orçamento? Essa ação não pode ser desfeita.
+            Tem certeza que deseja excluir este pedido? Essa ação não pode ser desfeita.
           </p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteDialogOpen(false)} disabled={deleteLoading}>
@@ -4082,26 +4495,3 @@ export default function OrderDetails() {
     </div>
   );
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

@@ -26,6 +26,7 @@ import { buildOrderDetailsPath } from '@/lib/orderRouting';
 import { isPendingCustomerInfoOrder, isPublicCatalogPersonalizedOrder } from '@/lib/orderMetadata';
 import {
   configurableOrderStatuses,
+  getOrderStatusLabel,
 } from '@/lib/orderStatusConfig';
 
 const statusOrder: OrderStatus[] = [...configurableOrderStatuses];
@@ -336,7 +337,7 @@ const DraggableOrderCard = ({ order, isUpdating, onOpen }: DraggableOrderCardPro
     <div ref={setNodeRef} style={style}>
       <OrderCard
         order={order}
-        statusLabel={statusMeta.label}
+        statusLabel={getOrderStatusLabel(order.status, null, order.payment_status)}
         statusColor={statusMeta.color}
         isUpdating={isUpdating}
         dragHandleProps={{ ...listeners, ...attributes }}
@@ -433,6 +434,7 @@ export default function OrdersKanban() {
       .select(
         'id, order_number, customer_id, customer_name, status, total, created_at, payment_method, notes, customer:customers(name, phone, document), items:order_items(product_name, quantity)'
       )
+      .is('deleted_at', null)
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -716,7 +718,7 @@ export default function OrdersKanban() {
             {activeOrder ? (
               <OrderCard
                 order={activeOrder}
-                statusLabel={getStatusMeta(activeOrder.status).label}
+                statusLabel={getOrderStatusLabel(activeOrder.status, null, activeOrder.payment_status)}
                 statusColor={getStatusMeta(activeOrder.status).color}
                 isOverlay
               />

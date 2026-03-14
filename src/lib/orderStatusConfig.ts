@@ -1,5 +1,5 @@
 import { normalizeHexColor } from '@/lib/companyTheme';
-import type { OrderStatus } from '@/types/database';
+import type { OrderStatus, PaymentStatus } from '@/types/database';
 
 export type ConfigurableOrderStatus = Exclude<OrderStatus, 'pronto'>;
 
@@ -138,14 +138,27 @@ const getReadableAccentText = (value: string) =>
 export const getOrderStatusLabel = (
   status: OrderStatus,
   customization?: Pick<CompanyOrderStatusCustomization, 'labels'> | null,
+  paymentStatus?: PaymentStatus | null,
 ) => {
   const resolved = resolveStatusKey(status);
-  return (
+  const baseLabel = (
     customization?.labels?.[resolved] ||
     customization?.labels?.[status] ||
     defaultOrderStatusLabels[resolved] ||
     defaultOrderStatusLabels[status]
   );
+
+  if (resolved === 'entregue') {
+    if (paymentStatus === 'pendente') {
+      return `${baseLabel}, aguardando pagamento`;
+    }
+
+    if (paymentStatus === 'parcial') {
+      return `${baseLabel}, pagamento parcial`;
+    }
+  }
+
+  return baseLabel;
 };
 
 export const getOrderStatusColor = (
