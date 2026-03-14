@@ -794,6 +794,11 @@ export interface OrderItem {
   total: number;
   attributes: Record<string, string> | null;
   notes: string | null;
+  status: OrderStatus;
+  ready_at?: string | null;
+  ready_by?: string | null;
+  delivered_at?: string | null;
+  delivered_by?: string | null;
   created_at: string;
 }
 

@@ -24,7 +24,7 @@ import { PUBLIC_CART_UPDATED_EVENT, getPublicCartItemsCount } from '@/lib/public
 import { getRecentlyViewedProducts, pushRecentlyViewedProduct } from '@/lib/catalogAnalytics';
 import { loadPublicCatalogCompany } from '@/lib/publicCatalogCompany';
 import { ensurePublicStorageUrl } from '@/lib/storage';
-import { normalizeProductionTimeDays } from '@/lib/productionTime';
+import { formatBusinessDaysLabel, normalizeProductionTimeDays } from '@/lib/productionTime';
 import { isPromotionActive, resolveProductBasePrice, resolveProductPrice } from '@/lib/pricing';
 import { getProductSaleUnitPriceSuffix } from '@/lib/productSaleUnit';
 import { CategoryIcon } from '@/lib/categoryIcons';
@@ -506,7 +506,7 @@ function ProductListCard({
             ) : null}
             {productionTimeDays !== null ? (
               <span className="rounded-full border border-[var(--pc-card-border)] px-2.5 py-1">
-                Produção: {productionTimeDays} {productionTimeDays === 1 ? 'dia' : 'dias'}
+                Producao: {formatBusinessDaysLabel(productionTimeDays)}
               </span>
             ) : null}
             <span className="rounded-full border border-[var(--pc-card-border)] px-2.5 py-1">
@@ -661,7 +661,7 @@ function ProductGridCard({
             ) : null}
             {productionTimeDays !== null ? (
               <span className="rounded-lg border border-[var(--pc-card-border)] bg-[var(--pc-page-bg)]/50 px-2 py-0.5">
-                Produção: {productionTimeDays} d
+                Producao: {formatBusinessDaysLabel(productionTimeDays)}
               </span>
             ) : null}
             <span className="rounded-lg border border-[var(--pc-card-border)] bg-[var(--pc-page-bg)]/50 px-2 py-0.5">

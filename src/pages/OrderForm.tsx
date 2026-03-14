@@ -15,6 +15,7 @@ import {
 } from '@/lib/pricing';
 import {
   calculateEstimatedDeliveryInfo,
+  formatBusinessDaysLabel,
   normalizeProductionTimeDays,
   resolveCompanyDeliveryTimeDays,
 } from '@/lib/productionTime';
@@ -800,10 +801,10 @@ export default function OrderForm() {
 
   const autoDeliveryDateDescription = useMemo(() => {
     if (companyDeliveryTimeDays > 0) {
-      return `Data calculada automaticamente com base no maior prazo dos produtos + ${companyDeliveryTimeDays} dia(s) de entrega da loja.`;
+      return `Data calculada automaticamente com base no maior prazo em dias uteis dos produtos + ${formatBusinessDaysLabel(companyDeliveryTimeDays)} de entrega da loja.`;
     }
 
-    return 'Data calculada automaticamente com base no maior prazo dos produtos selecionados.';
+    return 'Data calculada automaticamente com base no maior prazo em dias uteis dos produtos selecionados.';
   }, [companyDeliveryTimeDays]);
 
   useEffect(() => {

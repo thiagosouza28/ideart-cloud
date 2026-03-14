@@ -440,18 +440,47 @@ export default function PublicCustomerOrderDetails() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {displayItems.map((item) => (
-                        <TableRow key={item.id}>
-                          <TableCell className="font-medium">{item.product_name}</TableCell>
-                          <TableCell className="text-right">{item.quantity}</TableCell>
-                          <TableCell className="text-right">
-                            {asCurrency(Number(item.unit_price || 0))}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {asCurrency(Number(item.total || 0))}
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                      {displayItems.map((item) => {
+                        const readyAt = item.ready_at || item.delivered_at;
+
+                        return (
+                          <TableRow key={item.id}>
+                            <TableCell>
+                              <p className="font-medium">{item.product_name}</p>
+                              <div className="mt-2 flex flex-wrap items-center gap-2">
+                                {item.delivered_at ? (
+                                  <>
+                                    <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100">
+                                      Entregue
+                                    </Badge>
+                                    <span className="text-xs text-slate-500">
+                                      {formatDateTime(item.delivered_at)}
+                                    </span>
+                                  </>
+                                ) : readyAt ? (
+                                  <>
+                                    <Badge className="bg-sky-100 text-sky-800 hover:bg-sky-100">
+                                      Pronto
+                                    </Badge>
+                                    <span className="text-xs text-slate-500">
+                                      {formatDateTime(readyAt)}
+                                    </span>
+                                  </>
+                                ) : (
+                                  <Badge variant="outline">Em producao</Badge>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-right">{item.quantity}</TableCell>
+                            <TableCell className="text-right">
+                              {asCurrency(Number(item.unit_price || 0))}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              {asCurrency(Number(item.total || 0))}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 )}

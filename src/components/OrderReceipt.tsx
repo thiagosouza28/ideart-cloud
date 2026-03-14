@@ -2,9 +2,10 @@
 import { formatOrderNumber } from '@/lib/utils';
 import { Order, OrderItem, OrderPayment, PaymentStatus, PaymentMethod } from '@/types/database';
 import { formatAreaM2, parseM2Attributes, stripM2Attributes } from '@/lib/measurements';
-import { formatDatePtBr, normalizeProductionTimeDays } from '@/lib/productionTime';
+import { formatBusinessDaysLabel, formatDatePtBr, normalizeProductionTimeDays } from '@/lib/productionTime';
 import { stripPendingCustomerInfoNotes } from '@/lib/orderMetadata';
 import { extractVisibleOrderNotes } from '@/lib/orderNotes';
+import { buildOrderStatusCustomization, getOrderStatusLabel } from '@/lib/orderStatusConfig';
 
 interface OrderReceiptProps {
   order: Order;
@@ -80,6 +81,7 @@ const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
     const paymentMethodLabel = paymentMethodValue ? paymentMethodLabels[paymentMethodValue] : '-';
     const company = order.company;
     const companyName = company?.name || receiptTitle;
+    const statusCustomization = buildOrderStatusCustomization(company?.order_status_customization);
     const visibleOrderNotes =
       order.show_notes_on_pdf === false
         ? ''
@@ -111,24 +113,27 @@ const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
         className="receipt-root mx-auto w-full max-w-[794px] rounded-2xl border border-slate-200 bg-white p-5 text-slate-900 shadow-none"
       >
         <div className="receipt-block border-b border-slate-200 pb-4">
-          <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0">
+          <div className="flex items-start justify-between gap-6">
+            <div className="min-w-0 flex-1">
               <div className="flex items-center gap-3">
                 {company?.logo_url && (
-                  <img
-                    src={company.logo_url}
-                    alt="Logo da loja"
-                    className="h-11 w-11 rounded-md border border-slate-200 bg-white object-contain p-1"
-                  />
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center self-center overflow-hidden rounded-full border border-slate-200 bg-white p-1">
+                    <img
+                      src={company.logo_url}
+                      alt="Logo da loja"
+                      className="max-h-full max-w-full object-contain"
+                      crossOrigin="anonymous"
+                    />
+                  </div>
                 )}
-                <div>
-                  <p className="text-lg font-semibold leading-tight text-slate-800">{companyName}</p>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+                <div className="flex min-h-10 flex-col justify-center gap-0.5">
+                  <p className="text-[17px] font-semibold leading-none text-slate-800">{companyName}</p>
+                  <p className="text-[9px] font-semibold uppercase tracking-[0.28em] text-slate-400">
                     {receiptTitle}
                   </p>
                 </div>
               </div>
-              <div className="mt-2 space-y-0.5 text-[11px] text-slate-600">
+              <div className="mt-3 space-y-1 text-[10px] leading-none text-slate-600">
                 {addressLine && <p>{addressLine}</p>}
                 {cityStateLine && <p>{cityStateLine}</p>}
                 {storeDocument && <p>{storeDocument}</p>}
@@ -138,11 +143,13 @@ const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
                 {company?.email && <p>{company.email}</p>}
               </div>
             </div>
-            <div className="min-w-[132px] rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-right text-[11px]">
-              <p className="uppercase tracking-wide text-slate-400">Pedido</p>
-              <p className="text-base font-semibold text-slate-800">#{formatOrderNumber(order.order_number)}</p>
-              <p className="mt-1 uppercase tracking-wide text-slate-400">Emitido em</p>
-              <p className="font-medium text-slate-700">{formatDate(receiptDate)}</p>
+            <div className="min-w-[136px] rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-center text-[11px]">
+              <p className="text-[9px] font-medium uppercase tracking-[0.18em] text-slate-400">Pedido</p>
+              <p className="mt-1 text-[22px] font-bold leading-none text-slate-800">
+                #{formatOrderNumber(order.order_number)}
+              </p>
+              <p className="mt-2 text-[8px] font-semibold uppercase tracking-[0.16em] text-slate-400">Emitido em</p>
+              <p className="mt-1 text-[10px] font-medium text-slate-600">{formatDate(receiptDate)}</p>
             </div>
           </div>
         </div>
@@ -154,7 +161,9 @@ const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
           </div>
           <div>
             <p className="uppercase tracking-wide text-slate-500">Status</p>
-            <p className="font-semibold text-slate-900">{orderStatusLabels[order.status]}</p>
+            <p className="font-semibold text-slate-900">
+              {getOrderStatusLabel(order.status, statusCustomization, order.payment_status)}
+            </p>
           </div>
           <div>
             <p className="uppercase tracking-wide text-slate-500">Pagamento</p>
@@ -192,7 +201,7 @@ const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
                 <p className="uppercase tracking-wide text-slate-500">Tempo de produção</p>
                 <p className="font-medium text-slate-700">
                   {productionTimeDays !== null
-                    ? `${productionTimeDays} ${productionTimeDays === 1 ? 'dia' : 'dias'}`
+                    ? formatBusinessDaysLabel(productionTimeDays)
                     : '-'}
                 </p>
               </div>
@@ -205,13 +214,14 @@ const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
         )}
 
         <div className="receipt-block mt-4 overflow-hidden rounded-xl border border-slate-200">
-          <table className="receipt-table w-full text-[11px]">
+          <table className="receipt-table w-full table-fixed text-[11px]">
             <thead className="bg-slate-100 text-slate-600">
               <tr>
-                <th className="px-3 py-2 text-left font-medium">Produto</th>
-                <th className="px-3 py-2 text-center font-medium">Qtd</th>
-                <th className="px-3 py-2 text-right font-medium">Unitário</th>
-                <th className="px-3 py-2 text-right font-medium">Total</th>
+                <th className="w-[40%] whitespace-nowrap px-3 py-2 text-left font-medium">Produto</th>
+                <th className="w-[18%] whitespace-nowrap px-3 py-2 text-center font-medium">Status</th>
+                <th className="w-[12%] whitespace-nowrap px-3 py-2 text-center font-medium">Qtd</th>
+                <th className="w-[15%] whitespace-nowrap px-3 py-2 text-right font-medium">Unitário</th>
+                <th className="w-[15%] whitespace-nowrap px-3 py-2 text-right font-medium">Total</th>
               </tr>
             </thead>
             <tbody>
@@ -225,7 +235,7 @@ const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
                 const displayAttributes = stripM2Attributes(item.attributes);
                 const attributesText = Object.values(displayAttributes).filter(Boolean).join(', ');
                 const dimensionText = hasDimensions
-                  ? `Dimensões: ${m2.widthCm}cm x ${m2.heightCm}cm | Área: ${formatAreaM2(Number(item.quantity))} m\u00B2`
+                  ? `Dimensões: ${m2.widthCm}cm x ${m2.heightCm}cm | Área: ${formatAreaM2(Number(item.quantity))} m²`
                   : '';
                 const details = [
                   dimensionText,
@@ -235,9 +245,15 @@ const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
                   .filter(Boolean)
                   .join(' | ');
                 const quantityLabel = hasDimensions
-                  ? `${formatAreaM2(Number(item.quantity))} m\u00B2`
+                  ? `${formatAreaM2(Number(item.quantity))} m²`
                   : item.quantity;
-                const unitLabel = hasDimensions ? ' / m\u00B2' : '';
+                const unitLabel = hasDimensions ? ' / m²' : '';
+                const itemStatusLabel = getOrderStatusLabel(item.status, statusCustomization);
+                const itemStatusMoment = item.delivered_at
+                  ? `Entregue em ${formatDate(item.delivered_at)}`
+                  : item.ready_at
+                    ? `Pronto em ${formatDate(item.ready_at)}`
+                    : null;
 
                 return (
                   <tr key={item.id} className="receipt-row border-t border-slate-200">
@@ -246,13 +262,23 @@ const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
                       {details && (
                         <div className="mt-1 text-[10px] text-slate-500">{details}</div>
                       )}
+                      {itemStatusMoment && (
+                        <div className="mt-1 whitespace-nowrap text-[10px] text-slate-500">
+                          {itemStatusMoment}
+                        </div>
+                      )}
                     </td>
-                    <td className="px-3 py-2 text-center align-top">{quantityLabel}</td>
-                    <td className="px-3 py-2 text-right align-top">
+                    <td className="px-3 py-2 text-center align-top">
+                      <span className="inline-flex whitespace-nowrap rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-700">
+                        {itemStatusLabel}
+                      </span>
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-2 text-center align-top">{quantityLabel}</td>
+                    <td className="whitespace-nowrap px-3 py-2 text-right align-top">
                       {formatCurrency(Number(item.unit_price))}
                       {unitLabel}
                     </td>
-                    <td className="px-3 py-2 text-right font-medium align-top">
+                    <td className="whitespace-nowrap px-3 py-2 text-right font-medium align-top">
                       {formatCurrency(Number(item.total))}
                     </td>
                   </tr>

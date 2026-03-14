@@ -27,6 +27,7 @@ import {
 } from '@/lib/public-cart';
 import {
   calculateEstimatedDeliveryInfo,
+  formatBusinessDaysLabel,
   formatDatePtBr,
   normalizeProductionTimeDays,
   resolveCompanyDeliveryTimeDays,
@@ -487,7 +488,7 @@ export default function PublicCart() {
       }),
       '',
       ...(summary.productionTimeDaysUsed !== null
-        ? [`Tempo de produção: ${summary.productionTimeDaysUsed} ${summary.productionTimeDaysUsed === 1 ? 'dia' : 'dias'}`]
+        ? [`Tempo de producao: ${formatBusinessDaysLabel(summary.productionTimeDaysUsed)}`]
         : []),
       ...(summary.estimatedDeliveryDate
         ? [`Previsão de entrega: ${formatDatePtBr(summary.estimatedDeliveryDate)}`]
@@ -1245,8 +1246,7 @@ export default function PublicCart() {
                               {item.notes && <p className="mt-1 text-xs text-slate-500 border-l-2 border-slate-200 pl-2 py-0.5">Obs: {item.notes}</p>}
                               {typeof item.productionTimeDays === 'number' && item.productionTimeDays >= 0 && (
                                 <p className="mt-1 text-xs text-sky-700">
-                                  Tempo de produção: {item.productionTimeDays}{' '}
-                                  {item.productionTimeDays === 1 ? 'dia' : 'dias'}
+                                  Tempo de producao: {formatBusinessDaysLabel(item.productionTimeDays)}
                                 </p>
                               )}
 
@@ -1404,8 +1404,7 @@ export default function PublicCart() {
                     )}
                     {productionTimeDaysUsed !== null && (
                       <p className="mt-1 text-xs text-slate-500">
-                        Tempo de produção: {productionTimeDaysUsed}{' '}
-                        {productionTimeDaysUsed === 1 ? 'dia' : 'dias'}
+                        Tempo de producao: {formatBusinessDaysLabel(productionTimeDaysUsed)}
                       </p>
                     )}
                     {estimatedDeliveryInfo?.isoDate && (
@@ -1754,8 +1753,7 @@ export default function PublicCart() {
                     )}
                     {reviewProductionTimeDays !== null && (
                       <p>
-                        <strong>Tempo de produção:</strong> {reviewProductionTimeDays}{' '}
-                        {reviewProductionTimeDays === 1 ? 'dia' : 'dias'}
+                        <strong>Tempo de producao:</strong> {formatBusinessDaysLabel(reviewProductionTimeDays)}
                       </p>
                     )}
                     {reviewEstimatedDeliveryDate && (
@@ -1868,8 +1866,7 @@ export default function PublicCart() {
                           <div className="rounded-md border border-emerald-200 bg-white p-2 text-xs">
                             <p className="text-emerald-700">Tempo de produção</p>
                             <p className="font-semibold text-emerald-900">
-                              {orderResult.productionTimeDaysUsed}{' '}
-                              {orderResult.productionTimeDaysUsed === 1 ? 'dia' : 'dias'}
+                              {formatBusinessDaysLabel(orderResult.productionTimeDaysUsed)}
                             </p>
                           </div>
                         )}

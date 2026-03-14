@@ -342,7 +342,7 @@ export function CatalogManagerPreview({
 
                   <div className="space-y-2">
                     <p className="text-sm" style={{ color: cardTextMuted }}>
-                      Tempo de produção: 3 dias
+                      Tempo de produção: 3 dias uteis
                     </p>
                     <p className="text-[30px] font-bold" style={{ color: settings.price_color }}>
                       {settings.show_prices ? formatCurrency(product?.catalog_price ?? 3.5) : "Preço sob consulta"}

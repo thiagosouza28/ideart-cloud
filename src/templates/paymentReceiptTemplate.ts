@@ -88,6 +88,9 @@ const formatCpfCnpj = (value: string) => {
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(value || 0));
 
+const formatBusinessDaysLabel = (value: number) =>
+  `${value} ${value === 1 ? "dia util" : "dias uteis"}`;
+
 const formatDateTime = (value: string) => {
   const raw = String(value || "").trim();
   if (!raw) return "-";
@@ -514,7 +517,7 @@ export const buildPaymentReceiptHtml = (
           <span class="label">Prazos do pedido</span>
           <span class="value">Tempo de produção: ${escapeHtml(
             productionTimeDays !== null
-              ? `${productionTimeDays} ${productionTimeDays === 1 ? "dia" : "dias"}`
+              ? formatBusinessDaysLabel(productionTimeDays)
               : "-"
           )}</span>
           <span class="value" style="display:block; margin-top:4px; font-weight:500; color: var(--receipt-muted);">Previsão de entrega: ${escapeHtml(estimatedDeliveryLabel)}</span>

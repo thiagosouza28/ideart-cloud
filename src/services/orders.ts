@@ -84,6 +84,103 @@ const createOrderNotification = async ({
   });
 };
 
+type OrderStockDeductionItem = {
+  product_id: string | null;
+  product_name: string;
+  quantity: number;
+};
+
+type ProductStockRow = {
+  id: string;
+  stock_quantity: number | string | null;
+  stock_control_type?: string | null;
+  track_stock?: boolean | null;
+};
+
+const usesDirectStockControl = (product: ProductStockRow) =>
+  product.stock_control_type === 'simple' ||
+  (!product.stock_control_type && product.track_stock !== false);
+
+const applyDirectProductStockDeduction = async ({
+  companyId,
+  orderNumber,
+  userId,
+  items,
+}: {
+  companyId: string;
+  orderNumber: number | string | null | undefined;
+  userId?: string | null;
+  items: OrderStockDeductionItem[];
+}) => {
+  const quantitiesByProduct = new Map<string, number>();
+
+  items.forEach((item) => {
+    if (!item.product_id) return;
+    const quantity = Number(item.quantity || 0);
+    if (quantity <= 0) return;
+    quantitiesByProduct.set(
+      item.product_id,
+      (quantitiesByProduct.get(item.product_id) || 0) + quantity,
+    );
+  });
+
+  const productIds = Array.from(quantitiesByProduct.keys());
+  if (productIds.length === 0) return;
+
+  const { data: productsData, error: productsError } = await supabase
+    .from('products')
+    .select('id, stock_quantity, stock_control_type, track_stock')
+    .in('id', productIds)
+    .eq('company_id', companyId);
+
+  if (productsError) {
+    throw productsError;
+  }
+
+  const directStockProducts = ((productsData || []) as ProductStockRow[]).filter(
+    usesDirectStockControl,
+  );
+
+  if (directStockProducts.length === 0) return;
+
+  await Promise.all(
+    directStockProducts.map(async (product) => {
+      const quantity = quantitiesByProduct.get(product.id) || 0;
+      if (quantity <= 0) return;
+
+      const nextStock = Number(product.stock_quantity || 0) - quantity;
+      const { error } = await supabase
+        .from('products')
+        .update({ stock_quantity: nextStock })
+        .eq('id', product.id)
+        .eq('company_id', companyId);
+
+      if (error) {
+        throw error;
+      }
+    }),
+  );
+
+  await Promise.all(
+    directStockProducts.map(async (product) => {
+      const quantity = quantitiesByProduct.get(product.id) || 0;
+      if (quantity <= 0) return;
+
+      const { error } = await supabase.from('stock_movements').insert({
+        product_id: product.id,
+        movement_type: 'saida',
+        quantity,
+        reason: `Pedido ${formatOrderReference(orderNumber)}`,
+        user_id: userId || null,
+      });
+
+      if (error) {
+        throw error;
+      }
+    }),
+  );
+};
+
 const fetchUserRole = async (userId?: string | null) => {
   let resolvedUserId = userId || null;
 
@@ -859,6 +956,26 @@ type UpdateStatusInput = {
   paymentMethod?: PaymentMethod | null;
 };
 
+type MarkOrderItemsDeliveredInput = {
+  orderId: string;
+  itemIds: string[];
+  userId?: string | null;
+};
+
+type MarkOrderItemsReadyInput = {
+  orderId: string;
+  itemIds: string[];
+  userId?: string | null;
+};
+
+type UpdateOrderItemStatusInput = {
+  orderId: string;
+  itemId: string;
+  status: OrderStatus;
+  notes?: string;
+  userId?: string | null;
+};
+
 type OrderItemUpdate = Pick<
   OrderItem,
   | 'id'
@@ -934,6 +1051,88 @@ export const updateOrderItems = async (params: {
   throw error || new Error('Falha ao atualizar itens do pedido');
 };
 
+export const markOrderItemsDelivered = async ({
+  orderId,
+  itemIds,
+  userId,
+}: MarkOrderItemsDeliveredInput) => {
+  const normalizedItemIds = itemIds.filter(Boolean);
+
+  if (normalizedItemIds.length === 0) {
+    throw new Error('Selecione pelo menos um item para entregar');
+  }
+
+  const { data, error } = await supabase.rpc('mark_order_items_delivered' as any, {
+    p_order_id: orderId,
+    p_item_ids: normalizedItemIds,
+    p_user_id: userId || null,
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  return (data || null) as {
+    order: Order | null;
+    updated_item_ids: string[];
+    delivery_completed: boolean;
+  } | null;
+};
+
+export const markOrderItemsReady = async ({
+  orderId,
+  itemIds,
+  userId,
+}: MarkOrderItemsReadyInput) => {
+  const normalizedItemIds = itemIds.filter(Boolean);
+
+  if (normalizedItemIds.length === 0) {
+    throw new Error('Selecione pelo menos um item para marcar como pronto');
+  }
+
+  const { data, error } = await supabase.rpc('mark_order_items_ready' as any, {
+    p_order_id: orderId,
+    p_item_ids: normalizedItemIds,
+    p_user_id: userId || null,
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  return (data || null) as {
+    order: Order | null;
+    updated_item_ids: string[];
+    ready_completed: boolean;
+    status_updated: boolean;
+  } | null;
+};
+
+export const updateOrderItemStatus = async ({
+  orderId,
+  itemId,
+  status,
+  notes,
+  userId,
+}: UpdateOrderItemStatusInput) => {
+  const { data, error } = await supabase.rpc('update_order_item_status' as any, {
+    p_order_id: orderId,
+    p_item_id: itemId,
+    p_status: status,
+    p_notes: notes || null,
+    p_user_id: userId || null,
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  return (data || null) as {
+    order: Order | null;
+    item: OrderItem | null;
+  } | null;
+};
+
 export const updateOrderStatus = async ({
   orderId,
   status,
@@ -975,6 +1174,7 @@ export const updateOrderStatus = async ({
     updated_by: userId || null,
     cancel_reason: status === 'cancelado' ? notes || null : null,
   };
+  const statusChangedAt = new Date().toISOString();
 
   if (order.status === 'pendente' && status !== 'pendente') {
     updatePayload.notes = stripPendingCustomerInfoNotes(order.notes);
@@ -996,6 +1196,29 @@ export const updateOrderStatus = async ({
     throw updateError;
   }
 
+  const itemStatusPayload: Record<string, unknown> = {
+    status,
+  };
+
+  if (['finalizado', 'pronto', 'aguardando_retirada', 'entregue'].includes(status)) {
+    itemStatusPayload.ready_at = statusChangedAt;
+    itemStatusPayload.ready_by = userId || null;
+  }
+
+  if (status === 'entregue') {
+    itemStatusPayload.delivered_at = deliveredAt;
+    itemStatusPayload.delivered_by = userId || null;
+  }
+
+  const { error: itemStatusError } = await (supabase
+    .from('order_items')
+    .update(itemStatusPayload as any)
+    .eq('order_id', orderId)) as any;
+
+  if (itemStatusError) {
+    throw itemStatusError;
+  }
+
   const { error: historyError } = await supabase
     .from('order_status_history')
     .insert({
@@ -1012,28 +1235,61 @@ export const updateOrderStatus = async ({
   if (order.company_id && order.status !== 'finalizado' && status === 'finalizado') {
     const { data: orderItems, error: orderItemsError } = await supabase
       .from('order_items')
-      .select('product_id, product_name, quantity, products(stock_control_type)')
+      .select('product_id, product_name, quantity')
       .eq('order_id', orderId);
 
     if (orderItemsError) {
       throw orderItemsError;
     }
 
-    const compositionItems = (orderItems || []).filter(item => {
-      const stype = (item.products as any)?.stock_control_type;
-      return stype === 'composition';
+    const normalizedItems = ((orderItems || []) as Partial<OrderStockDeductionItem>[])
+      .map((item) => ({
+        product_id: item.product_id || null,
+        product_name: item.product_name || 'Produto',
+        quantity: Number(item.quantity || 0),
+      }))
+      .filter((item) => item.product_id && item.quantity > 0);
+
+    await applyDirectProductStockDeduction({
+      companyId: order.company_id,
+      orderNumber: order.order_number,
+      userId: userId || null,
+      items: normalizedItems,
     });
+
+    const normalizedProductIds = normalizedItems
+      .map((item) => item.product_id)
+      .filter((productId): productId is string => Boolean(productId));
+
+    let compositionProductIds = new Set<string>();
+    if (normalizedProductIds.length > 0) {
+      const { data: productsData, error: productsError } = await supabase
+        .from('products')
+        .select('id, stock_control_type')
+        .in('id', normalizedProductIds)
+        .eq('company_id', order.company_id);
+
+      if (productsError) {
+        throw productsError;
+      }
+
+      compositionProductIds = new Set(
+        (productsData || [])
+          .filter((product) => product.stock_control_type === 'composition')
+          .map((product) => product.id),
+      );
+    }
+
+    const compositionItems = normalizedItems.filter(
+      (item) => item.product_id && compositionProductIds.has(item.product_id),
+    );
 
     if (compositionItems.length > 0) {
       await consumeProductSupplies({
         companyId: order.company_id,
         orderId,
         userId: userId || null,
-        items: compositionItems.map((item) => ({
-          product_id: item.product_id,
-          product_name: item.product_name,
-          quantity: Number(item.quantity || 0),
-        })),
+        items: compositionItems,
       });
     }
 
@@ -1514,4 +1770,3 @@ export const uploadOrderArtFile = async (
     throw err;
   }
 };
-

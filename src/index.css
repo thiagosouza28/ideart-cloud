@@ -2009,12 +2009,10 @@
   }
 
   .receipt-root {
-    border: none !important;
     box-shadow: none !important;
-    border-radius: 0 !important;
-    max-width: none !important;
-    margin: 0 !important;
-    padding: 0 !important;
+    max-width: 733px !important;
+    width: 733px !important;
+    margin: 0 auto !important;
   }
 
   .receipt-fixed {

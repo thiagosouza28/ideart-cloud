@@ -126,11 +126,13 @@ const consumeOrderSupplies = async ({
   supabase,
   companyId,
   orderId,
+  orderNumber,
   userId,
 }: {
   supabase: ReturnType<typeof getSupabaseClient>;
   companyId: string;
   orderId: string;
+  orderNumber: number | string;
   userId: string;
 }) => {
   const { data: orderItems, error: orderItemsError } = await supabase
@@ -154,9 +156,88 @@ const consumeOrderSupplies = async ({
     return;
   }
 
+  const quantitiesByProduct = new Map<string, number>();
+  items.forEach((item) => {
+    if (!item.product_id) return;
+    quantitiesByProduct.set(
+      item.product_id,
+      (quantitiesByProduct.get(item.product_id) || 0) + Number(item.quantity || 0),
+    );
+  });
+
+  const productIds = Array.from(quantitiesByProduct.keys());
+  if (productIds.length === 0) {
+    return;
+  }
+
+  const { data: productsData, error: productsError } = await supabase
+    .from("products")
+    .select("id, stock_quantity, stock_control_type, track_stock")
+    .in("id", productIds)
+    .eq("company_id", companyId);
+
+  if (productsError) {
+    throw productsError;
+  }
+
+  const directStockProducts = (productsData || []).filter((product) =>
+    product.stock_control_type === "simple" ||
+    (!product.stock_control_type && product.track_stock !== false)
+  );
+
+  if (directStockProducts.length > 0) {
+    await Promise.all(directStockProducts.map(async (product) => {
+      const quantity = quantitiesByProduct.get(product.id) || 0;
+      if (quantity <= 0) return;
+
+      const { error } = await supabase
+        .from("products")
+        .update({ stock_quantity: Number(product.stock_quantity || 0) - quantity })
+        .eq("id", product.id)
+        .eq("company_id", companyId);
+
+      if (error) {
+        throw error;
+      }
+    }));
+
+    await Promise.all(directStockProducts.map(async (product) => {
+      const quantity = quantitiesByProduct.get(product.id) || 0;
+      if (quantity <= 0) return;
+
+      const { error } = await supabase
+        .from("stock_movements")
+        .insert({
+          product_id: product.id,
+          movement_type: "saida",
+          quantity,
+          reason: `Pedido #${orderNumber}`,
+          user_id: userId,
+        });
+
+      if (error) {
+        throw error;
+      }
+    }));
+  }
+
+  const compositionProductIds = new Set(
+    (productsData || [])
+      .filter((product) => product.stock_control_type === "composition")
+      .map((product) => product.id),
+  );
+
+  const compositionItems = items.filter((item) =>
+    item.product_id && compositionProductIds.has(item.product_id)
+  );
+
+  if (compositionItems.length === 0) {
+    return;
+  }
+
   const { error: consumeError } = await supabase.rpc("consume_product_supplies", {
     p_company_id: companyId,
-    p_items: items,
+    p_items: compositionItems,
     p_order_id: orderId,
     p_sale_id: null,
     p_user_id: userId,
@@ -567,12 +648,13 @@ Deno.serve(async (req) => {
           supabase,
           companyId: order.company_id,
           orderId,
+          orderNumber: order.order_number,
           userId,
         });
       } catch (consumeError) {
         const message = consumeError instanceof Error ? consumeError.message : String(consumeError);
         return jsonResponse(corsHeaders, 400, {
-          error: message || "Falha ao baixar insumos do pedido",
+          error: message || "Falha ao dar baixa de estoque do pedido",
         });
       }
     }

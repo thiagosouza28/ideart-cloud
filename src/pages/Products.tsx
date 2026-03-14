@@ -630,19 +630,19 @@ export default function Products() {
         <CardContent>
           <Table>
             <TableHeader>
-              <TableRow>
-                <TableHead className="w-[84px]">Foto</TableHead>
-                <TableHead>Nome</TableHead>
-                <TableHead>SKU</TableHead>
-                <TableHead>Tipo</TableHead>
-                <TableHead>Categoria</TableHead>
-                <TableHead className="text-right">Preço</TableHead>
-                <TableHead className="text-right">Custo real</TableHead>
-                <TableHead className="text-right">Lucro real</TableHead>
-                <TableHead>Estoque</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Catálogo</TableHead>
-                <TableHead className="w-[100px]">Ações</TableHead>
+              <TableRow className="[&>th]:h-14 [&>th]:py-0 [&>th]:align-middle">
+                <TableHead className="w-[84px] whitespace-nowrap text-center">Foto</TableHead>
+                <TableHead className="whitespace-nowrap text-center">Nome</TableHead>
+                <TableHead className="whitespace-nowrap text-center">SKU</TableHead>
+                <TableHead className="whitespace-nowrap text-center">Tipo</TableHead>
+                <TableHead className="whitespace-nowrap text-center">Categoria</TableHead>
+                <TableHead className="whitespace-nowrap text-center">Preço</TableHead>
+                <TableHead className="whitespace-nowrap text-center">Custo real</TableHead>
+                <TableHead className="whitespace-nowrap text-center">Lucro real</TableHead>
+                <TableHead className="whitespace-nowrap text-center">Estoque</TableHead>
+                <TableHead className="whitespace-nowrap text-center">Status</TableHead>
+                <TableHead className="whitespace-nowrap text-center">Catálogo</TableHead>
+                <TableHead className="w-[100px] whitespace-nowrap text-center">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

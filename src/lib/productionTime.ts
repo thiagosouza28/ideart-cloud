@@ -58,6 +58,38 @@ export const formatDatePtBr = (value: string | Date | null | undefined): string 
   return parsed.toLocaleDateString('pt-BR');
 };
 
+export const isBusinessDay = (value: Date): boolean => {
+  const day = value.getDay();
+  return day !== 0 && day !== 6;
+};
+
+export const formatBusinessDaysLabel = (value: number): string =>
+  `${value} ${value === 1 ? 'dia util' : 'dias uteis'}`;
+
+export const addBusinessDays = (
+  baseDate: Date,
+  businessDays: number,
+): Date => {
+  const result = new Date(baseDate);
+  result.setHours(12, 0, 0, 0);
+
+  while (!isBusinessDay(result)) {
+    result.setDate(result.getDate() + 1);
+  }
+
+  let remainingDays = Math.max(0, Math.trunc(Number(businessDays) || 0));
+
+  while (remainingDays > 0) {
+    result.setDate(result.getDate() + 1);
+    if (!isBusinessDay(result)) {
+      continue;
+    }
+    remainingDays -= 1;
+  }
+
+  return result;
+};
+
 export const resolveCompanyDeliveryTimeDays = (company: unknown): number => {
   if (!company || typeof company !== 'object') return 0;
   const source = company as Record<string, unknown>;
@@ -86,9 +118,7 @@ export const calculateEstimatedDeliveryInfo = ({
 
   const normalizedCompanyDelivery = normalizeProductionTimeDays(companyDeliveryDays) ?? 0;
   const totalDays = normalizedProductionTime + normalizedCompanyDelivery;
-  const estimatedDate = baseDate ? new Date(baseDate) : new Date();
-  estimatedDate.setHours(12, 0, 0, 0);
-  estimatedDate.setDate(estimatedDate.getDate() + totalDays);
+  const estimatedDate = addBusinessDays(baseDate ? new Date(baseDate) : new Date(), totalDays);
 
   const isoDate = toIsoDate(estimatedDate);
   if (!isoDate) return null;

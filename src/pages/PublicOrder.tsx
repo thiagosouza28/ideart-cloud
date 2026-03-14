@@ -16,7 +16,7 @@ import { ensurePublicStorageUrl } from '@/lib/storage';
 import { formatAreaM2, parseM2Attributes } from '@/lib/measurements';
 import { localizeOrderHistoryNote } from '@/lib/orderHistoryNotes';
 import { isPublicCatalogOrder } from '@/lib/orderMetadata';
-import { formatDatePtBr, normalizeProductionTimeDays } from '@/lib/productionTime';
+import { formatBusinessDaysLabel, formatDatePtBr, normalizeProductionTimeDays } from '@/lib/productionTime';
 import { CheckCircle, Clock, Copy, Package, Truck, XCircle, FileText, Image as ImageIcon } from 'lucide-react';
 
 const statusLabels: Record<OrderStatus, string> = {
@@ -416,6 +416,7 @@ export default function PublicOrder() {
                   <TableBody>
                     {payload.items.map((item) => {
                       const m2 = parseM2Attributes(item.attributes);
+                      const readyAt = item.ready_at || item.delivered_at;
                       const hasDimensions =
                         typeof m2.widthCm === 'number' &&
                         typeof m2.heightCm === 'number' &&
@@ -429,6 +430,29 @@ export default function PublicOrder() {
                         <TableRow key={item.id}>
                           <TableCell>
                             <p className="font-medium">{item.product_name}</p>
+                            <div className="mt-2 flex flex-wrap items-center gap-2">
+                              {item.delivered_at ? (
+                                <>
+                                  <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100">
+                                    Entregue
+                                  </Badge>
+                                  <span className="text-xs text-muted-foreground">
+                                    {formatDate(item.delivered_at)}
+                                  </span>
+                                </>
+                              ) : readyAt ? (
+                                <>
+                                  <Badge className="bg-sky-100 text-sky-800 hover:bg-sky-100">
+                                    Pronto
+                                  </Badge>
+                                  <span className="text-xs text-muted-foreground">
+                                    {formatDate(readyAt)}
+                                  </span>
+                                </>
+                              ) : (
+                                <Badge variant="outline">Em producao</Badge>
+                              )}
+                            </div>
                             {hasDimensions && (
                               <p className="text-xs text-muted-foreground mt-1">
                                 {m2.widthCm}cm x {m2.heightCm}cm - Area: {formatAreaM2(Number(item.quantity))} m\u00B2
@@ -459,7 +483,7 @@ export default function PublicOrder() {
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Tempo de produção</span>
                       <span>
-                        {productionTimeDays} {productionTimeDays === 1 ? 'dia' : 'dias'}
+                        {formatBusinessDaysLabel(productionTimeDays)}
                       </span>
                     </div>
                   )}

@@ -3064,7 +3064,7 @@ export default function ProductForm() {
 
                     {(productType === 'confeccionado' || personalizationEnabled) && (
                       <div className="space-y-2">
-                        <Label htmlFor="productionTimeDays">Tempo de produção (dias corridos)</Label>
+                        <Label htmlFor="productionTimeDays">Tempo de produção (dias uteis)</Label>
                         <Input
                           id="productionTimeDays"
                           type="number"
@@ -3084,7 +3084,7 @@ export default function ProductForm() {
                           <p className="text-xs text-destructive">{errors.production_time_days}</p>
                         ) : (
                           <p className="text-xs text-muted-foreground">
-                            Defina em dias corridos. Esse prazo será exibido no catálogo e no pedido.
+                            Defina em dias uteis. Esse prazo sera exibido no catalogo e no pedido.
                           </p>
                         )}
                       </div>

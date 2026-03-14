@@ -1,12 +1,14 @@
 import { forwardRef } from 'react';
 import { formatOrderNumber } from '@/lib/utils';
 import { formatAreaM2, parseM2Attributes, stripM2Attributes } from '@/lib/measurements';
+import { buildOrderStatusCustomization, getOrderStatusLabel } from '@/lib/orderStatusConfig';
 import type { Order, OrderItem, PaymentMethod, PaymentStatus } from '@/types/database';
 
 type DeliveryReceiptProps = {
   order: Order;
   items: OrderItem[];
   deliveredAt?: string | null;
+  deliveredItemIds?: string[];
   payment?: DeliveryReceiptPaymentInfo | null;
 };
 
@@ -35,10 +37,10 @@ const formatTime = (value: string) =>
 
 const paymentMethodLabels: Record<PaymentMethod, string> = {
   dinheiro: 'Dinheiro',
-  cartao: 'Cartão',
-  credito: 'Cartão de crédito',
-  debito: 'Cartão de débito',
-  transferencia: 'Transferência',
+  cartao: 'Cartao',
+  credito: 'Cartao de credito',
+  debito: 'Cartao de debito',
+  transferencia: 'Transferencia',
   pix: 'PIX',
   boleto: 'Boleto',
   outro: 'Outro',
@@ -50,10 +52,26 @@ const paymentStatusLabels: Record<PaymentStatus, string> = {
   pago: 'Pago',
 };
 
+const getItemDeliveryLabel = (item: OrderItem, deliveredItemIdSet: Set<string>) => {
+  if (deliveredItemIdSet.has(item.id)) {
+    return 'Entregue neste comprovante';
+  }
+
+  if (item.delivered_at) {
+    return 'Entregue anteriormente';
+  }
+
+  if (item.status === 'cancelado') {
+    return 'Cancelado';
+  }
+
+  return 'Nao entregue';
+};
+
 const DeliveryReceipt = forwardRef<HTMLDivElement, DeliveryReceiptProps>(
-  ({ order, items, deliveredAt, payment }, ref) => {
+  ({ order, items, deliveredAt, deliveredItemIds = [], payment }, ref) => {
     const deliveryMoment = deliveredAt || order.delivered_at || new Date().toISOString();
-    const customerName = order.customer?.name || order.customer_name || 'Cliente não informado';
+    const customerName = order.customer?.name || order.customer_name || 'Cliente nao informado';
     const customerPhone =
       order.customer?.phone ||
       (order as Order & { customer_phone?: string | null }).customer_phone ||
@@ -68,9 +86,18 @@ const DeliveryReceipt = forwardRef<HTMLDivElement, DeliveryReceiptProps>(
     const settledTotal = amountPaid + creditUsed;
     const pendingAmount = Math.max(0, orderTotal - settledTotal);
     const hasPendingAmount = order.payment_status !== 'pago' && pendingAmount > 0.009;
-    const paymentMethodLabel = payment?.method ? paymentMethodLabels[payment.method] || payment.method : 'Não informado';
+    const paymentMethodLabel = payment?.method ? paymentMethodLabels[payment.method] || payment.method : 'Nao informado';
     const paymentMoment = payment?.paidAt || null;
     const receiptTotalPaid = Math.max(Number(payment?.totalPaid || 0), settledTotal);
+    const deliveredItemIdSet = new Set(deliveredItemIds.filter(Boolean));
+    const activeItems = items.filter((item) => item.status !== 'cancelado');
+    const deliveredActiveItems = activeItems.filter((item) => Boolean(item.delivered_at));
+    const deliveredNowItems = items.filter((item) => deliveredItemIdSet.has(item.id));
+    const deliveredNowTotal = deliveredNowItems.reduce((sum, item) => sum + Number(item.total || 0), 0);
+    const pendingActiveCount = Math.max(0, activeItems.length - deliveredActiveItems.length);
+    const isTotalDelivery = activeItems.length > 0 && pendingActiveCount === 0;
+    const deliveryTypeLabel = isTotalDelivery ? 'Entrega total' : 'Entrega parcial';
+    const statusCustomization = buildOrderStatusCustomization(order.company?.order_status_customization);
 
     return (
       <div
@@ -92,7 +119,7 @@ const DeliveryReceipt = forwardRef<HTMLDivElement, DeliveryReceiptProps>(
                 <div>
                   <p className="text-lg font-semibold leading-tight">{companyName}</p>
                   <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500">
-                    Comprovante de entrega
+                    Comprovante de {deliveryTypeLabel.toLowerCase()}
                   </p>
                 </div>
               </div>
@@ -113,7 +140,7 @@ const DeliveryReceipt = forwardRef<HTMLDivElement, DeliveryReceiptProps>(
           </div>
         </div>
 
-        <div className="receipt-block mt-4 grid gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] sm:grid-cols-3">
+        <div className="receipt-block mt-4 grid gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] sm:grid-cols-4">
           <div>
             <p className="uppercase tracking-wide text-slate-500">Cliente</p>
             <p className="font-semibold text-slate-900">{customerName}</p>
@@ -123,20 +150,32 @@ const DeliveryReceipt = forwardRef<HTMLDivElement, DeliveryReceiptProps>(
             <p className="font-semibold text-slate-900">{customerPhone}</p>
           </div>
           <div>
-            <p className="uppercase tracking-wide text-slate-500">Valor total</p>
+            <p className="uppercase tracking-wide text-slate-500">Tipo da entrega</p>
+            <p className="font-semibold text-slate-900">{deliveryTypeLabel}</p>
+          </div>
+          <div>
+            <p className="uppercase tracking-wide text-slate-500">Valor total do pedido</p>
             <p className="font-semibold text-slate-900">{formatCurrency(orderTotal)}</p>
           </div>
           <div>
-            <p className="uppercase tracking-wide text-slate-500">Data da entrega</p>
-            <p className="font-medium text-slate-900">{formatDate(deliveryMoment)}</p>
+            <p className="uppercase tracking-wide text-slate-500">Itens nesta entrega</p>
+            <p className="font-medium text-slate-900">
+              {deliveredNowItems.length}/{activeItems.length || items.length}
+            </p>
           </div>
           <div>
-            <p className="uppercase tracking-wide text-slate-500">Hora da entrega</p>
-            <p className="font-medium text-slate-900">{formatTime(deliveryMoment)}</p>
+            <p className="uppercase tracking-wide text-slate-500">Itens entregues no pedido</p>
+            <p className="font-medium text-slate-900">
+              {deliveredActiveItems.length}/{activeItems.length || items.length}
+            </p>
           </div>
           <div>
-            <p className="uppercase tracking-wide text-slate-500">Empresa / loja</p>
-            <p className="font-medium text-slate-900">{companyName}</p>
+            <p className="uppercase tracking-wide text-slate-500">Itens pendentes</p>
+            <p className="font-medium text-slate-900">{pendingActiveCount}</p>
+          </div>
+          <div>
+            <p className="uppercase tracking-wide text-slate-500">Valor desta entrega</p>
+            <p className="font-medium text-slate-900">{formatCurrency(deliveredNowTotal)}</p>
           </div>
         </div>
 
@@ -144,9 +183,11 @@ const DeliveryReceipt = forwardRef<HTMLDivElement, DeliveryReceiptProps>(
           <table className="receipt-table w-full text-[11px]">
             <thead className="bg-slate-100 text-slate-600">
               <tr>
-                <th className="px-3 py-2 text-left font-medium">Produto / serviço</th>
+                <th className="px-3 py-2 text-left font-medium">Produto / servico</th>
                 <th className="px-3 py-2 text-center font-medium">Qtd</th>
                 <th className="px-3 py-2 text-right font-medium">Valor</th>
+                <th className="px-3 py-2 text-left font-medium">Entrega</th>
+                <th className="px-3 py-2 text-left font-medium">Status atual</th>
               </tr>
             </thead>
             <tbody>
@@ -160,13 +201,15 @@ const DeliveryReceipt = forwardRef<HTMLDivElement, DeliveryReceiptProps>(
                 const attributesText = Object.values(stripM2Attributes(item.attributes)).filter(Boolean).join(', ');
                 const details = [
                   hasDimensions
-                    ? `Dimensões: ${m2.widthCm}cm x ${m2.heightCm}cm | Área: ${formatAreaM2(Number(item.quantity))} m²`
+                    ? `Dimensoes: ${m2.widthCm}cm x ${m2.heightCm}cm | Area: ${formatAreaM2(Number(item.quantity))} m²`
                     : '',
                   attributesText,
                   item.notes ? `Obs: ${item.notes}` : '',
                 ]
                   .filter(Boolean)
                   .join(' | ');
+                const deliveryLabel = getItemDeliveryLabel(item, deliveredItemIdSet);
+                const currentStatusLabel = getOrderStatusLabel(item.status, statusCustomization);
 
                 return (
                   <tr key={item.id} className="receipt-row border-t border-slate-200">
@@ -180,6 +223,17 @@ const DeliveryReceipt = forwardRef<HTMLDivElement, DeliveryReceiptProps>(
                     <td className="px-3 py-2 text-right align-top font-medium">
                       {formatCurrency(Number(item.total || 0))}
                     </td>
+                    <td className="px-3 py-2 align-top text-slate-700">
+                      <div className="font-medium">{deliveryLabel}</div>
+                      {item.delivered_at && (
+                        <div className="mt-1 text-[10px] text-slate-500">
+                          {formatDate(item.delivered_at)} {formatTime(item.delivered_at)}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 align-top text-slate-700">
+                      <div className="font-medium">{currentStatusLabel}</div>
+                    </td>
                   </tr>
                 );
               })}
@@ -190,7 +244,7 @@ const DeliveryReceipt = forwardRef<HTMLDivElement, DeliveryReceiptProps>(
         {payment && (
           <div className="receipt-block mt-4 grid gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] sm:grid-cols-3">
             <div>
-              <p className="uppercase tracking-wide text-slate-500">Último pagamento registrado</p>
+              <p className="uppercase tracking-wide text-slate-500">Ultimo pagamento registrado</p>
               <p className="font-semibold text-slate-900">{formatCurrency(Number(payment.amount || 0))}</p>
             </div>
             <div>
@@ -221,7 +275,7 @@ const DeliveryReceipt = forwardRef<HTMLDivElement, DeliveryReceiptProps>(
           ].join(' ')}
         >
           <div>
-            <p className="uppercase tracking-wide text-slate-500">Situação do pagamento</p>
+            <p className="uppercase tracking-wide text-slate-500">Situacao do pagamento</p>
             <p className="font-semibold text-slate-900">
               {paymentStatusLabels[order.payment_status] || order.payment_status}
             </p>
@@ -236,7 +290,7 @@ const DeliveryReceipt = forwardRef<HTMLDivElement, DeliveryReceiptProps>(
           </div>
           {creditUsed > 0 && (
             <div>
-              <p className="uppercase tracking-wide text-slate-500">Crédito utilizado</p>
+              <p className="uppercase tracking-wide text-slate-500">Credito utilizado</p>
               <p className="font-medium text-slate-900">{formatCurrency(creditUsed)}</p>
             </div>
           )}
@@ -251,7 +305,7 @@ const DeliveryReceipt = forwardRef<HTMLDivElement, DeliveryReceiptProps>(
 
         <div className="receipt-block mt-5 rounded-lg border border-slate-200 p-4 text-[12px]">
           <p className="font-semibold text-slate-900">
-            Declaro que recebi o pedido corretamente.
+            Declaro que recebi corretamente os itens descritos neste comprovante.
           </p>
 
           <div className="mt-5 grid gap-4">
@@ -271,7 +325,7 @@ const DeliveryReceipt = forwardRef<HTMLDivElement, DeliveryReceiptProps>(
         </div>
 
         <div className="receipt-block mt-5 text-center text-[11px] text-slate-500">
-          <p>Comprovante de entrega do pedido</p>
+          <p>{isTotalDelivery ? 'Comprovante de entrega total do pedido' : 'Comprovante de entrega parcial do pedido'}</p>
         </div>
       </div>
     );

@@ -34,6 +34,7 @@ import {
 import { ensurePublicStorageUrl } from '@/lib/storage';
 import {
   calculateEstimatedDeliveryInfo,
+  formatBusinessDaysLabel,
   formatDatePtBr,
   normalizeProductionTimeDays,
   resolveCompanyDeliveryTimeDays,
@@ -1455,8 +1456,7 @@ export default function PublicProductDetails() {
               {estimatedDeliveryInfo && (
                 <div className="rounded-md border border-sky-200 bg-sky-50 p-3 text-xs text-sky-900">
                   <p>
-                    <strong>Tempo de produção:</strong> {estimatedDeliveryInfo.productionTimeDays}{' '}
-                    {estimatedDeliveryInfo.productionTimeDays === 1 ? 'dia' : 'dias'}
+                    <strong>Tempo de producao:</strong> {formatBusinessDaysLabel(estimatedDeliveryInfo.productionTimeDays)}
                   </p>
                   <p className="mt-1">
                     <strong>Previsão de entrega:</strong>{' '}
@@ -1684,8 +1684,7 @@ export default function PublicProductDetails() {
                 {estimatedDeliveryInfo ? (
                   <>
                     <p>
-                      Tempo de produção: <strong>{estimatedDeliveryInfo.productionTimeDays}</strong>{' '}
-                      {estimatedDeliveryInfo.productionTimeDays === 1 ? 'dia' : 'dias'}.
+                      Tempo de producao: <strong>{formatBusinessDaysLabel(estimatedDeliveryInfo.productionTimeDays)}</strong>.
                     </p>
                     <p>
                       Previsão de entrega: <strong>{formatDatePtBr(estimatedDeliveryInfo.isoDate)}</strong>.

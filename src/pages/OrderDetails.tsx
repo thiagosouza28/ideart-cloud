@@ -5,6 +5,7 @@ import html2canvas from 'html2canvas';
 import { formatOrderNumber } from '@/lib/utils';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { CurrencyInput } from '@/components/ui/currency-input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -34,6 +35,9 @@ import {
   deleteOrder,
   deleteOrderPaymentWithCredit as deleteOrderPayment,
   getOrCreatePublicLink,
+  markOrderItemsDelivered,
+  markOrderItemsReady,
+  updateOrderItemStatus,
   updateOrderStatus,
   updateOrderItems,
   uploadOrderFinalPhoto,
@@ -91,6 +95,9 @@ import {
 
 const PDF_MARGIN = 20;
 const PDF_SINGLE_PAGE_TOLERANCE = 1.08;
+const PRINT_PAGE_MARGIN_MM = 8;
+const A4_WIDTH_MM = 210;
+const RECEIPT_RENDER_WIDTH = Math.round(((A4_WIDTH_MM - PRINT_PAGE_MARGIN_MM * 2) / 25.4) * 96);
 
 const statusConfig: Record<OrderStatus, { label: string; icon: React.ComponentType<any>; color: string; next: OrderStatus[] }> = {
   orcamento: {
@@ -231,12 +238,20 @@ export default function OrderDetails() {
   // Status change dialog
   const [statusDialogOpen, setStatusDialogOpen] = useState(false);
   const [newStatus, setNewStatus] = useState<OrderStatus | ''>('');
+  const [statusItemId, setStatusItemId] = useState('');
   const [statusNotes, setStatusNotes] = useState('');
   const [saving, setSaving] = useState(false);
+  const [readyDialogOpen, setReadyDialogOpen] = useState(false);
+  const [readySaving, setReadySaving] = useState(false);
+  const [readyItemIds, setReadyItemIds] = useState<string[]>([]);
   const [deliveryDialogOpen, setDeliveryDialogOpen] = useState(false);
   const [deliverySaving, setDeliverySaving] = useState(false);
   const [deliveryReceiptOrder, setDeliveryReceiptOrder] = useState<Order | null>(null);
   const [deliveryReceiptPayment, setDeliveryReceiptPayment] = useState<DeliveryReceiptPaymentInfo | null>(null);
+  const [deliveryReceiptItems, setDeliveryReceiptItems] = useState<OrderItem[]>([]);
+  const [deliveryReceiptItemIds, setDeliveryReceiptItemIds] = useState<string[]>([]);
+  const [deliveryReceiptDeliveredAt, setDeliveryReceiptDeliveredAt] = useState<string | null>(null);
+  const [deliveryItemIds, setDeliveryItemIds] = useState<string[]>([]);
   const [deliveryPaymentAmount, setDeliveryPaymentAmount] = useState(0);
   const [deliveryPaymentMethod, setDeliveryPaymentMethod] = useState<PaymentMethod | ''>('');
   const [entryDialogOpen, setEntryDialogOpen] = useState(false);
@@ -622,6 +637,52 @@ export default function OrderDetails() {
       delivered_at: deliveredAt,
     };
   };
+
+  const buildDeliveryReceiptItemsSnapshot = (
+    sourceItems: OrderItem[],
+    deliveredItemIds: string[],
+    deliveredAt: string,
+  ) => {
+    const deliveredIdSet = new Set(deliveredItemIds);
+
+    return sourceItems.map((item) => {
+      if (!deliveredIdSet.has(item.id)) {
+        return item;
+      }
+
+      return {
+        ...item,
+        status: 'entregue',
+        ready_at: item.ready_at || deliveredAt,
+        ready_by: item.ready_by || user?.id || null,
+        delivered_at: item.delivered_at || deliveredAt,
+        delivered_by: item.delivered_by || user?.id || null,
+      };
+    });
+  };
+
+  const buildDeliveryReceiptMarkup = ({
+    deliveryOrder,
+    receiptItems,
+    deliveredItemIds,
+    deliveredAt,
+    paymentInfo,
+  }: {
+    deliveryOrder: Order;
+    receiptItems: OrderItem[];
+    deliveredItemIds: string[];
+    deliveredAt?: string | null;
+    paymentInfo?: DeliveryReceiptPaymentInfo | null;
+  }) =>
+    renderToStaticMarkup(
+      <DeliveryReceipt
+        order={deliveryOrder}
+        items={receiptItems}
+        deliveredAt={deliveredAt || deliveryOrder.delivered_at}
+        deliveredItemIds={deliveredItemIds}
+        payment={paymentInfo || undefined}
+      />,
+    );
 
   const buildPaymentReceiptSummary = (payment: OrderPayment) => {
     if (!order) return null;
@@ -1042,6 +1103,7 @@ export default function OrderDetails() {
       }),
       attributes,
       notes: null,
+      status: order?.status || 'orcamento',
       created_at: new Date().toISOString(),
       price_mode: 'catalog',
     };
@@ -1328,17 +1390,14 @@ export default function OrderDetails() {
       .join('\n');
     const printOverrides = `
       <style>
-        @page { size: A4 portrait; margin: 8mm; }
+        @page { size: A4 portrait; margin: ${PRINT_PAGE_MARGIN_MM}mm; }
         html, body { margin: 0; padding: 0; background: #ffffff; }
         body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         .receipt-root {
-          border: none !important;
           box-shadow: none !important;
-          border-radius: 0 !important;
-          max-width: none !important;
-          width: 100% !important;
-          margin: 0 !important;
-          padding: 0 !important;
+          max-width: ${RECEIPT_RENDER_WIDTH}px !important;
+          width: ${RECEIPT_RENDER_WIDTH}px !important;
+          margin: 0 auto !important;
         }
         .receipt-block, .receipt-row, .receipt-table tr, .receipt-table td, .receipt-table th {
           break-inside: avoid;
@@ -1463,7 +1522,7 @@ export default function OrderDetails() {
     container.style.position = 'fixed';
     container.style.left = '-9999px';
     container.style.top = '0';
-    container.style.width = '794px';
+    container.style.width = `${RECEIPT_RENDER_WIDTH}px`;
     container.style.background = '#ffffff';
     container.innerHTML = markup;
     document.body.appendChild(container);
@@ -1517,19 +1576,28 @@ export default function OrderDetails() {
     }
   };
 
-  const printDeliveryReceipt = (
-    deliveryOrder: Order,
-    paymentInfo?: DeliveryReceiptPaymentInfo | null,
-    targetWindow?: Window | null,
-  ) => {
-    const markup = renderToStaticMarkup(
-      <DeliveryReceipt
-        order={deliveryOrder}
-        items={items}
-        deliveredAt={deliveryOrder.delivered_at}
-        payment={paymentInfo || undefined}
-      />,
-    );
+  const printDeliveryReceipt = ({
+    deliveryOrder,
+    receiptItems,
+    deliveredItemIds,
+    deliveredAt,
+    paymentInfo,
+    targetWindow,
+  }: {
+    deliveryOrder: Order;
+    receiptItems: OrderItem[];
+    deliveredItemIds: string[];
+    deliveredAt?: string | null;
+    paymentInfo?: DeliveryReceiptPaymentInfo | null;
+    targetWindow?: Window | null;
+  }) => {
+    const markup = buildDeliveryReceiptMarkup({
+      deliveryOrder,
+      receiptItems,
+      deliveredItemIds,
+      deliveredAt,
+      paymentInfo,
+    });
 
     printMarkup(
       markup,
@@ -1569,20 +1637,111 @@ export default function OrderDetails() {
     return printWindow;
   };
 
+  const handleOpenReadyDialog = () => {
+    setReadyItemIds(readyCompletedFromItems ? [] : pendingReadyItems.map((item) => item.id));
+    setReadyDialogOpen(true);
+  };
+
+  const handleConfirmReady = async () => {
+    if (!order) return;
+    if (!['em_producao', 'finalizado', 'pronto', 'aguardando_retirada'].includes(order.status)) {
+      toast({
+        title: 'Marcacao indisponivel',
+        description: 'O pedido precisa estar em producao ou finalizado para registrar itens prontos.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (selectedReadyItems.length === 0) {
+      toast({
+        title: 'Selecione ao menos um item',
+        description: 'Escolha quais itens ja ficaram prontos.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setReadySaving(true);
+
+    try {
+      const readyResult = await markOrderItemsReady({
+        orderId: order.id,
+        itemIds: selectedReadyItems.map((item) => item.id),
+        userId: user?.id ?? null,
+      });
+
+      const updatedOrder = readyResult?.order;
+
+      if (!updatedOrder) {
+        throw new Error('O sistema nao retornou o pedido atualizado.');
+      }
+
+      const mergedOrder = {
+        ...order,
+        ...updatedOrder,
+        customer: order.customer,
+        company: order.company,
+      } as Order;
+
+      setOrder(mergedOrder);
+      setReadyDialogOpen(false);
+      toast({
+        title: readyResult?.ready_completed
+          ? readyResult?.status_updated
+            ? 'Todos os itens ficaram prontos. Pedido finalizado!'
+            : 'Todos os itens do pedido ja estao prontos!'
+          : 'Itens marcados como prontos!',
+        description: readyResult?.ready_completed
+          ? undefined
+          : `${selectedReadyItems.length} item(ns) marcado(s) como pronto(s).`,
+      });
+
+      await fetchOrder(order.id);
+    } catch (error: any) {
+      toast({
+        title: 'Erro ao marcar itens como prontos',
+        description: error?.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setReadySaving(false);
+    }
+  };
+
   const handleOpenDeliveryDialog = () => {
     const deliveredSnapshot =
-      order?.status === 'entregue' && order
-        ? buildDeliveredOrderSnapshot(order)
+      deliveryCompletedFromItems && order
+        ? buildDeliveredOrderSnapshot(order, latestDeliveredItemAt)
         : null;
 
-    if (deliveredSnapshot?.status === 'entregue') {
+    if (deliveryCompleted && deliveredSnapshot) {
+      const latestBatchItemIds = latestDeliveredItemAt
+        ? items
+            .filter((item) => {
+              if (!item.delivered_at) return false;
+              return new Date(item.delivered_at).getTime() === new Date(latestDeliveredItemAt).getTime();
+            })
+            .map((item) => item.id)
+        : [];
+
       setDeliveryReceiptOrder(deliveredSnapshot);
       setDeliveryReceiptPayment(buildDeliveryReceiptPaymentInfo(deliveredSnapshot, latestPaidPayment));
+      setDeliveryReceiptItems(items);
+      setDeliveryReceiptItemIds(
+        latestBatchItemIds.length > 0 ? latestBatchItemIds : deliveredItems.map((item) => item.id),
+      );
+      setDeliveryReceiptDeliveredAt(deliveredSnapshot.delivered_at || latestDeliveredItemAt || null);
+      setDeliveryItemIds([]);
       setDeliveryPaymentAmount(0);
       setDeliveryPaymentMethod(deliveredSnapshot.payment_method || '');
     } else {
       setDeliveryReceiptOrder(null);
       setDeliveryReceiptPayment(null);
+      setDeliveryReceiptItems([]);
+      setDeliveryReceiptItemIds([]);
+      setDeliveryReceiptDeliveredAt(null);
+      setDeliveryItemIds(pendingDeliveryItems.map((item) => item.id));
       setDeliveryPaymentAmount(remainingAmount);
       setDeliveryPaymentMethod('');
     }
@@ -1590,59 +1749,66 @@ export default function OrderDetails() {
   };
 
   const handlePrintDeliveryReceipt = () => {
-    const sourceOrder =
-      deliveryReceiptOrder ||
-      (order?.status === 'entregue' && order ? buildDeliveredOrderSnapshot(order) : null);
-    const printableOrder = sourceOrder ? buildDeliveredOrderSnapshot(sourceOrder) : null;
+    const sourceOrder = deliveryReceiptSource;
+    const printableOrder =
+      sourceOrder && deliveryCompleted
+        ? buildDeliveredOrderSnapshot(sourceOrder, deliveryRecordedAt)
+        : sourceOrder;
     const sourcePayment =
       deliveryReceiptPayment ||
       (printableOrder ? buildDeliveryReceiptPaymentInfo(printableOrder, latestPaidPayment) : null);
 
-    if (!printableOrder || printableOrder.status !== 'entregue') {
+    if (!printableOrder || !deliveryReceiptAvailable) {
       toast({
-        title: 'Comprovante indisponível',
-        description: 'O comprovante de entrega só pode ser reimpresso após o pedido ser entregue.',
+        title: 'Comprovante indisponivel',
+        description: 'Nenhum comprovante de entrega foi gerado ainda para este pedido.',
         variant: 'destructive',
       });
       return;
     }
 
-    if (!printableOrder.delivered_at) {
+    if (!deliveryRecordedAt) {
       toast({
-        title: 'Data da entrega indisponível',
-        description: 'Não foi possível localizar a data registrada da entrega para reimpressão.',
+        title: 'Data da entrega indisponivel',
+        description: 'Nao foi possivel localizar a data registrada da entrega para reimpressao.',
         variant: 'destructive',
       });
       return;
     }
 
-    printDeliveryReceipt(printableOrder, sourcePayment);
+    printDeliveryReceipt({
+      deliveryOrder: printableOrder,
+      receiptItems: deliveryReceiptSourceItems,
+      deliveredItemIds: deliveryReceiptSelectedItemIds,
+      deliveredAt: deliveryRecordedAt,
+      paymentInfo: sourcePayment,
+    });
   };
 
   const handleDownloadDeliveryReceipt = async () => {
-    const sourceOrder =
-      deliveryReceiptOrder ||
-      (order?.status === 'entregue' && order ? buildDeliveredOrderSnapshot(order) : null);
-    const printableOrder = sourceOrder ? buildDeliveredOrderSnapshot(sourceOrder) : null;
+    const sourceOrder = deliveryReceiptSource;
+    const printableOrder =
+      sourceOrder && deliveryCompleted
+        ? buildDeliveredOrderSnapshot(sourceOrder, deliveryRecordedAt)
+        : sourceOrder;
     const sourcePayment =
       deliveryReceiptPayment ||
       (printableOrder ? buildDeliveryReceiptPaymentInfo(printableOrder, latestPaidPayment) : null);
 
-    if (!printableOrder || printableOrder.status !== 'entregue') {
-      toast({ title: 'Comprovante indisponível', variant: 'destructive' });
+    if (!printableOrder || !deliveryReceiptAvailable || !deliveryRecordedAt) {
+      toast({ title: 'Comprovante indisponivel', variant: 'destructive' });
       return;
     }
 
     setDeliverySaving(true);
     try {
-      const markup = renderToStaticMarkup(
-        <DeliveryReceipt
-          order={printableOrder}
-          items={items}
-          deliveredAt={printableOrder.delivered_at}
-          payment={sourcePayment || undefined}
-        />,
-      );
+      const markup = buildDeliveryReceiptMarkup({
+        deliveryOrder: printableOrder,
+        receiptItems: deliveryReceiptSourceItems,
+        deliveredItemIds: deliveryReceiptSelectedItemIds,
+        deliveredAt: deliveryRecordedAt,
+        paymentInfo: sourcePayment,
+      });
 
       await downloadReceiptMarkupAsPdf(
         markup,
@@ -1659,18 +1825,33 @@ export default function OrderDetails() {
 
   const handleConfirmDelivery = async () => {
     if (!order) return;
-    if (!['pronto', 'finalizado', 'aguardando_retirada'].includes(order.status)) {
+    if (!['em_producao', 'pronto', 'finalizado', 'aguardando_retirada'].includes(order.status)) {
       toast({
         title: 'Entrega indisponível',
-        description: 'O pedido precisa estar pronto para confirmar a entrega.',
+        description: 'O pedido precisa estar em producao ou pronto para confirmar a entrega.',
         variant: 'destructive',
       });
       return;
     }
 
+    if (selectedDeliveryItems.length === 0) {
+      toast({
+        title: 'Selecione ao menos um item',
+        description:
+          pendingDeliveryItems.length === 0 && blockedDeliveryItems.length > 0
+            ? 'Nenhum item esta pronto para entrega. Marque o item como pronto antes de entregar.'
+            : 'Escolha quais itens prontos estao sendo entregues agora.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const isFinalDelivery = selectedDeliveryCompletesOrder;
     const printTitle = `Comprovante de entrega - Pedido #${formatOrderNumber(order.order_number)}`;
     const printWindow = preparePrintWindow(printTitle);
-    const pendingAmount = Math.max(0, remainingAmount);
+    const pendingAmount = isFinalDelivery ? Math.max(0, remainingAmount) : 0;
+    const selectedDeliveryItemIds = selectedDeliveryItems.map((item) => item.id);
+    let receiptPrinted = false;
     setDeliverySaving(true);
 
     try {
@@ -1707,11 +1888,13 @@ export default function OrderDetails() {
         );
       }
 
-      const updatedOrder = await updateOrderStatus({
+      const deliveryResult = await markOrderItemsDelivered({
         orderId: order.id,
-        status: 'entregue',
+        itemIds: selectedDeliveryItemIds,
         userId: user?.id ?? null,
       });
+
+      const updatedOrder = deliveryResult?.order;
 
       if (!updatedOrder) {
         throw new Error('O sistema não retornou o pedido atualizado.');
@@ -1723,28 +1906,49 @@ export default function OrderDetails() {
         customer: order.customer,
         company: order.company,
       } as Order;
+      const receiptRecordedAt = mergedOrder.delivered_at || new Date().toISOString();
+      const receiptOrder = isFinalDelivery
+        ? buildDeliveredOrderSnapshot(mergedOrder, receiptRecordedAt)
+        : mergedOrder;
+      const receiptItems = buildDeliveryReceiptItemsSnapshot(
+        items,
+        selectedDeliveryItemIds,
+        receiptRecordedAt,
+      );
+      const resolvedReceiptPayment =
+        receiptPaymentInfo || buildDeliveryReceiptPaymentInfo(receiptOrder, latestPaidPayment);
 
       setOrder(mergedOrder);
-      setDeliveryReceiptOrder(mergedOrder);
-      setDeliveryReceiptPayment(
-        receiptPaymentInfo || buildDeliveryReceiptPaymentInfo(mergedOrder, latestPaidPayment),
-      );
-      printDeliveryReceipt(
-        mergedOrder,
-        receiptPaymentInfo || buildDeliveryReceiptPaymentInfo(mergedOrder, latestPaidPayment),
-        printWindow,
-      );
+      setDeliveryReceiptOrder(receiptOrder);
+      setDeliveryReceiptPayment(resolvedReceiptPayment);
+      setDeliveryReceiptItems(receiptItems);
+      setDeliveryReceiptItemIds(selectedDeliveryItemIds);
+      setDeliveryReceiptDeliveredAt(receiptRecordedAt);
+      printDeliveryReceipt({
+        deliveryOrder: receiptOrder,
+        receiptItems,
+        deliveredItemIds: selectedDeliveryItemIds,
+        deliveredAt: receiptRecordedAt,
+        paymentInfo: resolvedReceiptPayment,
+        targetWindow: printWindow,
+      });
+      receiptPrinted = true;
 
       toast({
-        title: shouldRegisterPaymentOnDelivery
-          ? 'Entrega confirmada com pagamento registrado!'
-          : pendingAmount > 0
-            ? 'Entrega confirmada. Pedido aguardando pagamento.'
-            : 'Entrega confirmada com sucesso!',
+        title: isFinalDelivery
+          ? shouldRegisterPaymentOnDelivery
+            ? 'Entrega confirmada com pagamento registrado!'
+            : pendingAmount > 0
+              ? 'Entrega confirmada. Pedido aguardando pagamento.'
+              : 'Entrega confirmada com sucesso!'
+          : 'Entrega parcial registrada!',
+        description: isFinalDelivery
+          ? undefined
+          : `${selectedDeliveryItems.length} item(ns) marcado(s) como entregue(s).`,
       });
       await fetchOrder(order.id);
     } catch (error: any) {
-      if (printWindow && !printWindow.closed) {
+      if (!receiptPrinted && printWindow && !printWindow.closed) {
         printWindow.close();
       }
       toast({
@@ -2032,6 +2236,18 @@ export default function OrderDetails() {
     setSavingNotes(false);
   };
 
+  const handleOpenStatusDialog = () => {
+    const initialItem =
+      items.find((item) => !isCanceledItem(item)) ||
+      items[0] ||
+      null;
+
+    setStatusItemId(initialItem?.id || '');
+    setNewStatus('');
+    setStatusNotes('');
+    setStatusDialogOpen(true);
+  };
+
   const handleOpenPhoto = (photo: { url: string; created_at: string }) => {
     setSelectedPhoto(photo);
     setPhotoViewerOpen(true);
@@ -2297,6 +2513,10 @@ export default function OrderDetails() {
 
   const applyStatusChange = async (entrada?: number | null) => {
     if (!newStatus || !order) return;
+    if (statusTargetIsItem && !selectedStatusItem) {
+      toast({ title: 'Selecione um produto', variant: 'destructive' });
+      return;
+    }
 
     if (entrada && entrada > 0 && !entryMethod) {
       toast({ title: 'Selecione a forma de pagamento', variant: 'destructive' });
@@ -2333,20 +2553,30 @@ export default function OrderDetails() {
     const resolvedNotes = [trimmedNotes, artNote].filter(Boolean).join(' ');
 
     try {
-      await updateOrderStatus({
-        orderId: order.id,
-        status: newStatus,
-        notes: resolvedNotes || undefined,
-        userId: user.id,
-        entrada: entrada ?? null,
-        paymentMethod: entrada && entryMethod ? entryMethod : undefined,
-      });
+      if (statusTargetIsItem && selectedStatusItem) {
+        await updateOrderItemStatus({
+          orderId: order.id,
+          itemId: selectedStatusItem.id,
+          status: newStatus,
+          notes: resolvedNotes || undefined,
+          userId: user.id,
+        });
+      } else {
+        await updateOrderStatus({
+          orderId: order.id,
+          status: newStatus,
+          notes: resolvedNotes || undefined,
+          userId: user.id,
+          entrada: entrada ?? null,
+          paymentMethod: entrada && entryMethod ? entryMethod : undefined,
+        });
+      }
 
-      toast({ title: 'Status atualizado com sucesso!' });
+      toast({ title: statusTargetIsItem ? 'Status do produto atualizado com sucesso!' : 'Status atualizado com sucesso!' });
       setStatusDialogOpen(false);
       setEntryDialogOpen(false);
 
-      if (order.customer?.phone) {
+      if (!statusTargetIsItem && order.customer?.phone) {
         const statusLabel = statusLabels[newStatus] ?? newStatus;
         const approved = await confirm({
           title: 'Enviar WhatsApp?',
@@ -2360,6 +2590,7 @@ export default function OrderDetails() {
       }
 
       setNewStatus('');
+      setStatusItemId('');
       setStatusNotes('');
       setEntryAmount(0);
       fetchOrder();
@@ -2373,7 +2604,7 @@ export default function OrderDetails() {
   const handleStatusChange = async () => {
     if (!newStatus || !order) return;
 
-    if (order.status === 'orcamento' && newStatus === 'pendente') {
+    if (!statusTargetIsItem && order.status === 'orcamento' && newStatus === 'pendente') {
       setEntryMethod(order.payment_method || '');
       setEntryDialogOpen(true);
       return;
@@ -2682,6 +2913,79 @@ export default function OrderDetails() {
   const hasCustomerCredit = Boolean(order.customer_id) && customerAvailableCredit > 0;
   const canUseCredit = hasCustomerCredit && !isOrderPaid;
   const latestPaidPayment = payments.find((payment) => payment.status !== 'pendente') || null;
+  const isCanceledItem = (item: OrderItem) => item.status === 'cancelado';
+  const getItemReadyAt = (item: OrderItem) => item.ready_at || item.delivered_at || null;
+  const activeItems = items.filter((item) => !isCanceledItem(item));
+  const readyItems = activeItems.filter((item) => Boolean(getItemReadyAt(item)));
+  const pendingReadyItems = activeItems.filter((item) => !getItemReadyAt(item));
+  const readyCompletedFromItems =
+    activeItems.length > 0
+      ? pendingReadyItems.length === 0
+      : ['finalizado', 'pronto', 'aguardando_retirada', 'entregue'].includes(order.status);
+  const partialReadyRegistered =
+    readyItems.length > 0 && pendingReadyItems.length > 0;
+  const selectedReadyItems = pendingReadyItems.filter((item) =>
+    readyItemIds.includes(item.id),
+  );
+  const selectedReadyCompletesOrder =
+    !readyCompletedFromItems &&
+    pendingReadyItems.length > 0 &&
+    selectedReadyItems.length === pendingReadyItems.length;
+  const latestReadyItemAt = readyItems.reduce<string | null>((latest, item) => {
+    const readyAt = getItemReadyAt(item);
+    if (!readyAt) return latest;
+    if (!latest) return readyAt;
+    return new Date(readyAt) > new Date(latest) ? readyAt : latest;
+  }, null);
+  const deliveredItems = activeItems.filter((item) => Boolean(item.delivered_at));
+  const undeliveredItems = activeItems.filter((item) => !item.delivered_at);
+  const pendingDeliveryItems = undeliveredItems.filter((item) => Boolean(getItemReadyAt(item)));
+  const blockedDeliveryItems = undeliveredItems.filter((item) => !getItemReadyAt(item));
+  const deliveryCompletedFromItems =
+    activeItems.length > 0 ? undeliveredItems.length === 0 : order.status === 'entregue';
+  const partialDeliveryRegistered =
+    deliveredItems.length > 0 && undeliveredItems.length > 0;
+  const selectedDeliveryItems = pendingDeliveryItems.filter((item) =>
+    deliveryItemIds.includes(item.id),
+  );
+  const selectedDeliveryCompletesOrder =
+    !deliveryCompletedFromItems &&
+    undeliveredItems.length > 0 &&
+    selectedDeliveryItems.length === undeliveredItems.length;
+  const latestDeliveredItemAt = deliveredItems.reduce<string | null>((latest, item) => {
+    if (!item.delivered_at) return latest;
+    if (!latest) return item.delivered_at;
+    return new Date(item.delivered_at) > new Date(latest) ? item.delivered_at : latest;
+  }, null);
+  const deliveryLatestBatchItemIds = latestDeliveredItemAt
+    ? deliveredItems
+        .filter(
+          (item) =>
+            item.delivered_at &&
+            new Date(item.delivered_at).getTime() === new Date(latestDeliveredItemAt).getTime(),
+        )
+        .map((item) => item.id)
+    : [];
+  const statusTargetIsItem = items.length > 1;
+  const selectedStatusItem =
+    (statusTargetIsItem
+      ? items.find((item) => item.id === statusItemId)
+      : items[0]) || null;
+  const statusSource = selectedStatusItem?.status || order.status;
+  const statusDialogConfig = statusConfig[statusSource];
+  const statusDialogNextOptions = statusTargetIsItem
+    ? statusDialogConfig.next.filter(
+        (status) => !['finalizado', 'pronto', 'aguardando_retirada', 'entregue'].includes(status),
+      )
+    : statusDialogConfig.next;
+  const statusTargetLabel = statusTargetIsItem ? 'Produto' : 'Pedido';
+  const hasStatusDialogOptions = statusTargetIsItem
+    ? items.some((item) =>
+        statusConfig[item.status].next.some(
+          (status) => !['finalizado', 'pronto', 'aguardando_retirada', 'entregue'].includes(status),
+        ),
+      )
+    : statusConfig[order.status].next.length > 0;
 
   const config = statusConfig[order.status];
   const StatusIcon = config.icon;
@@ -2692,19 +2996,58 @@ export default function OrderDetails() {
   );
   const currentStatusBadgeStyle = getOrderStatusBadgeStyle(order.status, orderStatusCustomization);
   const canSendWhatsApp = Boolean(order?.customer?.phone);
+  const readyAllowedStatuses = [
+    'em_producao',
+    'finalizado',
+    'pronto',
+    'aguardando_retirada',
+  ];
+  const canManageReady =
+    readyAllowedStatuses.includes(order.status) &&
+    hasPermission(['admin', 'atendente', 'caixa', 'producao']);
+  const deliveryAllowedStatuses = [
+    'em_producao',
+    'pronto',
+    'finalizado',
+    'aguardando_retirada',
+    'entregue',
+  ];
   const canManageDelivery =
-    ['pronto', 'finalizado', 'aguardando_retirada', 'entregue'].includes(order.status) &&
+    deliveryAllowedStatuses.includes(order.status) &&
     hasPermission(['admin', 'atendente', 'caixa', 'producao']);
   const deliveryReceiptSource =
-    order.status === 'entregue'
-      ? buildDeliveredOrderSnapshot(deliveryReceiptOrder || order)
+    deliveryCompletedFromItems
+      ? buildDeliveredOrderSnapshot(deliveryReceiptOrder || order, latestDeliveredItemAt)
       : deliveryReceiptOrder;
-  const deliveryRecordedAt = deliveryReceiptSource?.delivered_at || null;
-  const deliveryCompleted = Boolean(deliveryReceiptSource?.status === 'entregue');
+  const deliveryReceiptSourceItems =
+    deliveryReceiptItems.length > 0 ? deliveryReceiptItems : items;
+  const deliveryReceiptSelectedItemIds =
+    deliveryReceiptItemIds.length > 0
+      ? deliveryReceiptItemIds
+      : deliveryCompletedFromItems
+        ? deliveryLatestBatchItemIds.length > 0
+          ? deliveryLatestBatchItemIds
+          : deliveredItems.map((item) => item.id)
+        : [];
+  const deliveryRecordedAt =
+    deliveryReceiptDeliveredAt || deliveryReceiptSource?.delivered_at || latestDeliveredItemAt || null;
+  const deliveryCompleted = deliveryCompletedFromItems;
+  const deliveryReceiptAvailable =
+    Boolean(deliveryReceiptSource) &&
+    deliveryReceiptSelectedItemIds.length > 0 &&
+    Boolean(deliveryRecordedAt);
+  const deliveryDialogShowsReceipt = deliveryCompleted || deliveryReceiptAvailable;
+  const deliveryReceiptActiveItems = deliveryReceiptSourceItems.filter((item) => !isCanceledItem(item));
+  const deliveryReceiptDeliveredCount = deliveryReceiptActiveItems.filter((item) => Boolean(item.delivered_at)).length;
+  const deliveryReceiptIsTotal =
+    deliveryReceiptActiveItems.length > 0 &&
+    deliveryReceiptDeliveredCount === deliveryReceiptActiveItems.length;
   const deliveryCustomerName = order.customer?.name || order.customer_name || 'Cliente não informado';
   const deliveryCustomerPhone = order.customer?.phone || '-';
-  const deliveryPendingAmount = deliveryCompleted ? 0 : remainingAmount;
-  const hasPendingPaymentAtDelivery = !deliveryCompleted && deliveryPendingAmount > 0;
+  const deliveryPendingAmount =
+    deliveryCompleted || !selectedDeliveryCompletesOrder ? 0 : remainingAmount;
+  const hasPendingPaymentAtDelivery =
+    !deliveryCompleted && selectedDeliveryCompletesOrder && deliveryPendingAmount > 0;
   const shouldRegisterPaymentOnDelivery =
     hasPendingPaymentAtDelivery &&
     Boolean(deliveryPaymentMethod) &&
@@ -2712,7 +3055,34 @@ export default function OrderDetails() {
   const deliveryPaymentInfo =
     deliveryReceiptPayment ||
     (deliveryReceiptSource ? buildDeliveryReceiptPaymentInfo(deliveryReceiptSource, latestPaidPayment) : null);
-  const deliveryConfirmDisabled = deliverySaving;
+  const readyConfirmDisabled =
+    readySaving || (!readyCompletedFromItems && selectedReadyItems.length === 0);
+  const readyActionLabel = readyCompletedFromItems
+    ? 'Itens prontos'
+    : partialReadyRegistered
+      ? 'Gerenciar prontos'
+      : 'Marcar pronto';
+  const readyPrimaryActionLabel = readyCompletedFromItems
+    ? ''
+    : selectedReadyCompletesOrder
+      ? 'Marcar tudo como pronto'
+      : 'Registrar itens prontos';
+  const deliveryConfirmDisabled =
+    deliverySaving || (!deliveryCompleted && selectedDeliveryItems.length === 0);
+  const deliveryActionLabel = deliveryCompleted
+    ? 'Comprovante de entrega'
+    : partialDeliveryRegistered
+      ? 'Gerenciar entrega'
+      : 'Confirmar entrega';
+  const deliveryPrimaryActionLabel = deliveryCompleted
+    ? ''
+    : selectedDeliveryCompletesOrder
+      ? shouldRegisterPaymentOnDelivery
+        ? 'Quitar e entregar'
+        : hasPendingPaymentAtDelivery
+          ? 'Entregar com saldo pendente'
+          : 'Confirmar entrega'
+      : 'Registrar entrega parcial';
   const publicLinkLabel = linkLoading
     ? 'Gerando...'
     : publicLinkToken
@@ -2813,10 +3183,20 @@ export default function OrderDetails() {
         </div>
 
         <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center">
+          {canManageReady && (
+            <Button
+              onClick={handleOpenReadyDialog}
+              variant={readyCompletedFromItems ? 'outline' : 'default'}
+              className="w-full sm:w-auto"
+            >
+              <Package className="mr-2 h-4 w-4" />
+              {readyActionLabel}
+            </Button>
+          )}
           {canManageDelivery && (
             <Button onClick={handleOpenDeliveryDialog} className="w-full sm:w-auto">
               <Truck className="mr-2 h-4 w-4" />
-              {order.status === 'entregue' ? 'Reimprimir Comprovante' : 'Confirmar Entrega'}
+              {deliveryCompleted ? 'Reimprimir Comprovante' : deliveryActionLabel}
             </Button>
           )}
           {order.status !== 'cancelado' && (
@@ -2837,8 +3217,8 @@ export default function OrderDetails() {
               Excluir
             </Button>
           )}
-          {config.next.length > 0 && hasPermission(['admin', 'atendente', 'caixa', 'producao']) && (
-            <Button onClick={() => setStatusDialogOpen(true)} className="w-full sm:w-auto">
+          {hasStatusDialogOptions && hasPermission(['admin', 'atendente', 'caixa', 'producao']) && (
+            <Button onClick={handleOpenStatusDialog} className="w-full sm:w-auto">
               Alterar Status
             </Button>
           )}
@@ -3012,15 +3392,16 @@ export default function OrderDetails() {
             </CardHeader>
             <CardContent>
               <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-                <Table className="min-w-[980px]">
+                <Table className={isEditingItems ? "min-w-[1120px]" : "table-fixed"}>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Produto</TableHead>
-                      <TableHead className="text-center">Qtd</TableHead>
-                      <TableHead className="text-right">Preço Unit.</TableHead>
-                      <TableHead className="text-right">Desconto</TableHead>
-                      <TableHead className="text-right">Total</TableHead>
-                      {isEditingItems && <TableHead className="text-right">Açãoes</TableHead>}
+                      <TableHead className="w-[38%] whitespace-nowrap">Produto</TableHead>
+                      <TableHead className="w-[140px] whitespace-nowrap text-center">Status</TableHead>
+                      <TableHead className="w-[110px] whitespace-nowrap text-center">Qtd</TableHead>
+                      <TableHead className="w-[130px] whitespace-nowrap text-center">Preço Unit.</TableHead>
+                      <TableHead className="w-[120px] whitespace-nowrap text-right">Desconto</TableHead>
+                      <TableHead className="w-[120px] whitespace-nowrap text-right">Total</TableHead>
+                      {isEditingItems && <TableHead className="whitespace-nowrap text-right">Açãoes</TableHead>}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -3036,6 +3417,12 @@ export default function OrderDetails() {
                         typeof m2Data.heightCm === 'number' &&
                         m2Data.widthCm > 0 &&
                         m2Data.heightCm > 0;
+                      const itemStatusLabel = getOrderStatusLabel(item.status, orderStatusCustomization);
+                      const itemStatusMoment = item.delivered_at
+                        ? `Entregue em ${formatDate(item.delivered_at)}`
+                        : getItemReadyAt(item)
+                          ? `Pronto em ${formatDate(getItemReadyAt(item) as string)}`
+                          : null;
 
                       return (
                         <TableRow key={item.id} className="h-12">
@@ -3084,6 +3471,11 @@ export default function OrderDetails() {
                                     </p>
                                   </div>
                                 )}
+                                {itemStatusMoment && (
+                                  <p className="text-xs text-muted-foreground">
+                                    {itemStatusMoment}
+                                  </p>
+                                )}
                               </div>
                             ) : (
                               <div>
@@ -3099,11 +3491,16 @@ export default function OrderDetails() {
                                 )}
                                 {hasValidDimensions && (
                                   <p className="text-xs text-muted-foreground mt-1">
-                                    {m2Data.widthCm}cm x {m2Data.heightCm}cm - Area: {formatAreaM2(item.quantity)} m\u00B2
+                                    {m2Data.widthCm}cm x {m2Data.heightCm}cm - Area: {formatAreaM2(item.quantity)} m²
                                   </p>
                                 )}
                                 {item.notes && (
                                   <p className="text-xs text-muted-foreground mt-1">Obs: {item.notes}</p>
+                                )}
+                                {itemStatusMoment && (
+                                  <p className="mt-1 text-xs text-muted-foreground">
+                                    {itemStatusMoment}
+                                  </p>
                                 )}
                                 {getTierRangeLabel(item.product_id) && !isM2 && (
                                   <p className="mt-1 text-xs text-muted-foreground">
@@ -3113,7 +3510,16 @@ export default function OrderDetails() {
                               </div>
                             )}
                           </TableCell>
-                          <TableCell className="text-center py-2">
+                          <TableCell className="py-2 text-center align-middle">
+                            <div className="flex justify-center whitespace-nowrap">
+                              <Badge
+                                className={`whitespace-nowrap ${statusConfig[item.status]?.color || 'bg-slate-100 text-slate-700'}`}
+                              >
+                                {itemStatusLabel}
+                              </Badge>
+                            </div>
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap text-center py-2">
                             {isEditingItems ? (
                               isM2 ? (
                                 <span className={`text-sm ${hasValidDimensions ? 'text-foreground' : 'text-destructive'}`}>
@@ -3137,9 +3543,9 @@ export default function OrderDetails() {
                               </p>
                             )}
                           </TableCell>
-                          <TableCell className="py-2 align-top">
+                          <TableCell className="whitespace-nowrap py-2 align-middle text-center">
                             {isEditingItems ? (
-                              <div className="ml-auto w-[150px] space-y-2">
+                              <div className="mx-auto w-[150px] space-y-2">
                                 <CurrencyInput
                                   value={Number(item.unit_price || 0)}
                                   onChange={(value) => handleChangeItemUnitPrice(index, value)}
@@ -3157,12 +3563,12 @@ export default function OrderDetails() {
                                 )}
                               </div>
                             ) : (
-                              <div className="text-right">
+                              <div className="text-center">
                                 {formatCurrency(Number(item.unit_price))}
                               </div>
                             )}
                           </TableCell>
-                          <TableCell className="py-2 align-top">
+                          <TableCell className="whitespace-nowrap py-2 align-top">
                             {isEditingItems ? (
                               <div className="ml-auto w-[180px] space-y-2">
                                 <Select
@@ -3214,7 +3620,7 @@ export default function OrderDetails() {
                               </div>
                             )}
                           </TableCell>
-                          <TableCell className="py-2">
+                          <TableCell className="whitespace-nowrap py-2">
                             {isEditingItems ? (
                               <div className="ml-auto w-[140px]">
                                 <CurrencyInput
@@ -4037,13 +4443,201 @@ export default function OrderDetails() {
       </Dialog>
 
       <Dialog
+        open={readyDialogOpen}
+        onOpenChange={(open) => {
+          if (readySaving) return;
+          setReadyDialogOpen(open);
+          if (!open) {
+            setReadyItemIds([]);
+          }
+        }}
+      >
+        <DialogContent
+          aria-describedby={undefined}
+          className="w-[calc(100vw-1.5rem)] max-w-[560px] overflow-hidden sm:w-full md:max-w-[760px]"
+        >
+          <DialogHeader className="pr-8">
+            <DialogTitle>{readyActionLabel}</DialogTitle>
+            <DialogDescription>
+              {readyCompletedFromItems
+                ? 'Todos os itens do pedido ja foram marcados como prontos.'
+                : 'Selecione os itens que ja ficaram prontos. Quando todos os itens estiverem prontos, o pedido sera finalizado automaticamente.'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="min-w-0 space-y-4">
+            <div className="min-w-0 rounded-lg border bg-muted/30 p-4 text-sm">
+              <div className="grid grid-cols-[96px_minmax(0,1fr)] items-start gap-3">
+                <span className="text-muted-foreground">Pedido</span>
+                <span className="min-w-0 font-medium text-right break-words">#{formatOrderNumber(order.order_number)}</span>
+              </div>
+              <div className="mt-2 grid grid-cols-[96px_minmax(0,1fr)] items-start gap-3">
+                <span className="text-muted-foreground">Cliente</span>
+                <span className="min-w-0 font-medium text-right break-words">{order.customer?.name || order.customer_name || 'Cliente nao informado'}</span>
+              </div>
+              <div className="mt-2 grid grid-cols-[96px_minmax(0,1fr)] items-start gap-3">
+                <span className="text-muted-foreground">Telefone</span>
+                <span className="min-w-0 font-medium text-right break-all">{order.customer?.phone || '-'}</span>
+              </div>
+            </div>
+
+            {!readyCompletedFromItems && (
+              <div className="space-y-3 rounded-lg border border-slate-200 p-4">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-medium text-slate-900">Itens do pedido</p>
+                    <p className="text-xs text-muted-foreground">
+                      Prontos: {readyItems.length}/{activeItems.length || items.length}
+                    </p>
+                  </div>
+                  {pendingReadyItems.length > 1 && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setReadyItemIds(pendingReadyItems.map((item) => item.id))}
+                    >
+                      Selecionar todos
+                    </Button>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  {items.map((item) => {
+                    const isCanceled = isCanceledItem(item);
+                    const readyAt = getItemReadyAt(item);
+                    const alreadyReady = Boolean(readyAt);
+                    const alreadyDelivered = Boolean(item.delivered_at);
+                    const checked = alreadyReady || readyItemIds.includes(item.id);
+
+                    return (
+                      <label
+                        key={item.id}
+                        className={[
+                          'flex items-start gap-3 rounded-lg border p-3',
+                          alreadyDelivered
+                            ? 'border-emerald-200 bg-emerald-50/60'
+                            : isCanceled
+                              ? 'border-red-200 bg-red-50/60'
+                            : alreadyReady
+                              ? 'border-sky-200 bg-sky-50/60'
+                              : 'border-slate-200 bg-white',
+                        ].join(' ')}
+                      >
+                        <Checkbox
+                          checked={checked}
+                          disabled={alreadyReady || isCanceled}
+                          onCheckedChange={(value) => {
+                            if (alreadyReady || isCanceled) return;
+                            setReadyItemIds((current) =>
+                              value === true
+                                ? Array.from(new Set([...current, item.id]))
+                                : current.filter((id) => id !== item.id),
+                            );
+                          }}
+                          className="mt-0.5"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-medium text-slate-900">{item.product_name}</p>
+                            <Badge variant="outline">Qtd: {item.quantity}</Badge>
+                            {alreadyDelivered ? (
+                              <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100">
+                                Entregue
+                              </Badge>
+                            ) : isCanceled ? (
+                              <Badge className="bg-red-100 text-red-800 hover:bg-red-100">
+                                Cancelado
+                              </Badge>
+                            ) : alreadyReady ? (
+                              <Badge className="bg-sky-100 text-sky-800 hover:bg-sky-100">
+                                Pronto
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline">Em producao</Badge>
+                            )}
+                          </div>
+                          {item.delivered_at ? (
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              Entregue em {formatDate(item.delivered_at)}
+                            </p>
+                          ) : isCanceled ? (
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              Item cancelado.
+                            </p>
+                          ) : readyAt ? (
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              Pronto em {formatDate(readyAt)}
+                            </p>
+                          ) : null}
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+                {partialReadyRegistered && (
+                  <div className="rounded-lg border border-sky-200 bg-sky-50 p-3 text-xs text-sky-900">
+                    Este pedido ja possui itens prontos. Marque apenas os restantes para continuar.
+                  </div>
+                )}
+              </div>
+            )}
+
+            {readyCompletedFromItems ? (
+              <div className="rounded-lg border border-sky-200 bg-sky-50 p-4 text-sm text-sky-950">
+                <p className="font-medium">Todos os itens ja estao prontos.</p>
+                <p className="mt-1">
+                  Ultimo registro: {latestReadyItemAt ? formatDate(latestReadyItemAt) : '-'}
+                </p>
+              </div>
+            ) : selectedReadyCompletesOrder ? (
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-950">
+                <p className="font-medium">Pedido completo</p>
+                <p className="mt-1">
+                  Ao confirmar, todos os itens ficarao prontos e o pedido sera finalizado automaticamente.
+                </p>
+              </div>
+            ) : (
+              <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                Os itens selecionados serao marcados como prontos, mas o pedido continuara aberto
+                enquanto existirem itens ainda em producao.
+              </div>
+            )}
+          </div>
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setReadyDialogOpen(false)}
+              disabled={readySaving}
+              className="w-full sm:w-auto"
+            >
+              {readyCompletedFromItems ? 'Fechar' : 'Cancelar'}
+            </Button>
+            {!readyCompletedFromItems && (
+              <Button
+                onClick={handleConfirmReady}
+                disabled={readyConfirmDisabled}
+                className="w-full min-w-0 sm:flex-1"
+              >
+                {readySaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                <Package className="mr-2 h-4 w-4" />
+                {readyPrimaryActionLabel}
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
         open={deliveryDialogOpen}
         onOpenChange={(open) => {
           if (deliverySaving) return;
           setDeliveryDialogOpen(open);
-          if (!open && !deliveryCompleted) {
+          if (!open) {
             setDeliveryReceiptOrder(null);
             setDeliveryReceiptPayment(null);
+            setDeliveryReceiptItems([]);
+            setDeliveryReceiptItemIds([]);
+            setDeliveryReceiptDeliveredAt(null);
+            setDeliveryItemIds([]);
             setDeliveryPaymentAmount(0);
             setDeliveryPaymentMethod('');
           }
@@ -4051,14 +4645,16 @@ export default function OrderDetails() {
       >
         <DialogContent
           aria-describedby={undefined}
-          className="w-[calc(100vw-1.5rem)] max-w-[560px] overflow-hidden sm:w-full"
+          className="w-[calc(100vw-1.5rem)] max-w-[560px] overflow-hidden sm:w-full md:max-w-[760px]"
         >
           <DialogHeader className="pr-8">
-            <DialogTitle>{deliveryCompleted ? 'Comprovante de entrega' : 'Confirmar entrega'}</DialogTitle>
+            <DialogTitle>{deliveryDialogShowsReceipt ? 'Comprovante de entrega' : deliveryActionLabel}</DialogTitle>
             <DialogDescription>
-              {deliveryCompleted
-                ? 'A entrega ja foi registrada. Use esta tela para consultar ou reimprimir o comprovante.'
-                : 'Ao confirmar, o pedido sera marcado como entregue e o sistema registrara a data e a hora da entrega, mesmo se ainda houver pagamento pendente.'}
+              {deliveryDialogShowsReceipt
+                ? deliveryReceiptIsTotal
+                  ? 'A entrega total ja foi registrada. Use esta tela para consultar, baixar ou reimprimir o comprovante.'
+                  : 'A entrega parcial ja foi registrada. Use esta tela para consultar, baixar ou reimprimir o comprovante.'
+                : 'Selecione os itens prontos que estao sendo entregues agora. Itens ainda em producao precisam ser marcados como prontos antes da entrega.'}
             </DialogDescription>
           </DialogHeader>
           <div className="min-w-0 space-y-4">
@@ -4081,12 +4677,128 @@ export default function OrderDetails() {
               </div>
             </div>
 
-            {deliveryCompleted ? (
+            {!deliveryDialogShowsReceipt && (
+              <div className="space-y-3 rounded-lg border border-slate-200 p-4">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-medium text-slate-900">Itens do pedido</p>
+                    <p className="text-xs text-muted-foreground">
+                      Entregues: {deliveredItems.length}/{activeItems.length || items.length} • Prontos para entrega: {pendingDeliveryItems.length}
+                    </p>
+                  </div>
+                  {pendingDeliveryItems.length > 1 && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setDeliveryItemIds(pendingDeliveryItems.map((item) => item.id))}
+                    >
+                      Selecionar todos
+                    </Button>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  {items.map((item) => {
+                    const isCanceled = isCanceledItem(item);
+                    const readyAt = getItemReadyAt(item);
+                    const alreadyReady = Boolean(readyAt);
+                    const alreadyDelivered = Boolean(item.delivered_at);
+                    const deliveryBlocked = !isCanceled && !alreadyDelivered && !alreadyReady;
+                    const checked = alreadyDelivered || deliveryItemIds.includes(item.id);
+
+                    return (
+                      <label
+                        key={item.id}
+                        className={[
+                          'flex items-start gap-3 rounded-lg border p-3',
+                          alreadyDelivered
+                            ? 'border-emerald-200 bg-emerald-50/60'
+                            : isCanceled
+                              ? 'border-red-200 bg-red-50/60'
+                            : deliveryBlocked
+                              ? 'border-slate-200 bg-slate-50/80'
+                              : 'border-sky-200 bg-sky-50/60',
+                        ].join(' ')}
+                      >
+                        <Checkbox
+                          checked={checked}
+                          disabled={alreadyDelivered || deliveryBlocked || isCanceled}
+                          onCheckedChange={(value) => {
+                            if (alreadyDelivered || deliveryBlocked || isCanceled) return;
+                            setDeliveryItemIds((current) =>
+                              value === true
+                                ? Array.from(new Set([...current, item.id]))
+                                : current.filter((id) => id !== item.id),
+                            );
+                          }}
+                          className="mt-0.5"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-medium text-slate-900">{item.product_name}</p>
+                            <Badge variant="outline">Qtd: {item.quantity}</Badge>
+                            {alreadyDelivered ? (
+                              <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100">
+                                Entregue
+                              </Badge>
+                            ) : isCanceled ? (
+                              <Badge className="bg-red-100 text-red-800 hover:bg-red-100">
+                                Cancelado
+                              </Badge>
+                            ) : alreadyReady ? (
+                              <Badge className="bg-sky-100 text-sky-800 hover:bg-sky-100">
+                                Pronto para entrega
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline">Aguardando ficar pronto</Badge>
+                            )}
+                          </div>
+                          {item.delivered_at ? (
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              Entregue em {formatDate(item.delivered_at)}
+                            </p>
+                          ) : isCanceled ? (
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              Item cancelado.
+                            </p>
+                          ) : readyAt ? (
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              Pronto em {formatDate(readyAt)}
+                            </p>
+                          ) : (
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              Marque este item como pronto antes de registrar a entrega.
+                            </p>
+                          )}
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+                {blockedDeliveryItems.length > 0 && (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-950">
+                    Existem {blockedDeliveryItems.length} item(ns) ainda em producao. Eles nao podem ser entregues antes de serem marcados como prontos.
+                  </div>
+                )}
+                {partialDeliveryRegistered && (
+                  <div className="rounded-lg border border-sky-200 bg-sky-50 p-3 text-xs text-sky-900">
+                    Este pedido ja possui itens entregues. Marque apenas os restantes para continuar.
+                  </div>
+                )}
+              </div>
+            )}
+
+            {deliveryDialogShowsReceipt ? (
               <div className="space-y-3">
                 <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
-                  <p className="font-medium">Entrega registrada com sucesso.</p>
+                  <p className="font-medium">
+                    {deliveryReceiptIsTotal ? 'Entrega total registrada com sucesso.' : 'Entrega parcial registrada com sucesso.'}
+                  </p>
                   <p className="mt-1">
                     Data e hora registradas: {deliveryRecordedAt ? formatDate(deliveryRecordedAt) : '-'}
+                  </p>
+                  <p className="mt-1">
+                    Itens entregues no pedido: {deliveryReceiptDeliveredCount}/{deliveryReceiptActiveItems.length || items.length}
                   </p>
                 </div>
                 {deliveryPaymentInfo && (
@@ -4102,7 +4814,15 @@ export default function OrderDetails() {
               </div>
             ) : (
               <div className="space-y-3">
-                {hasPendingPaymentAtDelivery ? (
+                {!selectedDeliveryCompletesOrder ? (
+                  <div className="rounded-lg border border-sky-200 bg-sky-50 p-4 text-sm text-sky-950">
+                    <p className="font-medium">Entrega parcial</p>
+                    <p className="mt-1">
+                      Os itens selecionados serao marcados como entregues, mas o pedido continuara aberto
+                      ate que todos os itens restantes fiquem prontos e sejam entregues.
+                    </p>
+                  </div>
+                ) : hasPendingPaymentAtDelivery ? (
                   <div className="min-w-0 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
                     <p className="font-medium">Pagamento pendente</p>
                     <p className="mt-1">
@@ -4161,9 +4881,9 @@ export default function OrderDetails() {
               disabled={deliverySaving}
               className="w-full sm:w-auto"
             >
-              {deliveryCompleted ? 'Fechar' : 'Cancelar'}
+              {deliveryDialogShowsReceipt ? 'Fechar' : 'Cancelar'}
             </Button>
-            {deliveryCompleted ? (
+            {deliveryDialogShowsReceipt ? (
               <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
                 <Button
                   variant="outline"
@@ -4191,11 +4911,7 @@ export default function OrderDetails() {
               >
                 {deliverySaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 <Truck className="mr-2 h-4 w-4" />
-                {shouldRegisterPaymentOnDelivery
-                  ? 'Quitar e entregar'
-                  : hasPendingPaymentAtDelivery
-                    ? 'Entregar com saldo pendente'
-                    : 'Confirmar entrega'}
+                {deliveryPrimaryActionLabel}
               </Button>
             )}
           </DialogFooter>
@@ -4203,15 +4919,66 @@ export default function OrderDetails() {
       </Dialog>
 
       {/* Status Change Dialog */}
-      <Dialog open={statusDialogOpen} onOpenChange={setStatusDialogOpen}>
+      <Dialog
+        open={statusDialogOpen}
+        onOpenChange={(open) => {
+          setStatusDialogOpen(open);
+          if (!open) {
+            setNewStatus('');
+            setStatusItemId('');
+            setStatusNotes('');
+          }
+        }}
+      >
         <DialogContent aria-describedby={undefined}>
           <DialogHeader>
-            <DialogTitle>Alterar Status do Pedido</DialogTitle>
+            <DialogTitle>Alterar Status do {statusTargetLabel}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            {order.status === 'pendente' ? (
+            {statusTargetIsItem && (
               <div className="space-y-2">
-                <Label>Este pedido precisa de criação ou ajuste de arte?</Label>
+                <Label>Produto</Label>
+                <Select
+                  value={statusItemId}
+                  onValueChange={(value) => {
+                    setStatusItemId(value);
+                    setNewStatus('');
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o produto" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {items.map((item) => (
+                      <SelectItem key={item.id} value={item.id}>
+                        {item.product_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {selectedStatusItem && (
+                  <div className="rounded-lg border bg-muted/30 p-3 text-sm">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-medium text-slate-900">{selectedStatusItem.product_name}</span>
+                      <Badge className={statusConfig[selectedStatusItem.status]?.color || 'bg-slate-100 text-slate-700'}>
+                        {getOrderStatusLabel(selectedStatusItem.status, orderStatusCustomization)}
+                      </Badge>
+                      {isCanceledItem(selectedStatusItem) && (
+                        <Badge variant="outline">Item cancelado</Badge>
+                      )}
+                    </div>
+                    {selectedStatusItem.status === 'em_producao' && (
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        Quando este item terminar a producao, use a acao `Marcar pronto`.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+            {statusSource === 'pendente' ? (
+              <div className="space-y-2">
+                <Label>Este {statusTargetLabel.toLowerCase()} precisa de criação ou ajuste de arte?</Label>
                 <div className="grid gap-2 sm:grid-cols-2">
                   <Button
                     type="button"
@@ -4237,7 +5004,7 @@ export default function OrderDetails() {
                     <SelectValue placeholder="Selecione o novo status" />
                   </SelectTrigger>
                   <SelectContent>
-                    {config.next.map((status) => (
+                    {statusDialogNextOptions.map((status) => (
                       <SelectItem key={status} value={status}>
                         <div className="flex items-center gap-2">
                           {(() => {
@@ -4250,6 +5017,11 @@ export default function OrderDetails() {
                     ))}
                   </SelectContent>
                 </Select>
+                {statusTargetIsItem && statusDialogNextOptions.length === 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    Este produto não possui troca de status disponível nesta tela.
+                  </p>
+                )}
               </div>
             )}
             <div className="space-y-2">
@@ -4270,7 +5042,12 @@ export default function OrderDetails() {
             </Button>
             <Button
               onClick={handleStatusChange}
-              disabled={saving || !newStatus || (newStatus === 'cancelado' && !statusNotes)}
+              disabled={
+                saving ||
+                !newStatus ||
+                (statusTargetIsItem && !selectedStatusItem) ||
+                (newStatus === 'cancelado' && !statusNotes)
+              }
             >
               {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               <CheckCircle className="mr-2 h-4 w-4" />
