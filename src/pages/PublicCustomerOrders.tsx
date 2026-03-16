@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
+import { PageFallback } from '@/App';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -146,6 +147,10 @@ export default function PublicCustomerOrders() {
     () => orders.filter((order) => order.status !== 'entregue' && order.status !== 'cancelado').length,
     [orders],
   );
+
+  if (ordersLoading && orders.length === 0) {
+    return <PageFallback />;
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">

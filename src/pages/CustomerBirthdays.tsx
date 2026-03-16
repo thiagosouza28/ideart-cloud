@@ -25,7 +25,7 @@ import { normalizeDigits } from '@/components/ui/masked-input';
 const MONTHS = [
   { value: 1, label: 'Janeiro' },
   { value: 2, label: 'Fevereiro' },
-  { value: 3, label: 'Marco' },
+  { value: 3, label: 'Março' },
   { value: 4, label: 'Abril' },
   { value: 5, label: 'Maio' },
   { value: 6, label: 'Junho' },
@@ -83,7 +83,7 @@ export default function CustomerBirthdays() {
   const buildBirthdayMessage = (customer: Customer) => {
     const template =
       company?.birthday_message_template?.trim() ||
-      'Ola {cliente_nome}, feliz aniversario! Que seu dia seja especial. {empresa_nome}';
+      'Olá {cliente_nome}, feliz aniversário! Que seu dia seja especial. {empresa_nome}';
     const ageToComplete = getAgeAtYear(customer.date_of_birth, currentYear);
     const birthdayDate = formatMonthDay(customer.date_of_birth);
     const replacements: Record<string, string> = {
@@ -115,9 +115,9 @@ export default function CustomerBirthdays() {
     <div className="page-container space-y-6">
       <div className="page-header">
         <div>
-          <h1 className="page-title">Aniversariantes do Mes</h1>
+          <h1 className="page-title">Aniversariantes do Mês</h1>
           <p className="text-sm text-muted-foreground">
-            Consulte clientes que fazem aniversario no mes selecionado.
+            Consulte clientes que fazem aniversário no mês selecionado.
           </p>
         </div>
       </div>
@@ -133,7 +133,7 @@ export default function CustomerBirthdays() {
           <div className="w-full sm:w-auto sm:min-w-[200px]">
             <Select value={String(selectedMonth)} onValueChange={(value) => setSelectedMonth(Number(value))}>
               <SelectTrigger>
-                <SelectValue placeholder="Selecione o mes" />
+                <SelectValue placeholder="Selecione o mês" />
               </SelectTrigger>
               <SelectContent>
                 {MONTHS.map((month) => (
@@ -166,7 +166,7 @@ export default function CustomerBirthdays() {
         ) : filtered.length === 0 ? (
           <Card>
             <CardContent className="py-8 text-center text-muted-foreground">
-              Nenhum aniversariante encontrado para este mes.
+              Nenhum aniversariante encontrado para este mês.
             </CardContent>
           </Card>
         ) : (

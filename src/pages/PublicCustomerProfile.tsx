@@ -12,6 +12,7 @@ import {
 } from '@/components/catalog/PublicCatalogChrome';
 import { CpfCnpjInput, PhoneInput, normalizeDigits, validateCpf, validatePhone } from '@/components/ui/masked-input';
 import { useCustomerAuth } from '@/hooks/use-customer-auth';
+import { PageFallback } from '@/App';
 import { customerSupabase } from '@/integrations/supabase/customer-client';
 import { loadPublicCatalogCompany } from '@/lib/publicCatalogCompany';
 
@@ -45,78 +46,46 @@ const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.
 export default function PublicCustomerProfile() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, signOut, loading } = useCustomerAuth();
+  const { user, signOut, loading: authLoading } = useCustomerAuth();
   const userId = user?.id ?? null;
   const userEmail = user?.email ?? null;
 
   const [catalogCompany, setCatalogCompany] = useState<CatalogChromeCompany | null>(null);
-  const [fallbackCompanyId, setFallbackCompanyId] = useState<string | null>(null);
   const [profileForm, setProfileForm] = useState<ProfileForm>(emptyProfileForm);
   const [profileLoaded, setProfileLoaded] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
-  const [profileErrors, setProfileErrors] = useState<Partial<Record<keyof ProfileForm, string>>>({});
   const [profileFeedback, setProfileFeedback] = useState<string | null>(null);
   const [profileErrorMessage, setProfileErrorMessage] = useState<string | null>(null);
-
-  const catalogPath = useMemo(() => {
-    const params = new URLSearchParams(location.search);
-    const catalog = params.get('catalog');
-    if (!catalog) return '/catalogo';
-    if (catalog.startsWith('/catalogo') || catalog.startsWith('/loja/')) return catalog;
-    return '/catalogo';
-  }, [location.search]);
-
-  const profilePath = useMemo(
-    () => (location.search ? `/minha-conta/perfil${location.search}` : '/minha-conta/perfil'),
-    [location.search],
-  );
-
-  const ordersPath = useMemo(
-    () => (location.search ? `/minha-conta/pedidos${location.search}` : '/minha-conta/pedidos'),
-    [location.search],
-  );
+  const [profileFormErrors, setProfileFormErrors] = useState<Partial<Record<keyof ProfileForm, string>>>({});
 
   const companyContext = useMemo(() => {
     const params = new URLSearchParams(location.search);
-    const company = params.get('company');
-    if (company && isUuid(company)) return company;
-
-    const catalog = params.get('catalog');
-    if (!catalog) return null;
-    const byId = catalog.match(/^\/loja\/([^/?#]+)/i);
-    if (byId?.[1]) return byId[1];
-    const bySlug = catalog.match(/^\/catalogo\/([^/?#]+)/i);
-    return bySlug?.[1] || null;
+    return params.get('catalog') || params.get('company') || null;
   }, [location.search]);
 
-  useEffect(() => {
-    if (loading) return;
-    if (!user) {
-      const params = new URLSearchParams();
-      params.set('next', profilePath);
-      if (catalogPath.startsWith('/catalogo') || catalogPath.startsWith('/loja/')) {
-        params.set('catalog', catalogPath);
-      }
-      navigate(`/minha-conta/login?${params.toString()}`, { replace: true });
-    }
-  }, [catalogPath, loading, navigate, profilePath, user]);
+  const profileCompanyId = catalogCompany?.id ?? null;
+
+  const catalogPath = useMemo(() => {
+    if (catalogCompany?.slug) return `/catalogo/${catalogCompany.slug}`;
+    if (catalogCompany?.id) return `/catalogo/loja/${catalogCompany.id}`;
+    return '/catalogo';
+  }, [catalogCompany]);
+
+  const ordersPath = useMemo(() => {
+    if (!companyContext) return '/minha-conta/pedidos';
+    return `/minha-conta/pedidos?${new URLSearchParams({ catalog: companyContext }).toString()}`;
+  }, [companyContext]);
 
   useEffect(() => {
     let isMounted = true;
-
     const loadCatalogCompany = async () => {
-      if (!companyContext) {
-        setCatalogCompany(null);
-        return;
-      }
-
+      if (!companyContext) return;
       const data = await loadPublicCatalogCompany({
         companyId: isUuid(companyContext) ? companyContext : undefined,
         slug: isUuid(companyContext) ? undefined : companyContext,
       });
 
       if (!isMounted) return;
-
       if (data) {
         setCatalogCompany(data);
       } else {
@@ -131,122 +100,72 @@ export default function PublicCustomerProfile() {
   }, [companyContext]);
 
   useEffect(() => {
-    const loadFallbackCompany = async () => {
-      if (!userId || catalogCompany?.id || (companyContext && isUuid(companyContext))) return;
-
-      const { data } = await customerSupabase
-        .from('orders')
-        .select('company_id')
-        .eq('customer_user_id', userId)
-        .not('company_id', 'is', null)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      setFallbackCompanyId((data?.company_id as string | null) || null);
-    };
-
-    void loadFallbackCompany();
-  }, [catalogCompany?.id, companyContext, userId]);
-
-  useEffect(() => {
-    if (!user) return;
-    const metadata = (user.user_metadata || {}) as Record<string, unknown>;
-    setProfileForm((prev) => ({
-      ...prev,
-      name: prev.name || (typeof metadata.full_name === 'string' ? metadata.full_name : '') || '',
-      phone: prev.phone || user.phone || (typeof metadata.phone === 'string' ? metadata.phone : '') || '',
-      document: prev.document || (typeof metadata.cpf === 'string' ? metadata.cpf : '') || '',
-      email: prev.email || user.email || '',
-    }));
-  }, [user]);
-
-  const profileCompanyId = useMemo(() => {
-    if (catalogCompany?.id) return catalogCompany.id;
-    if (companyContext && isUuid(companyContext)) return companyContext;
-    return fallbackCompanyId;
-  }, [catalogCompany?.id, companyContext, fallbackCompanyId]);
-
-  useEffect(() => {
-    if (!userId || !profileCompanyId) {
-      setProfileLoaded(true);
-      return;
-    }
-
-    let isMounted = true;
-
     const loadProfile = async () => {
-      setProfileLoaded(false);
-      const { data, error } = await customerSupabase
-        .from('customers')
-        .select('name, phone, document, email, address, city, state, zip_code')
-        .eq('company_id', profileCompanyId)
-        .eq('user_id', userId)
-        .order('updated_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      if (!userId || !profileCompanyId) return;
 
-      if (!isMounted) return;
+      const { data, error } = await customerSupabase.rpc('get_catalog_customer_checkout_profile', {
+        p_company_id: profileCompanyId,
+      });
 
-      if (!error && data) {
-        setProfileForm((prev) => ({
-          ...prev,
-          name: data.name || prev.name,
-          phone: data.phone || prev.phone,
-          document: data.document || prev.document,
-          email: data.email || prev.email,
-          address: data.address || '',
-          city: data.city || '',
-          state: data.state || '',
-          zipCode: data.zip_code || '',
-        }));
+      if (error) {
+        console.error('Error loading profile:', error);
+        setProfileLoaded(true);
+        return;
+      }
+
+      if (data && typeof data === 'object') {
+        const profile = data as any;
+        setProfileForm({
+          name: profile.name || '',
+          phone: profile.phone || '',
+          document: profile.document || '',
+          email: profile.email || '',
+          address: profile.address || '',
+          city: profile.city || '',
+          state: profile.state || '',
+          zipCode: profile.zip_code || '',
+        });
+      } else if (user) {
+        const metadata = (user.user_metadata || {}) as Record<string, unknown>;
+        setProfileForm({
+          ...emptyProfileForm,
+          name: (typeof metadata.full_name === 'string' ? metadata.full_name : '') || '',
+          phone: user.phone || (typeof metadata.phone === 'string' ? metadata.phone : '') || '',
+          document: (typeof metadata.cpf === 'string' ? metadata.cpf : '') || '',
+          email: user.email || '',
+        });
       }
       setProfileLoaded(true);
     };
 
     void loadProfile();
-    return () => {
-      isMounted = false;
-    };
-  }, [profileCompanyId, userId]);
-
-  const validateProfile = () => {
-    const nextErrors: Partial<Record<keyof ProfileForm, string>> = {};
-
-    if (profileForm.name.trim().length < 2) {
-      nextErrors.name = 'Informe o nome completo.';
-    }
-    if (!validatePhone(profileForm.phone)) {
-      nextErrors.phone = 'Telefone inválido.';
-    }
-    if (!validateCpf(profileForm.document)) {
-      nextErrors.document = 'CPF inválido.';
-    }
-    if (!isValidEmail(profileForm.email)) {
-      nextErrors.email = 'Informe um e-mail válido.';
-    }
-    if (!profileForm.address.trim()) {
-      nextErrors.address = 'Informe o endereço.';
-    }
-    if (!profileForm.city.trim()) {
-      nextErrors.city = 'Informe a cidade.';
-    }
-    if (profileForm.state.trim().length < 2) {
-      nextErrors.state = 'Informe o estado (UF).';
-    }
-    if (normalizeDigits(profileForm.zipCode).length < 8) {
-      nextErrors.zipCode = 'Informe um CEP válido.';
-    }
-
-    setProfileErrors(nextErrors);
-    return Object.keys(nextErrors).length === 0;
-  };
+  }, [profileCompanyId, userId, user]);
 
   const handleProfileChange = (field: keyof ProfileForm, value: string) => {
     setProfileForm((prev) => ({ ...prev, [field]: value }));
-    setProfileErrors((prev) => ({ ...prev, [field]: undefined }));
-    setProfileFeedback(null);
-    setProfileErrorMessage(null);
+    if (profileFormErrors[field]) {
+      setProfileFormErrors((prev) => {
+        const next = { ...prev };
+        delete next[field];
+        return next;
+      });
+    }
+  };
+
+  const validateProfile = () => {
+    const errors: Partial<Record<keyof ProfileForm, string>> = {};
+    if (!profileForm.name.trim()) errors.name = 'Informe seu nome completo.';
+    if (!validatePhone(profileForm.phone)) errors.phone = 'Informe um telefone válido.';
+    if (!validateCpf(profileForm.document)) errors.document = 'Informe um CPF válido.';
+    if (!isValidEmail(profileForm.email)) errors.email = 'Informe um e-mail válido.';
+    if (!profileForm.address.trim()) errors.address = 'Informe seu endereço.';
+    if (!profileForm.city.trim()) errors.city = 'Informe sua cidade.';
+    if (!profileForm.state.trim() || profileForm.state.trim().length < 2)
+      errors.state = 'Informe seu estado (UF).';
+    if (normalizeDigits(profileForm.zipCode).length < 8) errors.zipCode = 'Informe um CEP válido.';
+
+    setProfileFormErrors(errors);
+    return Object.keys(errors).length === 0;
   };
 
   const handleProfileSubmit = async (event: FormEvent) => {
@@ -279,6 +198,10 @@ export default function PublicCustomerProfile() {
     setProfileFeedback('Perfil salvo com sucesso.');
     setProfileSaving(false);
   };
+
+  if (authLoading || (profileCompanyId && !profileLoaded)) {
+    return <PageFallback />;
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
@@ -347,33 +270,40 @@ export default function PublicCustomerProfile() {
                   value={profileForm.name}
                   onChange={(event) => handleProfileChange('name', event.target.value)}
                   placeholder="Nome e sobrenome"
-                  disabled={!profileCompanyId}
+                  className={profileFormErrors.name ? 'border-destructive' : ''}
                 />
-                {profileErrors.name && <p className="mt-1 text-xs text-destructive">{profileErrors.name}</p>}
+                {profileFormErrors.name && (
+                  <p className="mt-1 text-xs text-destructive">{profileFormErrors.name}</p>
+                )}
               </div>
 
-              <div>
-                <Label htmlFor="profile-phone">Telefone (WhatsApp) *</Label>
-                <PhoneInput
-                  id="profile-phone"
-                  value={profileForm.phone}
-                  onChange={(value) => handleProfileChange('phone', value)}
-                  className={profileErrors.phone ? 'border-destructive' : ''}
-                  disabled={!profileCompanyId}
-                />
-                {profileErrors.phone && <p className="mt-1 text-xs text-destructive">{profileErrors.phone}</p>}
-              </div>
-
-              <div>
-                <Label htmlFor="profile-document">CPF *</Label>
-                <CpfCnpjInput
-                  id="profile-document"
-                  value={profileForm.document}
-                  onChange={(value) => handleProfileChange('document', value)}
-                  className={profileErrors.document ? 'border-destructive' : ''}
-                  disabled={!profileCompanyId}
-                />
-                {profileErrors.document && <p className="mt-1 text-xs text-destructive">{profileErrors.document}</p>}
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <Label htmlFor="profile-phone">Telefone *</Label>
+                  <PhoneInput
+                    id="profile-phone"
+                    value={profileForm.phone}
+                    onChange={(event) => handleProfileChange('phone', event.target.value)}
+                    placeholder="(00) 00000-0000"
+                    className={profileFormErrors.phone ? 'border-destructive' : ''}
+                  />
+                  {profileFormErrors.phone && (
+                    <p className="mt-1 text-xs text-destructive">{profileFormErrors.phone}</p>
+                  )}
+                </div>
+                <div>
+                  <Label htmlFor="profile-document">CPF *</Label>
+                  <CpfCnpjInput
+                    id="profile-document"
+                    value={profileForm.document}
+                    onChange={(event) => handleProfileChange('document', event.target.value)}
+                    placeholder="000.000.000-00"
+                    className={profileFormErrors.document ? 'border-destructive' : ''}
+                  />
+                  {profileFormErrors.document && (
+                    <p className="mt-1 text-xs text-destructive">{profileFormErrors.document}</p>
+                  )}
+                </div>
               </div>
 
               <div>
@@ -383,70 +313,93 @@ export default function PublicCustomerProfile() {
                   type="email"
                   value={profileForm.email}
                   onChange={(event) => handleProfileChange('email', event.target.value)}
-                  placeholder="voce@email.com"
-                  disabled={!profileCompanyId}
+                  placeholder="seu@email.com"
+                  className={profileFormErrors.email ? 'border-destructive' : ''}
                 />
-                {profileErrors.email && <p className="mt-1 text-xs text-destructive">{profileErrors.email}</p>}
+                {profileFormErrors.email && (
+                  <p className="mt-1 text-xs text-destructive">{profileFormErrors.email}</p>
+                )}
               </div>
 
+              <Separator className="my-4" />
+
               <div>
-                <Label htmlFor="profile-address">Endereço *</Label>
+                <Label htmlFor="profile-address">Endereço de entrega *</Label>
                 <Input
                   id="profile-address"
                   value={profileForm.address}
                   onChange={(event) => handleProfileChange('address', event.target.value)}
-                  placeholder="Rua, numero e complemento"
-                  disabled={!profileCompanyId}
+                  placeholder="Rua, número, complemento, bairro"
+                  className={profileFormErrors.address ? 'border-destructive' : ''}
                 />
-                {profileErrors.address && <p className="mt-1 text-xs text-destructive">{profileErrors.address}</p>}
+                {profileFormErrors.address && (
+                  <p className="mt-1 text-xs text-destructive">{profileFormErrors.address}</p>
+                )}
               </div>
 
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <div>
-                  <Label htmlFor="profile-city">Cidade *</Label>
-                  <Input
-                    id="profile-city"
-                    value={profileForm.city}
-                    onChange={(event) => handleProfileChange('city', event.target.value)}
-                    placeholder="Cidade"
-                    disabled={!profileCompanyId}
-                  />
-                  {profileErrors.city && <p className="mt-1 text-xs text-destructive">{profileErrors.city}</p>}
-                </div>
-                <div>
-                  <Label htmlFor="profile-state">UF *</Label>
-                  <Input
-                    id="profile-state"
-                    value={profileForm.state}
-                    onChange={(event) => handleProfileChange('state', event.target.value.toUpperCase().slice(0, 2))}
-                    placeholder="SP"
-                    disabled={!profileCompanyId}
-                  />
-                  {profileErrors.state && <p className="mt-1 text-xs text-destructive">{profileErrors.state}</p>}
-                </div>
-                <div>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="sm:col-span-1">
                   <Label htmlFor="profile-zip">CEP *</Label>
                   <Input
                     id="profile-zip"
                     value={profileForm.zipCode}
                     onChange={(event) => handleProfileChange('zipCode', event.target.value)}
                     placeholder="00000-000"
-                    disabled={!profileCompanyId}
+                    maxLength={9}
+                    className={profileFormErrors.zipCode ? 'border-destructive' : ''}
                   />
-                  {profileErrors.zipCode && <p className="mt-1 text-xs text-destructive">{profileErrors.zipCode}</p>}
+                  {profileFormErrors.zipCode && (
+                    <p className="mt-1 text-xs text-destructive">{profileFormErrors.zipCode}</p>
+                  )}
+                </div>
+                <div className="sm:col-span-1">
+                  <Label htmlFor="profile-city">Cidade *</Label>
+                  <Input
+                    id="profile-city"
+                    value={profileForm.city}
+                    onChange={(event) => handleProfileChange('city', event.target.value)}
+                    placeholder="Cidade"
+                    className={profileFormErrors.city ? 'border-destructive' : ''}
+                  />
+                  {profileFormErrors.city && (
+                    <p className="mt-1 text-xs text-destructive">{profileFormErrors.city}</p>
+                  )}
+                </div>
+                <div className="sm:col-span-1">
+                  <Label htmlFor="profile-state">Estado (UF) *</Label>
+                  <Input
+                    id="profile-state"
+                    value={profileForm.state}
+                    onChange={(event) => handleProfileChange('state', event.target.value)}
+                    placeholder="UF"
+                    maxLength={2}
+                    className={profileFormErrors.state ? 'border-destructive' : ''}
+                  />
+                  {profileFormErrors.state && (
+                    <p className="mt-1 text-xs text-destructive">{profileFormErrors.state}</p>
+                  )}
                 </div>
               </div>
 
-              {profileErrorMessage && <p className="text-xs text-destructive">{profileErrorMessage}</p>}
-              {profileFeedback && <p className="text-xs text-emerald-600">{profileFeedback}</p>}
-
-              <Button
-                type="submit"
-                className="bg-[#1a3a8f] hover:bg-[#16337e]"
-                disabled={!profileCompanyId || profileSaving}
-              >
-                {profileSaving ? 'Salvando perfil...' : 'Salvar perfil'}
-              </Button>
+              <div className="pt-2">
+                {profileFeedback && (
+                  <p className="mb-3 rounded-md bg-emerald-50 p-3 text-sm font-medium text-emerald-700">
+                    {profileFeedback}
+                  </p>
+                )}
+                {profileErrorMessage && (
+                  <p className="mb-3 rounded-md bg-destructive/10 p-3 text-sm font-medium text-destructive">
+                    {profileErrorMessage}
+                  </p>
+                )}
+                <Button
+                  type="submit"
+                  className="w-full bg-[#1a3a8f] hover:bg-[#16337e]"
+                  disabled={profileSaving || !profileCompanyId}
+                >
+                  {profileSaving ? 'Salvando...' : 'Salvar perfil'}
+                </Button>
+              </div>
             </form>
           </CardContent>
         </Card>

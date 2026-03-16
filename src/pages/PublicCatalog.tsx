@@ -15,6 +15,7 @@ import {
   Tag,
   TrendingUp,
 } from 'lucide-react';
+import { PageFallback } from '@/App';
 import { publicSupabase as supabase } from '@/integrations/supabase/public-client';
 import { Slider } from '@/components/ui/slider';
 import { BannerCarousel } from '@/components/BannerCarousel';
@@ -1348,13 +1349,7 @@ export default function PublicCatalog() {
     priceRange[1] !== priceBounds.max;
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-slate-50">
-        <div className="grid min-h-screen place-items-center">
-          <p className="text-sm font-medium text-slate-500">Carregando catálogo...</p>
-        </div>
-      </div>
-    );
+    return <PageFallback />;
   }
 
   if (notFound) {

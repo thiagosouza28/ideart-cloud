@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
+import { PageFallback } from '@/App';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -334,6 +335,10 @@ export default function PublicCustomerOrderDetails() {
   const displayTotal = Number(displayOrder?.total ?? order?.total ?? 0);
   const displayAmountPaid = Number(displayOrder?.amount_paid ?? order?.amount_paid ?? 0);
   const displayPaymentStatus = displayOrder?.payment_status ?? order?.payment_status ?? 'pendente';
+
+  if (pageLoading && !order && !publicPayload) {
+    return <PageFallback />;
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">

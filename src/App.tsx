@@ -82,7 +82,7 @@ const queryClient = new QueryClient({
   },
 });
 
-const PageFallback = () => (
+export const PageFallback = () => (
   <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background/80 backdrop-blur-sm animate-in fade-in duration-300">
     <div className="relative flex flex-col items-center gap-4 p-8 rounded-2xl bg-card border shadow-2xl scale-in-95 animate-in">
       <div className="relative">

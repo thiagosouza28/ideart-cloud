@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import {
   LayoutDashboard,
   ShoppingCart,
@@ -102,6 +103,17 @@ export function AppSidebar() {
   const { role, signOut, hasPermission, hasModulePermission } = useAuth();
   const collapsed = state === 'collapsed';
 
+  const allMenuUrls = useMemo(() => {
+    const menus = [
+      ...primaryMenu,
+      ...operationsMenu,
+      ...catalogMenu,
+      ...settingsMenu,
+      ...superAdminMenu,
+    ];
+    return menus.map((m) => m.url);
+  }, []);
+
   const filterByRole = (items: MenuItem[]) =>
     items.filter((item) => hasPermission(item.roles) && hasModulePermission(item.moduleKey));
   const isSuperAdmin = role === 'super_admin';
@@ -121,10 +133,28 @@ export function AppSidebar() {
   const neutralNavButtonClass =
     'min-h-11 h-auto text-sm font-medium text-sidebar-foreground/80 hover:bg-sidebar-accent/70 hover:text-sidebar-foreground [&>span:last-child]:whitespace-normal [&>span:last-child]:overflow-visible [&>span:last-child]:text-clip [&>span:last-child]:leading-tight';
   const isItemActive = (url: string) => {
+    const currentPath = location.pathname;
+
+    // Correspondência exata sempre vence
+    if (currentPath === url) return true;
+
+    // Para dashboards, evitamos correspondência parcial se não for exata
     if (url === '/dashboard' || url === '/super-admin') {
-      return location.pathname === url;
+      return currentPath === url;
     }
-    return location.pathname === url || location.pathname.startsWith(`${url}/`);
+
+    // Se o caminho atual começar com a URL do item (ex: /clientes/novo começando com /clientes)
+    if (currentPath.startsWith(`${url}/`)) {
+      // Verificamos se existe algum outro item de menu que seja uma correspondência mais específica
+      // (ex: se estivermos em /clientes/aniversariantes, não queremos ativar o item /clientes)
+      const hasMoreSpecificMatch = allMenuUrls.some(
+        (menuUrl) => menuUrl !== url && currentPath.startsWith(menuUrl) && menuUrl.length > url.length,
+      );
+
+      return !hasMoreSpecificMatch;
+    }
+
+    return false;
   };
 
   return (

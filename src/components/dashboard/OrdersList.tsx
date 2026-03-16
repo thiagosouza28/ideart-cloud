@@ -31,7 +31,7 @@ export function OrdersList({ items }: OrdersListProps) {
         <div className="mt-5 space-y-4">
           {items.map((item) => (
             <div key={item.id} className="flex flex-col gap-3 rounded-2xl border border-border/80 px-4 py-3 sm:flex-row sm:items-center">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-sm font-semibold text-muted-foreground">
+              <div className="flex h-9 min-w-[3rem] shrink-0 items-center justify-center rounded-full bg-muted px-3 text-[11px] font-bold text-muted-foreground tracking-tighter shadow-sm border border-border/50">
                 {item.id}
               </div>
               <div className="min-w-0 flex-1">

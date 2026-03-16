@@ -26,6 +26,7 @@ import { buildPeriodSeries, loadReports, type ReportBundle, type ReportFilters, 
 import { exportToCsv, exportToExcel, openPdfPreview, printPdf, type ExportRow } from '@/lib/report-export';
 import { OrderStatus } from '@/types/database';
 import { useAuth } from '@/contexts/AuthContext';
+import { PageFallback } from '@/App';
 
 const statusOptions: Array<{ value: OrderStatus | 'all'; label: string }> = [
   { value: 'all', label: 'Todos' },
@@ -225,12 +226,12 @@ export default function Reports() {
   }, [profile?.company_id]);
 
   const handleClear = () => {
-    setFilters({
+    setFilters((prev) => ({
+      ...prev,
       startDate: defaults.start,
       endDate: defaults.end,
       status: 'all' as const,
-      companyId: profile?.company_id ?? null,
-    });
+    }));
   };
 
   const cashSeries = useMemo(() => {
@@ -245,8 +246,12 @@ export default function Reports() {
     return reportData.sales.salesByPeriod[salesPeriod] || [];
   }, [reportData, salesPeriod]);
 
+  if (loading && !reportData) {
+    return <PageFallback />;
+  }
+
   return (
-    <div className="space-y-6">
+    <div className="page-container space-y-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h1 className="text-3xl font-bold text-slate-900">Relatórios</h1>

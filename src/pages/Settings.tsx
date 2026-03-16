@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import Cropper, { Area } from 'react-easy-crop';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useLayoutEffect } from 'react';
 import {
@@ -26,6 +27,7 @@ import {
   Type,
   LayoutTemplate,
   Paintbrush2,
+  Crop,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -244,6 +246,47 @@ const themeTemplateOptions: Array<{
     { value: 'logo', description: 'Gera uma paleta clara e escura a partir da cor dominante da logo.' },
   ];
 
+const createImage = (url: string): Promise<HTMLImageElement> =>
+  new Promise((resolve, reject) => {
+    const image = new Image();
+    image.addEventListener('load', () => resolve(image));
+    image.addEventListener('error', (error) => reject(error));
+    image.setAttribute('crossOrigin', 'anonymous');
+    image.src = url;
+  });
+
+async function getCroppedImg(
+  imageSrc: string,
+  pixelCrop: Area,
+): Promise<Blob | null> {
+  const image = await createImage(imageSrc);
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+
+  if (!ctx) return null;
+
+  canvas.width = pixelCrop.width;
+  canvas.height = pixelCrop.height;
+
+  ctx.drawImage(
+    image,
+    pixelCrop.x,
+    pixelCrop.y,
+    pixelCrop.width,
+    pixelCrop.height,
+    0,
+    0,
+    pixelCrop.width,
+    pixelCrop.height,
+  );
+
+  return new Promise((resolve) => {
+    canvas.toBlob((blob) => {
+      resolve(blob);
+    }, 'image/png');
+  });
+}
+
 export default function Settings() {
   const { toast } = useToast();
   const { profile, user, hasPermission, refreshCompany } = useAuth();
@@ -327,6 +370,13 @@ export default function Settings() {
   // Controla a aba por estado para evitar reload e manter o estado dos formulários.
   const [activeTab, setActiveTab] = useState<'company' | 'theme'>('company');
   const [companySettingsTab, setCompanySettingsTab] = useState<'geral' | 'dashboard' | 'contato' | 'mensagens' | 'permissoes'>('geral');
+
+  // Logo Crop Dialog
+  const [cropDialogOpen, setCropDialogOpen] = useState(false);
+  const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
+  const [crop, setCrop] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
 
   // Dialogs
   const [categoryDialog, setCategoryDialog] = useState(false);
@@ -587,14 +637,34 @@ export default function Settings() {
   const handleLogoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      setLogoFile(file);
       const reader = new FileReader();
-      reader.onloadend = () => {
-        setLogoPreview(reader.result as string);
+      reader.onload = () => {
+        setCropImageSrc(reader.result as string);
+        setCropDialogOpen(true);
       };
       reader.readAsDataURL(file);
+    }
+  };
 
-      try {
+  const onCropComplete = useCallback((_croppedArea: Area, croppedAreaPixels: Area) => {
+    setCroppedAreaPixels(croppedAreaPixels);
+  }, []);
+
+  const handleCropSave = async () => {
+    if (!cropImageSrc || !croppedAreaPixels) return;
+
+    try {
+      const croppedBlob = await getCroppedImg(cropImageSrc, croppedAreaPixels);
+      if (croppedBlob) {
+        const file = new File([croppedBlob], 'logo.png', { type: 'image/png' });
+        setLogoFile(file);
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setLogoPreview(reader.result as string);
+        };
+        reader.readAsDataURL(file);
+
+        // Extract color and suggest theme
         const suggestedColor = await extractDominantColorFromFile(file);
         setThemeForm((prev) =>
           setCompanyThemePalette(
@@ -608,13 +678,31 @@ export default function Settings() {
           ),
         );
         toast({
-          title: 'Cor principal sugerida a partir da logo',
-          description: `Revise a nova paleta ${themePaletteMode === 'dark' ? 'escura' : 'clara'} na aba Tema da Empresa antes de salvar.`,
+          title: 'Logo recortada com sucesso',
+          description: `Cor principal sugerida a partir da logo. Revise na aba Tema.`,
         });
-      } catch (error) {
-        console.error('Erro ao extrair cor da logo:', error);
       }
+    } catch (error) {
+      console.error('Erro ao recortar imagem:', error);
+      toast({
+        title: 'Erro ao recortar imagem',
+        variant: 'destructive',
+      });
+    } finally {
+      setCropDialogOpen(false);
+      setCropImageSrc(null);
     }
+  };
+
+  const handleRemoveLogo = () => {
+    setLogoFile(null);
+    setLogoPreview(null);
+    setCompanyForm(prev => ({ ...prev })); // trigger change to enable save button
+    setIsSaved(false);
+    toast({
+      title: 'Logo removida',
+      description: 'Clique em Salvar para confirmar a remoção.',
+    });
   };
 
   const handleSignatureChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -741,11 +829,12 @@ export default function Settings() {
       let logoUrl = company.logo_url;
       let signatureUrl = company.signature_image_url || null;
 
-      // Upload new logo if changed
-      if (logoFile) {
+      // If logoPreview is null, it means the user removed the logo
+      if (logoPreview === null) {
+        logoUrl = null;
+      } else if (logoFile) {
+        // Upload new logo if changed
         try {
-          // If we had an old local logo, we should delete it, but Settings.tsx doesn't track specifically the "old" one before overwrite easily here.
-          // However, the rule is to save the new one.
           logoUrl = await uploadFile(logoFile, 'product-images');
         } catch (err) {
           throw new Error(`Erro ao enviar logo: ${err}`);
@@ -875,7 +964,7 @@ export default function Settings() {
 
       if (error) throw error;
 
-      const savedTheme = normalizeCompanyTheme(data ?? payload, profile.company_id);
+      const savedTheme = normalizeCompanyTheme(data as CompanyTheme ?? payload, profile.company_id);
       setThemeForm(savedTheme);
       setOriginalThemeForm(savedTheme);
       setCompanyThemeLocally(savedTheme);
@@ -1131,32 +1220,47 @@ export default function Settings() {
                 <TabsContent value="geral" className="mt-0 space-y-6">
                   {/* Logo Upload */}
                   <div className="flex items-center gap-6">
-                    <div className="relative">
-                      <div className="h-20 w-20 rounded-full border-2 border-dashed border-muted-foreground/30 flex items-center justify-center overflow-hidden bg-muted/50">
-                        {logoPreview ? (
-                          <img
-                            src={logoPreview}
-                            alt="Logo"
-                            className="h-full w-full object-cover"
-                          />
-                        ) : (
-                          <Upload className="h-6 w-6 text-muted-foreground/50" />
-                        )}
+                      <div className="relative group">
+                        <div className="h-20 w-20 rounded-full border-2 border-dashed border-muted-foreground/30 flex items-center justify-center overflow-hidden bg-muted/50 transition-colors group-hover:border-primary/50">
+                          {logoPreview ? (
+                            <img
+                              src={logoPreview}
+                              alt="Logo"
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <Upload className="h-6 w-6 text-muted-foreground/50" />
+                          )}
+                        </div>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleLogoChange}
+                          className="absolute inset-0 opacity-0 cursor-pointer"
+                        />
                       </div>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleLogoChange}
-                        className="absolute inset-0 opacity-0 cursor-pointer"
-                      />
+                      <div className="flex flex-col gap-1">
+                        <p className="font-medium">Logo da Empresa</p>
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm text-muted-foreground">
+                            Clique na imagem para alterar
+                          </p>
+                          {logoPreview && (
+                            <>
+                              <span className="text-muted-foreground/30">•</span>
+                              <button
+                                type="button"
+                                onClick={handleRemoveLogo}
+                                className="text-sm text-destructive hover:underline flex items-center gap-1"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                                Remover logo
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-medium">Logo da Empresa</p>
-                      <p className="text-sm text-muted-foreground">
-                        Clique para alterar
-                      </p>
-                    </div>
-                  </div>
 
                   <div className="flex flex-col gap-4 rounded-lg border border-muted/60 p-4">
                     <div className="flex items-center gap-6">
@@ -2242,6 +2346,52 @@ export default function Settings() {
         </div>
       </div>
 
+      {/* Logo Crop Dialog */}
+      <Dialog open={cropDialogOpen} onOpenChange={setCropDialogOpen}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Recortar Logo</DialogTitle>
+            <DialogDescription>
+              Arraste e ajuste a imagem para definir como a logo deve aparecer no sistema.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="relative h-[400px] w-full bg-muted rounded-md overflow-hidden">
+            {cropImageSrc && (
+              <Cropper
+                image={cropImageSrc}
+                crop={crop}
+                zoom={zoom}
+                aspect={1}
+                onCropChange={setCrop}
+                onCropComplete={onCropComplete}
+                onZoomChange={setZoom}
+              />
+            )}
+          </div>
+          <div className="py-4">
+            <Label>Zoom</Label>
+            <input
+              type="range"
+              value={zoom}
+              min={1}
+              max={3}
+              step={0.1}
+              aria-labelledby="Zoom"
+              onChange={(e) => setZoom(Number(e.target.value))}
+              className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCropDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleCropSave}>
+              <Crop className="h-4 w-4 mr-2" />
+              Salvar Recorte
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

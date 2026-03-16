@@ -49,6 +49,7 @@ import {
 } from '@/lib/paymentMethods';
 import { buildSuggestedOrderFileName, sanitizeDisplayFileName } from '@/lib/orderFiles';
 import { trackCatalogEvent } from '@/lib/catalogAnalytics';
+import { PageFallback } from '@/App';
 
 const asCurrency = (value: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
@@ -1067,11 +1068,7 @@ export default function PublicCart() {
   };
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <p className="text-sm text-slate-500">Carregando carrinho...</p>
-      </div>
-    );
+    return <PageFallback />;
   }
 
   if (notFound || !company) {

@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
 import { formatOrderNumber } from '@/lib/utils';
 import { useParams } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
@@ -18,6 +18,7 @@ import { localizeOrderHistoryNote } from '@/lib/orderHistoryNotes';
 import { isPublicCatalogOrder } from '@/lib/orderMetadata';
 import { formatBusinessDaysLabel, formatDatePtBr, normalizeProductionTimeDays } from '@/lib/productionTime';
 import { CheckCircle, Clock, Copy, Package, Truck, XCircle, FileText, Image as ImageIcon } from 'lucide-react';
+import { PageFallback } from '@/App';
 
 const statusLabels: Record<OrderStatus, string> = {
   orcamento: 'Orçamento',
@@ -254,20 +255,7 @@ export default function PublicOrder() {
   ]);
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-slate-50 text-slate-900">
-        <CatalogTopNav subtitle="Acompanhe seu pedido" showContact={false} />
-        <CatalogHero
-          badge="Pedido online"
-          title="Acompanhar pedido"
-          description="Visualize status, itens e pagamentos em tempo real."
-        />
-        <div className="mx-auto flex w-full max-w-[1400px] items-center justify-center px-4 py-10 sm:px-6 lg:px-8">
-          <div className="text-sm text-slate-500">Carregando...</div>
-        </div>
-        <CatalogFooter />
-      </div>
-    );
+    return <PageFallback />;
   }
 
   if (error || !payload) {

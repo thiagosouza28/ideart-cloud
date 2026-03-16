@@ -62,6 +62,7 @@ export type CompanyThemeFontFamily = 'Inter' | 'Roboto' | 'Poppins' | 'Open Sans
 export type CompanyThemePaletteMode = 'light' | 'dark';
 
 export interface CompanyThemePalette {
+  [key: string]: string | undefined;
   primary_color: string;
   secondary_color: string;
   background_color: string;
