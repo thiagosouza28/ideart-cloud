@@ -330,6 +330,7 @@ export interface Product {
   catalog_featured?: boolean | null;
   catalog_min_order?: number | null;
   catalog_price?: number | null;
+  mostrar_tabela_preco_catalogo?: boolean | null;
   catalog_short_description?: string | null;
   catalog_long_description?: string | null;
   catalog_sort_order?: number | null;

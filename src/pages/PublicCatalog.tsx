@@ -25,12 +25,12 @@ import { getRecentlyViewedProducts, pushRecentlyViewedProduct } from '@/lib/cata
 import { loadPublicCatalogCompany } from '@/lib/publicCatalogCompany';
 import { ensurePublicStorageUrl } from '@/lib/storage';
 import { formatBusinessDaysLabel, normalizeProductionTimeDays } from '@/lib/productionTime';
-import { isPromotionActive, resolveProductBasePrice, resolveProductPrice } from '@/lib/pricing';
+import { isPromotionActive, resolveProductBasePrice, resolveProductPrice, getCatalogPrice, hasCatalogPriceRanges } from '@/lib/pricing';
 import { getProductSaleUnitPriceSuffix } from '@/lib/productSaleUnit';
 import { CategoryIcon } from '@/lib/categoryIcons';
 import { buildCategoryProductCountMap, buildCategoryTree, collectCategoryScopeIds } from '@/lib/categoryTree';
 import { buildCatalogProductMetrics, getProductBadgeLabels, normalizeCatalogText, scoreCatalogSearchMatch } from '@/lib/catalogDiscovery';
-import { Category, Company as DatabaseCompany, Product, ProductReview } from '@/types/database';
+import { Category, Company as DatabaseCompany, Product, ProductReview, PriceTier } from '@/types/database';
 
 interface Company extends Omit<DatabaseCompany, 'catalog_contact_url' | 'whatsapp'> {
   catalog_layout?: 'grid' | 'list' | null;
@@ -73,15 +73,6 @@ type SortMode =
 
 type ViewMode = 'grid' | 'list';
 type DiscoverySectionId = 'best_sellers' | 'top_ranked' | 'recommended' | 'recently_viewed';
-
-const asCurrency = (value: number) =>
-  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
-
-const getProductPrice = (product: ProductWithCategory) =>
-  resolveProductPrice(product as unknown as Product, 1, [], 0);
-
-const getPromotionBasePrice = (product: ProductWithCategory) =>
-  resolveProductBasePrice(product as unknown as Product, 1, [], 0);
 
 const cardShadow = '0 16px 38px rgba(15, 23, 42, 0.08)';
 
@@ -174,14 +165,21 @@ function ProductMiniShelf({
   products,
   company,
   metricsMap,
+  priceTiers,
+  showPrices,
 }: {
   title: string;
   icon: React.ReactNode;
   products: ProductWithCategory[];
   company: Company | null;
   metricsMap: Map<string, { reviewCount: number; averageRating: number; rankingScore: number }>;
+  priceTiers: PriceTier[];
+  showPrices: boolean;
 }) {
   if (products.length === 0) return null;
+
+  const asCurrency = (value: number) =>
+    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 
   return (
     <section
@@ -205,6 +203,9 @@ function ProductMiniShelf({
             ? `/catalogo/${company.slug}/produto/${productIdentifier}`
             : `/catalogo/produto/${product.id}`;
           const metrics = metricsMap.get(product.id);
+
+          const price = getCatalogPrice(product as Product, priceTiers);
+          const hasRanges = hasCatalogPriceRanges(product as Product, priceTiers);
 
           return (
             <Link
@@ -237,8 +238,19 @@ function ProductMiniShelf({
                 <span>{Number(product.sales_count || 0)} vendas</span>
               </div>
               <div className="mt-2.5">
-                <p className="text-xs sm:text-sm font-bold text-[var(--pc-price)]">{asCurrency(getProductPrice(product))}</p>
-                <p className="text-[10px] sm:text-[11px] text-[var(--pc-muted)]">{getProductSaleUnitPriceSuffix(product.unit_type)}</p>
+                {showPrices && price !== null ? (
+                  <>
+                    <p className="text-xs sm:text-sm font-bold text-[var(--pc-price)]">
+                      {hasRanges ? (
+                        <span className="block text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-[var(--pc-muted)]">A partir de</span>
+                      ) : null}
+                      {asCurrency(price)}
+                    </p>
+                    <p className="text-[10px] sm:text-[11px] text-[var(--pc-muted)]">{getProductSaleUnitPriceSuffix(product.unit_type)}</p>
+                  </>
+                ) : (
+                  <p className="text-xs sm:text-sm font-bold text-[var(--pc-price)]">Consultar</p>
+                )}
               </div>
             </Link>
           );
@@ -254,6 +266,8 @@ function DiscoverySidebar({
   onChange,
   company,
   metricsMap,
+  priceTiers,
+  showPrices,
 }: {
   sections: Array<{
     id: DiscoverySectionId;
@@ -266,8 +280,13 @@ function DiscoverySidebar({
   onChange: (id: DiscoverySectionId) => void;
   company: Company | null;
   metricsMap: Map<string, { reviewCount: number; averageRating: number; rankingScore: number }>;
+  priceTiers: PriceTier[];
+  showPrices: boolean;
 }) {
   const active = sections.find((section) => section.id === activeSection) || sections[0];
+
+  const asCurrency = (value: number) =>
+    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 
   if (!active) return null;
 
@@ -348,6 +367,9 @@ function DiscoverySidebar({
                 : `/catalogo/produto/${product.id}`;
               const metrics = metricsMap.get(product.id);
 
+              const price = getCatalogPrice(product as Product, priceTiers);
+              const hasRanges = hasCatalogPriceRanges(product as Product, priceTiers);
+
               return (
                 <Link
                   key={product.id}
@@ -385,7 +407,14 @@ function DiscoverySidebar({
 
                   <span className="shrink-0 text-right">
                     <span className="block text-sm font-bold text-[var(--pc-price)]">
-                      {asCurrency(getProductPrice(product))}
+                      {showPrices && price !== null ? (
+                        <>
+                          {hasRanges && <span className="block text-[10px] opacity-70">A partir de</span>}
+                          {asCurrency(price)}
+                        </>
+                      ) : (
+                        'Consultar'
+                      )}
                     </span>
                     <span className="block text-[11px] text-[var(--pc-muted)]">
                       {getProductSaleUnitPriceSuffix(product.unit_type)}
@@ -408,6 +437,7 @@ function ProductListCard({
   buttonText,
   reviewHref,
   metricsMap,
+  priceTiers,
 }: {
   product: ProductWithCategory;
   company: Company | null;
@@ -415,6 +445,7 @@ function ProductListCard({
   buttonText: string;
   reviewHref: string;
   metricsMap: Map<string, { reviewCount: number; averageRating: number; rankingScore: number }>;
+  priceTiers: PriceTier[];
 }) {
   const productIdentifier = product.slug?.trim() ? product.slug : product.id;
   const href = company?.slug
@@ -424,6 +455,16 @@ function ProductListCard({
   const productionTimeDays = normalizeProductionTimeDays(product.production_time_days);
   const metrics = metricsMap.get(product.id);
   const badges = getProductBadgeLabels(product as Product, metrics);
+
+  const price = getCatalogPrice(product as Product, priceTiers);
+  const hasRanges = hasCatalogPriceRanges(product as Product, priceTiers);
+
+  const asCurrency = (value: number) =>
+    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+
+  const getPromotionBasePriceLocal = (p: ProductWithCategory) =>
+     resolveProductBasePrice(p as unknown as Product, 1, priceTiers, 0);
+
   const handleProductOpen = () => {
     if (company?.id) pushRecentlyViewedProduct(company.id, product.id);
   };
@@ -515,15 +556,18 @@ function ProductListCard({
           </div>
 
           <div className="mt-auto flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            {showPrices ? (
+            {showPrices && price !== null ? (
               <div>
                 {inPromotion ? (
                   <p className="text-sm text-[var(--pc-muted)] line-through">
-                    {asCurrency(getPromotionBasePrice(product))}
+                    {asCurrency(getPromotionBasePriceLocal(product))}
                   </p>
                 ) : null}
                 <p className="text-xl font-extrabold text-[var(--pc-price)]">
-                  {asCurrency(getProductPrice(product))}
+                  {hasRanges ? (
+                    <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-[var(--pc-muted)] mr-1">A partir de</span>
+                  ) : null}
+                  {asCurrency(price)}
                 </p>
                 <p className="text-xs font-medium text-[var(--pc-muted)]">
                   {getProductSaleUnitPriceSuffix(product.unit_type)}
@@ -540,7 +584,7 @@ function ProductListCard({
                 color: 'var(--pc-button-text)',
               }}
             >
-              {buttonText}
+              {price === null ? 'Solicitar orçamento' : buttonText}
             </span>
           </div>
         </div>
@@ -566,6 +610,7 @@ function ProductGridCard({
   buttonText,
   reviewHref,
   metricsMap,
+  priceTiers,
 }: {
   product: ProductWithCategory;
   company: Company | null;
@@ -573,6 +618,7 @@ function ProductGridCard({
   buttonText: string;
   reviewHref: string;
   metricsMap: Map<string, { reviewCount: number; averageRating: number; rankingScore: number }>;
+  priceTiers: PriceTier[];
 }) {
   const productIdentifier = product.slug?.trim() ? product.slug : product.id;
   const href = company?.slug
@@ -582,6 +628,15 @@ function ProductGridCard({
   const productionTimeDays = normalizeProductionTimeDays(product.production_time_days);
   const metrics = metricsMap.get(product.id);
   const badges = getProductBadgeLabels(product as Product, metrics);
+
+  const price = getCatalogPrice(product as Product, priceTiers);
+  const hasRanges = hasCatalogPriceRanges(product as Product, priceTiers);
+
+  const asCurrency = (value: number) =>
+    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+
+  const getPromotionBasePriceLocal = (p: ProductWithCategory) =>
+    resolveProductBasePrice(p as unknown as Product, 1, priceTiers, 0);
 
   const handleProductOpen = () => {
     if (company?.id) pushRecentlyViewedProduct(company.id, product.id);
@@ -673,15 +728,18 @@ function ProductGridCard({
 
       <div className="mt-auto flex flex-col gap-3 p-3 sm:p-5 pt-0">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          {showPrices ? (
+          {showPrices && price !== null ? (
             <div className="min-w-0 flex-1">
               {inPromotion ? (
                 <p className="truncate text-xs sm:text-sm text-[var(--pc-muted)] line-through">
-                  {asCurrency(getPromotionBasePrice(product))}
+                  {asCurrency(getPromotionBasePriceLocal(product))}
                 </p>
               ) : null}
               <p className="truncate text-base sm:text-2xl font-black text-[var(--pc-price)]">
-                {asCurrency(getProductPrice(product))}
+                {hasRanges ? (
+                  <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-[var(--pc-muted)] mr-1">A partir de</span>
+                ) : null}
+                {asCurrency(price)}
               </p>
             </div>
           ) : (
@@ -693,7 +751,7 @@ function ProductGridCard({
             onClick={handleProductOpen}
             className="inline-flex min-h-[40px] sm:min-h-[46px] shrink-0 items-center justify-center rounded-xl sm:rounded-2xl bg-[var(--pc-button-bg)] px-5 sm:px-6 py-2 text-xs sm:text-sm font-bold text-[var(--pc-button-text)] shadow-sm transition-all hover:scale-[1.03] active:scale-[0.98]"
           >
-            {buttonText}
+            {price === null ? 'Solicitar orçamento' : buttonText}
           </Link>
         </div>
 
@@ -717,6 +775,7 @@ export default function PublicCatalog() {
   const [company, setCompany] = useState<Company | null>(null);
   const [products, setProducts] = useState<ProductWithCategory[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [priceTiers, setPriceTiers] = useState<PriceTier[]>([]);
   const [reviews, setReviews] = useState<ProductReview[]>([]);
   const [attributeRows, setAttributeRows] = useState<ProductAttributeRow[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -732,6 +791,26 @@ export default function PublicCatalog() {
   const [expandedCategoryIds, setExpandedCategoryIds] = useState<string[]>([]);
   const [recentlyViewedIds, setRecentlyViewedIds] = useState<string[]>([]);
   const [activeDiscoverySection, setActiveDiscoverySection] = useState<DiscoverySectionId>('best_sellers');
+
+  const asCurrency = (value: number) =>
+    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+
+  const getProductPrice = (product: ProductWithCategory) =>
+    getCatalogPrice(product as unknown as Product, priceTiers);
+
+  const getProductPriceForSort = (product: ProductWithCategory) =>
+    getProductPrice(product) ?? 0;
+
+  const renderCatalogPriceLabel = (product: ProductWithCategory, showPrices: boolean) => {
+    if (!showPrices) return 'Consultar';
+    const price = getCatalogPrice(product as Product, priceTiers);
+    if (price === null) return 'Preço sob consulta';
+    const hasRanges = hasCatalogPriceRanges(product as Product, priceTiers);
+    return (hasRanges ? 'A partir de ' : '') + asCurrency(price);
+  };
+
+  const getPromotionBasePrice = (product: ProductWithCategory) =>
+    resolveProductBasePrice(product as unknown as Product, 1, priceTiers, 0);
 
   useEffect(() => {
     const loadCatalog = async () => {
@@ -784,7 +863,7 @@ export default function PublicCatalog() {
 
       const productIds = mappedProducts.map((product) => product.id);
 
-      const [categoriesResult, reviewsResult, attributesResult] = await Promise.all([
+      const [categoriesResult, reviewsResult, attributesResult, priceTiersResult] = await Promise.all([
         supabase
           .from('categories')
           .select('*')
@@ -802,6 +881,12 @@ export default function PublicCatalog() {
             .select('product_id, attribute_value:attribute_values(id, value, attribute:attributes(id, name))')
             .in('product_id', productIds)
           : Promise.resolve({ data: [], error: null }),
+        productIds.length > 0
+          ? supabase
+            .from('price_tiers')
+            .select('*')
+            .in('product_id', productIds)
+          : Promise.resolve({ data: [], error: null }),
       ]);
 
       setProducts(mappedProducts);
@@ -812,6 +897,7 @@ export default function PublicCatalog() {
       }));
       setReviews((reviewsResult.data || []) as ProductReview[]);
       setAttributeRows((attributesResult.data || []) as ProductAttributeRow[]);
+      setPriceTiers((priceTiersResult.data || []) as PriceTier[]);
       setExpandedCategoryIds(
         ((categoriesResult.data || []) as Category[])
           .filter((category) => !category.parent_id)
@@ -992,16 +1078,18 @@ export default function PublicCatalog() {
       categories: suggestedCategories,
       products: suggestedProducts,
     };
-  }, [categories, categoryNameMap, productAttributeMap, products, searchTerm]);
+  }, [categories, categoryNameMap, productAttributeMap, products, searchTerm, priceTiers]);
 
   const priceBounds = useMemo(() => {
-    const prices = products.map((product) => getProductPrice(product)).filter((value) => Number.isFinite(value));
+    const prices = products
+      .map((product) => getProductPrice(product))
+      .filter((value): value is number => value !== null && Number.isFinite(value));
     if (prices.length === 0) return { min: 0, max: 0 };
     return {
       min: Math.floor(Math.min(...prices)),
       max: Math.ceil(Math.max(...prices)),
     };
-  }, [products]);
+  }, [products, priceTiers]);
 
   useEffect(() => {
     setPriceRange([priceBounds.min, priceBounds.max]);
@@ -1028,7 +1116,13 @@ export default function PublicCatalog() {
         if (scopeIds && !scopeIds.has(product.category_id || '')) return false;
 
         const price = getProductPrice(product);
-        if (price < priceRange[0] || price > priceRange[1]) return false;
+        if (price !== null) {
+          if (price < priceRange[0] || price > priceRange[1]) return false;
+        } else {
+          // Products without price are always shown if no specific range filter is active, 
+          // or if the filter is at its default bounds.
+          if (priceRange[0] > 0) return false;
+        }
 
         if (normalizedSearch && score <= 0) return false;
 
@@ -1049,8 +1143,8 @@ export default function PublicCatalog() {
       if (sortBy === 'sales_desc') return Number(b.product.sales_count || 0) - Number(a.product.sales_count || 0);
       if (sortBy === 'name_asc') return a.product.name.localeCompare(b.product.name, 'pt-BR');
       if (sortBy === 'name_desc') return b.product.name.localeCompare(a.product.name, 'pt-BR');
-      if (sortBy === 'price_asc') return getProductPrice(a.product) - getProductPrice(b.product);
-      if (sortBy === 'price_desc') return getProductPrice(b.product) - getProductPrice(a.product);
+      if (sortBy === 'price_asc') return getProductPriceForSort(a.product) - getProductPriceForSort(b.product);
+      if (sortBy === 'price_desc') return getProductPriceForSort(b.product) - getProductPriceForSort(a.product);
       return b.score - a.score;
     });
 
@@ -1066,6 +1160,7 @@ export default function PublicCatalog() {
     selectedAttributeValues,
     selectedCategory,
     sortBy,
+    priceTiers,
   ]);
 
   const bestSellingProducts = useMemo(
@@ -1074,7 +1169,7 @@ export default function PublicCatalog() {
         .sort((a, b) => Number(b.sales_count || 0) - Number(a.sales_count || 0))
         .filter((product) => Number(product.sales_count || 0) > 0)
         .slice(0, 4),
-    [products],
+    [products, priceTiers],
   );
 
   const topRankedProducts = useMemo(
@@ -1085,7 +1180,7 @@ export default function PublicCatalog() {
             (productMetricsMap.get(b.id)?.rankingScore || 0) - (productMetricsMap.get(a.id)?.rankingScore || 0),
         )
         .slice(0, 4),
-    [productMetricsMap, products],
+    [productMetricsMap, products, priceTiers],
   );
 
   const recentlyViewedProducts = useMemo(
@@ -1094,7 +1189,7 @@ export default function PublicCatalog() {
         .map((id) => products.find((product) => product.id === id))
         .filter((product): product is ProductWithCategory => Boolean(product))
         .slice(0, 4),
-    [products, recentlyViewedIds],
+    [products, recentlyViewedIds, priceTiers],
   );
 
   const recommendedProducts = useMemo(() => {
@@ -1114,7 +1209,7 @@ export default function PublicCatalog() {
         return scoreB - scoreA;
       })
       .slice(0, 4);
-  }, [productMetricsMap, products, recentlyViewedProducts]);
+  }, [productMetricsMap, products, recentlyViewedProducts, priceTiers]);
 
   const discoverySections = useMemo(
     () => [
@@ -1400,7 +1495,7 @@ export default function PublicCatalog() {
                                 </span>
                               </span>
                               <span className="text-xs font-semibold text-[var(--pc-price)]">
-                                {showPrices ? asCurrency(getProductPrice(product)) : 'Consultar'}
+                                {renderCatalogPriceLabel(product, showPrices)}
                               </span>
                             </Link>
                           );
@@ -1641,6 +1736,8 @@ export default function PublicCatalog() {
                 products={recommendedProducts}
                 company={company}
                 metricsMap={productMetricsMap}
+                priceTiers={priceTiers}
+                showPrices={showPrices}
               />
 
               {recentlyViewedProducts.length > 0 ? (
@@ -1650,6 +1747,8 @@ export default function PublicCatalog() {
                   products={recentlyViewedProducts}
                   company={company}
                   metricsMap={productMetricsMap}
+                  priceTiers={priceTiers}
+                  showPrices={showPrices}
                 />
               ) : null}
             </div>
@@ -1730,6 +1829,7 @@ export default function PublicCatalog() {
                             buttonText={buttonText}
                             reviewHref={reviewHref}
                             metricsMap={productMetricsMap}
+                            priceTiers={priceTiers}
                           />
                         ) : (
                           <ProductListCard
@@ -1739,6 +1839,7 @@ export default function PublicCatalog() {
                             buttonText={buttonText}
                             reviewHref={reviewHref}
                             metricsMap={productMetricsMap}
+                            priceTiers={priceTiers}
                           />
                         )}
                       </div>
@@ -1756,6 +1857,8 @@ export default function PublicCatalog() {
               onChange={setActiveDiscoverySection}
               company={company}
               metricsMap={productMetricsMap}
+              priceTiers={priceTiers}
+              showPrices={showPrices}
             />
           </div>
         </div>

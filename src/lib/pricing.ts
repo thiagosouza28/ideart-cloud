@@ -149,17 +149,68 @@ export const resolveProductPrice = (
   priceTiers: PriceTier[] = [],
   suppliesCost = 0,
 ) => {
-  if (isPromotionActive(product) && product.promo_price !== null) {
+  if (isPromotionActive(product) && product.promo_price !== null && Number(product.promo_price) > 0) {
     return Number(product.promo_price);
   }
-  const hasTiers = priceTiers.some((tier) => tier.product_id === product.id);
-  if (hasTiers) {
-    return resolveSuggestedPrice(product, quantity, priceTiers, suppliesCost);
+
+  const tiers = priceTiers.filter((tier) => tier.product_id === product.id);
+  if (tiers.length > 0) {
+    const matchingTier = tiers.find(
+      (t) =>
+        quantity >= t.min_quantity &&
+        (t.max_quantity === null || quantity <= t.max_quantity),
+    );
+    if (matchingTier && Number(matchingTier.price) > 0) {
+      return Number(matchingTier.price);
+    }
   }
-  if (product.catalog_price !== null && product.catalog_price !== undefined) {
+
+  if (product.catalog_price !== null && product.catalog_price !== undefined && Number(product.catalog_price) > 0) {
     return Number(product.catalog_price);
   }
-  return resolveSuggestedPrice(product, quantity, priceTiers, suppliesCost);
+
+  if (product.final_price !== null && product.final_price !== undefined && Number(product.final_price) > 0) {
+    return Number(product.final_price);
+  }
+
+  return calculateSuggestedPrice(product, suppliesCost);
+};
+
+export const getCatalogPrice = (
+  product: Product,
+  priceTiers: PriceTier[] = [],
+) => {
+  // 1. Check for active promotion first (it overrides everything)
+  if (isPromotionActive(product) && product.promo_price !== null && Number(product.promo_price) > 0) {
+    return Number(product.promo_price);
+  }
+
+  // 2. Check for volume-based price tiers
+  const tiers = priceTiers.filter((tier) => tier.product_id === product.id);
+  if (tiers.length > 0) {
+    const minTierPrice = Math.min(...tiers.map((t) => Number(t.price)));
+    if (minTierPrice > 0) return minTierPrice;
+  }
+
+  // 3. Fallback to catalog price
+  if (product.catalog_price !== null && product.catalog_price !== undefined && Number(product.catalog_price) > 0) {
+    return Number(product.catalog_price);
+  }
+
+  // 4. Default to final price
+  if (product.final_price !== null && product.final_price !== undefined && Number(product.final_price) > 0) {
+    return Number(product.final_price);
+  }
+
+  return null;
+};
+
+export const hasCatalogPriceRanges = (
+  product: Product,
+  priceTiers: PriceTier[] = [],
+) => {
+  if (isPromotionActive(product)) return false;
+  return priceTiers.some((tier) => tier.product_id === product.id);
 };
 
 export const resolveProductBasePrice = (

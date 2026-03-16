@@ -1,4 +1,4 @@
-﻿import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
+import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { z } from 'zod';
 import { Button } from '@/components/ui/button';
@@ -16,7 +16,7 @@ import { supabase } from '@/integrations/supabase/client';
 import type { PostgrestError } from '@supabase/supabase-js';
 import { useToast } from '@/hooks/use-toast';
 import { Attribute, AttributeValue, Category, Expense, OrderItem, Product, ProductColor, ProductSupply, ProductType, SaleItem, Supply, StockControlType } from '@/types/database';
-import { ArrowLeft, Plus, Trash2, Calculator, Save, Loader2, Upload, Image, Globe, Package, FolderPlus, Tag, CopyPlus, ShieldAlert, ExternalLink, PackageX, Layers, Boxes } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Calculator, Save, Loader2, Upload, Image, Globe, Package, FolderPlus, Tag, CopyPlus, ShieldAlert, ExternalLink, PackageX, Layers, Boxes, Table as TableIcon } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useAuth } from '@/contexts/AuthContext';
 import { generateProductDescription } from '@/services/ai';
@@ -563,6 +563,7 @@ type FormSnapshot = {
   showInCatalog: boolean;
   catalogFeatured: boolean;
   catalogPrice: number | null;
+  mostrarTabelaPrecoCatalogo: boolean;
   catalogShortDescription: string;
   catalogLongDescription: string;
   imageUrls: string[];
@@ -632,6 +633,7 @@ export default function ProductForm() {
   const [showInCatalog, setShowInCatalog] = useState(false);
   const [catalogFeatured, setCatalogFeatured] = useState(false);
   const [catalogPrice, setCatalogPrice] = useState<number | null>(null);
+  const [mostrarTabelaPrecoCatalogo, setMostrarTabelaPrecoCatalogo] = useState(true);
   const [catalogShortDescription, setCatalogShortDescription] = useState('');
   const [catalogLongDescription, setCatalogLongDescription] = useState('');
   const [productColors, setProductColors] = useState<ProductColor[]>([]);
@@ -926,6 +928,7 @@ export default function ProductForm() {
       setIsActive(Boolean(product.is_active));
       setShowInCatalog(product.catalog_enabled === true || product.show_in_catalog === true);
       setCatalogFeatured(product.catalog_featured ?? false);
+      setMostrarTabelaPrecoCatalogo(product.mostrar_tabela_preco_catalogo ?? true);
       setCatalogPrice(product.catalog_price !== null && product.catalog_price !== undefined ? Number(product.catalog_price) : null);
       setCatalogShortDescription(product.catalog_short_description || '');
       setCatalogLongDescription(product.catalog_long_description || '');
@@ -1206,6 +1209,7 @@ export default function ProductForm() {
       show_in_catalog: showInCatalog,
       catalog_enabled: showInCatalog,
       catalog_featured: catalogFeatured,
+      mostrar_tabela_preco_catalogo: mostrarTabelaPrecoCatalogo,
       catalog_min_order: minOrderQuantity,
       catalog_price: catalogPrice,
       catalog_short_description: catalogShortDescription || null,
@@ -1251,7 +1255,7 @@ export default function ProductForm() {
       isActive,
       showInCatalog,
       catalogFeatured,
-      minOrderQuantity,
+      mostrarTabelaPrecoCatalogo,
       catalogPrice,
       catalogShortDescription,
       catalogLongDescription,
@@ -1373,6 +1377,7 @@ export default function ProductForm() {
     isActive,
     showInCatalog,
     catalogFeatured,
+    mostrarTabelaPrecoCatalogo,
     catalogPrice,
     catalogShortDescription,
     catalogLongDescription,
@@ -1439,6 +1444,7 @@ export default function ProductForm() {
     isActive,
     showInCatalog,
     catalogFeatured,
+    mostrarTabelaPrecoCatalogo,
     catalogPrice,
     catalogShortDescription,
     catalogLongDescription,
@@ -1541,6 +1547,7 @@ export default function ProductForm() {
       setIsActive(Boolean(draftData.isActive));
       setShowInCatalog(Boolean(draftData.showInCatalog));
       setCatalogFeatured(Boolean(draftData.catalogFeatured));
+      setMostrarTabelaPrecoCatalogo(Boolean(draftData.mostrarTabelaPrecoCatalogo ?? true));
       setCatalogPrice(draftData.catalogPrice ?? null);
       setCatalogShortDescription(draftData.catalogShortDescription ?? '');
       setCatalogLongDescription(draftData.catalogLongDescription ?? '');
@@ -2415,6 +2422,7 @@ export default function ProductForm() {
       show_in_catalog: showInCatalog,
       catalog_enabled: showInCatalog,
       catalog_featured: catalogFeatured,
+      mostrar_tabela_preco_catalogo: mostrarTabelaPrecoCatalogo,
       catalog_price: catalogPrice ?? null,
       catalog_short_description: catalogShortDescription.trim() || null,
       catalog_long_description: catalogLongDescription.trim() || null,
@@ -2919,6 +2927,14 @@ export default function ProductForm() {
                       onChange={(value) => setCatalogPrice(value)}
                     />
                     <p className="text-xs text-muted-foreground">Deixe em branco para usar o preço padrão.</p>
+                  </div>
+
+                  <div className="flex items-center gap-3 pt-4">
+                    <Switch checked={mostrarTabelaPrecoCatalogo} onCheckedChange={setMostrarTabelaPrecoCatalogo} />
+                    <Label className="flex items-center gap-2">
+                      <TableIcon className="h-4 w-4" />
+                      Mostrar tabela de preços no catálogo
+                    </Label>
                   </div>
 
                   <div className="space-y-2">

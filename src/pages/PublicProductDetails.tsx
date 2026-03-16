@@ -25,7 +25,7 @@ import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
 import { useCustomerAuth } from '@/hooks/use-customer-auth';
 import { customerSupabase } from '@/integrations/supabase/customer-client';
-import { publicSupabase } from '@/integrations/supabase/public-client';
+import { supabase } from '@/integrations/supabase/client';
 import {
   PUBLIC_CART_UPDATED_EVENT,
   getPublicCartItemsCount,
@@ -39,11 +39,17 @@ import {
   normalizeProductionTimeDays,
   resolveCompanyDeliveryTimeDays,
 } from '@/lib/productionTime';
-import { isPromotionActive, resolveProductBasePrice, resolveProductPrice } from '@/lib/pricing';
+import {
+  isPromotionActive,
+  resolveProductBasePrice,
+  resolveProductPrice,
+  getCatalogPrice,
+  hasCatalogPriceRanges,
+} from '@/lib/pricing';
 import { getProductSaleUnitPriceSuffix } from '@/lib/productSaleUnit';
 import { useToast } from '@/hooks/use-toast';
 import { loadPublicCatalogCompany } from '@/lib/publicCatalogCompany';
-import { Company, Product, ProductColor, ProductReview } from '@/types/database';
+import type { Company, Product, ProductColor, ProductReview, PriceTier } from '@/types/database';
 import { pushRecentlyViewedProduct, trackCatalogEvent, trackProductView } from '@/lib/catalogAnalytics';
 import { calculateAreaM2, formatAreaM2, isAreaUnit, parseMeasurementInput } from '@/lib/measurements';
 
@@ -117,6 +123,7 @@ export default function PublicProductDetails() {
   const { user } = useCustomerAuth();
   const [company, setCompany] = useState<CompanyWithColors | null>(null);
   const [product, setProduct] = useState<ProductWithCategory | null>(null);
+  const [priceTiers, setPriceTiers] = useState<PriceTier[]>([]);
   const [relatedProducts, setRelatedProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
@@ -164,7 +171,7 @@ export default function PublicProductDetails() {
       }
 
       if (!companyData && !slug) {
-        let productLookupQuery = publicSupabase.from('products').select('company_id');
+        let productLookupQuery = supabase.from('products').select('company_id');
         if (isUuid(resolvedProductSlug)) {
           productLookupQuery = productLookupQuery.or(
             `id.eq.${resolvedProductSlug},slug.eq.${resolvedProductSlug}`
@@ -188,7 +195,7 @@ export default function PublicProductDetails() {
 
       setCompany(companyData as CompanyWithColors);
 
-      let productQuery = publicSupabase
+      let productQuery = supabase
         .from('products')
         .select('*, category:categories(name)')
         .eq('company_id', companyData.id)
@@ -221,22 +228,31 @@ export default function PublicProductDetails() {
       setProduct(normalizedProduct);
       pushRecentlyViewedProduct(companyData.id, productData.id);
       void trackProductView({
-        client: user ? customerSupabase : publicSupabase,
+        client: user ? customerSupabase : supabase,
         companyId: companyData.id,
         productId: productData.id,
         userId: user?.id || null,
       });
 
-      const { data: relatedData } = await publicSupabase
-        .from('products')
-        .select('*')
-        .eq('company_id', companyData.id)
-        .or('catalog_enabled.is.true,show_in_catalog.is.true')
-        .eq('is_active', true)
-        .neq('id', productData.id)
-        .limit(12);
+      const [relatedResult, priceTiersResult] = await Promise.all([
+        supabase
+          .from('products')
+          .select('*')
+          .eq('company_id', companyData.id)
+          .or('catalog_enabled.is.true,show_in_catalog.is.true')
+          .eq('is_active', true)
+          .neq('id', productData.id)
+          .limit(12),
+        supabase
+          .from('price_tiers')
+          .select('*')
+          .eq('product_id', productData.id)
+          .order('min_quantity', { ascending: true }),
+      ]);
 
-      const mappedRelated = ((relatedData as unknown as Product[]) || [])
+      setPriceTiers((priceTiersResult.data || []) as PriceTier[]);
+
+      const mappedRelated = ((relatedResult.data as unknown as Product[]) || [])
         .map((related) => ({
           ...related,
           image_url: ensurePublicStorageUrl('product-images', related.image_url),
@@ -346,7 +362,7 @@ export default function PublicProductDetails() {
       }
 
       setReviewsLoading(true);
-      const { data, error } = await publicSupabase
+      const { data, error } = await supabase
         .from('product_reviews')
         .select('*')
         .eq('product_id', product.id)
@@ -389,10 +405,18 @@ export default function PublicProductDetails() {
     };
   }, [selectedReviewImage]);
 
-  const unitPrice = product ? resolveProductPrice(product as Product, 1, [], 0) : 0;
+  const unitPriceStartingFrom = product ? getCatalogPrice(product as Product, priceTiers) : null;
+  const hasRanges = product ? hasCatalogPriceRanges(product as Product, priceTiers) : false;
+
+  const currentUnitPrice = useMemo(() => {
+    if (!product) return null;
+    const price = resolveProductPrice(product as Product, orderForm.quantity, priceTiers, 0);
+    return price > 0 ? price : null;
+  }, [product, orderForm.quantity, priceTiers]);
+
   const minimumOrderQuantity = Math.max(1, Number(product?.catalog_min_order ?? product?.min_order_quantity ?? 1));
   const promoBasePrice = product && isPromotionActive(product as Product)
-    ? resolveProductBasePrice(product as Product, 1, [], 0)
+    ? resolveProductBasePrice(product as Product, orderForm.quantity, priceTiers, 0)
     : null;
   const activeImage = productImages[selectedImageIndex] ?? product?.image_url ?? null;
   const thumbnailImages: Array<string | null> = productImages.length > 0
@@ -522,7 +546,7 @@ export default function PublicProductDetails() {
         productSlug: product.slug || null,
         name: product.name,
         imageUrl: product.image_url,
-        unitPrice,
+        unitPrice: currentUnitPrice,
         quantity,
         minOrderQuantity: isM2 ? 0.0001 : minimumOrderQuantity,
         notes: notes || null,
@@ -539,7 +563,7 @@ export default function PublicProductDetails() {
       description: `${product.name} foi adicionado ao carrinho.`,
     });
     void trackCatalogEvent({
-      client: user ? customerSupabase : publicSupabase,
+      client: user ? customerSupabase : supabase,
       companyId: company.id,
       productId: product.id,
       userId: user?.id || null,
@@ -630,7 +654,7 @@ export default function PublicProductDetails() {
 
     setReviewSubmitting(true);
     setReviewError(null);
-    const reviewClient = user ? customerSupabase : publicSupabase;
+    const reviewClient = user ? customerSupabase : supabase;
 
     const uploadedImageUrls: string[] = [];
     for (const [index, file] of reviewFiles.entries()) {
@@ -1430,7 +1454,7 @@ export default function PublicProductDetails() {
             </div>
 
             <div className="catalog-detail-buybox space-y-4">
-              {showPrices ? (
+              {showPrices && currentUnitPrice !== null ? (
                 promoBasePrice !== null ? (
                   <div className="flex flex-col gap-1">
                     <div className="text-sm text-slate-500">
@@ -1439,18 +1463,49 @@ export default function PublicProductDetails() {
                     </div>
                     <div className="flex flex-wrap items-end gap-2">
                       <span className="text-sm text-slate-500">Por</span>
-                      <span className="text-3xl font-bold catalog-price">{formatCurrency(unitPrice)}</span>
+                      {priceTiers.length > 0 && (
+                        <span className="text-sm font-bold uppercase tracking-wider text-slate-500 mb-1">A partir de</span>
+                      )}
+                      <span className="text-3xl font-bold catalog-price">
+                        {formatCurrency(currentUnitPrice)}
+                      </span>
                       <span className="text-sm text-slate-500">{getProductSaleUnitPriceSuffix(product.unit_type)}</span>
                     </div>
                   </div>
                 ) : (
                   <div className="flex flex-wrap items-end gap-3">
-                    <span className="text-3xl font-bold catalog-price">{formatCurrency(unitPrice)}</span>
+                    {priceTiers.length > 0 && (
+                      <span className="text-sm font-bold uppercase tracking-wider text-slate-500 mb-1">A partir de</span>
+                    )}
+                    <span className="text-3xl font-bold catalog-price">
+                      {formatCurrency(currentUnitPrice)}
+                    </span>
                     <span className="text-sm text-slate-500">{getProductSaleUnitPriceSuffix(product.unit_type)}</span>
                   </div>
                 )
               ) : (
-                <div className="text-sm text-slate-500">Preço sob consulta</div>
+                <div className="text-lg font-bold text-slate-900">Preço sob consulta</div>
+              )}
+
+              {showPrices && priceTiers.length > 0 && product.mostrar_tabela_preco_catalogo !== false && (
+                <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3">Tabela de Preços</h4>
+                  <div className="space-y-2">
+                    {priceTiers.map((tier) => (
+                      <div key={tier.id} className="flex items-center justify-between text-sm">
+                        <span className="text-slate-600">
+                          {tier.max_quantity === null || tier.max_quantity === 0 || String(tier.max_quantity).toLowerCase() === 'infinito' || String(tier.max_quantity).toLowerCase() === 'sem limite'
+                            ? `A partir de ${tier.min_quantity} unidades`
+                            : `${tier.min_quantity} a ${tier.max_quantity} unidades`}
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-slate-400">→</span>
+                          <span className="font-bold text-slate-900">{formatCurrency(tier.price)}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               )}
 
               {estimatedDeliveryInfo && (
@@ -1553,14 +1608,15 @@ export default function PublicProductDetails() {
                 <div className="flex items-center justify-between rounded-lg border border-slate-100 bg-slate-50/50 p-3">
                   <div className="text-sm font-medium text-slate-600">Total do Item</div>
                   <div className="text-xl font-bold text-primary">
-                    {(() => {
-                      const qty = Math.max(1, Number(orderForm.quantity || 1));
-                      const area = isAreaUnit(product.unit)
-                        ? calculateAreaM2(parseMeasurementInput(orderForm.width) || 0, parseMeasurementInput(orderForm.height) || 0)
-                        : 1;
-                      return formatCurrency(unitPrice * area * qty);
-                    })()}
-                  </div>
+                      {(() => {
+                        if (currentUnitPrice === null) return formatCurrency(0);
+                        const qty = Math.max(1, Number(orderForm.quantity || 1));
+                        const area = isAreaUnit(product.unit)
+                          ? calculateAreaM2(parseMeasurementInput(orderForm.width) || 0, parseMeasurementInput(orderForm.height) || 0)
+                          : 1;
+                        return formatCurrency(currentUnitPrice * area * qty);
+                      })()}
+                    </div>
                 </div>
               )}
               <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
@@ -1602,13 +1658,21 @@ export default function PublicProductDetails() {
                     <Plus className="h-4 w-4" />
                   </button>
                 </div>
-                <Button className="flex-1 catalog-btn" onClick={() => handleAddToCart('sum')}>
-                  <ShoppingCart className="h-4 w-4 mr-2" />
-                  Adicionar ao carrinho
-                </Button>
-                <Button className="flex-1 catalog-btn" onClick={handleGoToCheckout}>
-                  Fazer Pedido
-                </Button>
+                {unitPriceStartingFrom !== null ? (
+                  <>
+                    <Button className="flex-1 catalog-btn" onClick={() => handleAddToCart('sum')}>
+                      <ShoppingCart className="h-4 w-4 mr-2" />
+                      Adicionar ao carrinho
+                    </Button>
+                    <Button className="flex-1 catalog-btn" onClick={handleGoToCheckout}>
+                      Comprar agora
+                    </Button>
+                  </>
+                ) : (
+                  <Button className="flex-1 catalog-btn" onClick={openContact}>
+                    Solicitar orçamento
+                  </Button>
+                )}
               </div>
               {minimumOrderQuantity > 1 && (
                 <p className="text-sm font-medium text-amber-700">
@@ -1913,20 +1977,26 @@ export default function PublicProductDetails() {
                         <CardContent className="p-4">
                           <h3 className="font-semibold text-sm mb-1 truncate">{related.name}</h3>
                           {showPrices ? (
-                            isPromotionActive(related) ? (
-                              <div className="flex flex-col gap-1">
-                                <span className="text-xs text-slate-400 line-through">
-                                  De {formatCurrency(resolveProductBasePrice(related as Product, 1, [], 0))}
-                                </span>
-                                <span className="text-sm font-bold catalog-price">
-                                  Por {formatCurrency(resolveProductPrice(related as Product, 1, [], 0))}
-                                </span>
-                              </div>
-                            ) : (
-                              <span className="text-sm font-bold catalog-price">
-                                {formatCurrency(resolveProductPrice(related as Product, 1, [], 0))}
-                              </span>
-                            )
+                            (() => {
+                              const relatedPrice = getCatalogPrice(related as Product, []);
+                              if (relatedPrice === null) return <span className="text-xs text-slate-500">Preço sob consulta</span>;
+                              return (
+                                isPromotionActive(related) ? (
+                                  <div className="flex flex-col gap-1">
+                                    <span className="text-xs text-slate-400 line-through">
+                                      De {formatCurrency(resolveProductBasePrice(related as Product, 1, [], 0))}
+                                    </span>
+                                    <span className="text-sm font-bold catalog-price">
+                                      {formatCurrency(relatedPrice)}
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <span className="text-sm font-bold catalog-price">
+                                    {formatCurrency(relatedPrice)}
+                                  </span>
+                                )
+                              );
+                            })()
                           ) : (
                             <span className="text-xs text-slate-500">Preço sob consulta</span>
                           )}
