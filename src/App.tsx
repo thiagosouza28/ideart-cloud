@@ -83,8 +83,21 @@ const queryClient = new QueryClient({
 });
 
 const PageFallback = () => (
-  <div className="page-container flex items-center justify-center min-h-[400px]">
-    <span className="text-sm text-muted-foreground">Carregando...</span>
+  <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background/80 backdrop-blur-sm animate-in fade-in duration-300">
+    <div className="relative flex flex-col items-center gap-4 p-8 rounded-2xl bg-card border shadow-2xl scale-in-95 animate-in">
+      <div className="relative">
+        <div className="h-16 w-16 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="h-8 w-8 rounded-full bg-primary/10 animate-pulse" />
+        </div>
+      </div>
+      <div className="flex flex-col items-center gap-1 text-center">
+        <span className="text-lg font-bold tracking-tight text-foreground">Carregando</span>
+        <span className="text-xs font-medium text-muted-foreground animate-pulse italic">
+          Preparando seu ambiente...
+        </span>
+      </div>
+    </div>
   </div>
 );
 

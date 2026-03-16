@@ -604,7 +604,7 @@ export default function UserManagement() {
                 {users.length} usuário{users.length !== 1 ? 's' : ''} cadastrado{users.length !== 1 ? 's' : ''}
               </CardDescription>
             </div>
-            <div className="relative max-w-sm">
+            <div className="relative w-full sm:max-w-xl">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
               <Input
                 placeholder="Buscar por nome, e-mail ou loja..."

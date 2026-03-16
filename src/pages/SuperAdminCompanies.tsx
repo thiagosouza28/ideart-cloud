@@ -10,7 +10,14 @@ import {
   Loader2,
   Mail,
   LayoutGrid,
-  CalendarPlus
+  CalendarPlus,
+  ArrowUpDown,
+  Phone,
+  UserCircle,
+  TrendingUp,
+  AlertTriangle,
+  Clock,
+  LogOut
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,10 +33,16 @@ import { invokeEdgeFunction } from '@/services/edgeFunctions';
 import { toast } from 'sonner';
 import type { Company, Plan, SubscriptionStatus } from '@/types/database';
 import { ensurePublicStorageUrl } from '@/lib/storage';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface CompanyWithPlan extends Company {
   plan?: Plan;
   user_count?: number;
+  owner_email?: string;
+  total_sales?: number;
+  order_count?: number;
+  last_order_at?: string | null;
 }
 
 interface CompanyUser {
@@ -37,6 +50,15 @@ interface CompanyUser {
   full_name: string;
   email: string | null;
   created_at: string | null;
+}
+
+interface ImpersonateResponse {
+  email: string;
+  token: string;
+  user_id: string;
+  action_link?: string | null;
+  token_hash?: string | null;
+  verification_type?: string | null;
 }
 
 const normalizeSearchText = (value: string) =>
@@ -62,18 +84,23 @@ const statusColors: Record<string, string> = {
   active: 'bg-emerald-100 text-emerald-700 border-emerald-200',
   cancelled: 'bg-rose-100 text-rose-700 border-rose-200',
   canceled: 'bg-rose-100 text-rose-700 border-rose-200',
-  expired: 'bg-slate-100 text-slate-600 border-slate-200',
+  expired: 'bg-rose-100 text-rose-700 border-rose-200',
   past_due: 'bg-yellow-100 text-yellow-700 border-yellow-200',
   unpaid: 'bg-rose-100 text-rose-700 border-rose-200',
   incomplete: 'bg-slate-100 text-slate-600 border-slate-200',
 };
 
 export default function SuperAdminCompanies() {
+  const navigate = useNavigate();
+  const { startImpersonation, clearImpersonation, isImpersonating } = useAuth();
   const [companies, setCompanies] = useState<CompanyWithPlan[]>([]);
   const [plans, setPlans] = useState<Plan[]>([]);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [planFilter, setPlanFilter] = useState<string>('all');
+  const [sortBy, setSortBy] = useState<string>('newest');
   const [loading, setLoading] = useState(true);
+  const [impersonatingId, setImpersonatingId] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedCompany, setSelectedCompany] = useState<CompanyWithPlan | null>(null);
   const [formData, setFormData] = useState({
@@ -97,35 +124,155 @@ export default function SuperAdminCompanies() {
   }, []);
 
   const loadData = async () => {
-    const [companiesResult, plansResult, profilesResult] = await Promise.all([
-      supabase.from('companies').select('*').order('created_at', { ascending: false }),
+    const [companiesResult, plansResult, profilesResult, ordersResult, salesResult] = await Promise.all([
+      supabase.from('companies').select('*, subscription_end_date, trial_ends_at').order('created_at', { ascending: false }),
       supabase.from('plans').select('*').eq('is_active', true),
       supabase.from('profiles').select('company_id'),
+      supabase.from('orders').select('company_id, total, status, created_at').neq('status', 'cancelado'),
+      supabase.from('sales').select('company_id, total, created_at'),
     ]);
+
+    if (companiesResult.error) {
+      toast.error('Erro ao carregar empresas');
+      setLoading(false);
+      return;
+    }
 
     const plansData = (plansResult.data || []) as Plan[];
     setPlans(plansData);
 
-    const profiles = profilesResult.data || [];
-    const companiesData = ((companiesResult.data as any[]) || []).map((company: any) => ({
-      ...company,
-      logo_url: ensurePublicStorageUrl('product-images', company.logo_url),
-      plan: plansData.find(p => p.id === company.plan_id),
-      user_count: profiles.filter(p => p.company_id === company.id).length,
-    }));
+    const profiles = (profilesResult.data as any[]) || [];
+    const orders = (ordersResult.data as any[]) || [];
+    const sales = (salesResult.data as any[]) || [];
+
+    const companiesData = ((companiesResult.data as any[]) || []).map((company: any) => {
+      const companyOrders = orders.filter(o => o.company_id === company.id);
+      const companySales = sales.filter(s => s.company_id === company.id);
+      
+      const totalOrderSales = companyOrders.reduce((sum, o) => sum + Number(o.total || 0), 0);
+      const totalPDVSales = companySales.reduce((sum, s) => sum + Number(s.total || 0), 0);
+      
+      const lastOrderDate = companyOrders.length > 0 
+        ? companyOrders.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0].created_at 
+        : null;
+      const lastSaleDate = companySales.length > 0
+        ? companySales.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0].created_at
+        : null;
+
+      const finalLastDate = (lastOrderDate && lastSaleDate)
+        ? (new Date(lastOrderDate).getTime() > new Date(lastSaleDate).getTime() ? lastOrderDate : lastSaleDate)
+        : (lastOrderDate || lastSaleDate || null);
+
+      return {
+        ...company,
+        logo_url: ensurePublicStorageUrl('product-images', company.logo_url),
+        plan: plansData.find(p => p.id === company.plan_id),
+        user_count: profiles.filter(p => p.company_id === company.id).length,
+        owner_email: company.email,
+        total_sales: totalOrderSales + totalPDVSales,
+        order_count: companyOrders.length + companySales.length,
+        last_order_at: finalLastDate,
+      };
+    });
 
     setCompanies(companiesData);
     setLoading(false);
   };
 
-  const filtered = companies.filter(c => {
-    const searchTerm = normalizeSearchText(search);
-    const matchesSearch = !searchTerm ||
-      normalizeSearchText(c.name).includes(searchTerm) ||
-      normalizeSearchText(c.slug).includes(searchTerm);
-    const matchesStatus = statusFilter === 'all' || (c.subscription_status || 'trial') === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
+  const getExpirationDate = (company: CompanyWithPlan) => {
+    return company.trial_ends_at || company.subscription_end_date;
+  };
+
+  const getDaysRemainingValue = (company: CompanyWithPlan) => {
+    if (company.plan?.billing_period === 'lifetime') return 999999;
+    const endDate = getExpirationDate(company);
+    if (!endDate) return 0;
+    const now = new Date();
+    const diff = new Date(endDate).getTime() - now.getTime();
+    return Math.ceil(diff / (1000 * 60 * 60 * 24));
+  };
+
+  const filtered = companies
+    .filter(c => {
+      const searchTerm = normalizeSearchText(search);
+      const matchesSearch = !searchTerm ||
+        normalizeSearchText(c.name).includes(searchTerm) ||
+        normalizeSearchText(c.slug || '').includes(searchTerm);
+      const matchesStatus = statusFilter === 'all' || (c.subscription_status || 'trial') === statusFilter;
+      const matchesPlan = planFilter === 'all' || c.plan_id === planFilter;
+      return matchesSearch && matchesStatus && matchesPlan;
+    })
+    .sort((a, b) => {
+      if (sortBy === 'newest') return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      if (sortBy === 'oldest') return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      if (sortBy === 'name') return a.name.localeCompare(b.name);
+      if (sortBy === 'sales_value') return (b.total_sales || 0) - (a.total_sales || 0);
+      if (sortBy === 'order_count') return (b.order_count || 0) - (a.order_count || 0);
+      if (sortBy === 'last_activity') {
+        const dateA = a.last_order_at ? new Date(a.last_order_at).getTime() : 0;
+        const dateB = b.last_order_at ? new Date(b.last_order_at).getTime() : 0;
+        return dateB - dateA;
+      }
+      if (sortBy === 'expiration') {
+        const dateA = getExpirationDate(a);
+        const dateB = getExpirationDate(b);
+        if (!dateA) return 1;
+        if (!dateB) return -1;
+        return new Date(dateA).getTime() - new Date(dateB).getTime();
+      }
+      return 0;
+    });
+
+  const stats = {
+    total: companies.length,
+    active: companies.filter(c => c.subscription_status === 'active').length,
+    trial: companies.filter(c => c.subscription_status === 'trial' || !c.subscription_status).length,
+    expired: companies.filter(c => {
+      const days = getDaysRemainingValue(c);
+      return days < 0;
+    }).length,
+  };
+
+  const handleImpersonate = async (company: CompanyWithPlan) => {
+    if (!company.owner_email) {
+      toast.error('Não foi possível identificar o e-mail do proprietário.');
+      return;
+    }
+
+    if (isImpersonating) {
+      toast.error('Finalize a sessão atual antes de entrar em outra conta.');
+      return;
+    }
+
+    setImpersonatingId(company.id);
+    try {
+      const response = await invokeEdgeFunction<ImpersonateResponse>('admin-impersonate', {
+        email: company.owner_email,
+        redirect_to: `${window.location.origin}/dashboard`,
+      }, {
+        resetAuthOn401: false,
+      });
+
+      await startImpersonation();
+      
+      const { data, error } = await supabase.auth.verifyOtp({
+        type: (response.verification_type as any) || 'magiclink',
+        token_hash: response.token_hash!,
+      });
+
+      if (error || !data.session) {
+        throw error || new Error('Falha ao autenticar como cliente.');
+      }
+
+      toast.success(`Entrando como ${company.name}...`);
+      navigate('/dashboard', { replace: true });
+    } catch (error: any) {
+      clearImpersonation();
+      toast.error(error.message || 'Erro ao acessar a conta do cliente.');
+    } finally {
+      setImpersonatingId(null);
+    }
+  };
 
   const openEditDialog = (company: CompanyWithPlan) => {
     setSelectedCompany(company);
@@ -330,6 +477,32 @@ export default function SuperAdminCompanies() {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
   };
 
+  const getRemainingDays = (company: CompanyWithPlan) => {
+    if (company.plan?.billing_period === 'lifetime') {
+      return <span className="text-green-600">Vitalício</span>;
+    }
+
+    const endDate = company.trial_ends_at
+      ? new Date(company.trial_ends_at)
+      : company.subscription_end_date
+        ? new Date(company.subscription_end_date)
+        : null;
+
+    if (!endDate) {
+      return '-';
+    }
+
+    const now = new Date();
+    const diff = endDate.getTime() - now.getTime();
+    const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
+
+    if (days < 0) {
+      return <span className="text-red-600">Expirado</span>;
+    }
+
+    return `${days} dia(s)`;
+  };
+
   return (
     <div className="page-container space-y-6">
       <div className="flex items-center justify-between gap-4 flex-wrap">
@@ -342,41 +515,132 @@ export default function SuperAdminCompanies() {
         </div>
       </div>
 
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Card className="border-slate-200">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-slate-500">Total</CardTitle>
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100">
+              <Building2 className="h-4 w-4 text-slate-600" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.total}</div>
+          </CardContent>
+        </Card>
+        <Card className="border-slate-200">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-emerald-600">Ativas</CardTitle>
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50">
+              <TrendingUp className="h-4 w-4 text-emerald-600" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-emerald-700">{stats.active}</div>
+          </CardContent>
+        </Card>
+        <Card className="border-slate-200">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-blue-600">Em Teste</CardTitle>
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50">
+              <AlertTriangle className="h-4 w-4 text-blue-600" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-blue-700">{stats.trial}</div>
+          </CardContent>
+        </Card>
+        <Card className="border-slate-200">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-rose-600">Expiradas</CardTitle>
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-rose-50">
+              <Clock className="h-4 w-4 text-rose-600" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-rose-700">{stats.expired}</div>
+          </CardContent>
+        </Card>
+      </div>
+
       <Card className="border-slate-200">
         <CardHeader>
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <Building2 className="h-5 w-5" />
-                Empresas Cadastradas
-              </CardTitle>
-              <CardDescription>
-                {companies.length} empresa{companies.length !== 1 ? 's' : ''} no sistema
-              </CardDescription>
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Building2 className="h-5 w-5" />
+                  Empresas Cadastradas
+                </CardTitle>
+                <CardDescription>
+                  Gerenciamento completo das lojas cadastradas
+                </CardDescription>
+              </div>
+              <div className="relative w-full sm:w-[450px]">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                <Input
+                  placeholder="Nome ou slug da empresa..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
             </div>
-            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+
+            <div className="flex flex-wrap items-center gap-2">
               <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-full sm:w-[140px]">
+                <SelectTrigger className="w-[140px] h-8 text-xs">
                   <SelectValue placeholder="Status" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Todos</SelectItem>
+                  <SelectItem value="all">Todos Status</SelectItem>
                   <SelectItem value="trial">Teste</SelectItem>
                   <SelectItem value="active">Ativo</SelectItem>
-                  <SelectItem value="cancelled">Cancelado</SelectItem>
                   <SelectItem value="expired">Expirado</SelectItem>
+                  <SelectItem value="cancelled">Cancelado</SelectItem>
                 </SelectContent>
               </Select>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                <Input
-                  placeholder="Pesquisar empresa..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  aria-label="Pesquisar empresa"
-                  className="w-full pl-9 sm:w-[220px]"
-                />
-              </div>
+
+              <Select value={planFilter} onValueChange={setPlanFilter}>
+                <SelectTrigger className="w-[140px] h-8 text-xs">
+                  <SelectValue placeholder="Plano" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos Planos</SelectItem>
+                  {plans.map(plan => (
+                    <SelectItem key={plan.id} value={plan.id}>{plan.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select value={sortBy} onValueChange={setSortBy}>
+                <SelectTrigger className="w-[140px] h-8 text-xs">
+                  <SelectValue placeholder="Ordenar" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="newest">Mais recentes</SelectItem>
+                  <SelectItem value="oldest">Mais antigas</SelectItem>
+                  <SelectItem value="name">Nome (A-Z)</SelectItem>
+                  <SelectItem value="expiration">Data de Expiração</SelectItem>
+                  <SelectItem value="sales_value">Maior Volume Vendas</SelectItem>
+                  <SelectItem value="order_count">Mais Pedidos</SelectItem>
+                  <SelectItem value="last_activity">Última Atividade</SelectItem>
+                </SelectContent>
+              </Select>
+
+              {isImpersonating && (
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="h-8 text-xs text-rose-600 border-rose-200 bg-rose-50"
+                  onClick={() => {
+                    clearImpersonation();
+                    window.location.reload();
+                  }}
+                >
+                  <LogOut className="h-3 w-3 mr-1" />
+                  Sair do Cliente
+                </Button>
+              )}
             </div>
           </div>
         </CardHeader>
@@ -387,110 +651,180 @@ export default function SuperAdminCompanies() {
                 <TableHead>Empresa</TableHead>
                 <TableHead>Plano</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Usuários</TableHead>
-                <TableHead>Criada em</TableHead>
-                <TableHead className="w-[50px]" />
+                <TableHead>Vendas/Pedidos</TableHead>
+                <TableHead>Dias Restantes</TableHead>
+                <TableHead>Última Venda</TableHead>
+                <TableHead className="text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8">
-                    Carregando...
+                  <TableCell colSpan={7} className="py-20">
+                    <div className="flex flex-col items-center justify-center gap-3">
+                      <div className="relative">
+                        <div className="h-12 w-12 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <Loader2 className="h-5 w-5 text-primary/40 animate-pulse" />
+                        </div>
+                      </div>
+                      <p className="text-sm font-medium text-muted-foreground animate-pulse">Buscando empresas...</p>
+                    </div>
                   </TableCell>
                 </TableRow>
               ) : filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8 text-slate-500">
+                  <TableCell colSpan={7} className="text-center py-8 text-slate-500">
                     Nenhuma empresa encontrada
                   </TableCell>
                 </TableRow>
-              ) : filtered.map((company) => (
-                <TableRow key={company.id} className={!company.is_active ? 'opacity-60' : ''}>
-                  <TableCell>
-                    <div className="flex items-center gap-3">
-                      {company.logo_url ? (
-                        <img
-                          src={company.logo_url}
-                          alt={company.name}
-                          className="h-10 w-10 rounded-lg object-cover"
-                        />
-                      ) : (
-                        <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                          <Building2 className="h-5 w-5 text-primary" />
+              ) : filtered.map((company) => {
+                const daysRemaining = getDaysRemainingValue(company);
+                const isNearExpiration = daysRemaining >= 0 && daysRemaining <= 7 && company.plan?.billing_period !== 'lifetime';
+                const isExpired = daysRemaining < 0;
+
+                return (
+                  <TableRow key={company.id} className={!company.is_active ? 'opacity-60' : ''}>
+                    <TableCell>
+                      <div className="flex items-center gap-3">
+                        {company.logo_url ? (
+                          <img
+                            src={company.logo_url}
+                            alt={company.name}
+                            className="h-10 w-10 rounded-lg object-cover border border-slate-100"
+                          />
+                        ) : (
+                          <div className="h-10 w-10 rounded-lg bg-slate-100 flex items-center justify-center border border-slate-200">
+                            <Building2 className="h-5 w-5 text-slate-400" />
+                          </div>
+                        )}
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium text-slate-900 line-clamp-1">{company.name}</p>
+                            <Badge variant="secondary" className="text-[9px] h-4 px-1 py-0 font-normal">
+                              <Users className="h-2 w-2 mr-0.5" />
+                              {company.user_count || 0}
+                            </Badge>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <p className="text-xs text-slate-500">{company.slug}</p>
+                            {company.phone && (
+                              <a 
+                                href={`https://wa.me/55${company.phone.replace(/\D/g, '')}`} 
+                                target="_blank" 
+                                rel="noreferrer"
+                                className="text-emerald-500 hover:text-emerald-600"
+                              >
+                                <Phone className="h-3 w-3" />
+                              </a>
+                            )}
+                          </div>
                         </div>
-                      )}
-                      <div>
-                        <p className="font-medium">{company.name}</p>
-                        <p className="text-sm text-slate-500">{company.slug}</p>
                       </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    {company.plan ? (
+                    </TableCell>
+                    <TableCell>
+                      {company.plan ? (
+                        <div>
+                          <p className="text-sm font-medium text-slate-700">{company.plan.name}</p>
+                          <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">
+                            {company.plan.billing_period === 'monthly' ? 'Mensal' : 
+                             company.plan.billing_period === 'quarterly' ? 'Trimestral' : 
+                             company.plan.billing_period === 'lifetime' ? 'Vitalício' : 'Anual'}
+                          </p>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-slate-400">Sem plano</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant="outline"
+                        className={`${statusColors[(company.subscription_status as SubscriptionStatus) || 'trial']} text-[10px] py-0 px-2 h-5`}
+                      >
+                        {statusLabels[(company.subscription_status as SubscriptionStatus) || 'trial']}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
                       <div>
-                        <p className="font-medium">{company.plan.name}</p>
-                        <p className="text-sm text-slate-500">
-                          {formatCurrency(company.plan.price)}/{
-                            company.plan.billing_period === 'monthly' ? 'Mensal' : 
-                            company.plan.billing_period === 'quarterly' ? 'Trimestral' : 
-                            company.plan.billing_period === 'lifetime' ? 'Vitalício' : 'Anual'
-                          }
+                        <p className="text-sm font-bold text-emerald-600">
+                          {formatCurrency(company.total_sales || 0)}
+                        </p>
+                        <p className="text-[10px] text-slate-500 flex items-center gap-1">
+                          <LayoutGrid className="h-2.5 w-2.5" />
+                          {company.order_count || 0} pedidos
                         </p>
                       </div>
-                    ) : (
-                      <span className="text-slate-500">Sem plano</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <Badge
-                      variant="outline"
-                      className={statusColors[(company.subscription_status as SubscriptionStatus) || 'trial']}
-                    >
-                      {statusLabels[(company.subscription_status as SubscriptionStatus) || 'trial']}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-1 text-slate-500">
-                      <Users className="h-4 w-4" />
-                      {company.user_count || 0}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-slate-500">
-                    {formatDate(company.created_at)}
-                  </TableCell>
-                  <TableCell>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon">
-                          <MoreHorizontal className="h-4 w-4" />
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1.5">
+                        <span className={`text-sm font-medium ${
+                          isExpired ? 'text-rose-600' : 
+                          isNearExpiration ? 'text-amber-600' : 
+                          'text-slate-700'
+                        }`}>
+                          {company.plan?.billing_period === 'lifetime' ? 'Vitalício' : 
+                           isExpired ? 'Expirado' : `${daysRemaining} dia(s)`}
+                        </span>
+                        {isNearExpiration && <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />}
+                        {isExpired && <Clock className="h-3.5 w-3.5 text-rose-500" />}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-xs text-slate-500 whitespace-nowrap">
+                      {company.last_order_at ? formatDate(company.last_order_at) : 'Nunca'}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-slate-400 hover:text-primary hover:bg-primary/5"
+                          title="Entrar na conta"
+                          onClick={() => handleImpersonate(company)}
+                          disabled={impersonatingId === company.id}
+                        >
+                          {impersonatingId === company.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <UserCircle className="h-4 w-4" />
+                          )}
                         </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => openEditDialog(company)}>
-                          Editar assinatura
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => openUsersDialog(company)}>
-                          Usuários
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => openTrialDialog(company)}>
-                          <CalendarPlus className="h-4 w-4 mr-2" />
-                          Adicionar dias de teste
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => toggleCompanyStatus(company)}>
-                          {company.is_active ? 'Desativar' : 'Ativar'}
-                        </DropdownMenuItem>
-                        {company.slug && (
-                          <DropdownMenuItem onClick={() => window.open(`/catalogo/${company.slug}`, '_blank')}>
-                            <ExternalLink className="h-4 w-4 mr-2" />
-                            Ver catálogo
-                          </DropdownMenuItem>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              ))}
+
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => openEditDialog(company)}>
+                              <CalendarPlus className="h-4 w-4 mr-2" />
+                              Editar assinatura
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => openUsersDialog(company)}>
+                              <Users className="h-4 w-4 mr-2" />
+                              Usuários
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => openTrialDialog(company)}>
+                              <CalendarPlus className="h-4 w-4 mr-2" />
+                              Adicionar dias de teste
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => toggleCompanyStatus(company)}>
+                              <KeyRound className="h-4 w-4 mr-2" />
+                              {company.is_active ? 'Desativar Empresa' : 'Ativar Empresa'}
+                            </DropdownMenuItem>
+                            {company.slug && (
+                              <DropdownMenuItem onClick={() => window.open(`/catalogo/${company.slug}`, '_blank')}>
+                                <ExternalLink className="h-4 w-4 mr-2" />
+                                Ver catálogo
+                              </DropdownMenuItem>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </CardContent>

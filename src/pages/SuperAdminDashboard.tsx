@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Building2, CreditCard, LayoutGrid, TrendingUp, AlertTriangle, Mail, FileCheck, Trash2 } from 'lucide-react';
+import { Building2, CreditCard, LayoutGrid, TrendingUp, AlertTriangle, Mail, FileCheck, Trash2, UserCircle, LogOut, Clock } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -13,6 +13,13 @@ interface Stats {
   activeCompanies: number;
   trialCompanies: number;
   totalPlans: number;
+  totalSalesVolume: number;
+  totalOrderCount: number;
+}
+
+interface CompanyWithStats extends Company {
+  totalSales: number;
+  orderCount: number;
 }
 
 const statusLabels: Record<string, string> = {
@@ -44,7 +51,10 @@ export default function SuperAdminDashboard() {
     activeCompanies: 0,
     trialCompanies: 0,
     totalPlans: 0,
+    totalSalesVolume: 0,
+    totalOrderCount: 0,
   });
+  const [topCompanies, setTopCompanies] = useState<CompanyWithStats[]>([]);
   const [recentCompanies, setRecentCompanies] = useState<Company[]>([]);
   const [contactMessages, setContactMessages] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -54,26 +64,49 @@ export default function SuperAdminDashboard() {
   }, []);
 
   const loadData = async () => {
-    const [companiesResult, plansResult, messagesResult] = await Promise.all([
+    const [companiesResult, plansResult, messagesResult, ordersResult, salesResult] = await Promise.all([
       supabase.from('companies').select('*').order('created_at', { ascending: false }),
       supabase.from('plans').select('*').eq('is_active', true),
-      supabase.from('order_notifications').select('*').eq('type', 'contact_form').order('created_at', { ascending: false }).limit(5)
+      supabase.from('order_notifications').select('*').eq('type', 'contact_form').order('created_at', { ascending: false }).limit(5),
+      supabase.from('orders').select('company_id, total').neq('status', 'cancelado'),
+      supabase.from('sales').select('company_id, total'),
     ]);
 
     const companies = (companiesResult.data || []) as Company[];
     const plans = plansResult.data || [];
     const messages = messagesResult.data || [];
+    const orders = ordersResult.data || [];
+    const sales = salesResult.data || [];
+
+    const totalSalesValue = [...orders, ...sales].reduce((sum, item) => sum + Number(item.total || 0), 0);
+
+    const companiesWithStats = companies.map(c => {
+      const cOrders = orders.filter(o => o.company_id === c.id);
+      const cSales = sales.filter(s => s.company_id === c.id);
+      return {
+        ...c,
+        totalSales: cOrders.reduce((sum, o) => sum + Number(o.total || 0), 0) + cSales.reduce((sum, s) => sum + Number(s.total || 0), 0),
+        orderCount: cOrders.length + cSales.length,
+      };
+    });
 
     setStats({
       totalCompanies: companies.length,
       activeCompanies: companies.filter(c => c.subscription_status === 'active').length,
       trialCompanies: companies.filter(c => c.subscription_status === 'trial' || !c.subscription_status).length,
       totalPlans: plans.length,
+      totalSalesVolume: totalSalesValue,
+      totalOrderCount: orders.length + sales.length,
     });
 
+    setTopCompanies(companiesWithStats.sort((a, b) => b.totalSales - a.totalSales).slice(0, 5));
     setRecentCompanies(companies.slice(0, 5));
     setContactMessages(messages);
     setLoading(false);
+  };
+
+  const asCurrency = (value: number) => {
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
   };
 
   const formatDate = (dateString: string) => {
@@ -119,16 +152,25 @@ export default function SuperAdminDashboard() {
 
   if (loading) {
     return (
-      <div className="page-container">
-        <div className="flex items-center justify-center h-64">
-          <p className="text-slate-500">Carregando...</p>
+      <div className="flex h-[calc(100vh-200px)] items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="relative">
+            <div className="h-16 w-16 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
+            <div className="absolute inset-0 flex items-center justify-center">
+              <TrendingUp className="h-6 w-6 text-primary animate-pulse" />
+            </div>
+          </div>
+          <div className="text-center">
+            <h3 className="text-lg font-bold text-slate-900">Calculando métricas</h3>
+            <p className="text-sm text-slate-500 animate-pulse">Consolidando dados das lojas...</p>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="page-container space-y-6">
+    <div className="page-container space-y-6 animate-in fade-in duration-500">
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-3 text-slate-600">
           <LayoutGrid className="h-5 w-5" />
@@ -139,7 +181,7 @@ export default function SuperAdminDashboard() {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <Card
           className="border-slate-200 cursor-pointer hover:shadow-sm transition-shadow"
           onClick={() => navigate('/super-admin/empresas')}
@@ -158,49 +200,65 @@ export default function SuperAdminDashboard() {
 
         <Card className="border-slate-200">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-slate-500">Assinaturas Ativas</CardTitle>
+            <CardTitle className="text-sm font-medium text-emerald-600">Volume Total Vendas</CardTitle>
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-100">
               <TrendingUp className="h-4 w-4 text-emerald-600" />
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-semibold text-emerald-700">{stats.activeCompanies}</div>
-            <p className="text-xs text-slate-500">pagando mensalmente</p>
+            <div className="text-2xl font-semibold text-emerald-700">{asCurrency(stats.totalSalesVolume)}</div>
+            <p className="text-xs text-slate-500">volume total transacionado</p>
           </CardContent>
         </Card>
 
         <Card className="border-slate-200">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-slate-500">Em Teste</CardTitle>
+            <CardTitle className="text-sm font-medium text-blue-600">Total Pedidos</CardTitle>
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-100">
-              <AlertTriangle className="h-4 w-4 text-blue-600" />
+              <LayoutGrid className="h-4 w-4 text-blue-600" />
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-semibold text-blue-700">{stats.trialCompanies}</div>
-            <p className="text-xs text-slate-500">período de avaliação</p>
-          </CardContent>
-        </Card>
-
-        <Card
-          className="border-slate-200 cursor-pointer hover:shadow-sm transition-shadow"
-          onClick={() => navigate('/super-admin/planos')}
-        >
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-slate-500">Planos</CardTitle>
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100">
-              <CreditCard className="h-4 w-4 text-slate-600" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-semibold text-slate-900">{stats.totalPlans}</div>
-            <p className="text-xs text-slate-500">planos configurados</p>
+            <div className="text-2xl font-semibold text-blue-700">{stats.totalOrderCount}</div>
+            <p className="text-xs text-slate-500">pedidos e vendas PDV</p>
           </CardContent>
         </Card>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card className="border-slate-200">
+      <div className="grid gap-6 lg:grid-cols-3">
+        <Card className="border-slate-200 lg:col-span-1">
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <TrendingUp className="h-4 w-4 text-emerald-500" />
+              Top 5 Lojas (Vendas)
+            </CardTitle>
+            <CardDescription>Lojas com maior volume financeiro</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {topCompanies.length === 0 ? (
+              <p className="text-slate-500 text-center py-8">Sem dados de vendas</p>
+            ) : (
+              <div className="space-y-4">
+                {topCompanies.map((company, idx) => (
+                  <div key={company.id} className="flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span className="text-xs font-bold text-slate-400 w-4">#{idx + 1}</span>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-slate-900 truncate">{company.name}</p>
+                        <p className="text-[10px] text-slate-500">{company.orderCount} pedidos</p>
+                      </div>
+                    </div>
+                    <span className="text-sm font-bold text-emerald-600 shrink-0">
+                      {asCurrency(company.totalSales)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="border-slate-200 lg:col-span-2">
           <CardHeader>
             <CardTitle className="text-base">Empresas Recentes</CardTitle>
             <CardDescription>Últimas empresas cadastradas no sistema</CardDescription>
@@ -213,26 +271,30 @@ export default function SuperAdminDashboard() {
                 {recentCompanies.map((company) => (
                   <div
                     key={company.id}
-                    className="flex items-center justify-between p-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 cursor-pointer transition-colors"
+                    className="grid grid-cols-12 items-center p-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 cursor-pointer transition-colors gap-4"
                     onClick={() => navigate('/super-admin/empresas')}
                   >
-                    <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                    <div className="col-span-6 flex items-center gap-3 min-w-0">
+                      <div className="h-10 w-10 shrink-0 rounded-lg bg-primary/10 flex items-center justify-center">
                         <Building2 className="h-5 w-5 text-primary" />
                       </div>
-                      <div>
-                        <p className="font-medium text-slate-900">{company.name}</p>
-                        <p className="text-sm text-slate-500">{company.slug}</p>
+                      <div className="min-w-0">
+                        <p className="font-medium text-slate-900 truncate">{company.name}</p>
+                        <p className="text-sm text-slate-500 truncate">{company.slug}</p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-3">
+                    
+                    <div className="col-span-3 flex justify-center">
                       <Badge
                         variant="outline"
-                        className={statusColors[company.subscription_status as SubscriptionStatus || 'trial']}
+                        className={`${statusColors[company.subscription_status as SubscriptionStatus || 'trial']} w-24 justify-center`}
                       >
                         {statusLabels[company.subscription_status as SubscriptionStatus || 'trial']}
                       </Badge>
-                      <span className="text-sm text-slate-500">
+                    </div>
+
+                    <div className="col-span-3 text-right">
+                      <span className="text-sm text-slate-500 whitespace-nowrap">
                         {formatDate(company.created_at)}
                       </span>
                     </div>
@@ -242,7 +304,9 @@ export default function SuperAdminDashboard() {
             )}
           </CardContent>
         </Card>
+      </div>
 
+      <div className="grid gap-6">
         <Card className="border-slate-200">
           <CardHeader>
             <CardTitle className="text-base">Mensagens de Contato</CardTitle>
@@ -252,7 +316,7 @@ export default function SuperAdminDashboard() {
             {contactMessages.length === 0 ? (
               <p className="text-slate-500 text-center py-8">Nenhuma mensagem recebida</p>
             ) : (
-              <div className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                 {contactMessages.map((msg) => {
                   const data = JSON.parse(msg.body || '{}');
                   const isRead = !!msg.read_at;
@@ -263,7 +327,7 @@ export default function SuperAdminDashboard() {
                     >
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-2">
-                          <span className="font-bold text-slate-900">{data.name}</span>
+                          <span className="font-bold text-slate-900 truncate max-w-[150px]">{data.name}</span>
                           {!isRead && <Badge className="bg-primary text-[10px] h-4">Nova</Badge>}
                         </div>
                         <span className="text-xs text-slate-400">{formatDate(msg.created_at)}</span>
@@ -275,11 +339,8 @@ export default function SuperAdminDashboard() {
                         {data.message}
                       </div>
                       <div className="flex items-center justify-between gap-4">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-[11px] bg-slate-100 px-2 py-0.5 rounded text-slate-500">{data.email}</span>
-                          <Badge variant="secondary" className="text-[10px] uppercase font-bold py-0">
-                            {data.company}
-                          </Badge>
+                        <div className="flex flex-wrap items-center gap-2 min-w-0">
+                          <span className="text-[11px] bg-slate-100 px-2 py-0.5 rounded text-slate-500 truncate max-w-[120px]">{data.email}</span>
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
                           <Button 

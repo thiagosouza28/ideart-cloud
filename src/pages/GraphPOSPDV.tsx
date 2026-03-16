@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, ShoppingCart, Barcode, User, Plus, Minus, Trash2 } from 'lucide-react';
 import GraphPOSCard from '@/components/graphpos/GraphPOSCard';
@@ -76,7 +76,7 @@ const graphPosInlineInputClass =
 export default function GraphPOSPDV() {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const isMobile = useIsMobile();
   const [search, setSearch] = useState('');
   const [barcodeInput, setBarcodeInput] = useState('');
@@ -192,6 +192,8 @@ export default function GraphPOSPDV() {
     if (checkout.customer && !selectedCustomer) {
       setSelectedCustomer({
         id: checkout.customer.id,
+        company_id: profile?.company_id || null,
+        user_id: user?.id || null,
         name: checkout.customer.name,
         document: checkout.customer.document || null,
         email: checkout.customer.email || null,
@@ -203,6 +205,7 @@ export default function GraphPOSPDV() {
         notes: null,
         date_of_birth: null,
         photo_url: null,
+        saldo_credito: 0,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       });
@@ -376,11 +379,12 @@ export default function GraphPOSPDV() {
     if (tiers.length === 0) return null;
 
     return tiers
-      .map((tier) =>
-        tier.max_quantity === null
+      .map((tier) => {
+        const isInfinite = tier.max_quantity === null || Number(tier.max_quantity) === 0;
+        return isInfinite
           ? `${tier.min_quantity}+`
-          : `${tier.min_quantity} a ${tier.max_quantity}`,
-      )
+          : `${tier.min_quantity} a ${tier.max_quantity}`;
+      })
       .join(', ');
   };
 

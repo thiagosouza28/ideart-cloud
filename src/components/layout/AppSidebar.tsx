@@ -120,20 +120,24 @@ export function AppSidebar() {
     'min-h-11 h-auto text-sm font-medium text-sidebar-foreground/80 hover:bg-sidebar-accent/70 hover:text-sidebar-foreground data-[active=true]:bg-sidebar-primary data-[active=true]:text-sidebar-primary-foreground [&>span:last-child]:whitespace-normal [&>span:last-child]:overflow-visible [&>span:last-child]:text-clip [&>span:last-child]:leading-tight';
   const neutralNavButtonClass =
     'min-h-11 h-auto text-sm font-medium text-sidebar-foreground/80 hover:bg-sidebar-accent/70 hover:text-sidebar-foreground [&>span:last-child]:whitespace-normal [&>span:last-child]:overflow-visible [&>span:last-child]:text-clip [&>span:last-child]:leading-tight';
-  const isItemActive = (url: string) =>
-    location.pathname === url || location.pathname.startsWith(`${url}/`);
+  const isItemActive = (url: string) => {
+    if (url === '/dashboard' || url === '/super-admin') {
+      return location.pathname === url;
+    }
+    return location.pathname === url || location.pathname.startsWith(`${url}/`);
+  };
 
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border bg-sidebar">
       <SidebarHeader className="border-b border-sidebar-border">
-        <div className={`flex items-center gap-3 px-3 py-4 ${collapsed ? 'justify-center' : ''}`}>
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-sidebar-primary text-sidebar-primary-foreground shadow-sm">
+        <div className={`flex items-center gap-3 px-3 py-4 ${collapsed ? 'justify-center overflow-hidden' : ''}`}>
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-sidebar-primary text-sidebar-primary-foreground shadow-sm">
             <Package className="h-5 w-5" />
           </div>
           {!collapsed && (
-            <div className="flex flex-col leading-tight">
-              <span className="text-base font-semibold text-sidebar-foreground">Ideart Cloud</span>
-              <span className="text-[11px] font-medium tracking-wide text-sidebar-muted">SISTEMA DE GESTÃO</span>
+            <div className="flex flex-col leading-tight min-w-0">
+              <span className="text-base font-semibold text-sidebar-foreground truncate">Ideart Cloud</span>
+              <span className="text-[11px] font-medium tracking-wide text-sidebar-muted truncate">SISTEMA DE GESTÃO</span>
             </div>
           )}
         </div>
@@ -291,7 +295,7 @@ export function AppSidebar() {
                   <SidebarMenuItem key={item.title}>
                     <SidebarMenuButton
                       asChild
-                      isActive={location.pathname === item.url || location.pathname.startsWith(`${item.url}/`)}
+                      isActive={isItemActive(item.url)}
                       tooltip={item.title}
                       className={navButtonClass}
                     >

@@ -74,13 +74,13 @@ interface OrderItemForm {
   notes: string;
 }
 
-type ProductAttributeOption = {
+export type ProductAttributeOption = {
   id: string;
   value: string;
   priceModifier: number;
 };
 
-type ProductAttributeGroup = {
+export type ProductAttributeGroup = {
   attributeId: string;
   attributeName: string;
   options: ProductAttributeOption[];
@@ -273,11 +273,12 @@ export default function OrderForm() {
     if (tiers.length === 0) return null;
 
     return tiers
-      .map((tier) =>
-        tier.max_quantity === null
+      .map((tier) => {
+        const isInfinite = tier.max_quantity === null || Number(tier.max_quantity) === 0;
+        return isInfinite
           ? `${tier.min_quantity}+`
-          : `${tier.min_quantity} a ${tier.max_quantity}`,
-      )
+          : `${tier.min_quantity} a ${tier.max_quantity}`;
+      })
       .join(', ');
   };
 
@@ -1485,150 +1486,22 @@ export default function OrderForm() {
                     <p>Pesquise por nome ou SKU e clique em adicionar.</p>
                   </div>
                 ) : (
-                  <div className="order-table-wrap">
-                    <table className="order-items-table">
-                      <thead>
-                        <tr>
-                          <th>Produto</th>
-                          <th>Qtd</th>
-                          <th>Preco Unit.</th>
-                          <th>Total</th>
-                          <th />
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {items.map((item) => (
-                          <tr key={item.product.id}>
-                            <td>
-                              <div className="order-product-cell">
-                                <strong>{item.product.name}</strong>
-                                <span>{item.product.sku || 'Sem SKU'}</span>
-                                <span>
-                                  Unidade de venda: {getProductSaleUnitLabel(item.product.unit_type, { capitalize: true })}
-                                </span>
-                                {getTierRangeLabel(item.product.id) ? (
-                                  <span>Faixas válidas: {getTierRangeLabel(item.product.id)}</span>
-                                ) : null}
-                                {getProductSaleEquivalentText(item.product.unit_type, item.quantity, item.product.name) ? (
-                                  <span>
-                                    Total equivalente:{' '}
-                                    {getProductSaleEquivalentText(item.product.unit_type, item.quantity, item.product.name)}
-                                  </span>
-                                ) : null}
-                                {getProductAttributeGroups(item.product.id).length > 0 ? (
-                                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                                    {getProductAttributeGroups(item.product.id).map((group) => (
-                                      <div key={`${item.product.id}-${group.attributeId}`} className="space-y-1">
-                                        <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--order-muted)]">
-                                          {group.attributeName}
-                                        </span>
-                                        <div className="order-select-wrap">
-                                          <select
-                                            value={item.attributes?.[group.attributeName] || group.options[0]?.value || ''}
-                                            onChange={(event) =>
-                                              changeItemAttribute(item.product.id, group.attributeName, event.target.value)
-                                            }
-                                            className="order-input order-select h-auto py-2 text-sm"
-                                          >
-                                            {group.options.map((option) => (
-                                              <option key={option.id} value={option.value}>
-                                                {option.value}
-                                                {option.priceModifier > 0 ? ` (+${fmt(option.priceModifier)})` : ''}
-                                                {option.priceModifier < 0 ? ` (-${fmt(Math.abs(option.priceModifier))})` : ''}
-                                              </option>
-                                            ))}
-                                          </select>
-                                          <ChevronDown className="order-select-icon" />
-                                        </div>
-                                      </div>
-                                    ))}
-                                  </div>
-                                ) : null}
-                              </div>
-                            </td>
-                            <td>
-                              {isAreaUnit(item.product.unit) ? (
-                                <div className="space-y-2">
-                                  <div className="flex items-center gap-2">
-                                    <div className="flex flex-col gap-1 w-[70px]">
-                                      <span className="text-[10px] uppercase text-muted-foreground font-semibold">Larg. (cm)</span>
-                                      <input
-                                        type="text"
-                                        inputMode="decimal"
-                                        className="order-input text-sm px-2 py-1 h-auto"
-                                        value={item.attributes[M2_ATTRIBUTE_KEYS.widthCm] ?? ''}
-                                        onChange={(e) => changeM2SubQuantity(item.product.id, M2_ATTRIBUTE_KEYS.widthCm, e.target.value)}
-                                        disabled={saving}
-                                      />
-                                    </div>
-                                    <span className="text-muted-foreground mt-4 text-xs font-medium">x</span>
-                                    <div className="flex flex-col gap-1 w-[70px]">
-                                      <span className="text-[10px] uppercase text-muted-foreground font-semibold">Alt. (cm)</span>
-                                      <input
-                                        type="text"
-                                        inputMode="decimal"
-                                        className="order-input text-sm px-2 py-1 h-auto"
-                                        value={item.attributes[M2_ATTRIBUTE_KEYS.heightCm] ?? ''}
-                                        onChange={(e) => changeM2SubQuantity(item.product.id, M2_ATTRIBUTE_KEYS.heightCm, e.target.value)}
-                                        disabled={saving}
-                                      />
-                                    </div>
-                                  </div>
-                                  <div className="text-xs font-semibold text-[var(--order-primary)]">
-                                    {formatAreaM2(item.quantity || 0)} m²
-                                  </div>
-                                </div>
-                              ) : (
-                                <div className="order-qty-control">
-                                  <button
-                                    type="button"
-                                    onClick={() => changeQty(item.product.id, -1)}
-                                    disabled={saving || item.quantity <= 1}
-                                  >
-                                    <Minus className="h-3.5 w-3.5" />
-                                  </button>
-                                  <input
-                                    type="number"
-                                    min={1}
-                                    value={item.quantity}
-                                    onChange={(event) => {
-                                      const parsed = Number(event.target.value);
-                                      setQty(item.product.id, Number.isFinite(parsed) ? parsed : 1);
-                                    }}
-                                  />
-                                  <button type="button" onClick={() => changeQty(item.product.id, 1)} disabled={saving}>
-                                    <Plus className="h-3.5 w-3.5" />
-                                  </button>
-                                </div>
-                              )}
-                              {getTierRangeLabel(item.product.id) ? (
-                                <div className="mt-1 text-[11px] text-[var(--order-muted)]">
-                                  Faixas: {getTierRangeLabel(item.product.id)}
-                                </div>
-                              ) : null}
-                            </td>
-                            <td>
-                              {fmt(item.unit_price)}
-                              <div className="text-xs text-[var(--order-muted)]">
-                                {getProductSaleUnitPriceSuffix(item.product.unit_type)}
-                              </div>
-                            </td>
-                            <td>{fmt(calculateItemTotal(item))}</td>
-                            <td>
-                              <button
-                                type="button"
-                                className="order-delete-btn"
-                                onClick={() => removeItem(item.product.id)}
-                                disabled={saving}
-                                aria-label={`Remover ${item.product.name}`}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                  <div className="order-items-grid">
+                    {items.map((item) => (
+                      <EditableOrderItem
+                        key={item.product.id}
+                        item={item}
+                        saving={saving}
+                        productAttributeGroups={getProductAttributeGroups(item.product.id)}
+                        tierRangeLabel={getTierRangeLabel(item.product.id)}
+                        onQuantityChange={(productId, value) => setQty(productId, value)}
+                        onM2SubQuantityChange={changeM2SubQuantity}
+                        onAttributeChange={changeItemAttribute}
+                        onRemove={removeItem}
+                        calculateItemTotal={calculateItemTotal}
+                        formatCurrency={fmt}
+                      />
+                    ))}
                   </div>
                 )}
               </div>

@@ -15,6 +15,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
+import { ProductAttributeGroup } from './OrderForm';
 import { Order, OrderFinalPhoto, OrderArtFile, OrderItem, OrderStatusHistory, OrderStatus, OrderPayment, PaymentMethod, PaymentStatus, Product, Customer, PriceTier } from '@/types/database';
 import { ArrowLeft, Loader2, CheckCircle, Clock, Package, Truck, XCircle, User, FileText, Printer, MessageCircle, Link, Copy, CreditCard, PauseCircle, Trash2, Image as ImageIcon, Upload, Paintbrush, Sparkles, Wallet, FileDown } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -293,11 +294,13 @@ export default function OrderDetails() {
   const [orderDiscountValue, setOrderDiscountValue] = useState(0);
   const [savingItems, setSavingItems] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
+  const [productAttributeMap, setProductAttributeMap] = useState<Record<string, ProductAttributeGroup[]>>({});
   const [priceTiers, setPriceTiers] = useState<PriceTier[]>([]);
   const [newItemProductId, setNewItemProductId] = useState('');
   const [newItemQuantity, setNewItemQuantity] = useState(1);
   const [newItemWidthCm, setNewItemWidthCm] = useState('');
   const [newItemHeightCm, setNewItemHeightCm] = useState('');
+  const [newItemAttributes, setNewItemAttributes] = useState<Record<string, string>>({});
   const [customerDialogOpen, setCustomerDialogOpen] = useState(false);
   const [customerSaving, setCustomerSaving] = useState(false);
   const [customerDraft, setCustomerDraft] = useState<Customer | null>(null);
@@ -388,6 +391,46 @@ export default function OrderDetails() {
   const getProductById = (productId?: string | null) =>
     products.find((product) => product.id === productId);
 
+  const getProductAttributeGroups = (productId: string) => productAttributeMap[productId] || [];
+
+  const ensureSelectedAttributes = (
+    productId: string,
+    attributes: Record<string, string> = {},
+  ): Record<string, string> => {
+    const nextAttributes = { ...attributes };
+    const productGroups = getProductAttributeGroups(productId);
+
+    productGroups.forEach((group) => {
+      const selectedValue = String(nextAttributes[group.attributeName] || '').trim();
+      const hasValidSelection = group.options.some((option) => option.value === selectedValue);
+      if (!hasValidSelection && group.options[0]?.value) {
+        nextAttributes[group.attributeName] = group.options[0].value;
+      }
+    });
+
+    return nextAttributes;
+  };
+
+  const getAttributePriceModifier = (
+    productId: string,
+    attributes: Record<string, string> = {},
+  ): number =>
+    getProductAttributeGroups(productId).reduce((sum, group) => {
+      const selectedValue = String(attributes[group.attributeName] || '').trim();
+      const selectedOption = group.options.find((option) => option.value === selectedValue);
+      return sum + Number(selectedOption?.priceModifier || 0);
+    }, 0);
+
+  const calculateUnitPriceWithAttributes = (
+    product: Product,
+    quantity: number,
+    attributes: Record<string, string> = {},
+  ) => {
+    const basePrice = getProductPriceForQuantity(product, quantity);
+    const attributeModifier = getAttributePriceModifier(product.id, attributes);
+    return Math.max(0, basePrice + attributeModifier);
+  };
+
   const getProductPriceForQuantity = (product: Product, quantity: number) =>
     resolveProductPrice(product, quantity, priceTiers, 0);
 
@@ -409,11 +452,12 @@ export default function OrderDetails() {
     if (tiers.length === 0) return null;
 
     return tiers
-      .map((tier) =>
-        tier.max_quantity === null
+      .map((tier) => {
+        const isInfinite = tier.max_quantity === null || Number(tier.max_quantity) === 0;
+        return isInfinite
           ? `${tier.min_quantity}+`
-          : `${tier.min_quantity} a ${tier.max_quantity}`,
-      )
+          : `${tier.min_quantity} a ${tier.max_quantity}`;
+      })
       .join(', ');
   };
 
@@ -652,7 +696,7 @@ export default function OrderDetails() {
 
       return {
         ...item,
-        status: 'entregue',
+        status: 'entregue' as OrderStatus,
         ready_at: item.ready_at || deliveredAt,
         ready_by: item.ready_by || user?.id || null,
         delivered_at: item.delivered_at || deliveredAt,
@@ -784,21 +828,83 @@ export default function OrderDetails() {
     const productIds = loadedProducts.map((product) => product.id);
     if (productIds.length === 0) {
       setPriceTiers([]);
+      setProductAttributeMap({});
       return;
     }
 
-    const { data: tiersData, error: tiersError } = await supabase
-      .from('price_tiers')
-      .select('*')
-      .in('product_id', productIds)
-      .order('min_quantity');
+    const [tiersResult, attributesResult] = await Promise.all([
+      supabase
+        .from('price_tiers')
+        .select('*')
+        .in('product_id', productIds)
+        .order('min_quantity'),
+      supabase
+        .from('product_attributes')
+        .select(
+          'product_id, price_modifier, attribute_value_id, attribute_value:attribute_values(id, value, attribute_id, attribute:attributes(id, name))',
+        )
+        .in('product_id', productIds),
+    ]);
 
-    if (tiersError) {
+    if (tiersResult.error) {
       toast({ title: 'Erro ao carregar faixas de preço', variant: 'destructive' });
       return;
     }
 
-    setPriceTiers((tiersData as PriceTier[]) || []);
+    if (attributesResult.error) {
+      toast({ title: 'Erro ao carregar atributos', variant: 'destructive' });
+      return;
+    }
+
+    setPriceTiers((tiersResult.data as PriceTier[]) || []);
+
+    const nextProductAttributeMap: Record<string, ProductAttributeGroup[]> = {};
+    (attributesResult.data || []).forEach((row) => {
+      const productId = row.product_id;
+      const attributeValue = Array.isArray(row.attribute_value)
+        ? row.attribute_value[0]
+        : row.attribute_value;
+      const attribute = Array.isArray(attributeValue?.attribute)
+        ? attributeValue.attribute[0]
+        : attributeValue?.attribute;
+      const attributeId = String(attribute?.id || attributeValue?.attribute_id || '').trim();
+      const attributeName = String(attribute?.name || '').trim();
+      const valueId = String(attributeValue?.id || row.attribute_value_id || '').trim();
+      const valueLabel = String(attributeValue?.value || '').trim();
+
+      if (!productId || !attributeId || !attributeName || !valueId || !valueLabel) return;
+
+      const productGroups = nextProductAttributeMap[productId] || [];
+      let group = productGroups.find((item) => item.attributeId === attributeId);
+
+      if (!group) {
+        group = {
+          attributeId,
+          attributeName,
+          options: [],
+        };
+        productGroups.push(group);
+      }
+
+      if (!group.options.some((option) => option.id === valueId)) {
+        group.options.push({
+          id: valueId,
+          value: valueLabel,
+          priceModifier: Number(row.price_modifier || 0),
+        });
+      }
+
+      nextProductAttributeMap[productId] = productGroups;
+    });
+
+    Object.values(nextProductAttributeMap).forEach((groups) => {
+      groups.sort((left, right) => left.attributeName.localeCompare(right.attributeName, 'pt-BR'));
+      groups.forEach((group) => {
+        group.options.sort((left, right) => left.value.localeCompare(right.value, 'pt-BR'));
+      });
+    });
+
+    setProductAttributeMap(nextProductAttributeMap);
   };
 
   const startEditingItems = async () => {
@@ -957,6 +1063,34 @@ export default function OrderDetails() {
     );
   };
 
+  const handleChangeItemAttribute = (index: number, attributeName: string, value: string) => {
+    setEditableItems((prev) =>
+      prev.map((item, idx) => {
+        if (idx !== index) return item;
+
+        const nextAttributes = ensureSelectedAttributes(item.product_id!, {
+          ...(item.attributes || {}),
+          [attributeName]: value,
+        });
+
+        const product = getProductById(item.product_id);
+        const next = {
+          ...item,
+          attributes: nextAttributes,
+        };
+
+        if (product && item.price_mode !== 'manual') {
+          next.unit_price = calculateUnitPriceWithAttributes(product, item.quantity, nextAttributes);
+        }
+
+        return {
+          ...next,
+          total: calculateItemTotal(next),
+        };
+      }),
+    );
+  };
+
   const handleChangeItemTotal = (index: number, value: number) => {
     setEditableItems((prev) =>
       prev.map((item, idx) => {
@@ -1076,14 +1210,18 @@ export default function OrderDetails() {
     if (!isM2 && !validateTierQuantity(product, quantity)) {
       return;
     }
-    const unitPrice = getProductPriceForQuantity(product, quantity > 0 ? quantity : 1);
+
+    const initialAttributes = ensureSelectedAttributes(product.id, newItemAttributes);
+    const unitPrice = calculateUnitPriceWithAttributes(product, quantity > 0 ? quantity : 1, initialAttributes);
+
     const attributes = isM2
-      ? buildM2Attributes({}, {
+      ? buildM2Attributes(initialAttributes, {
         widthCm: widthCm as number,
         heightCm: heightCm as number,
         areaM2: quantity,
       })
-      : null;
+      : Object.keys(initialAttributes).length > 0 ? initialAttributes : null;
+
     const newItem: EditableOrderItem = {
       id: crypto.randomUUID(),
       order_id: order?.id || '',
@@ -1112,10 +1250,12 @@ export default function OrderDetails() {
     setNewItemQuantity(1);
     setNewItemWidthCm('');
     setNewItemHeightCm('');
+    setNewItemAttributes({});
   };
 
   const handleNewItemProductChange = (productId: string) => {
     setNewItemProductId(productId);
+    setNewItemAttributes(ensureSelectedAttributes(productId));
     const product = products.find((entry) => entry.id === productId);
     if (!product || isAreaUnit(product.unit)) {
       setNewItemQuantity(1);
@@ -3391,93 +3531,237 @@ export default function OrderDetails() {
               )}
             </CardHeader>
             <CardContent>
-              <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-                <Table className={isEditingItems ? "min-w-[1120px]" : "table-fixed"}>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-[38%] whitespace-nowrap">Produto</TableHead>
-                      <TableHead className="w-[140px] whitespace-nowrap text-center">Status</TableHead>
-                      <TableHead className="w-[110px] whitespace-nowrap text-center">Qtd</TableHead>
-                      <TableHead className="w-[130px] whitespace-nowrap text-center">Preço Unit.</TableHead>
-                      <TableHead className="w-[120px] whitespace-nowrap text-right">Desconto</TableHead>
-                      <TableHead className="w-[120px] whitespace-nowrap text-right">Total</TableHead>
-                      {isEditingItems && <TableHead className="whitespace-nowrap text-right">Açãoes</TableHead>}
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {(isEditingItems ? editableItems : items).map((item, index) => {
-                      const m2Data = parseM2Attributes(item.attributes);
-                      const isM2 = isItemM2(item);
-                      const displayAttributes = stripM2Attributes(item.attributes);
-                      const discountState = getItemDiscountState(item);
-                      const widthRaw = item.attributes?.[M2_ATTRIBUTE_KEYS.widthCm] ?? '';
-                      const heightRaw = item.attributes?.[M2_ATTRIBUTE_KEYS.heightCm] ?? '';
-                      const hasValidDimensions =
-                        typeof m2Data.widthCm === 'number' &&
-                        typeof m2Data.heightCm === 'number' &&
-                        m2Data.widthCm > 0 &&
-                        m2Data.heightCm > 0;
-                      const itemStatusLabel = getOrderStatusLabel(item.status, orderStatusCustomization);
-                      const itemStatusMoment = item.delivered_at
-                        ? `Entregue em ${formatDate(item.delivered_at)}`
-                        : getItemReadyAt(item)
-                          ? `Pronto em ${formatDate(getItemReadyAt(item) as string)}`
-                          : null;
+              {isEditingItems ? (
+                <div className="grid gap-4">
+                  {editableItems.map((item, index) => {
+                    const m2Data = parseM2Attributes(item.attributes);
+                    const isM2 = isItemM2(item);
+                    const widthRaw = item.attributes?.[M2_ATTRIBUTE_KEYS.widthCm] ?? '';
+                    const heightRaw = item.attributes?.[M2_ATTRIBUTE_KEYS.heightCm] ?? '';
+                    const hasValidDimensions =
+                      typeof m2Data.widthCm === 'number' &&
+                      typeof m2Data.heightCm === 'number' &&
+                      m2Data.widthCm > 0 &&
+                      m2Data.heightCm > 0;
+                    const discountState = getItemDiscountState(item);
 
-                      return (
-                        <TableRow key={item.id} className="h-12">
-                          <TableCell className="py-2">
-                            {isEditingItems ? (
-                              <div className="space-y-2">
-                                <Select
-                                  value={item.product_id ?? ""}
-                                  onValueChange={(value) => handleChangeItemProduct(index, value)}
-                                >
-                                  <SelectTrigger>
-                                    <SelectValue placeholder="Selecione o produto" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {products.map((product) => (
-                                      <SelectItem key={product.id} value={product.id}>
-                                        {product.name}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                                {isM2 && (
-                                  <div className="space-y-2">
-                                    <div className="grid gap-2 sm:grid-cols-2">
-                                      <div className="space-y-1">
-                                        <Label className="text-[10px] uppercase text-muted-foreground">Largura (cm)</Label>
-                                        <Input
-                                          value={widthRaw}
-                                          onChange={(e) => handleChangeItemDimensions(index, M2_ATTRIBUTE_KEYS.widthCm, e.target.value)}
-                                          className="h-8 text-xs"
-                                          inputMode="decimal"
-                                        />
-                                      </div>
-                                      <div className="space-y-1">
-                                        <Label className="text-[10px] uppercase text-muted-foreground">Altura (cm)</Label>
-                                        <Input
-                                          value={heightRaw}
-                                          onChange={(e) => handleChangeItemDimensions(index, M2_ATTRIBUTE_KEYS.heightCm, e.target.value)}
-                                          className="h-8 text-xs"
-                                          inputMode="decimal"
-                                        />
-                                      </div>
-                                    </div>
-                                    <p className={`text-xs ${hasValidDimensions ? 'text-muted-foreground' : 'text-destructive'}`}>
-                                      Area: {hasValidDimensions ? `${formatAreaM2(item.quantity)} m\u00B2` : 'Informe dimensoes validas'}
-                                    </p>
+                    return (
+                      <div key={item.id} className="rounded-lg border bg-card p-4 shadow-sm">
+                        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                          <div className="flex-1 space-y-3">
+                            <div className="space-y-2">
+                              <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Produto</Label>
+                              <Select
+                                value={item.product_id ?? ""}
+                                onValueChange={(value) => handleChangeItemProduct(index, value)}
+                              >
+                                <SelectTrigger className="w-full lg:max-w-md">
+                                  <SelectValue placeholder="Selecione o produto" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {products.map((product) => (
+                                    <SelectItem key={product.id} value={product.id}>
+                                      {product.name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+
+                            {isM2 && (
+                              <div className="grid gap-3 sm:grid-cols-2 lg:max-w-md">
+                                <div className="space-y-1.5">
+                                  <Label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Largura (cm)</Label>
+                                  <Input
+                                    value={widthRaw}
+                                    onChange={(e) => handleChangeItemDimensions(index, M2_ATTRIBUTE_KEYS.widthCm, e.target.value)}
+                                    className="h-9"
+                                    inputMode="decimal"
+                                  />
+                                </div>
+                                <div className="space-y-1.5">
+                                  <Label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Altura (cm)</Label>
+                                  <Input
+                                    value={heightRaw}
+                                    onChange={(e) => handleChangeItemDimensions(index, M2_ATTRIBUTE_KEYS.heightCm, e.target.value)}
+                                    className="h-9"
+                                    inputMode="decimal"
+                                  />
+                                </div>
+                                <p className={`col-span-full text-xs font-medium ${hasValidDimensions ? 'text-primary' : 'text-destructive'}`}>
+                                  Área: {hasValidDimensions ? `${formatAreaM2(item.quantity)} m\u00B2` : 'Informe dimensões válidas'}
+                                </p>
+                              </div>
+                            )}
+
+                            {item.product_id && getProductAttributeGroups(item.product_id).length > 0 && (
+                              <div className="grid gap-3 sm:grid-cols-2 lg:max-w-md">
+                                {getProductAttributeGroups(item.product_id).map((group) => (
+                                  <div key={`${item.id}-${group.attributeId}`} className="space-y-1.5">
+                                    <Label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                                      {group.attributeName}
+                                    </Label>
+                                    <Select
+                                      value={item.attributes?.[group.attributeName] || group.options[0]?.value || ""}
+                                      onValueChange={(value) => handleChangeItemAttribute(index, group.attributeName, value)}
+                                    >
+                                      <SelectTrigger className="h-9">
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {group.options.map((option) => (
+                                          <SelectItem key={option.id} value={option.value}>
+                                            {option.value}
+                                            {option.priceModifier > 0 ? ` (+${formatCurrency(option.priceModifier)})` : ""}
+                                            {option.priceModifier < 0 ? ` (-${formatCurrency(Math.abs(option.priceModifier))})` : ""}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
                                   </div>
-                                )}
-                                {itemStatusMoment && (
-                                  <p className="text-xs text-muted-foreground">
-                                    {itemStatusMoment}
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 lg:flex lg:flex-row lg:items-end lg:gap-6">
+                            {!isM2 && (
+                              <div className="space-y-1.5">
+                                <Label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Qtd</Label>
+                                <Input
+                                  type="number"
+                                  min={1}
+                                  value={item.quantity}
+                                  onChange={(e) => handleChangeItemQuantity(index, Number(e.target.value))}
+                                  className="w-full text-center lg:w-24"
+                                />
+                                {getTierRangeLabel(item.product_id) && (
+                                  <p className="text-[10px] text-muted-foreground text-center">
+                                    {getTierRangeLabel(item.product_id)}
                                   </p>
                                 )}
                               </div>
-                            ) : (
+                            )}
+
+                            <div className="space-y-1.5">
+                              <Label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Preço Unit.</Label>
+                              <div className="space-y-1.5">
+                                <CurrencyInput
+                                  value={Number(item.unit_price || 0)}
+                                  onChange={(value) => handleChangeItemUnitPrice(index, value)}
+                                  className="w-full lg:w-32"
+                                />
+                                {'price_mode' in item && item.price_mode === 'manual' && (
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-auto w-full px-2 py-1 text-[10px] hover:bg-primary/5 hover:text-primary"
+                                    onClick={() => handleResetItemUnitPrice(index)}
+                                  >
+                                    Usar tabela
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="space-y-1.5">
+                              <Label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Desconto</Label>
+                              <div className="flex flex-col gap-1.5">
+                                <div className="flex gap-1.5">
+                                  <Select
+                                    value={discountState.discountType}
+                                    onValueChange={(value) => handleChangeItemDiscountType(index, value as DiscountType)}
+                                  >
+                                    <SelectTrigger className="w-16 lg:w-20">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="fixed">R$</SelectItem>
+                                      <SelectItem value="percent">%</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                  {discountState.discountType === 'percent' ? (
+                                    <Input
+                                      type="number"
+                                      min={0}
+                                      max={100}
+                                      step="0.01"
+                                      value={discountState.discountValue}
+                                      onChange={(e) => handleChangeItemDiscountValue(index, Number(e.target.value))}
+                                      className="text-right lg:w-24"
+                                    />
+                                  ) : (
+                                    <CurrencyInput
+                                      value={discountState.discountValue}
+                                      onChange={(value) => handleChangeItemDiscountValue(index, value)}
+                                      className="lg:w-32"
+                                    />
+                                  )}
+                                </div>
+                                <p className="text-right text-[10px] font-medium text-destructive">
+                                  -{formatCurrency(discountState.discountAmount)}
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="space-y-1.5">
+                              <Label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground text-right block">Total</Label>
+                              <div className="flex items-center gap-3">
+                                <CurrencyInput
+                                  value={calculateItemTotal(item)}
+                                  onChange={(value) => handleChangeItemTotal(index, value)}
+                                  className="w-full lg:w-36 text-right font-semibold"
+                                />
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => handleRemoveItem(index)}
+                                  className="text-muted-foreground hover:text-destructive hover:bg-destructive/5"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+                  <Table className="table-fixed">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-[38%] whitespace-nowrap">Produto</TableHead>
+                        <TableHead className="w-[140px] whitespace-nowrap text-center">Status</TableHead>
+                        <TableHead className="w-[110px] whitespace-nowrap text-center">Qtd</TableHead>
+                        <TableHead className="w-[130px] whitespace-nowrap text-center">Preço Unit.</TableHead>
+                        <TableHead className="w-[120px] whitespace-nowrap text-right">Desconto</TableHead>
+                        <TableHead className="w-[120px] whitespace-nowrap text-right">Total</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {items.map((item) => {
+                        const m2Data = parseM2Attributes(item.attributes);
+                        const displayAttributes = stripM2Attributes(item.attributes);
+                        const discountState = getItemDiscountState(item);
+                        const hasValidDimensions =
+                          typeof m2Data.widthCm === 'number' &&
+                          typeof m2Data.heightCm === 'number' &&
+                          m2Data.widthCm > 0 &&
+                          m2Data.heightCm > 0;
+                        const itemStatusLabel = getOrderStatusLabel(item.status, orderStatusCustomization);
+                        const itemStatusMoment = item.delivered_at
+                          ? `Entregue em ${formatDate(item.delivered_at)}`
+                          : getItemReadyAt(item)
+                            ? `Pronto em ${formatDate(getItemReadyAt(item) as string)}`
+                            : null;
+
+                        return (
+                          <TableRow key={item.id} className="h-12">
+                            <TableCell className="py-2">
                               <div>
                                 <p className="font-medium">{item.product_name}</p>
                                 {Object.keys(displayAttributes).length > 0 && (
@@ -3502,108 +3786,31 @@ export default function OrderDetails() {
                                     {itemStatusMoment}
                                   </p>
                                 )}
-                                {getTierRangeLabel(item.product_id) && !isM2 && (
+                                {!isItemM2(item) && getTierRangeLabel(item.product_id) && (
                                   <p className="mt-1 text-xs text-muted-foreground">
                                     Faixas válidas: {getTierRangeLabel(item.product_id)}
                                   </p>
                                 )}
                               </div>
-                            )}
-                          </TableCell>
-                          <TableCell className="py-2 text-center align-middle">
-                            <div className="flex justify-center whitespace-nowrap">
-                              <Badge
-                                className={`whitespace-nowrap ${statusConfig[item.status]?.color || 'bg-slate-100 text-slate-700'}`}
-                              >
-                                {itemStatusLabel}
-                              </Badge>
-                            </div>
-                          </TableCell>
-                          <TableCell className="whitespace-nowrap text-center py-2">
-                            {isEditingItems ? (
-                              isM2 ? (
-                                <span className={`text-sm ${hasValidDimensions ? 'text-foreground' : 'text-destructive'}`}>
-                                  {hasValidDimensions ? `${formatAreaM2(item.quantity)} m\u00B2` : '--'}
-                                </span>
-                              ) : (
-                                <Input
-                                  type="number"
-                                  min={1}
-                                  value={item.quantity}
-                                  onChange={(e) => handleChangeItemQuantity(index, Number(e.target.value))}
-                                  className="w-20 text-center"
-                                />
-                              )
-                            ) : (
-                              isM2 ? `${formatAreaM2(item.quantity)} m\u00B2` : item.quantity
-                            )}
-                            {isEditingItems && getTierRangeLabel(item.product_id) && !isM2 && (
-                              <p className="mt-1 text-[11px] text-muted-foreground">
-                                {getTierRangeLabel(item.product_id)}
-                              </p>
-                            )}
-                          </TableCell>
-                          <TableCell className="whitespace-nowrap py-2 align-middle text-center">
-                            {isEditingItems ? (
-                              <div className="mx-auto w-[150px] space-y-2">
-                                <CurrencyInput
-                                  value={Number(item.unit_price || 0)}
-                                  onChange={(value) => handleChangeItemUnitPrice(index, value)}
-                                />
-                                {'price_mode' in item && item.price_mode === 'manual' && (
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-auto px-2 py-1 text-xs"
-                                    onClick={() => handleResetItemUnitPrice(index)}
-                                  >
-                                    Usar tabela
-                                  </Button>
-                                )}
+                            </TableCell>
+                            <TableCell className="py-2 text-center align-middle">
+                              <div className="flex justify-center whitespace-nowrap">
+                                <Badge
+                                  className={`whitespace-nowrap ${statusConfig[item.status]?.color || 'bg-slate-100 text-slate-700'}`}
+                                >
+                                  {itemStatusLabel}
+                                </Badge>
                               </div>
-                            ) : (
+                            </TableCell>
+                            <TableCell className="whitespace-nowrap text-center py-2">
+                              {isItemM2(item) ? `${formatAreaM2(item.quantity)} m\u00B2` : item.quantity}
+                            </TableCell>
+                            <TableCell className="whitespace-nowrap py-2 align-middle text-center">
                               <div className="text-center">
                                 {formatCurrency(Number(item.unit_price))}
                               </div>
-                            )}
-                          </TableCell>
-                          <TableCell className="whitespace-nowrap py-2 align-top">
-                            {isEditingItems ? (
-                              <div className="ml-auto w-[180px] space-y-2">
-                                <Select
-                                  value={discountState.discountType}
-                                  onValueChange={(value) => handleChangeItemDiscountType(index, value as DiscountType)}
-                                >
-                                  <SelectTrigger>
-                                    <SelectValue placeholder="Tipo" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="fixed">R$</SelectItem>
-                                    <SelectItem value="percent">%</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                                {discountState.discountType === 'percent' ? (
-                                  <Input
-                                    type="number"
-                                    min={0}
-                                    max={100}
-                                    step="0.01"
-                                    value={discountState.discountValue}
-                                    onChange={(e) => handleChangeItemDiscountValue(index, Number(e.target.value))}
-                                    className="text-right"
-                                  />
-                                ) : (
-                                  <CurrencyInput
-                                    value={discountState.discountValue}
-                                    onChange={(value) => handleChangeItemDiscountValue(index, value)}
-                                  />
-                                )}
-                                <p className="text-right text-xs text-muted-foreground">
-                                  {formatCurrency(discountState.discountAmount)}
-                                </p>
-                              </div>
-                            ) : (
+                            </TableCell>
+                            <TableCell className="whitespace-nowrap py-2 align-top">
                               <div className="text-right">
                                 {discountState.discountAmount > 0 ? (
                                   <>
@@ -3618,37 +3825,17 @@ export default function OrderDetails() {
                                   <span className="text-muted-foreground">-</span>
                                 )}
                               </div>
-                            )}
-                          </TableCell>
-                          <TableCell className="whitespace-nowrap py-2">
-                            {isEditingItems ? (
-                              <div className="ml-auto w-[140px]">
-                                <CurrencyInput
-                                  value={calculateItemTotal(item)}
-                                  onChange={(value) => handleChangeItemTotal(index, value)}
-                                />
-                              </div>
-                            ) : (
-                              <div className="text-right font-medium">{formatCurrency(calculateItemTotal(item))}</div>
-                            )}
-                          </TableCell>
-                          {isEditingItems && (
-                            <TableCell className="text-right py-1">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => handleRemoveItem(index)}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
                             </TableCell>
-                          )}
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </div>
+                            <TableCell className="whitespace-nowrap py-2 text-right font-medium">
+                              {formatCurrency(calculateItemTotal(item))}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
 
               {isEditingItems && (
                 <div className="mt-4 rounded-lg border p-4">
@@ -3671,6 +3858,40 @@ export default function OrderDetails() {
                         <p className="text-xs text-muted-foreground">
                           Faixas válidas: {getTierRangeLabel(newItemProductId)}
                         </p>
+                      )}
+
+                      {newItemProductId && getProductAttributeGroups(newItemProductId).length > 0 && (
+                        <div className="grid gap-2 sm:grid-cols-2 mt-2">
+                          {getProductAttributeGroups(newItemProductId).map((group) => (
+                            <div key={`new-item-${group.attributeId}`} className="space-y-1">
+                              <Label className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                                {group.attributeName}
+                              </Label>
+                              <Select
+                                value={newItemAttributes[group.attributeName] || group.options[0]?.value || ""}
+                                onValueChange={(value) => {
+                                  setNewItemAttributes(prev => ({
+                                    ...prev,
+                                    [group.attributeName]: value
+                                  }));
+                                }}
+                              >
+                                <SelectTrigger className="h-8 text-xs">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {group.options.map((option) => (
+                                    <SelectItem key={option.id} value={option.value}>
+                                      {option.value}
+                                      {option.priceModifier > 0 ? ` (+${formatCurrency(option.priceModifier)})` : ""}
+                                      {option.priceModifier < 0 ? ` (-${formatCurrency(Math.abs(option.priceModifier))})` : ""}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          ))}
+                        </div>
                       )}
                     </div>
                     {newItemIsM2 ? (

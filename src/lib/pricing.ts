@@ -98,15 +98,8 @@ export const resolveSuggestedPrice = (
   }
 
   // 2. Check for volume-based price tiers
-  const tiers = priceTiers.filter((tier) => tier.product_id === product.id);
-  if (tiers.length > 0) {
-    const tier = tiers.find(
-      (t) =>
-        quantity >= t.min_quantity &&
-        (t.max_quantity === null || quantity <= t.max_quantity),
-    );
-    if (tier) return Number(tier.price);
-  }
+  const tier = getMatchingPriceTier(product.id, quantity, priceTiers);
+  if (tier) return Number(tier.price);
 
   // 3. Fallback to manually set fixed final price
   if (product.final_price !== null && product.final_price !== undefined) {
@@ -124,15 +117,8 @@ export const getBasePrice = (
   suppliesCost = 0,
 ) => {
   // 1. Check for volume-based price tiers
-  const tiers = priceTiers.filter((tier) => tier.product_id === product.id);
-  if (tiers.length > 0) {
-    const tier = tiers.find(
-      (t) =>
-        quantity >= t.min_quantity &&
-        (t.max_quantity === null || quantity <= t.max_quantity),
-    );
-    if (tier) return Number(tier.price);
-  }
+  const tier = getMatchingPriceTier(product.id, quantity, priceTiers);
+  if (tier) return Number(tier.price);
 
   // 2. Fallback to manually set fixed final price
   if (product.final_price !== null && product.final_price !== undefined) {
@@ -153,16 +139,9 @@ export const resolveProductPrice = (
     return Number(product.promo_price);
   }
 
-  const tiers = priceTiers.filter((tier) => tier.product_id === product.id);
-  if (tiers.length > 0) {
-    const matchingTier = tiers.find(
-      (t) =>
-        quantity >= t.min_quantity &&
-        (t.max_quantity === null || quantity <= t.max_quantity),
-    );
-    if (matchingTier && Number(matchingTier.price) > 0) {
-      return Number(matchingTier.price);
-    }
+  const matchingTier = getMatchingPriceTier(product.id, quantity, priceTiers);
+  if (matchingTier && Number(matchingTier.price) > 0) {
+    return Number(matchingTier.price);
   }
 
   if (product.catalog_price !== null && product.catalog_price !== undefined && Number(product.catalog_price) > 0) {
@@ -245,12 +224,22 @@ export const getMatchingPriceTier = (
   const safeQuantity = Number(quantity) || 0;
   if (safeQuantity <= 0) return null;
 
+  const tiers = getProductPriceTiers(productId, priceTiers);
+
   return (
-    getProductPriceTiers(productId, priceTiers).find(
-      (tier) =>
-        safeQuantity >= Number(tier.min_quantity) &&
-        (tier.max_quantity === null || safeQuantity <= Number(tier.max_quantity)),
-    ) || null
+    tiers.find((tier) => {
+      const min = Number(tier.min_quantity);
+      const max = tier.max_quantity === null ? null : Number(tier.max_quantity);
+
+      // Considera null ou 0 como sem limite (infinito)
+      const isInfinite = max === null || max === 0;
+
+      if (isInfinite) {
+        return safeQuantity >= min;
+      }
+
+      return safeQuantity >= min && safeQuantity <= max;
+    }) || null
   );
 };
 
@@ -287,11 +276,12 @@ export const getPriceTierValidationMessage = (
   if (tiers.length === 0) return null;
 
   const formatted = tiers
-    .map((tier) =>
-      tier.max_quantity === null
+    .map((tier) => {
+      const isInfinite = tier.max_quantity === null || Number(tier.max_quantity) === 0;
+      return isInfinite
         ? `${tier.min_quantity}+`
-        : `${tier.min_quantity} a ${tier.max_quantity}`,
-    )
+        : `${tier.min_quantity} a ${tier.max_quantity}`;
+    })
     .join(', ');
 
   return `Use uma quantidade dentro das faixas configuradas: ${formatted}.`;
