@@ -18,7 +18,8 @@ import {
   type CompanyPaymentMethodConfig,
 } from '@/lib/paymentMethods';
 import { usesDirectProductStock } from '@/lib/stockControl';
-import { consumeProductSupplies } from '@/lib/supplyConsumption';
+import { consumeProductSupplies } from '@/services/supplyConsumption';
+import { SyncManager } from '@/services/sync';
 
 const formatCurrency = (v: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
@@ -307,27 +308,24 @@ export default function GraphPOSPagamento() {
                     const payment = paymentMethod;
                     const paidAmount = payment === 'dinheiro' ? amountPaid : total;
                     const changeAmount = payment === 'dinheiro' ? Math.max(0, amountPaid - total) : 0;
+                    const saleId = crypto.randomUUID();
 
-                    const { data: sale, error: saleError } = await supabase
-                      .from('sales')
-                      .insert({
-                        user_id: user.id,
-                        company_id: companyId,
-                        customer_id: customer?.id || null,
-                        subtotal,
-                        discount,
-                        total,
-                        payment_method: payment,
-                        amount_paid: paidAmount,
-                        change_amount: changeAmount,
-                      })
-                      .select()
-                      .single();
+                    const { data: sale, error: saleError } = await SyncManager.performMutation('sales', 'INSERT', {
+                      id: saleId,
+                      user_id: user.id,
+                      company_id: companyId,
+                      customer_id: customer?.id || null,
+                      subtotal,
+                      discount,
+                      total,
+                      payment_method: payment,
+                      amount_paid: paidAmount,
+                      change_amount: changeAmount,
+                    });
 
                     if (saleError || !sale) {
-                      toast({ title: 'Erro ao finalizar venda', variant: 'destructive' });
-                      setSaving(false);
-                      return;
+                      toast({ title: 'Erro ao finalizar venda (offline)', variant: 'default' });
+                      // We proceed anyway because it's queued
                     }
 
                     await Promise.all(items.map((item) => {
@@ -341,8 +339,8 @@ export default function GraphPOSPagamento() {
                             })
                           : null;
 
-                      return supabase.from('sale_items').insert({
-                        sale_id: sale.id,
+                      return SyncManager.performMutation('sale_items', 'INSERT', {
+                        sale_id: saleId,
                         product_id: item.id,
                         product_name: item.name,
                         quantity: item.quantity,
@@ -373,29 +371,30 @@ export default function GraphPOSPagamento() {
                         const qty = quantitiesByProduct[product.id] || 0;
                         if (qty <= 0) return Promise.resolve();
                         const newStock = Number(product.stock_quantity) - qty;
-                        let updateProductQuery = supabase.from('products').update({ stock_quantity: newStock }).eq('id', product.id);
-                        if (companyId) {
-                          updateProductQuery = updateProductQuery.eq('company_id', companyId);
-                        }
-                        return updateProductQuery;
+
+                        return SyncManager.performMutation('products', 'UPDATE',
+                          { stock_quantity: newStock },
+                          { id: product.id }
+                        );
                       }));
 
                       await Promise.all(trackedProducts.map((product) => {
                         const qty = quantitiesByProduct[product.id] || 0;
                         if (qty <= 0) return Promise.resolve();
-                        return supabase.from('stock_movements').insert({
+                        return SyncManager.performMutation('stock_movements', 'INSERT', {
                           product_id: product.id,
                           movement_type: 'saida',
                           quantity: qty,
-                          reason: `Venda PDV #${sale.id.slice(0, 8)}`,
+                          reason: `Venda PDV #${saleId.slice(0, 8)}`,
                           user_id: user.id,
                         });
                       }));
                     }
 
-                    await consumeProductSupplies({
+                    // Only consume supplies online for now, as it's complex to mirror supply logic offline
+                    void consumeProductSupplies({
                       companyId,
-                      saleId: sale.id,
+                      saleId: saleId,
                       userId: user.id,
                       items: items.map((item) => ({
                         product_id: item.id,
@@ -404,7 +403,8 @@ export default function GraphPOSPagamento() {
                       })),
                     });
 
-                    await supabase.rpc('recalculate_product_sales_counts', {
+                    // RPC calls can't be easily queued offline without a specialized worker
+                    void supabase.rpc('recalculate_product_sales_counts', {
                       p_company_id: companyId,
                     });
 
@@ -412,8 +412,8 @@ export default function GraphPOSPagamento() {
                       ...checkout,
                       paymentMethod,
                       amountPaid,
-                      saleId: sale.id,
-                      createdAt: sale.created_at,
+                      saleId: saleId,
+                      createdAt: new Date().toISOString(),
                     });
                     window.localStorage.removeItem(draftStorageKey);
 

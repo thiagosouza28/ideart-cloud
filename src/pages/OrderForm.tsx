@@ -65,6 +65,9 @@ import {
   Wallet,
 } from 'lucide-react';
 
+import { EditableOrderItem } from '@/components/EditableOrderItem';
+import '@/styles/order-form-items.css';
+
 interface OrderItemForm {
   product: Product;
   quantity: number;

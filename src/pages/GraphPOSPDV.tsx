@@ -25,6 +25,8 @@ import { useUnsavedChanges } from '@/hooks/use-unsaved-changes';
 import { M2_ATTRIBUTE_KEYS, calculateAreaM2, formatAreaM2, isAreaUnit, parseM2Attributes, parseMeasurementInput } from '@/lib/measurements';
 import { usesDirectProductStock, usesSupplyStock } from '@/lib/stockControl';
 import { cn } from '@/lib/utils';
+import { localDb } from '@/lib/localDb';
+import { Network } from '@capacitor/network';
 
 const createLocalId = () => {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -232,9 +234,22 @@ export default function GraphPOSPDV() {
     const timeout = setTimeout(async () => {
       setProductsLoading(true);
       const safeTerm = sanitizeIlikeTerm(rawTerm);
+      const networkStatus = await Network.getStatus();
 
       let directMatches: Product[] = [];
-      if (safeTerm) {
+
+      if (!networkStatus.connected) {
+        // Search in SQLite
+        try {
+          const sqliteRes = await localDb.query(
+            `SELECT payload FROM products WHERE name LIKE ? OR payload LIKE ?`,
+            [`%${rawTerm}%`, `%${rawTerm}%`]
+          );
+          directMatches = (sqliteRes.values || []).map(v => JSON.parse(v.payload));
+        } catch (err) {
+          console.error('SQLite search error:', err);
+        }
+      } else if (safeTerm) {
         let directQuery = supabase
           .from('products')
           .select('*')
@@ -255,6 +270,14 @@ export default function GraphPOSPDV() {
         }
 
         directMatches = (data as unknown as Product[]) || [];
+
+        // Update SQLite cache
+        for (const product of directMatches) {
+          await localDb.run(
+            `INSERT OR REPLACE INTO products (id, name, price, stock_quantity, payload) VALUES (?, ?, ?, ?, ?)`,
+            [product.id, product.name, product.price, product.stock_quantity, JSON.stringify(product)]
+          );
+        }
       }
 
       const mappedDirect = directMatches.map((product) => ({
@@ -313,6 +336,23 @@ export default function GraphPOSPDV() {
 
     const timeout = setTimeout(async () => {
       setCustomerLoading(true);
+      const networkStatus = await Network.getStatus();
+
+      if (!networkStatus.connected) {
+        // Search in SQLite
+        try {
+          const res = await localDb.query(
+            `SELECT payload FROM customers WHERE name LIKE ? OR phone LIKE ?`,
+            [`%${term}%`, `%${term}%`]
+          );
+          setCustomerOptions((res.values || []).map(v => JSON.parse(v.payload)));
+        } catch (err) {
+          console.error('SQLite customer search error:', err);
+        }
+        setCustomerLoading(false);
+        return;
+      }
+
       const digits = normalizeDigits(term);
       const filters = [`name.ilike.%${term}%`];
       if (digits) {
@@ -331,8 +371,17 @@ export default function GraphPOSPDV() {
         return;
       }
 
-      setCustomerOptions((data as Customer[]) || []);
+      const foundCustomers = (data as Customer[]) || [];
+      setCustomerOptions(foundCustomers);
       setCustomerLoading(false);
+
+      // Cache to SQLite
+      for (const customer of foundCustomers) {
+        await localDb.run(
+          `INSERT OR REPLACE INTO customers (id, name, phone, email, payload) VALUES (?, ?, ?, ?, ?)`,
+          [customer.id, customer.name, customer.phone, customer.email, JSON.stringify(customer)]
+        );
+      }
     }, 300);
 
     return () => clearTimeout(timeout);

@@ -19,68 +19,74 @@ interface EditableOrderItemProps {
 export const EditableOrderItem: React.FC<EditableOrderItemProps> = ({ item, saving, productAttributeGroups, tierRangeLabel, onQuantityChange, onM2SubQuantityChange, onAttributeChange, onRemove, calculateItemTotal, formatCurrency }) => {
   return (
     <div className="order-item-card">
-      <div className="order-item-card-main">
-        <div className="order-product-details">
-          <strong>{item.product.name}</strong>
-          <span>{item.product.sku || 'Sem SKU'}</span>
-        </div>
-        <div className="order-item-fields">
-          <div className="order-item-field">
-            <label>Qtd</label>
-            {isAreaUnit(item.product.unit) ? (
-              <div className="m2-input-group">
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  placeholder="Larg. (cm)"
-                  value={item.attributes[M2_ATTRIBUTE_KEYS.widthCm] ?? ''}
-                  onChange={(e) => onM2SubQuantityChange(item.product.id, M2_ATTRIBUTE_KEYS.widthCm, e.target.value)}
-                  disabled={saving}
-                />
-                <span>x</span>
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  placeholder="Alt. (cm)"
-                  value={item.attributes[M2_ATTRIBUTE_KEYS.heightCm] ?? ''}
-                  onChange={(e) => onM2SubQuantityChange(item.product.id, M2_ATTRIBUTE_KEYS.heightCm, e.target.value)}
-                  disabled={saving}
-                />
-                <div className="m2-result">{formatAreaM2(item.quantity || 0)} m²</div>
-              </div>
-            ) : (
-              <div className="order-qty-control">
-                <button type="button" onClick={() => onQuantityChange(item.product.id, -1)} disabled={saving || item.quantity <= 1}>
-                  <Minus className="h-3.5 w-3.5" />
-                </button>
-                <input
-                  type="number"
-                  min={1}
-                  value={item.quantity}
-                  onChange={(e) => onQuantityChange(item.product.id, parseInt(e.target.value) || 1)}
-                />
-                <button type="button" onClick={() => onQuantityChange(item.product.id, 1)} disabled={saving}>
-                  <Plus className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            )}
-          </div>
-          <div className="order-item-field">
-            <label>Preço Unit.</label>
-            <div className="price-display">{formatCurrency(item.unit_price)}</div>
-          </div>
-          <div className="order-item-field">
-            <label>Total</label>
-            <div className="price-display">{formatCurrency(calculateItemTotal(item))}</div>
-          </div>
-        </div>
-        <button type="button" className="order-delete-btn" onClick={() => onRemove(item.product.id)} disabled={saving}>
-          <Trash2 className="h-4 w-4" />
-        </button>
+      <div className="order-product-details">
+        <strong>{item.product.name}</strong>
+        <span>{item.product.sku || 'Sem SKU'}</span>
       </div>
-      {tierRangeLabel && <div className="tier-range-label">Faixas: {tierRangeLabel}</div>}
+
+      <div className="order-item-field">
+        <label>Qtd</label>
+        {isAreaUnit(item.product.unit) ? (
+          <div className="m2-input-group">
+            <input
+              type="text"
+              inputMode="decimal"
+              placeholder="Larg. (cm)"
+              value={item.attributes[M2_ATTRIBUTE_KEYS.widthCm] ?? ''}
+              onChange={(e) => onM2SubQuantityChange(item.product.id, M2_ATTRIBUTE_KEYS.widthCm, e.target.value)}
+              disabled={saving}
+            />
+            <span>x</span>
+            <input
+              type="text"
+              inputMode="decimal"
+              placeholder="Alt. (cm)"
+              value={item.attributes[M2_ATTRIBUTE_KEYS.heightCm] ?? ''}
+              onChange={(e) => onM2SubQuantityChange(item.product.id, M2_ATTRIBUTE_KEYS.heightCm, e.target.value)}
+              disabled={saving}
+            />
+            <div className="m2-result">{formatAreaM2(item.quantity || 0)} m²</div>
+          </div>
+        ) : (
+          <div className="order-qty-control">
+            <button type="button" onClick={() => onQuantityChange(item.product.id, -1)} disabled={saving || item.quantity <= 1}>
+              <Minus className="h-3.5 w-3.5" />
+            </button>
+            <input
+              type="number"
+              min={1}
+              value={item.quantity}
+              onChange={(e) => onQuantityChange(item.product.id, parseInt(e.target.value) || 1)}
+            />
+            <button type="button" onClick={() => onQuantityChange(item.product.id, 1)} disabled={saving}>
+              <Plus className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div className="order-item-field">
+        <label>Preço Unit.</label>
+        <div className="price-display">{formatCurrency(item.unit_price)}</div>
+      </div>
+
+      <div className="order-item-field">
+        <label>Total</label>
+        <div className="price-display">{formatCurrency(calculateItemTotal(item))}</div>
+      </div>
+
+      <button type="button" className="order-delete-btn" onClick={() => onRemove(item.product.id)} disabled={saving}>
+        <Trash2 className="h-4 w-4" />
+      </button>
+
+      {tierRangeLabel && (
+        <div className="tier-range-label" style={{ gridColumn: '1 / -1' }}>
+          Faixas: {tierRangeLabel}
+        </div>
+      )}
+
       {productAttributeGroups.length > 0 && (
-        <div className="order-item-attributes">
+        <div className="order-item-attributes" style={{ gridColumn: '1 / -1' }}>
           {productAttributeGroups.map((group) => (
             <div key={group.attributeId} className="attribute-group">
               <label>{group.attributeName}</label>
