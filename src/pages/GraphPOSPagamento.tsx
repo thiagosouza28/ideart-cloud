@@ -18,7 +18,7 @@ import {
   type CompanyPaymentMethodConfig,
 } from '@/lib/paymentMethods';
 import { usesDirectProductStock } from '@/lib/stockControl';
-import { consumeProductSupplies } from '@/services/supplyConsumption';
+import { consumeProductSupplies } from '@/lib/supplyConsumption';
 import { SyncManager } from '@/services/sync';
 
 const formatCurrency = (v: number) =>
