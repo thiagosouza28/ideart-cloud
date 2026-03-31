@@ -700,6 +700,93 @@ export const fetchOrderPayments = async (orderId: string) => {
   return data;
 };
 
+export type MergeableOrderCandidate = Pick<
+  Order,
+  | 'id'
+  | 'order_number'
+  | 'customer_id'
+  | 'customer_name'
+  | 'status'
+  | 'subtotal'
+  | 'discount'
+  | 'total'
+  | 'payment_status'
+  | 'created_at'
+>;
+
+export const fetchMergeableCustomerOrders = async ({
+  targetOrderId,
+  customerId,
+}: {
+  targetOrderId: string;
+  customerId: string;
+}): Promise<MergeableOrderCandidate[]> => {
+  const { data: orders, error: ordersError } = await supabase
+    .from('orders')
+    .select('id, order_number, customer_id, customer_name, status, subtotal, discount, total, payment_status, created_at, amount_paid, customer_credit_used')
+    .eq('customer_id', customerId)
+    .neq('id', targetOrderId)
+    .is('deleted_at', null)
+    .neq('status', 'cancelado')
+    .eq('amount_paid', 0)
+    .eq('customer_credit_used', 0)
+    .order('created_at', { ascending: false });
+
+  if (ordersError) {
+    throw ordersError;
+  }
+
+  const candidates = (orders || []) as Array<
+    MergeableOrderCandidate & { amount_paid?: number | null; customer_credit_used?: number | null }
+  >;
+
+  if (candidates.length === 0) {
+    return [];
+  }
+
+  const candidateIds = candidates.map((order) => order.id);
+  const { data: payments, error: paymentsError } = await supabase
+    .from('order_payments')
+    .select('order_id')
+    .in('order_id', candidateIds);
+
+  if (paymentsError) {
+    throw paymentsError;
+  }
+
+  const blockedOrderIds = new Set((payments || []).map((payment) => payment.order_id));
+
+  return candidates
+    .filter((order) => !blockedOrderIds.has(order.id))
+    .map(({ amount_paid: _amountPaid, customer_credit_used: _creditUsed, ...order }) => order);
+};
+
+export const mergeCustomerOrders = async ({
+  targetOrderId,
+  sourceOrderIds,
+  userId,
+}: {
+  targetOrderId: string;
+  sourceOrderIds: string[];
+  userId?: string | null;
+}) => {
+  if (sourceOrderIds.length === 0) {
+    throw new Error('Selecione pelo menos um pedido para agrupar');
+  }
+
+  const { data, error } = await supabase.rpc('merge_customer_orders' as any, {
+    p_target_order_id: targetOrderId,
+    p_source_order_ids: sourceOrderIds,
+    p_user_id: userId || null,
+  });
+
+  if (error || !data) {
+    throw error || new Error('Falha ao agrupar pedidos');
+  }
+
+  return data as Order;
+};
+
 type CreatePaymentInput = {
   orderId: string;
   amount: number;
@@ -708,6 +795,8 @@ type CreatePaymentInput = {
   paidAt?: string | null;
   notes?: string;
   createdBy?: string | null;
+  orderDiscountType?: Order['discount_type'];
+  orderDiscountValue?: number;
 };
 
 export const createOrderPayment = async ({
@@ -869,6 +958,8 @@ export const createOrderPaymentWithCredit = async ({
   paidAt,
   notes,
   createdBy,
+  orderDiscountType,
+  orderDiscountValue,
 }: CreatePaymentInput): Promise<{
   payment: OrderPayment | null;
   summary: PaymentSummary;
@@ -879,14 +970,24 @@ export const createOrderPaymentWithCredit = async ({
     throw new Error('Valor invÃ¡lido');
   }
 
-  const { data, error } = await supabase.rpc('record_order_payment_internal' as any, {
+  const rpcParams: Record<string, unknown> = {
     p_order_id: orderId,
     p_amount: amount,
     p_method: method,
     p_status: status,
     p_notes: notes || null,
     p_paid_at: status === 'pendente' ? null : paidAt || null,
-  });
+  };
+
+  if (orderDiscountType) {
+    rpcParams.p_order_discount_type = orderDiscountType;
+  }
+
+  if (orderDiscountValue !== undefined && orderDiscountValue !== null) {
+    rpcParams.p_order_discount_value = orderDiscountValue;
+  }
+
+  const { data, error } = await supabase.rpc('record_order_payment_internal' as any, rpcParams);
 
   if (error) {
     throw error;

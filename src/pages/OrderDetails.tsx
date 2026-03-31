@@ -35,13 +35,16 @@ import {
   createOrderPaymentWithCredit as createOrderPayment,
   deleteOrder,
   deleteOrderPaymentWithCredit as deleteOrderPayment,
+  fetchMergeableCustomerOrders,
   getOrCreatePublicLink,
   markOrderItemsDelivered,
+  mergeCustomerOrders,
   markOrderItemsReady,
   updateOrderItemStatus,
   updateOrderStatus,
   updateOrderItems,
   uploadOrderFinalPhoto,
+  type MergeableOrderCandidate,
 } from '@/services/orders';
 import { ensurePublicStorageUrl } from '@/lib/storage';
 import {
@@ -267,6 +270,9 @@ export default function OrderDetails() {
 
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState(0);
+  const [paymentAmountTouched, setPaymentAmountTouched] = useState(false);
+  const [paymentDiscountType, setPaymentDiscountType] = useState<DiscountType>('fixed');
+  const [paymentDiscountValue, setPaymentDiscountValue] = useState(0);
   const [paymentDate, setPaymentDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | ''>('');
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('pago');
@@ -282,6 +288,11 @@ export default function OrderDetails() {
   const [receiptDialogOpen, setReceiptDialogOpen] = useState(false);
   const [receiptPayment, setReceiptPayment] = useState<OrderPayment | null>(null);
   const [paymentReceiptLoading, setPaymentReceiptLoading] = useState(false);
+  const [mergeDialogOpen, setMergeDialogOpen] = useState(false);
+  const [mergeOrdersLoading, setMergeOrdersLoading] = useState(false);
+  const [mergeOrdersSaving, setMergeOrdersSaving] = useState(false);
+  const [mergeCandidates, setMergeCandidates] = useState<MergeableOrderCandidate[]>([]);
+  const [selectedMergeOrderIds, setSelectedMergeOrderIds] = useState<string[]>([]);
 
   const [publicLinkToken, setPublicLinkToken] = useState<string | null>(null);
   const [linkLoading, setLinkLoading] = useState(false);
@@ -2333,6 +2344,86 @@ export default function OrderDetails() {
     setLoading(false);
   };
 
+  const openMergeDialog = async () => {
+    if (!order?.customer_id) {
+      toast({ title: 'Associe um cliente ao pedido', variant: 'destructive' });
+      return;
+    }
+
+    if (!canMergeOrders) {
+      toast({
+        title: 'Agrupamento indisponível',
+        description: 'Somente pedidos em aberto e sem pagamentos podem ser agrupados.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setMergeDialogOpen(true);
+    setMergeOrdersLoading(true);
+    setSelectedMergeOrderIds([]);
+
+    try {
+      const candidates = await fetchMergeableCustomerOrders({
+        targetOrderId: order.id,
+        customerId: order.customer_id,
+      });
+      setMergeCandidates(candidates);
+    } catch (error: any) {
+      toast({
+        title: 'Erro ao carregar pedidos',
+        description: error?.message,
+        variant: 'destructive',
+      });
+      setMergeDialogOpen(false);
+    } finally {
+      setMergeOrdersLoading(false);
+    }
+  };
+
+  const handleToggleMergeOrder = (orderIdToToggle: string, checked: boolean) => {
+    setSelectedMergeOrderIds((prev) => {
+      if (checked) {
+        if (prev.includes(orderIdToToggle)) return prev;
+        return [...prev, orderIdToToggle];
+      }
+      return prev.filter((item) => item !== orderIdToToggle);
+    });
+  };
+
+  const handleMergeOrders = async () => {
+    if (!order) return;
+    if (selectedMergeOrderIds.length === 0) {
+      toast({ title: 'Selecione ao menos um pedido', variant: 'destructive' });
+      return;
+    }
+
+    setMergeOrdersSaving(true);
+    try {
+      await mergeCustomerOrders({
+        targetOrderId: order.id,
+        sourceOrderIds: selectedMergeOrderIds,
+        userId: user?.id || null,
+      });
+      setMergeDialogOpen(false);
+      setSelectedMergeOrderIds([]);
+      setMergeCandidates([]);
+      toast({
+        title: 'Pedidos agrupados com sucesso!',
+        description: 'O desconto geral foi preservado e convertido para valor fixo, se necessário.',
+      });
+      await fetchOrder(order.id);
+    } catch (error: any) {
+      toast({
+        title: 'Erro ao agrupar pedidos',
+        description: error?.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setMergeOrdersSaving(false);
+    }
+  };
+
 
   const formatDate = (d: string) =>
     new Date(d).toLocaleString('pt-BR');
@@ -2532,6 +2623,9 @@ export default function OrderDetails() {
       return;
     }
     setPaymentAmount(remaining);
+    setPaymentAmountTouched(false);
+    setPaymentDiscountType(savedOrderDiscount.discountType);
+    setPaymentDiscountValue(savedOrderDiscount.discountValue);
     setPaymentDate(new Date().toISOString().slice(0, 10));
     setPaymentMethod(order.payment_method || '');
     setPaymentStatus('pago');
@@ -2606,6 +2700,9 @@ export default function OrderDetails() {
 
   const handleCreatePayment = async () => {
     if (!order) return;
+    const paymentDiscountChanged =
+      paymentDiscountType !== savedOrderDiscount.discountType ||
+      Math.abs(paymentDiscountValue - savedOrderDiscount.discountValue) > 0.009;
 
     if (!paymentMethod) {
       toast({ title: 'Selecione a forma de pagamento', variant: 'destructive' });
@@ -2617,7 +2714,21 @@ export default function OrderDetails() {
       return;
     }
 
-    if (paymentAmount > remainingAmount && !order.customer_id) {
+    if (paymentDiscountInvalid) {
+      toast({
+        title: 'Desconto inválido',
+        description: 'O desconto não pode reduzir o total abaixo do valor já quitado.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (paymentAmount > paymentRemainingAmount && paymentStatus === 'pendente') {
+      toast({ title: 'Valor excede o saldo restante', variant: 'destructive' });
+      return;
+    }
+
+    if (paymentAmount > paymentRemainingAmount && !order.customer_id) {
       toast({ title: 'Associe um cliente ao pedido para gerar crédito do excedente', variant: 'destructive' });
       return;
     }
@@ -2632,6 +2743,8 @@ export default function OrderDetails() {
         paidAt: paymentStatus === 'pendente' ? null : resolvePaidAtIso(paymentDate),
         notes: paymentNotes || undefined,
         createdBy: user.id,
+        orderDiscountType: paymentDiscountChanged ? paymentDiscountType : undefined,
+        orderDiscountValue: paymentDiscountChanged ? paymentDiscountValue : undefined,
       });
 
       const creditGenerated = Number(result.payment?.generated_credit_amount ?? 0);
@@ -3008,6 +3121,23 @@ export default function OrderDetails() {
     })
   ), [items]);
   const savedOrderDiscount = getSavedOrderDiscountState();
+  const paymentSubtotal = calculateSubtotal(items);
+  const paymentDiscountAmount = calculateOrderDiscountAmount(
+    paymentSubtotal,
+    paymentDiscountType,
+    paymentDiscountValue,
+  );
+  const paymentOrderTotal = calculateOrderTotal(
+    paymentSubtotal,
+    paymentDiscountType,
+    paymentDiscountValue,
+  );
+  const paymentSettledAmount =
+    Number(order?.amount_paid ?? 0) +
+    Number(order?.customer_credit_used ?? 0);
+  const paymentOutstandingAfterDiscount = roundCurrency(paymentOrderTotal - paymentSettledAmount);
+  const paymentDiscountInvalid = paymentOutstandingAfterDiscount < -0.009;
+  const paymentRemainingAmount = Math.max(0, paymentOutstandingAfterDiscount);
   const itemsDirty = isEditingItems && (
     JSON.stringify(editableItemsSnapshot) !== JSON.stringify(itemsSnapshot) ||
     orderDiscountType !== savedOrderDiscount.discountType ||
@@ -3031,6 +3161,11 @@ export default function OrderDetails() {
     || uploadingPhoto
     || uploadingArtFile;
 
+  useEffect(() => {
+    if (!paymentDialogOpen || paymentAmountTouched) return;
+    setPaymentAmount(paymentRemainingAmount);
+  }, [paymentAmountTouched, paymentDialogOpen, paymentRemainingAmount]);
+
   useUnsavedChanges(
     hasUnsavedChanges && !saving && !savingItems && !paymentSaving && !cancelLoading && !deleteLoading
   );
@@ -3050,6 +3185,20 @@ export default function OrderDetails() {
   const generatedCredit = Number(order.customer_credit_generated ?? 0);
   const remainingAmount = Math.max(0, orderTotal - paidTotal - creditUsed);
   const isOrderPaid = remainingAmount <= 0;
+  const hasRegisteredPayments =
+    payments.length > 0 || paidTotal > 0.009 || creditUsed > 0.009;
+  const canMergeOrders =
+    order.status !== 'cancelado' &&
+    Boolean(order.customer_id) &&
+    !hasRegisteredPayments;
+  const selectedMergeOrders = mergeCandidates.filter((candidate) =>
+    selectedMergeOrderIds.includes(candidate.id),
+  );
+  const mergeSelectedTotal = selectedMergeOrders.reduce(
+    (sum, candidate) => sum + Number(candidate.total || 0),
+    0,
+  );
+  const mergeProjectedTotal = orderTotal + mergeSelectedTotal;
   const hasCustomerCredit = Boolean(order.customer_id) && customerAvailableCredit > 0;
   const canUseCredit = hasCustomerCredit && !isOrderPaid;
   const latestPaidPayment = payments.find((payment) => payment.status !== 'pendente') || null;
@@ -3476,18 +3625,32 @@ export default function OrderDetails() {
                 <User className="h-5 w-5" />
                 Cliente
               </CardTitle>
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full sm:w-auto"
-                onClick={() => {
-                  setCustomerDialogOpen(true);
-                  setCustomerDraft(order.customer || null);
-                  setCustomerNameDraft(order.customer?.name || order.customer_name || '');
-                }}
-              >
-                {order.customer || order.customer_name ? 'Editar cliente' : 'Adicionar cliente'}
-              </Button>
+              <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+                {order.customer_id && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full sm:w-auto"
+                    onClick={openMergeDialog}
+                    disabled={!canMergeOrders || mergeOrdersLoading}
+                    title="Somente pedidos sem pagamento do mesmo cliente podem ser agrupados, inclusive entregues."
+                  >
+                    Agrupar pedidos
+                  </Button>
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full sm:w-auto"
+                  onClick={() => {
+                    setCustomerDialogOpen(true);
+                    setCustomerDraft(order.customer || null);
+                    setCustomerNameDraft(order.customer?.name || order.customer_name || '');
+                  }}
+                >
+                  {order.customer || order.customer_name ? 'Editar cliente' : 'Adicionar cliente'}
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               {order.customer ? (
@@ -4474,6 +4637,111 @@ export default function OrderDetails() {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={mergeDialogOpen} onOpenChange={setMergeDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Agrupar pedidos do cliente</DialogTitle>
+            <p className="text-sm text-muted-foreground">
+              Pedidos sem pagamento do mesmo cliente podem ser agrupados, inclusive quando jÃ¡ estiverem entregues.
+            </p>
+            <DialogDescription>
+              Selecione pedidos abertos do mesmo cliente para juntar neste pedido e ficar com um único saldo.
+              Pedidos com pagamento não entram nesse agrupamento.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid gap-3 rounded-md border p-4 text-sm md:grid-cols-3">
+              <div className="space-y-1">
+                <p className="text-muted-foreground">Pedido principal</p>
+                <p className="font-medium">#{formatOrderNumber(order.order_number)}</p>
+                <p>{formatCurrency(orderTotal)}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-muted-foreground">Pedidos selecionados</p>
+                <p className="font-medium">{selectedMergeOrderIds.length}</p>
+                <p>{formatCurrency(mergeSelectedTotal)}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-muted-foreground">Novo total previsto</p>
+                <p className="font-medium text-primary">{formatCurrency(mergeProjectedTotal)}</p>
+                <p className="text-xs text-muted-foreground">O desconto geral é preservado no total final.</p>
+              </div>
+            </div>
+
+            {mergeOrdersLoading ? (
+              <div className="flex min-h-32 items-center justify-center rounded-md border text-sm text-muted-foreground">
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Carregando pedidos elegíveis...
+              </div>
+            ) : mergeCandidates.length === 0 ? (
+              <div className="rounded-md border border-dashed p-6 text-sm text-muted-foreground">
+                Nenhum outro pedido aberto e sem pagamento foi encontrado para este cliente.
+              </div>
+            ) : (
+              <div className="max-h-[360px] space-y-2 overflow-y-auto pr-1">
+                {mergeCandidates.map((candidate) => (
+                  <label
+                    key={candidate.id}
+                    className="flex cursor-pointer items-start gap-3 rounded-md border p-3 transition-colors hover:bg-muted/40"
+                  >
+                    <Checkbox
+                      checked={selectedMergeOrderIds.includes(candidate.id)}
+                      onCheckedChange={(checked) => handleToggleMergeOrder(candidate.id, checked === true)}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <p className="font-medium">#{formatOrderNumber(candidate.order_number)}</p>
+                          <p className="text-xs text-muted-foreground">
+                            Status: {getOrderStatusLabel(candidate.status, orderStatusCustomization)}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {formatDate(candidate.created_at)} • {candidate.status === 'orcamento' ? 'Orçamento' : 'Pendente'}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-medium">{formatCurrency(Number(candidate.total || 0))}</p>
+                          {Number(candidate.discount || 0) > 0 && (
+                            <p className="text-xs text-muted-foreground">
+                              Desconto atual: {formatCurrency(Number(candidate.discount || 0))}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setMergeDialogOpen(false);
+                setSelectedMergeOrderIds([]);
+              }}
+              disabled={mergeOrdersSaving}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleMergeOrders}
+              disabled={mergeOrdersSaving || mergeOrdersLoading || selectedMergeOrderIds.length === 0}
+            >
+              {mergeOrdersSaving ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Agrupando...
+                </>
+              ) : (
+                'Agrupar pedidos'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Payment Dialog */}
       <Dialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen}>
         <DialogContent aria-describedby={undefined} className="max-w-md">
@@ -4483,21 +4751,105 @@ export default function OrderDetails() {
           <div className="space-y-4">
             <div className="rounded-md border p-3 text-sm space-y-1">
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Total do pedido</span>
-                <span>{formatCurrency(orderTotal)}</span>
+                <span className="text-muted-foreground">Subtotal do pedido</span>
+                <span>{formatCurrency(paymentSubtotal)}</span>
+              </div>
+              {paymentDiscountAmount > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">
+                    Desconto ({paymentDiscountType === 'percent' ? `${paymentDiscountValue}%` : 'R$'})
+                  </span>
+                  <span className="text-destructive">-{formatCurrency(paymentDiscountAmount)}</span>
+                </div>
+              )}
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Total atualizado</span>
+                <span>{formatCurrency(paymentOrderTotal)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Total pago</span>
                 <span>{formatCurrency(paidTotal)}</span>
               </div>
+              {creditUsed > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Crédito usado</span>
+                  <span>{formatCurrency(creditUsed)}</span>
+                </div>
+              )}
               <div className="flex justify-between font-medium">
                 <span className="text-muted-foreground">Saldo restante</span>
-                <span>{formatCurrency(remainingAmount)}</span>
+                <span>{formatCurrency(paymentRemainingAmount)}</span>
               </div>
             </div>
             <div className="space-y-2">
+              <Label>Desconto no pedido</Label>
+              <div className="flex gap-2">
+                <div className="w-28">
+                  <Select
+                    value={paymentDiscountType}
+                    onValueChange={(value) => {
+                      const nextType = normalizeDiscountType(value);
+                      const currentDiscountAmount = calculateOrderDiscountAmount(
+                        paymentSubtotal,
+                        paymentDiscountType,
+                        paymentDiscountValue,
+                      );
+                      setPaymentDiscountType(nextType);
+                      setPaymentDiscountValue(
+                        calculateDiscountValueFromAmount({
+                          baseAmount: paymentSubtotal,
+                          discountAmount: currentDiscountAmount,
+                          discountType: nextType,
+                        }),
+                      );
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Tipo" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="fixed">R$</SelectItem>
+                      <SelectItem value="percent">%</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex-1">
+                  {paymentDiscountType === 'percent' ? (
+                    <Input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step="0.01"
+                      value={paymentDiscountValue}
+                      onChange={(event) => setPaymentDiscountValue(normalizeDiscountValue(Number(event.target.value)))}
+                      className="text-right"
+                    />
+                  ) : (
+                    <CurrencyInput
+                      value={paymentDiscountValue}
+                      onChange={(value) => setPaymentDiscountValue(normalizeDiscountValue(value))}
+                    />
+                  )}
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                O desconto ajusta o total do pedido antes de registrar o pagamento.
+              </p>
+              {paymentDiscountInvalid && (
+                <p className="text-xs text-destructive">
+                  O desconto não pode reduzir o total abaixo do valor já quitado.
+                </p>
+              )}
+            </div>
+            <div className="space-y-2">
               <Label>Valor pago</Label>
-              <CurrencyInput value={paymentAmount} onChange={setPaymentAmount} />
+              <CurrencyInput
+                value={paymentAmount}
+                onChange={(value) => {
+                  setPaymentAmountTouched(true);
+                  setPaymentAmount(value);
+                }}
+              />
             </div>
             <div className="space-y-2">
               <Label>Data do pagamento</Label>
@@ -4557,10 +4909,17 @@ export default function OrderDetails() {
             </Button>
             <Button
               onClick={handleCreatePayment}
-              disabled={paymentSaving || paymentAmount <= 0 || (paymentAmount > remainingAmount && !order.customer_id)}
+              disabled={
+                paymentSaving ||
+                paymentAmount <= 0 ||
+                paymentDiscountInvalid ||
+                (paymentAmount > paymentRemainingAmount && (paymentStatus === 'pendente' || !order.customer_id))
+              }
             >
               {paymentSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {paymentAmount > remainingAmount && order.customer_id ? `Confirmar (gera crédito de ${formatCurrency(paymentAmount - remainingAmount)})` : 'Confirmar'}
+              {paymentAmount > paymentRemainingAmount && paymentStatus !== 'pendente' && order.customer_id
+                ? `Confirmar (gera crédito de ${formatCurrency(paymentAmount - paymentRemainingAmount)})`
+                : 'Confirmar'}
             </Button>
           </DialogFooter>
         </DialogContent>

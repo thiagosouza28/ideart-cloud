@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CurrencyInput } from '@/components/ui/currency-input';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -29,6 +30,14 @@ import {
   getProductSaleUnitLabel,
   getProductSaleUnitPriceSuffix,
 } from '@/lib/productSaleUnit';
+import {
+  calculateDiscountAmount,
+  calculateDiscountValueFromAmount,
+  calculateLineTotal,
+  normalizeDiscountType,
+  normalizeDiscountValue,
+  type DiscountType,
+} from '@/lib/orderDiscounts';
 import { fetchCompanyPaymentMethods } from '@/services/companyPaymentMethods';
 import { applyCustomerCreditToOrder } from '@/services/orders';
 import {
@@ -68,13 +77,14 @@ import {
 import { EditableOrderItem } from '@/components/EditableOrderItem';
 import '@/styles/order-form-items.css';
 
-interface OrderItemForm {
+export interface OrderItemForm {
   product: Product;
   quantity: number;
   unit_price: number;
   discount: number;
   attributes: Record<string, string>;
   notes: string;
+  isManual?: boolean;
 }
 
 export type ProductAttributeOption = {
@@ -147,6 +157,62 @@ const paymentConditions = [
 
 const steps = ['Tipo', 'Detalhes', 'Revisão', 'Confirmação'];
 
+const createManualProduct = (name: string): Product =>
+  ({
+    track_stock: false,
+    stock_control_type: null,
+    id: `manual:${crypto.randomUUID()}`,
+    name,
+    sku: null,
+    barcode: null,
+    description: null,
+    product_type: 'servico',
+    category_id: null,
+    company_id: null,
+    owner_id: null,
+    is_public: false,
+    is_copy: false,
+    original_product_id: null,
+    image_url: null,
+    image_urls: null,
+    unit: 'un',
+    unit_type: 'unit',
+    is_active: true,
+    show_in_catalog: false,
+    catalog_enabled: false,
+    catalog_featured: false,
+    catalog_min_order: null,
+    catalog_price: null,
+    mostrar_tabela_preco_catalogo: false,
+    catalog_short_description: null,
+    catalog_long_description: null,
+    catalog_sort_order: null,
+    slug: null,
+    product_colors: null,
+    personalization_enabled: false,
+    production_time_days: null,
+    service_base_price: 0,
+    base_cost: 0,
+    labor_cost: 0,
+    expense_percentage: 0,
+    waste_percentage: 0,
+    profit_margin: 0,
+    promo_price: null,
+    promo_start_at: null,
+    promo_end_at: null,
+    final_price: null,
+    stock_quantity: 0,
+    min_stock: 0,
+    min_order_quantity: 1,
+    sales_count: 0,
+    view_count: 0,
+    yampi_sku_id: null,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    category: undefined,
+    company: undefined,
+  }) as Product;
+
 export default function OrderForm() {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -176,6 +242,7 @@ export default function OrderForm() {
   const [deliveryDate, setDeliveryDate] = useState('');
   const [deliveryDateMode, setDeliveryDateMode] = useState<DeliveryDateMode>('auto');
   const [deliveryMethod, setDeliveryMethod] = useState('retirada');
+  const [discountType, setDiscountType] = useState<DiscountType>('fixed');
   const [discount, setDiscount] = useState(0);
   const [freight, setFreight] = useState(0);
   const [paymentCondition, setPaymentCondition] = useState('avista');
@@ -199,14 +266,32 @@ export default function OrderForm() {
   const customerInputRef = useRef<HTMLInputElement | null>(null);
 
   const [productSearchTerm, setProductSearchTerm] = useState('');
-  const [productDropdownOpen, setProductDropdownOpen] = useState(false);
-  const productBlurTimerRef = useRef<number | null>(null);
+  const [productDialogOpen, setProductDialogOpen] = useState(false);
+  const [selectedDialogProductId, setSelectedDialogProductId] = useState('');
+  const [productDialogQuantity, setProductDialogQuantity] = useState(1);
+  const [manualItemDialogOpen, setManualItemDialogOpen] = useState(false);
+  const [manualItemDescription, setManualItemDescription] = useState('');
+  const [manualItemQuantity, setManualItemQuantity] = useState(1);
+  const [manualItemPrice, setManualItemPrice] = useState(0);
+  const [discountDialogOpen, setDiscountDialogOpen] = useState(false);
+  const [discountDialogType, setDiscountDialogType] = useState<DiscountType>('fixed');
+  const [discountDialogValue, setDiscountDialogValue] = useState(0);
+  const [freightDialogOpen, setFreightDialogOpen] = useState(false);
+  const [freightDialogValue, setFreightDialogValue] = useState(0);
+  const [paymentQuickDialogOpen, setPaymentQuickDialogOpen] = useState(false);
+  const [paymentConditionDialogValue, setPaymentConditionDialogValue] = useState('avista');
+  const [paymentMethodDialogValue, setPaymentMethodDialogValue] = useState<PaymentMethod>('pix');
+  const [notesDialogOpen, setNotesDialogOpen] = useState(false);
+  const [notesDialogValue, setNotesDialogValue] = useState('');
+  const [notesDialogShowOnPdf, setNotesDialogShowOnPdf] = useState(true);
 
   const draftRestoredRef = useRef(false);
   const draftStorageKey = 'order_form_draft';
 
   const fmt = (n: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(n || 0));
+
+  const isManualOrderItem = (item: OrderItemForm) => Boolean(item.isManual || item.product.id.startsWith('manual:'));
 
   const getProductPrice = (product: Product, quantity: number): number => {
     const safeQuantity = Number.isFinite(quantity) && quantity > 0 ? quantity : 1;
@@ -286,15 +371,33 @@ export default function OrderForm() {
   };
 
   const calculateItemTotal = (item: OrderItemForm) =>
-    Math.max(0, Number(item.unit_price) * Number(item.quantity) - Number(item.discount || 0));
+    calculateLineTotal({
+      quantity: Number(item.quantity || 0),
+      unitPrice: Number(item.unit_price || 0),
+      discountType: 'fixed',
+      discountValue: Number(item.discount || 0),
+    });
+
+  const calculateOrderDiscountAmount = (
+    subtotalValue: number,
+    nextDiscountType: DiscountType = discountType,
+    nextDiscountValue: number = discount,
+  ) =>
+    calculateDiscountAmount({
+      baseAmount: subtotalValue,
+      discountType: nextDiscountType,
+      discountValue: nextDiscountValue,
+    });
 
   const updateTotals = (
     nextItems: OrderItemForm[] = items,
+    nextDiscountType: DiscountType = discountType,
     nextDiscount: number = discount,
     nextFreight: number = freight,
   ) => {
     const subtotal = nextItems.reduce((sum, item) => sum + calculateItemTotal(item), 0);
-    const calculatedTotal = Math.max(0, subtotal - Number(nextDiscount || 0) + Number(nextFreight || 0));
+    const discountAmount = calculateOrderDiscountAmount(subtotal, nextDiscountType, nextDiscount);
+    const calculatedTotal = Math.max(0, subtotal - discountAmount + Number(nextFreight || 0));
     setTotals({
       itemCount: nextItems.length,
       subtotal,
@@ -304,17 +407,19 @@ export default function OrderForm() {
 
   useEffect(() => {
     updateTotals();
-  }, [items, discount, freight]);
+  }, [discount, discountType, freight, items]);
 
   const itemsSnapshot = useMemo(
     () =>
       items.map((item) => ({
-        product_id: item.product.id,
+        product_id: isManualOrderItem(item) ? null : item.product.id,
+        product_name: item.product.name,
         quantity: item.quantity,
         unit_price: item.unit_price,
         discount: item.discount,
         attributes: item.attributes,
         notes: item.notes,
+        is_manual: isManualOrderItem(item),
       })),
     [items],
   );
@@ -331,6 +436,7 @@ export default function OrderForm() {
       deliveryDate,
       deliveryDateMode,
       deliveryMethod,
+      discountType,
       discount,
       freight,
       paymentCondition,
@@ -350,6 +456,7 @@ export default function OrderForm() {
       deliveryDate,
       deliveryDateMode,
       deliveryMethod,
+      discountType,
       discount,
       freight,
       paymentCondition,
@@ -370,6 +477,7 @@ export default function OrderForm() {
     customerEmail.trim() ||
     notes.trim() ||
     !showNotesOnPdf ||
+    discountType !== 'fixed' ||
     discount > 0 ||
     freight > 0,
   );
@@ -566,6 +674,7 @@ export default function OrderForm() {
         deliveryDate?: string;
         deliveryDateMode?: DeliveryDateMode;
         deliveryMethod?: string;
+        discountType?: DiscountType;
         discount?: number;
         freight?: number;
         paymentCondition?: string;
@@ -574,11 +683,13 @@ export default function OrderForm() {
         responsibleId?: string;
         items?: Array<{
           productId: string;
+          productName?: string;
           quantity: number;
           unit_price: number;
           discount: number;
           attributes: Record<string, string>;
           notes: string;
+          isManual?: boolean;
         }>;
       };
 
@@ -594,6 +705,7 @@ export default function OrderForm() {
         setDeliveryDateMode(parsed.deliveryDateMode);
       }
       if (parsed.deliveryMethod) setDeliveryMethod(parsed.deliveryMethod);
+      if (parsed.discountType) setDiscountType(normalizeDiscountType(parsed.discountType));
       if (typeof parsed.discount === 'number') setDiscount(parsed.discount);
       if (typeof parsed.freight === 'number') setFreight(parsed.freight);
       if (parsed.paymentCondition) setPaymentCondition(parsed.paymentCondition);
@@ -604,6 +716,18 @@ export default function OrderForm() {
       if (parsed.items && Array.isArray(parsed.items)) {
         const restoredItems = parsed.items
           .map((item) => {
+            if (item.isManual || item.productId?.startsWith('manual:')) {
+              return {
+                product: createManualProduct(item.productName || 'Item avulso'),
+                quantity: Number(item.quantity) || 1,
+                unit_price: Number(item.unit_price) || 0,
+                discount: Number(item.discount) || 0,
+                attributes: {},
+                notes: item.notes || '',
+                isManual: true,
+              } as OrderItemForm;
+            }
+
             const product = products.find((productEntry) => productEntry.id === item.productId);
             if (!product) return null;
             const nextAttributes = ensureSelectedAttributes(product.id, item.attributes || {});
@@ -649,6 +773,7 @@ export default function OrderForm() {
       deliveryDate: deliveryDate || undefined,
       deliveryDateMode,
       deliveryMethod: deliveryMethod || undefined,
+      discountType,
       discount,
       freight,
       paymentCondition,
@@ -657,11 +782,13 @@ export default function OrderForm() {
       responsibleId: responsibleId || undefined,
       items: items.map((item) => ({
         productId: item.product.id,
+        productName: item.product.name,
         quantity: item.quantity,
         unit_price: item.unit_price,
         discount: item.discount,
         attributes: item.attributes,
         notes: item.notes,
+        isManual: isManualOrderItem(item),
       })),
     };
 
@@ -674,6 +801,7 @@ export default function OrderForm() {
         payload.customerEmail ||
         payload.notes ||
         !payload.showNotesOnPdf ||
+        payload.discountType !== 'fixed' ||
         payload.discount > 0 ||
         payload.freight > 0,
       );
@@ -693,6 +821,7 @@ export default function OrderForm() {
     deliveryDateMode,
     deliveryMethod,
     discount,
+    discountType,
     documentType,
     draftStorageKey,
     freight,
@@ -709,9 +838,6 @@ export default function OrderForm() {
     return () => {
       if (customerBlurTimerRef.current) {
         window.clearTimeout(customerBlurTimerRef.current);
-      }
-      if (productBlurTimerRef.current) {
-        window.clearTimeout(productBlurTimerRef.current);
       }
     };
   }, []);
@@ -749,16 +875,71 @@ export default function OrderForm() {
 
   const filteredProducts = useMemo(() => {
     const text = productSearchTerm.trim().toLowerCase();
-    if (!text) return [];
+    if (!text) return products.slice(0, 8);
     return products
       .filter((product) => {
         const byName = product.name.toLowerCase().includes(text);
         const bySku = (product.sku || '').toLowerCase().includes(text);
-        return byName || bySku;
+        const byId = product.id.toLowerCase().includes(text);
+        return byName || bySku || byId;
       })
-      .slice(0, 5);
+      .slice(0, 8);
   }, [productSearchTerm, products]);
-  const shouldShowProductDropdown = productDropdownOpen && productSearchTerm.trim().length > 0;
+  const selectedDialogProduct = useMemo(
+    () => filteredProducts.find((product) => product.id === selectedDialogProductId) || products.find((product) => product.id === selectedDialogProductId) || null,
+    [filteredProducts, products, selectedDialogProductId],
+  );
+  const productDialogQuantityValue = selectedDialogProduct && isAreaUnit(selectedDialogProduct.unit)
+    ? 1
+    : Math.max(1, Number(productDialogQuantity) || 1);
+  const productDialogPreviewPrice = selectedDialogProduct
+    ? calculateUnitPriceWithAttributes(
+      selectedDialogProduct,
+      productDialogQuantityValue,
+      ensureSelectedAttributes(selectedDialogProduct.id),
+    )
+    : 0;
+  const productDialogPreviewTotal = productDialogPreviewPrice * productDialogQuantityValue;
+  const customerDisplayName = customerName.trim() || customerSearchTerm.trim() || 'Cliente não informado';
+  const documentTypeLabel =
+    documentTypeOptions.find((option) => option.id === documentType)?.label || 'Pedido';
+  const paymentConditionLabel =
+    paymentConditions.find((option) => option.value === paymentCondition)?.label || 'À vista';
+  const notesPreviewText = notes.trim()
+    ? notes.trim().slice(0, 72) + (notes.trim().length > 72 ? '...' : '')
+    : 'Sem observações no pedido';
+  const orderDiscountAmount = calculateOrderDiscountAmount(totals.subtotal);
+  const discountDialogPreviewAmount = calculateOrderDiscountAmount(
+    totals.subtotal,
+    discountDialogType,
+    discountDialogValue,
+  );
+  const discountDialogPreviewTotal = Math.max(0, totals.subtotal - discountDialogPreviewAmount + freight);
+  const freightDialogPreviewTotal = Math.max(0, totals.subtotal - orderDiscountAmount + freightDialogValue);
+  const createdAtLabel = useMemo(
+    () =>
+      new Intl.DateTimeFormat('pt-BR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+      }).format(new Date()),
+    [],
+  );
+
+  useEffect(() => {
+    if (!productDialogOpen) return;
+
+    if (filteredProducts.length === 0) {
+      if (selectedDialogProductId) {
+        setSelectedDialogProductId('');
+      }
+      return;
+    }
+
+    if (!filteredProducts.some((product) => product.id === selectedDialogProductId)) {
+      setSelectedDialogProductId(filteredProducts[0].id);
+    }
+  }, [filteredProducts, productDialogOpen, selectedDialogProductId]);
 
   const stepStates = useMemo(() => {
     const detailsDone = Boolean((customerId || customerName.trim()) && items.length > 0);
@@ -805,10 +986,10 @@ export default function OrderForm() {
 
   const autoDeliveryDateDescription = useMemo(() => {
     if (companyDeliveryTimeDays > 0) {
-      return `Data calculada automaticamente com base no maior prazo em dias uteis dos produtos + ${formatBusinessDaysLabel(companyDeliveryTimeDays)} de entrega da loja.`;
+      return `Data calculada automaticamente com base no maior prazo em dias úteis dos produtos + ${formatBusinessDaysLabel(companyDeliveryTimeDays)} de entrega da loja.`;
     }
 
-    return 'Data calculada automaticamente com base no maior prazo em dias uteis dos produtos selecionados.';
+    return 'Data calculada automaticamente com base no maior prazo em dias úteis dos produtos selecionados.';
   }, [companyDeliveryTimeDays]);
 
   useEffect(() => {
@@ -830,19 +1011,24 @@ export default function OrderForm() {
     setPriorityLevel(value);
   };
 
-  const addItem = (productId: string) => {
+  const addItem = (productId: string, quantityOverride?: number) => {
     const product = products.find((entry) => entry.id === productId);
     if (!product) return;
     const initialQuantity = isAreaUnit(product.unit)
       ? 1
       : getInitialTierQuantity(product.id, priceTiers);
     const nextAttributes = ensureSelectedAttributes(product.id);
+    const requestedQuantity =
+      Number.isFinite(quantityOverride) && Number(quantityOverride) > 0
+        ? Math.max(1, Number(quantityOverride))
+        : initialQuantity;
+    const quantityToAdd = isAreaUnit(product.unit) ? 1 : requestedQuantity;
 
     setItems((prev) => {
       const existingIndex = prev.findIndex((item) => item.product.id === product.id);
       if (existingIndex >= 0) {
         const next = [...prev];
-        const nextQty = Math.max(1, Number(next[existingIndex].quantity || 1) + 1);
+        const nextQty = Math.max(1, Number(next[existingIndex].quantity || 1) + quantityToAdd);
         if (!validateTierQuantity(product, nextQty)) {
           return prev;
         }
@@ -856,7 +1042,7 @@ export default function OrderForm() {
         return next;
       }
 
-      const quantity = initialQuantity;
+      const quantity = quantityToAdd;
       if (!validateTierQuantity(product, quantity)) {
         return prev;
       }
@@ -874,7 +1060,114 @@ export default function OrderForm() {
     });
 
     setProductSearchTerm('');
-    setProductDropdownOpen(false);
+  };
+
+  const addManualItem = () => {
+    const description = manualItemDescription.trim();
+    const quantity = Math.max(1, Number(manualItemQuantity) || 1);
+    const unitPrice = Math.max(0, Number(manualItemPrice) || 0);
+
+    if (!description) {
+      toast({ title: 'Informe a descrição do item', variant: 'destructive' });
+      return;
+    }
+
+    setItems((prev) => [
+      ...prev,
+      {
+        product: createManualProduct(description),
+        quantity,
+        unit_price: unitPrice,
+        discount: 0,
+        attributes: {},
+        notes: '',
+        isManual: true,
+      },
+    ]);
+
+    setManualItemDescription('');
+    setManualItemQuantity(1);
+    setManualItemPrice(0);
+    setManualItemDialogOpen(false);
+  };
+
+  const openProductDialog = () => {
+    setProductSearchTerm('');
+    setProductDialogQuantity(1);
+    setSelectedDialogProductId(products[0]?.id || '');
+    setProductDialogOpen(true);
+  };
+
+  const closeProductDialog = (open: boolean) => {
+    setProductDialogOpen(open);
+    if (!open) {
+      setProductSearchTerm('');
+      setProductDialogQuantity(1);
+      setSelectedDialogProductId('');
+    }
+  };
+
+  const openManualDialog = () => {
+    setManualItemDescription('');
+    setManualItemQuantity(1);
+    setManualItemPrice(0);
+    setManualItemDialogOpen(true);
+  };
+
+  const openDiscountDialog = () => {
+    setDiscountDialogType(discountType);
+    setDiscountDialogValue(discount);
+    setDiscountDialogOpen(true);
+  };
+
+  const applyDiscountDialog = () => {
+    setDiscountType(discountDialogType);
+    setDiscount(discountDialogValue);
+    setDiscountDialogOpen(false);
+  };
+
+  const openFreightDialog = () => {
+    setFreightDialogValue(freight);
+    setFreightDialogOpen(true);
+  };
+
+  const applyFreightDialog = () => {
+    setFreight(freightDialogValue);
+    setFreightDialogOpen(false);
+  };
+
+  const openPaymentQuickDialog = () => {
+    setPaymentConditionDialogValue(paymentCondition);
+    setPaymentMethodDialogValue(paymentMethod);
+    setPaymentQuickDialogOpen(true);
+  };
+
+  const applyPaymentQuickDialog = () => {
+    setPaymentCondition(paymentConditionDialogValue);
+    setPaymentMethod(paymentMethodDialogValue);
+    setPaymentQuickDialogOpen(false);
+  };
+
+  const openNotesDialog = () => {
+    setNotesDialogValue(notes);
+    setNotesDialogShowOnPdf(showNotesOnPdf);
+    setNotesDialogOpen(true);
+  };
+
+  const applyNotesDialog = () => {
+    setNotes(notesDialogValue);
+    setShowNotesOnPdf(notesDialogShowOnPdf);
+    setNotesDialogOpen(false);
+  };
+
+  const handleAddSelectedProduct = () => {
+    if (!selectedDialogProduct) {
+      toast({ title: 'Selecione um produto', variant: 'destructive' });
+      return;
+    }
+
+    addItem(selectedDialogProduct.id, productDialogQuantityValue);
+    closeProductDialog(false);
   };
 
   const removeItem = (productId: string) => {
@@ -885,6 +1178,12 @@ export default function OrderForm() {
     setItems((prev) =>
       prev.map((item) => {
         if (item.product.id !== productId) return item;
+        if (isManualOrderItem(item)) {
+          return {
+            ...item,
+            quantity: Math.max(1, Number(item.quantity || 1) + delta),
+          };
+        }
         const nextQty = Math.max(1, Number(item.quantity || 1) + delta);
         if (!validateTierQuantity(item.product, nextQty)) {
           return item;
@@ -905,6 +1204,12 @@ export default function OrderForm() {
     setItems((prev) =>
       prev.map((item) => {
         if (item.product.id !== productId) return item;
+        if (isManualOrderItem(item)) {
+          return {
+            ...item,
+            quantity: nextValue,
+          };
+        }
         if (!validateTierQuantity(item.product, nextValue)) {
           return item;
         }
@@ -999,6 +1304,7 @@ export default function OrderForm() {
       deliveryDate: deliveryDate || undefined,
       deliveryDateMode,
       deliveryMethod: deliveryMethod || undefined,
+      discountType,
       discount,
       freight,
       paymentCondition,
@@ -1007,11 +1313,13 @@ export default function OrderForm() {
       responsibleId: responsibleId || undefined,
       items: items.map((item) => ({
         productId: item.product.id,
+        productName: item.product.name,
         quantity: item.quantity,
         unit_price: item.unit_price,
         discount: item.discount,
         attributes: item.attributes,
         notes: item.notes,
+        isManual: isManualOrderItem(item),
       })),
     };
     window.localStorage.setItem(draftStorageKey, JSON.stringify(payload));
@@ -1039,6 +1347,7 @@ export default function OrderForm() {
     }
 
     const invalidTierItems = items.filter((item) => {
+      if (isManualOrderItem(item)) return false;
       if (isAreaUnit(item.product.unit)) return false;
       return !isQuantityAllowedByPriceTiers(item.product.id, item.quantity, priceTiers);
     });
@@ -1052,12 +1361,13 @@ export default function OrderForm() {
       return;
     }
 
-    const invalidAttributeItems = items.filter((item) =>
-      getProductAttributeGroups(item.product.id).some((group) => {
+    const invalidAttributeItems = items.filter((item) => {
+      if (isManualOrderItem(item)) return false;
+      return getProductAttributeGroups(item.product.id).some((group) => {
         const selectedValue = String(item.attributes?.[group.attributeName] || '').trim();
         return !group.options.some((option) => option.value === selectedValue);
-      }),
-    );
+      });
+    });
 
     if (invalidAttributeItems.length > 0) {
       toast({
@@ -1107,6 +1417,7 @@ export default function OrderForm() {
       }
 
       const status: OrderStatus = documentType === 'orcamento' ? 'orcamento' : 'pendente';
+      const orderDiscountAmount = calculateOrderDiscountAmount(totals.subtotal);
       const { data: createdOrder, error: orderError } = await supabase
         .from('orders')
         .insert({
@@ -1115,9 +1426,9 @@ export default function OrderForm() {
           customer_name: customerName.trim() || null,
           status,
           subtotal: totals.subtotal,
-          discount_type: 'fixed',
+          discount_type: discountType,
           discount_value: discount,
-          discount,
+          discount: orderDiscountAmount,
           total: totals.total,
           amount_paid: 0,
           payment_status: 'pendente',
@@ -1139,7 +1450,7 @@ export default function OrderForm() {
 
       const orderItemsPayload = items.map((item) => ({
         order_id: createdOrder.id,
-        product_id: item.product.id,
+        product_id: isManualOrderItem(item) ? null : item.product.id,
         product_name: item.product.name,
         quantity: item.quantity,
         unit_price: item.unit_price,
@@ -1195,6 +1506,19 @@ export default function OrderForm() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleChangeOrderDiscountType = (value: string) => {
+    const nextType = normalizeDiscountType(value);
+    const currentDiscountAmount = calculateOrderDiscountAmount(totals.subtotal, discountType, discount);
+    setDiscountType(nextType);
+    setDiscount(
+      calculateDiscountValueFromAmount({
+        baseAmount: totals.subtotal,
+        discountAmount: currentDiscountAmount,
+        discountType: nextType,
+      }),
+    );
   };
 
   if (loading) {
@@ -1397,6 +1721,25 @@ export default function OrderForm() {
               </div>
             </section>
 
+            <section className="order-card order-creation-hero">
+              <div className="order-creation-hero-main">
+                <div>
+                  <p className="order-creation-hero-eyebrow">Pedido em criação</p>
+                  <h2 className="order-creation-hero-title">{customerDisplayName}</h2>
+                  <p className="order-creation-hero-meta">
+                    <span className="order-status-pill">Pendente</span>
+                    <span>{documentTypeLabel}</span>
+                    <span>Criado em {createdAtLabel}</span>
+                    <span>Entrega {deliveryDate || productionInfo.estimatedDeliveryDate || 'a definir'}</span>
+                  </p>
+                </div>
+                <div className="order-creation-hero-side">
+                  <strong>{fmt(finalTotalToPay)}</strong>
+                  <span>{totals.itemCount} itens no pedido</span>
+                </div>
+              </div>
+            </section>
+
             <section className="order-card">
               <div className="order-card-header">
                 <h2 className="order-card-title">
@@ -1406,78 +1749,64 @@ export default function OrderForm() {
                 <span className="order-count-badge">{totals.itemCount} itens</span>
               </div>
               <div className="order-card-body">
-                <div className="order-field-group">
-                  <label className="order-field-label" htmlFor="product-search">
-                    Buscar produto
-                  </label>
-                  <div className="order-search-field">
-                    <Search className="order-field-icon" />
-                    <input
-                      id="product-search"
-                      value={productSearchTerm}
-                      onChange={(event) => {
-                        const nextValue = event.target.value;
-                        setProductSearchTerm(nextValue);
-                        setProductDropdownOpen(nextValue.trim().length > 0);
-                      }}
-                      onFocus={() => {
-                        if (productBlurTimerRef.current) {
-                          window.clearTimeout(productBlurTimerRef.current);
-                        }
-                        setProductDropdownOpen(productSearchTerm.trim().length > 0);
-                      }}
-                      onBlur={() => {
-                        productBlurTimerRef.current = window.setTimeout(() => {
-                          setProductDropdownOpen(false);
-                        }, 150);
-                      }}
-                      placeholder="Buscar por nome ou SKU"
-                      className="order-input order-search-input"
-                    />
-                  </div>
+                <div className="order-module-toolbar">
+                  <button type="button" className="order-module-chip tone-blue" onClick={openProductDialog}>
+                    <Box className="h-4 w-4" />
+                    Produto
+                  </button>
+                  <button type="button" className="order-module-chip tone-slate" onClick={openManualDialog}>
+                    <Plus className="h-4 w-4" />
+                    Item avulso
+                  </button>
+                  <button type="button" className="order-module-chip tone-cyan" onClick={openDiscountDialog}>
+                    %
+                    Desconto
+                  </button>
+                  <button type="button" className="order-module-chip tone-amber" onClick={openFreightDialog}>
+                    <Truck className="h-4 w-4" />
+                    Taxa de entrega
+                  </button>
+                  <button type="button" className="order-module-chip tone-green" onClick={openPaymentQuickDialog}>
+                    <CreditCard className="h-4 w-4" />
+                    Pagamento
+                  </button>
+                  <button type="button" className="order-module-chip tone-dark" onClick={openNotesDialog}>
+                    <FileText className="h-4 w-4" />
+                    Observações
+                  </button>
+                </div>
 
-                  {shouldShowProductDropdown ? (
-                    <div className="order-dropdown">
-                      {filteredProducts.length === 0 ? (
-                        <div className="order-dropdown-empty">Nenhum produto encontrado</div>
-                      ) : (
-                        filteredProducts.map((product) => {
-                          const thumbUrl = ensurePublicStorageUrl('product-images', product.image_url);
-                          return (
-                            <div key={product.id} className="order-product-result">
-                              <div className="order-product-result-left">
-                                <div className="order-product-thumb">
-                                  {thumbUrl ? <img src={thumbUrl} alt={product.name} loading="lazy" /> : <Box className="h-4 w-4" />}
-                                </div>
-                                <div className="order-product-meta">
-                                  <strong>{product.name}</strong>
-                                  <span>SKU: {product.sku || '-'}</span>
-                                  <span>Unidade de venda: {getProductSaleUnitLabel(product.unit_type, { capitalize: true })}</span>
-                                  {getTierRangeLabel(product.id) ? (
-                                    <span>Faixas: {getTierRangeLabel(product.id)}</span>
-                                  ) : null}
-                                </div>
-                              </div>
-                              <div className="order-product-result-right">
-                                <span>
-                                  {fmt(getProductPrice(product, 1))} {getProductSaleUnitPriceSuffix(product.unit_type)}
-                                </span>
-                                <button
-                                  type="button"
-                                  className="order-add-btn"
-                                  onMouseDown={(event) => event.preventDefault()}
-                                  onClick={() => addItem(product.id)}
-                                >
-                                  <Plus className="h-3.5 w-3.5" />
-                                  Adicionar
-                                </button>
-                              </div>
-                            </div>
-                          );
-                        })
-                      )}
-                    </div>
-                  ) : null}
+                <p className="order-toolbar-caption">
+                  Use os atalhos para montar o pedido com mais agilidade e ajustar desconto, frete, pagamento e observações sem sair da tela.
+                </p>
+
+                <div className="order-quick-preview-grid">
+                  <button type="button" className="order-quick-preview-card is-discount" onClick={openDiscountDialog}>
+                    <span className="order-quick-preview-label">Desconto</span>
+                    <strong>{orderDiscountAmount > 0 ? `-${fmt(orderDiscountAmount)}` : 'Sem desconto'}</strong>
+                    <small>
+                      {orderDiscountAmount > 0
+                        ? discountType === 'percent'
+                          ? `${discount}% sobre o subtotal`
+                          : `${fmt(discount)} em valor`
+                        : 'Aplicar abatimento no pedido'}
+                    </small>
+                  </button>
+                  <button type="button" className="order-quick-preview-card is-freight" onClick={openFreightDialog}>
+                    <span className="order-quick-preview-label">Entrega</span>
+                    <strong>{freight > 0 ? fmt(freight) : 'Sem taxa'}</strong>
+                    <small>{deliveryMethod === 'retirada' ? 'Retirada na loja' : 'Cobrança de frete configurável'}</small>
+                  </button>
+                  <button type="button" className="order-quick-preview-card is-payment" onClick={openPaymentQuickDialog}>
+                    <span className="order-quick-preview-label">Pagamento</span>
+                    <strong>{getPaymentMethodDisplayName(paymentMethod, companyPaymentMethods)}</strong>
+                    <small>{paymentConditionLabel}</small>
+                  </button>
+                  <button type="button" className="order-quick-preview-card is-notes" onClick={openNotesDialog}>
+                    <span className="order-quick-preview-label">Observações</span>
+                    <strong>{notes.trim() ? 'Com anotações' : 'Sem anotações'}</strong>
+                    <small>{notesPreviewText}</small>
+                  </button>
                 </div>
 
                 {items.length === 0 ? (
@@ -1485,33 +1814,42 @@ export default function OrderForm() {
                     <div className="order-empty-icon">
                       <Box className="h-5 w-5" />
                     </div>
-                    <h3>Nenhum produto adicionado</h3>
-                    <p>Pesquise por nome ou SKU e clique em adicionar.</p>
+                    <h3>Nenhum item adicionado</h3>
+                    <p>Clique em Produto ou Item avulso para montar o pedido no estilo rápido da nova tela.</p>
                   </div>
                 ) : (
-                  <div className="order-items-grid">
-                    {items.map((item) => (
-                      <EditableOrderItem
-                        key={item.product.id}
-                        item={item}
-                        saving={saving}
-                        productAttributeGroups={getProductAttributeGroups(item.product.id)}
-                        tierRangeLabel={getTierRangeLabel(item.product.id)}
-                        onQuantityChange={(productId, value) => setQty(productId, value)}
-                        onM2SubQuantityChange={changeM2SubQuantity}
-                        onAttributeChange={changeItemAttribute}
-                        onRemove={removeItem}
-                        calculateItemTotal={calculateItemTotal}
-                        formatCurrency={fmt}
-                      />
-                    ))}
+                  <div className="order-items-board">
+                    <div className="order-items-board-head" aria-hidden="true">
+                      <span>Item</span>
+                      <span>Preço</span>
+                      <span>Qtd</span>
+                      <span>Total</span>
+                      <span>Remover</span>
+                    </div>
+                    <div className="order-items-grid">
+                      {items.map((item) => (
+                        <EditableOrderItem
+                          key={item.product.id}
+                          item={item}
+                          saving={saving}
+                          productAttributeGroups={getProductAttributeGroups(item.product.id)}
+                          tierRangeLabel={getTierRangeLabel(item.product.id)}
+                          onQuantityChange={(productId, value) => setQty(productId, value)}
+                          onM2SubQuantityChange={changeM2SubQuantity}
+                          onAttributeChange={changeItemAttribute}
+                          onRemove={removeItem}
+                          calculateItemTotal={calculateItemTotal}
+                          formatCurrency={fmt}
+                        />
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
             </section>
 
             <div className="order-sub-grid">
-              <section className="order-card">
+              <section className="order-card" id="order-notes-card">
                 <div className="order-card-header">
                   <h2 className="order-card-title">
                     <FileText className="order-card-title-icon" />
@@ -1545,7 +1883,7 @@ export default function OrderForm() {
                 </div>
               </section>
 
-              <section className="order-card">
+              <section className="order-card" id="order-delivery-card">
                 <div className="order-card-header">
                   <h2 className="order-card-title">
                     <Truck className="order-card-title-icon" />
@@ -1604,7 +1942,7 @@ export default function OrderForm() {
           </div>
 
           <aside className="order-side-column">
-            <section className="order-card">
+            <section className="order-card" id="order-summary-card">
               <div className="order-card-header">
                 <h2 className="order-card-title">
                   <ReceiptText className="order-card-title-icon" />
@@ -1618,13 +1956,45 @@ export default function OrderForm() {
                 </div>
                 <div className="order-summary-row order-summary-edit">
                   <label htmlFor="discount-input">Desconto</label>
-                  <CurrencyInput
-                    id="discount-input"
-                    value={discount}
-                    onChange={setDiscount}
-                    className="order-input order-currency-input"
-                  />
+                  <div className="flex w-full gap-2">
+                    <div className="order-select-wrap min-w-[86px]">
+                      <select
+                        value={discountType}
+                        onChange={(event) => handleChangeOrderDiscountType(event.target.value)}
+                        className="order-input order-select"
+                      >
+                        <option value="fixed">R$</option>
+                        <option value="percent">%</option>
+                      </select>
+                      <ChevronDown className="order-select-icon" />
+                    </div>
+                    {discountType === 'percent' ? (
+                      <input
+                        id="discount-input"
+                        type="number"
+                        min={0}
+                        max={100}
+                        step="0.01"
+                        value={discount}
+                        onChange={(event) => setDiscount(normalizeDiscountValue(Number(event.target.value)))}
+                        className="order-input w-full text-right"
+                      />
+                    ) : (
+                      <CurrencyInput
+                        id="discount-input"
+                        value={discount}
+                        onChange={(value) => setDiscount(normalizeDiscountValue(value))}
+                        className="order-input order-currency-input"
+                      />
+                    )}
+                  </div>
                 </div>
+                {orderDiscountAmount > 0 && (
+                  <div className="order-summary-row">
+                    <span>Desconto aplicado</span>
+                    <strong className="text-destructive">-{fmt(orderDiscountAmount)}</strong>
+                  </div>
+                )}
                 <div className="order-summary-row order-summary-edit">
                   <label htmlFor="freight-input">Frete</label>
                   <CurrencyInput
@@ -1704,7 +2074,7 @@ export default function OrderForm() {
               </div>
             </section>
 
-            <section className="order-card">
+            <section className="order-card" id="order-payment-card">
               <div className="order-card-header">
                 <h2 className="order-card-title">
                   <Wallet className="order-card-title-icon" />
@@ -1807,7 +2177,7 @@ export default function OrderForm() {
                     ) : (
                       salespeople.map((person) => (
                         <option key={person.id} value={person.id}>
-                          {person.full_name || 'Usuario'}
+                          {person.full_name || 'Usuário'}
                         </option>
                       ))
                     )}
@@ -1865,6 +2235,472 @@ export default function OrderForm() {
           </button>
         </div>
       </footer>
+
+      <Dialog open={productDialogOpen} onOpenChange={closeProductDialog}>
+        <DialogContent className="order-dialog-content sm:max-w-[560px]" aria-describedby={undefined}>
+          <div className="order-dialog-shell">
+            <div className="order-dialog-topbar">
+              <DialogHeader className="order-dialog-header">
+                <DialogTitle className="order-dialog-title">
+                  <Box className="h-5 w-5" />
+                  Adicionar Produto
+                </DialogTitle>
+              </DialogHeader>
+            </div>
+
+            <div className="order-dialog-body">
+              <div className="order-field-group">
+                <label className="order-field-label" htmlFor="product-dialog-search">
+                  ID do produto (atalho)
+                </label>
+                <div className="order-search-field">
+                  <Search className="order-field-icon" />
+                  <input
+                    id="product-dialog-search"
+                    value={productSearchTerm}
+                    onChange={(event) => setProductSearchTerm(event.target.value)}
+                    placeholder="Digite o ID, SKU ou nome"
+                    className="order-input order-search-input"
+                  />
+                </div>
+                <p className="order-dialog-hint">Dica: digite o ID, SKU ou parte do nome para filtrar.</p>
+              </div>
+
+              <div className="order-field-group">
+                <label className="order-field-label" htmlFor="product-dialog-select">
+                  Produto
+                </label>
+                <div className="order-select-wrap">
+                  <select
+                    id="product-dialog-select"
+                    value={selectedDialogProductId}
+                    onChange={(event) => setSelectedDialogProductId(event.target.value)}
+                    className="order-input order-select"
+                  >
+                    {filteredProducts.length === 0 ? (
+                      <option value="">Nenhum produto encontrado</option>
+                    ) : (
+                      filteredProducts.map((product) => (
+                        <option key={product.id} value={product.id}>
+                          {product.name} {product.sku ? `(${product.sku})` : ''}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                  <ChevronDown className="order-select-icon" />
+                </div>
+              </div>
+
+              {selectedDialogProduct ? (
+                <div className="order-dialog-product-card">
+                  <div className="order-product-thumb order-dialog-thumb">
+                    {ensurePublicStorageUrl('product-images', selectedDialogProduct.image_url) ? (
+                      <img
+                        src={ensurePublicStorageUrl('product-images', selectedDialogProduct.image_url)!}
+                        alt={selectedDialogProduct.name}
+                        loading="lazy"
+                      />
+                    ) : (
+                      <Box className="h-5 w-5" />
+                    )}
+                  </div>
+                  <div className="order-dialog-product-meta">
+                    <strong>{selectedDialogProduct.name}</strong>
+                    <span>SKU: {selectedDialogProduct.sku || '-'}</span>
+                    <span>
+                      {fmt(productDialogPreviewPrice)} {getProductSaleUnitPriceSuffix(selectedDialogProduct.unit_type)}
+                    </span>
+                    {getTierRangeLabel(selectedDialogProduct.id) ? (
+                      <span>Faixas: {getTierRangeLabel(selectedDialogProduct.id)}</span>
+                    ) : (
+                      <span>
+                        Unidade de venda: {getProductSaleUnitLabel(selectedDialogProduct.unit_type, { capitalize: true })}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <p className="order-dialog-empty-note">Selecione um produto para ver os detalhes.</p>
+              )}
+
+              <div className="order-field-group">
+                <label className="order-field-label" htmlFor="product-dialog-quantity">
+                  Quantidade
+                </label>
+                <input
+                  id="product-dialog-quantity"
+                  type="number"
+                  min={1}
+                  value={productDialogQuantityValue}
+                  onChange={(event) => setProductDialogQuantity(Number(event.target.value) || 1)}
+                  className="order-input"
+                  disabled={Boolean(selectedDialogProduct && isAreaUnit(selectedDialogProduct.unit))}
+                />
+                {selectedDialogProduct && isAreaUnit(selectedDialogProduct.unit) ? (
+                  <p className="order-dialog-hint">
+                    Produtos por área iniciam com 1 e as medidas podem ser ajustadas depois na lista do pedido.
+                  </p>
+                ) : null}
+              </div>
+
+              <div className="order-dialog-total">Total: {fmt(productDialogPreviewTotal)}</div>
+            </div>
+
+            <DialogFooter className="order-dialog-footer">
+              <button type="button" className="order-btn order-btn-primary" onClick={handleAddSelectedProduct}>
+                Adicionar
+              </button>
+              <button type="button" className="order-btn order-btn-ghost" onClick={() => closeProductDialog(false)}>
+                Fechar
+              </button>
+            </DialogFooter>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={manualItemDialogOpen} onOpenChange={setManualItemDialogOpen}>
+        <DialogContent className="order-dialog-content sm:max-w-[520px]" aria-describedby={undefined}>
+          <div className="order-dialog-shell">
+            <div className="order-dialog-topbar">
+              <DialogHeader className="order-dialog-header">
+                <DialogTitle className="order-dialog-title">
+                  <Plus className="h-5 w-5" />
+                  Adicionar Item Avulso
+                </DialogTitle>
+              </DialogHeader>
+            </div>
+
+            <div className="order-dialog-body">
+              <div className="order-field-group">
+                <label className="order-field-label" htmlFor="manual-item-description">
+                  Descrição do item
+                </label>
+                <input
+                  id="manual-item-description"
+                  value={manualItemDescription}
+                  onChange={(event) => setManualItemDescription(event.target.value)}
+                  className="order-input"
+                  placeholder="Ex.: Ajuste de arte, serviço extra, frete especial"
+                />
+              </div>
+
+              <div className="order-dialog-grid">
+                <div className="order-field-group">
+                  <label className="order-field-label" htmlFor="manual-item-quantity">
+                    Quantidade
+                  </label>
+                  <input
+                    id="manual-item-quantity"
+                    type="number"
+                    min={1}
+                    value={manualItemQuantity}
+                    onChange={(event) => setManualItemQuantity(Number(event.target.value) || 1)}
+                    className="order-input"
+                  />
+                </div>
+
+                <div className="order-field-group">
+                  <label className="order-field-label" htmlFor="manual-item-price">
+                    Valor
+                  </label>
+                  <CurrencyInput
+                    id="manual-item-price"
+                    value={manualItemPrice}
+                    onChange={setManualItemPrice}
+                    className="order-input"
+                  />
+                </div>
+              </div>
+
+              <div className="order-dialog-total">
+                Total: {fmt(Math.max(1, Number(manualItemQuantity) || 1) * Math.max(0, Number(manualItemPrice) || 0))}
+              </div>
+            </div>
+
+            <DialogFooter className="order-dialog-footer">
+              <button type="button" className="order-btn order-btn-primary" onClick={addManualItem}>
+                Adicionar
+              </button>
+              <button type="button" className="order-btn order-btn-ghost" onClick={() => setManualItemDialogOpen(false)}>
+                Fechar
+              </button>
+            </DialogFooter>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={discountDialogOpen} onOpenChange={setDiscountDialogOpen}>
+        <DialogContent className="order-dialog-content sm:max-w-[500px]" aria-describedby={undefined}>
+          <div className="order-dialog-shell">
+            <div className="order-dialog-topbar order-dialog-topbar-cyan">
+              <DialogHeader className="order-dialog-header">
+                <DialogTitle className="order-dialog-title">
+                  % Desconto do pedido
+                </DialogTitle>
+              </DialogHeader>
+            </div>
+
+            <div className="order-dialog-body">
+              <div className="order-quick-dialog-summary">
+                <div>
+                  <span>Subtotal atual</span>
+                  <strong>{fmt(totals.subtotal)}</strong>
+                </div>
+                <div>
+                  <span>Total previsto</span>
+                  <strong>{fmt(discountDialogPreviewTotal)}</strong>
+                </div>
+              </div>
+
+              <div className="order-dialog-grid">
+                <div className="order-field-group">
+                  <label className="order-field-label" htmlFor="discount-dialog-type">
+                    Tipo
+                  </label>
+                  <div className="order-select-wrap">
+                    <select
+                      id="discount-dialog-type"
+                      value={discountDialogType}
+                      onChange={(event) => setDiscountDialogType(normalizeDiscountType(event.target.value))}
+                      className="order-input order-select"
+                    >
+                      <option value="fixed">R$</option>
+                      <option value="percent">%</option>
+                    </select>
+                    <ChevronDown className="order-select-icon" />
+                  </div>
+                </div>
+
+                <div className="order-field-group">
+                  <label className="order-field-label" htmlFor="discount-dialog-value">
+                    Valor
+                  </label>
+                  {discountDialogType === 'percent' ? (
+                    <input
+                      id="discount-dialog-value"
+                      type="number"
+                      min={0}
+                      max={100}
+                      step="0.01"
+                      value={discountDialogValue}
+                      onChange={(event) => setDiscountDialogValue(normalizeDiscountValue(Number(event.target.value)))}
+                      className="order-input"
+                    />
+                  ) : (
+                    <CurrencyInput
+                      id="discount-dialog-value"
+                      value={discountDialogValue}
+                      onChange={(value) => setDiscountDialogValue(normalizeDiscountValue(value))}
+                      className="order-input"
+                    />
+                  )}
+                </div>
+              </div>
+
+              <p className="order-dialog-hint">
+                O desconto geral é aplicado sobre o subtotal dos itens e aparece no total final do pedido.
+              </p>
+
+              {discountDialogPreviewAmount > 0 ? (
+                <div className="order-dialog-total">Desconto aplicado: -{fmt(discountDialogPreviewAmount)}</div>
+              ) : (
+                <div className="order-dialog-total">Sem desconto aplicado</div>
+              )}
+            </div>
+
+            <DialogFooter className="order-dialog-footer">
+              <button type="button" className="order-btn order-btn-outline" onClick={applyDiscountDialog}>
+                Aplicar
+              </button>
+              <button type="button" className="order-btn order-btn-ghost" onClick={() => setDiscountDialogOpen(false)}>
+                Fechar
+              </button>
+            </DialogFooter>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={freightDialogOpen} onOpenChange={setFreightDialogOpen}>
+        <DialogContent className="order-dialog-content sm:max-w-[480px]" aria-describedby={undefined}>
+          <div className="order-dialog-shell">
+            <div className="order-dialog-topbar order-dialog-topbar-amber">
+              <DialogHeader className="order-dialog-header">
+                <DialogTitle className="order-dialog-title">
+                  <Truck className="h-5 w-5" />
+                  Taxa de entrega
+                </DialogTitle>
+              </DialogHeader>
+            </div>
+
+            <div className="order-dialog-body">
+              <div className="order-quick-dialog-summary">
+                <div>
+                  <span>Método atual</span>
+                  <strong>{deliveryMethods.find((method) => method.value === deliveryMethod)?.label || 'Entrega'}</strong>
+                </div>
+                <div>
+                  <span>Total previsto</span>
+                  <strong>{fmt(freightDialogPreviewTotal)}</strong>
+                </div>
+              </div>
+
+              <div className="order-field-group">
+                <label className="order-field-label" htmlFor="freight-dialog-value">
+                  Valor do frete
+                </label>
+                <CurrencyInput
+                  id="freight-dialog-value"
+                  value={freightDialogValue}
+                  onChange={setFreightDialogValue}
+                  className="order-input"
+                />
+              </div>
+
+              <p className="order-dialog-hint">
+                Use este atalho para ajustar a taxa de entrega sem precisar ir até o resumo do pedido.
+              </p>
+            </div>
+
+            <DialogFooter className="order-dialog-footer">
+              <button type="button" className="order-btn order-btn-outline" onClick={applyFreightDialog}>
+                Aplicar
+              </button>
+              <button type="button" className="order-btn order-btn-ghost" onClick={() => setFreightDialogOpen(false)}>
+                Fechar
+              </button>
+            </DialogFooter>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={paymentQuickDialogOpen} onOpenChange={setPaymentQuickDialogOpen}>
+        <DialogContent className="order-dialog-content sm:max-w-[620px]" aria-describedby={undefined}>
+          <div className="order-dialog-shell">
+            <div className="order-dialog-topbar order-dialog-topbar-green">
+              <DialogHeader className="order-dialog-header">
+                <DialogTitle className="order-dialog-title">
+                  <Wallet className="h-5 w-5" />
+                  Pagamento do pedido
+                </DialogTitle>
+              </DialogHeader>
+            </div>
+
+            <div className="order-dialog-body">
+              <div className="order-quick-dialog-summary">
+                <div>
+                  <span>Total a cobrar</span>
+                  <strong>{fmt(finalTotalToPay)}</strong>
+                </div>
+                <div>
+                  <span>Condição atual</span>
+                  <strong>{paymentConditions.find((option) => option.value === paymentConditionDialogValue)?.label || 'À vista'}</strong>
+                </div>
+              </div>
+
+              <div className="order-field-group">
+                <label className="order-field-label" htmlFor="payment-condition-dialog">
+                  Condição de pagamento
+                </label>
+                <div className="order-select-wrap">
+                  <select
+                    id="payment-condition-dialog"
+                    value={paymentConditionDialogValue}
+                    onChange={(event) => setPaymentConditionDialogValue(event.target.value)}
+                    className="order-input order-select"
+                  >
+                    {paymentConditions.map((condition) => (
+                      <option key={condition.value} value={condition.value}>
+                        {condition.label}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="order-select-icon" />
+                </div>
+              </div>
+
+              <div className="order-payment-grid order-payment-grid-dialog">
+                {companyPaymentMethods.map((option) => {
+                  const Icon = paymentMethodIcons[option.type] || Wallet;
+                  const active = paymentMethodDialogValue === option.type;
+                  return (
+                    <button
+                      key={option.type}
+                      type="button"
+                      className={`order-payment-btn ${active ? 'is-active' : ''}`}
+                      onClick={() => setPaymentMethodDialogValue(option.type)}
+                    >
+                      <Icon className="h-4 w-4" />
+                      <span>{getPaymentMethodDisplayName(option.type, companyPaymentMethods)}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <DialogFooter className="order-dialog-footer">
+              <button type="button" className="order-btn order-btn-outline" onClick={applyPaymentQuickDialog}>
+                Aplicar
+              </button>
+              <button type="button" className="order-btn order-btn-ghost" onClick={() => setPaymentQuickDialogOpen(false)}>
+                Fechar
+              </button>
+            </DialogFooter>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={notesDialogOpen} onOpenChange={setNotesDialogOpen}>
+        <DialogContent className="order-dialog-content sm:max-w-[560px]" aria-describedby={undefined}>
+          <div className="order-dialog-shell">
+            <div className="order-dialog-topbar order-dialog-topbar-dark">
+              <DialogHeader className="order-dialog-header">
+                <DialogTitle className="order-dialog-title">
+                  <FileText className="h-5 w-5" />
+                  Observações do pedido
+                </DialogTitle>
+              </DialogHeader>
+            </div>
+
+            <div className="order-dialog-body">
+              <div className="order-field-group">
+                <label className="order-field-label" htmlFor="notes-dialog-value">
+                  Observações internas
+                </label>
+                <Textarea
+                  id="notes-dialog-value"
+                  value={notesDialogValue}
+                  onChange={(event) => setNotesDialogValue(event.target.value)}
+                  placeholder="Detalhes de arte, acabamento, recados internos e qualquer orientação importante."
+                  className="order-textarea min-h-[140px]"
+                  rows={6}
+                />
+              </div>
+
+              <label className="order-quick-dialog-checkbox">
+                <input
+                  type="checkbox"
+                  className="mt-1 h-4 w-4"
+                  checked={notesDialogShowOnPdf}
+                  onChange={(event) => setNotesDialogShowOnPdf(event.target.checked)}
+                />
+                <span>
+                  <strong>Mostrar observações no PDF</strong>
+                  <small>Desative se quiser manter esse conteúdo visível somente dentro do sistema.</small>
+                </span>
+              </label>
+            </div>
+
+            <DialogFooter className="order-dialog-footer">
+              <button type="button" className="order-btn order-btn-outline" onClick={applyNotesDialog}>
+                Aplicar
+              </button>
+              <button type="button" className="order-btn order-btn-ghost" onClick={() => setNotesDialogOpen(false)}>
+                Fechar
+              </button>
+            </DialogFooter>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {items.length === 0 ? (
         <div className="order-floating-alert">

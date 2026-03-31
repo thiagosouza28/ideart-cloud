@@ -602,6 +602,8 @@ export interface Order {
   delivered_by?: string | null;
   deleted_at?: string | null;
   deleted_by?: string | null;
+  merged_into_order_id?: string | null;
+  merged_at?: string | null;
   created_by: string | null;
   updated_by: string | null;
   created_at: string;
