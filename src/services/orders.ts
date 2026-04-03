@@ -4,6 +4,7 @@ import { generateAndUploadPaymentReceipt } from '@/services/paymentReceipts';
 import { ensurePublicStorageUrl } from '@/lib/storage';
 import { uploadFile, deleteFile } from '@/lib/upload';
 import { formatOrderNumber } from '@/lib/utils';
+import { createClientUuid } from '@/lib/clientIds';
 import { stripPendingCustomerInfoNotes } from '@/lib/orderMetadata';
 import { sanitizeDisplayFileName } from '@/lib/orderFiles';
 import { summarizeOrderPayments } from '@/lib/orderPayments';
@@ -228,20 +229,7 @@ const shouldFallbackToDirectUpdate = (error: unknown) => {
   );
 };
 
-const generateFileId = () => {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
-  }
-  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
-    const bytes = new Uint8Array(16);
-    crypto.getRandomValues(bytes);
-    bytes[6] = (bytes[6] & 0x0f) | 0x40;
-    bytes[8] = (bytes[8] & 0x3f) | 0x80;
-    const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0'));
-    return `${hex.slice(0, 4).join('')}-${hex.slice(4, 6).join('')}-${hex.slice(6, 8).join('')}-${hex.slice(8, 10).join('')}-${hex.slice(10, 16).join('')}`;
-  }
-  return `${Date.now().toString(16)}-${Math.random().toString(16).slice(2)}`;
-};
+const generateFileId = () => createClientUuid();
 
 const buildOrderStorageUploadPath = (
   orderId: string,
@@ -317,7 +305,7 @@ const fetchOrderForReceipt = async (orderId: string) => {
   const { data, error } = await supabase
     .from('orders')
     .select(
-      'id, order_number, company_id, customer_id, customer_name, payment_method, amount_paid, customer_credit_used, customer_credit_generated, total, production_time_days_used, estimated_delivery_date, company:companies(name, document, address, city, state, logo_url, signature_image_url, signature_responsible, signature_role), customer:customers(name, document)',
+      'id, order_number, company_id, customer_id, customer_name, freight_amount, delivery_method, payment_condition, payment_method, amount_paid, customer_credit_used, customer_credit_generated, total, production_time_days_used, estimated_delivery_date, company:companies(name, document, address, city, state, logo_url, signature_image_url, signature_responsible, signature_role), customer:customers(name, document)',
     )
     .eq('id', orderId)
     .single();
@@ -1110,12 +1098,17 @@ export const updateOrderItems = async (params: {
   items: OrderItemUpdate[];
   orderDiscountType?: Order['discount_type'];
   orderDiscountValue?: number;
+  freightAmount?: number;
 }) => {
   const { data, error } = await supabase.rpc('update_order_items' as any, {
     p_order_id: params.orderId,
     p_items: params.items,
     p_order_discount_type: params.orderDiscountType ?? 'fixed',
     p_order_discount_value: params.orderDiscountValue ?? 0,
+    p_freight_amount:
+      params.freightAmount === undefined || params.freightAmount === null
+        ? null
+        : Math.max(0, Number(params.freightAmount)),
   });
 
   if (!error && data) {
@@ -1130,6 +1123,9 @@ export const updateOrderItems = async (params: {
     items: params.items,
     order_discount_type: params.orderDiscountType ?? 'fixed',
     order_discount_value: params.orderDiscountValue ?? 0,
+    ...(params.freightAmount === undefined || params.freightAmount === null
+      ? {}
+      : { freight_amount: Math.max(0, Number(params.freightAmount)) }),
   };
 
   if (EDGE_FUNCTIONS_ENABLED) {
@@ -1231,6 +1227,34 @@ export const updateOrderItemStatus = async ({
   return (data || null) as {
     order: Order | null;
     item: OrderItem | null;
+  } | null;
+};
+
+export const deleteOrderItemAdmin = async ({
+  orderId,
+  itemId,
+  notes,
+  userId,
+}: {
+  orderId: string;
+  itemId: string;
+  notes?: string;
+  userId?: string | null;
+}) => {
+  const { data, error } = await supabase.rpc('delete_order_item_admin' as any, {
+    p_order_id: orderId,
+    p_item_id: itemId,
+    p_notes: notes || null,
+    p_user_id: userId || null,
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  return (data || null) as {
+    order: Order | null;
+    deletedItemId: string | null;
   } | null;
 };
 

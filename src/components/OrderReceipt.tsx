@@ -62,6 +62,21 @@ const paymentMethodLabels: Record<PaymentMethod, string> = {
   outro: 'Outro',
 };
 
+const deliveryMethodLabels = {
+  retirada: 'Retirada na loja',
+  entrega: 'Entrega',
+  motoboy: 'Motoboy',
+} as const;
+
+const paymentConditionLabels: Record<string, string> = {
+  avista: 'À vista',
+  '7dias': '7 dias',
+  '15dias': '15 dias',
+  '30dias': '30 dias',
+  '45dias': '45 dias',
+  entrada_saldo: 'Entrada + saldo',
+};
+
 const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
   ({ order, items, payment, summary }, ref) => {
     const paidTotal = Number(summary?.paidTotal ?? order.amount_paid ?? 0);
@@ -97,6 +112,13 @@ const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
     const storeDocument = documentLabel(company?.document);
     const customerLabel = order.customer?.name || order.customer_name || 'Cliente não informado';
     const totalLabel = formatCurrency(Number(order.total));
+    const freightAmount = Number(order.freight_amount ?? 0);
+    const deliveryMethodLabel = order.delivery_method
+      ? deliveryMethodLabels[order.delivery_method as keyof typeof deliveryMethodLabels] || order.delivery_method
+      : '-';
+    const paymentConditionLabel = order.payment_condition
+      ? paymentConditionLabels[order.payment_condition] || order.payment_condition.trim()
+      : '-';
     const productionTimeDays = normalizeProductionTimeDays(order.production_time_days_used);
     const estimatedDeliveryDateLabel = order.estimated_delivery_date
       ? formatDatePtBr(order.estimated_delivery_date)
@@ -213,6 +235,27 @@ const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
           </div>
         )}
 
+        {(freightAmount > 0 || order.delivery_method || order.payment_condition) && (
+          <div className="receipt-block mt-4 rounded-xl border border-slate-200 px-3 py-2 text-[11px]">
+            <div className="grid gap-2 sm:grid-cols-3">
+              <div>
+                <p className="uppercase tracking-wide text-slate-500">Método de entrega</p>
+                <p className="font-medium text-slate-700">{deliveryMethodLabel}</p>
+              </div>
+              <div>
+                <p className="uppercase tracking-wide text-slate-500">Condição de pagamento</p>
+                <p className="font-medium text-slate-700">{paymentConditionLabel}</p>
+              </div>
+              <div>
+                <p className="uppercase tracking-wide text-slate-500">Taxa de entrega</p>
+                <p className="font-medium text-slate-700">
+                  {freightAmount > 0 ? formatCurrency(freightAmount) : 'Sem taxa'}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="receipt-block mt-4 overflow-hidden rounded-xl border border-slate-200">
           <table className="receipt-table w-full table-fixed text-[11px]">
             <thead className="bg-slate-100 text-slate-600">
@@ -299,6 +342,12 @@ const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
                 <div className="flex justify-between">
                   <span className="text-slate-500">Desconto</span>
                   <span>-{formatCurrency(Number(order.discount))}</span>
+                </div>
+              )}
+              {freightAmount > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Taxa de entrega</span>
+                  <span>{formatCurrency(freightAmount)}</span>
                 </div>
               )}
               <div className="flex justify-between border-t border-slate-200 pt-2 text-sm font-semibold">

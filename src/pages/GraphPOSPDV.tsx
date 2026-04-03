@@ -22,18 +22,14 @@ import { getGraphPOSCheckoutState, setGraphPOSCheckoutState } from '@/lib/graphp
 import { normalizeDigits } from '@/components/ui/masked-input';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useUnsavedChanges } from '@/hooks/use-unsaved-changes';
+import { createClientUuid } from '@/lib/clientIds';
 import { M2_ATTRIBUTE_KEYS, calculateAreaM2, formatAreaM2, isAreaUnit, parseM2Attributes, parseMeasurementInput } from '@/lib/measurements';
 import { usesDirectProductStock, usesSupplyStock } from '@/lib/stockControl';
 import { cn } from '@/lib/utils';
 import { localDb } from '@/lib/localDb';
 import { Network } from '@capacitor/network';
 
-const createLocalId = () => {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
-  }
-  return `tmp-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-};
+const createLocalId = () => createClientUuid();
 
 const normalizeSearchText = (value: string) =>
   value

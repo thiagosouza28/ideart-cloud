@@ -20,6 +20,7 @@ import {
 import { usesDirectProductStock } from '@/lib/stockControl';
 import { consumeProductSupplies } from '@/lib/supplyConsumption';
 import { SyncManager } from '@/services/sync';
+import { createClientUuid } from '@/lib/clientIds';
 
 const formatCurrency = (v: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
@@ -308,7 +309,7 @@ export default function GraphPOSPagamento() {
                     const payment = paymentMethod;
                     const paidAmount = payment === 'dinheiro' ? amountPaid : total;
                     const changeAmount = payment === 'dinheiro' ? Math.max(0, amountPaid - total) : 0;
-                    const saleId = crypto.randomUUID();
+                    const saleId = createClientUuid();
 
                     const { data: sale, error: saleError } = await SyncManager.performMutation('sales', 'INSERT', {
                       id: saleId,

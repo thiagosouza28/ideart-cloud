@@ -282,6 +282,7 @@ type ItemsUpdatePayload = {
   }>;
   order_discount_type?: "fixed" | "percent";
   order_discount_value?: number;
+  freight_amount?: number;
 };
 
 Deno.serve(async (req) => {
@@ -510,6 +511,8 @@ Deno.serve(async (req) => {
         body.order_discount_type === "percent" ? "percent" : "fixed";
       const orderDiscountValue =
         typeof body.order_discount_value === "number" ? body.order_discount_value : 0;
+      const freightAmount =
+        typeof body.freight_amount === "number" ? Math.max(0, body.freight_amount) : null;
 
       if (items.length === 0) {
         return jsonResponse(corsHeaders, 400, { error: "Itens obrigatórios" });
@@ -542,6 +545,7 @@ Deno.serve(async (req) => {
           p_items: items,
           p_order_discount_type: orderDiscountType,
           p_order_discount_value: orderDiscountValue,
+          p_freight_amount: freightAmount,
         },
       );
 

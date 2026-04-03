@@ -26,6 +26,7 @@ import OrderReceipt from '@/components/OrderReceipt';
 import PaymentReceipt from '@/components/PaymentReceipt';
 import DeliveryReceipt, { type DeliveryReceiptPaymentInfo } from '@/components/DeliveryReceipt';
 import CustomerSearch from '@/components/CustomerSearch';
+import { createClientUuid } from '@/lib/clientIds';
 import { M2_ATTRIBUTE_KEYS, buildM2Attributes, calculateAreaM2, formatAreaM2, isAreaUnit, parseM2Attributes, parseMeasurementInput, stripM2Attributes } from '@/lib/measurements';
 import { useConfirm } from '@/components/ui/confirm-dialog';
 import {
@@ -34,6 +35,7 @@ import {
   cancelOrderPaymentWithCredit as cancelOrderPayment,
   createOrderPaymentWithCredit as createOrderPayment,
   deleteOrder,
+  deleteOrderItemAdmin,
   deleteOrderPaymentWithCredit as deleteOrderPayment,
   fetchMergeableCustomerOrders,
   getOrCreatePublicLink,
@@ -102,6 +104,7 @@ const PDF_SINGLE_PAGE_TOLERANCE = 1.08;
 const PRINT_PAGE_MARGIN_MM = 8;
 const A4_WIDTH_MM = 210;
 const RECEIPT_RENDER_WIDTH = Math.round(((A4_WIDTH_MM - PRINT_PAGE_MARGIN_MM * 2) / 25.4) * 96);
+const COMPLETED_ORDER_STATUSES: OrderStatus[] = ['finalizado', 'pronto', 'aguardando_retirada', 'entregue'];
 
 const statusConfig: Record<OrderStatus, { label: string; icon: React.ComponentType<any>; color: string; next: OrderStatus[] }> = {
   orcamento: {
@@ -177,6 +180,27 @@ const statusLabels: Record<OrderStatus, string> = {
   aguardando_retirada: 'Aguardando retirada',
   entregue: 'Entregue',
   cancelado: 'Cancelado',
+};
+
+const deliveryMethodLabels = {
+  retirada: 'Retirada na loja',
+  entrega: 'Entrega',
+  motoboy: 'Motoboy',
+} as const;
+
+const priorityLabels = {
+  baixa: 'Baixa',
+  normal: 'Normal',
+  alta: 'Alta',
+} as const;
+
+const paymentConditionLabels: Record<string, string> = {
+  avista: 'À vista',
+  '7dias': '7 dias',
+  '15dias': '15 dias',
+  '30dias': '30 dias',
+  '45dias': '45 dias',
+  entrada_saldo: 'Entrada + saldo',
 };
 
 const defaultStatusCustomerMessages: Record<OrderStatus, string> = {
@@ -285,6 +309,8 @@ export default function OrderDetails() {
   const [customerAvailableCredit, setCustomerAvailableCredit] = useState(0);
   const [paymentActionId, setPaymentActionId] = useState<string | null>(null);
   const [paymentActionType, setPaymentActionType] = useState<'cancel' | 'delete' | 'download' | null>(null);
+  const [itemActionId, setItemActionId] = useState<string | null>(null);
+  const [itemActionType, setItemActionType] = useState<'cancel' | 'delete' | null>(null);
   const [receiptDialogOpen, setReceiptDialogOpen] = useState(false);
   const [receiptPayment, setReceiptPayment] = useState<OrderPayment | null>(null);
   const [paymentReceiptLoading, setPaymentReceiptLoading] = useState(false);
@@ -303,6 +329,7 @@ export default function OrderDetails() {
   const [editableItems, setEditableItems] = useState<EditableOrderItem[]>([]);
   const [orderDiscountType, setOrderDiscountType] = useState<DiscountType>('fixed');
   const [orderDiscountValue, setOrderDiscountValue] = useState(0);
+  const [editingFreightAmount, setEditingFreightAmount] = useState(0);
   const [savingItems, setSavingItems] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
   const [productAttributeMap, setProductAttributeMap] = useState<Record<string, ProductAttributeGroup[]>>({});
@@ -312,6 +339,9 @@ export default function OrderDetails() {
   const [newItemWidthCm, setNewItemWidthCm] = useState('');
   const [newItemHeightCm, setNewItemHeightCm] = useState('');
   const [newItemAttributes, setNewItemAttributes] = useState<Record<string, string>>({});
+  const [newManualItemName, setNewManualItemName] = useState('');
+  const [newManualItemQuantity, setNewManualItemQuantity] = useState(1);
+  const [newManualItemUnitPrice, setNewManualItemUnitPrice] = useState(0);
   const [customerDialogOpen, setCustomerDialogOpen] = useState(false);
   const [customerSaving, setCustomerSaving] = useState(false);
   const [customerDraft, setCustomerDraft] = useState<Customer | null>(null);
@@ -499,6 +529,17 @@ export default function OrderDetails() {
     };
   };
 
+  const resetEditingComposer = () => {
+    setNewItemProductId('');
+    setNewItemQuantity(1);
+    setNewItemWidthCm('');
+    setNewItemHeightCm('');
+    setNewItemAttributes({});
+    setNewManualItemName('');
+    setNewManualItemQuantity(1);
+    setNewManualItemUnitPrice(0);
+  };
+
   const getSavedOrderDiscountState = () =>
     resolveDiscountState({
       baseAmount: calculateSubtotal(items),
@@ -623,7 +664,14 @@ export default function OrderDetails() {
     subtotalValue: number,
     discountType: DiscountType,
     discountValue: number,
-  ) => Math.max(0, subtotalValue - calculateOrderDiscountAmount(subtotalValue, discountType, discountValue));
+    freightAmount = 0,
+  ) =>
+    Math.max(
+      0,
+      subtotalValue -
+        calculateOrderDiscountAmount(subtotalValue, discountType, discountValue) +
+        roundCurrency(Number(freightAmount || 0)),
+    );
 
   const paymentReceiptMethodLabels: Record<PaymentMethod, string> = {
     dinheiro: 'Dinheiro',
@@ -926,10 +974,8 @@ export default function OrderDetails() {
     setEditableItems(mapped);
     setOrderDiscountType(savedOrderDiscount.discountType);
     setOrderDiscountValue(savedOrderDiscount.discountValue);
-    setNewItemProductId('');
-    setNewItemQuantity(1);
-    setNewItemWidthCm('');
-    setNewItemHeightCm('');
+    setEditingFreightAmount(roundCurrency(Number(order?.freight_amount ?? 0)));
+    resetEditingComposer();
     setIsEditingItems(true);
   };
 
@@ -938,11 +984,9 @@ export default function OrderDetails() {
     const savedOrderDiscount = getSavedOrderDiscountState();
     setOrderDiscountType(savedOrderDiscount.discountType);
     setOrderDiscountValue(savedOrderDiscount.discountValue);
+    setEditingFreightAmount(roundCurrency(Number(order?.freight_amount ?? 0)));
     setIsEditingItems(false);
-    setNewItemProductId('');
-    setNewItemQuantity(1);
-    setNewItemWidthCm('');
-    setNewItemHeightCm('');
+    resetEditingComposer();
   };
 
   const handleChangeItemProduct = (index: number, productId: string) => {
@@ -1008,12 +1052,27 @@ export default function OrderDetails() {
         if (idx !== index) return item;
         if (isItemM2(item)) return item;
         const product = getProductById(item.product_id);
-        if (!product || !validateTierQuantity(product, quantity)) return item;
+        if (!product) {
+          return { ...item, quantity, total: calculateItemTotal({ ...item, quantity }) };
+        }
+        if (!validateTierQuantity(product, quantity)) return item;
         const next = { ...item, quantity };
         if (item.price_mode !== 'manual') {
           next.unit_price = getProductPriceForQuantity(product, quantity);
         }
         return { ...next, total: calculateItemTotal(next) };
+      }),
+    );
+  };
+
+  const handleChangeManualItemName = (index: number, value: string) => {
+    setEditableItems((prev) =>
+      prev.map((item, idx) => {
+        if (idx !== index) return item;
+        return {
+          ...item,
+          product_name: value,
+        };
       }),
     );
   };
@@ -1234,7 +1293,7 @@ export default function OrderDetails() {
       : Object.keys(initialAttributes).length > 0 ? initialAttributes : null;
 
     const newItem: EditableOrderItem = {
-      id: crypto.randomUUID(),
+      id: createClientUuid(),
       order_id: order?.id || '',
       product_id: product.id,
       product_name: product.name,
@@ -1262,6 +1321,46 @@ export default function OrderDetails() {
     setNewItemWidthCm('');
     setNewItemHeightCm('');
     setNewItemAttributes({});
+  };
+
+  const handleAddManualItem = () => {
+    const productName = newManualItemName.trim();
+    const quantity = Math.max(1, Number(newManualItemQuantity) || 1);
+    const unitPrice = Math.max(0, Number(newManualItemUnitPrice) || 0);
+
+    if (!productName) {
+      toast({ title: 'Informe o nome do item avulso', variant: 'destructive' });
+      return;
+    }
+
+    const newItem: EditableOrderItem = {
+      id: createClientUuid(),
+      order_id: order?.id || '',
+      product_id: null,
+      product_name: productName,
+      quantity,
+      unit_price: unitPrice,
+      discount_type: 'fixed',
+      discount_value: 0,
+      discount: 0,
+      total: calculateItemTotal({
+        quantity,
+        unit_price: unitPrice,
+        discount_type: 'fixed',
+        discount_value: 0,
+        discount: 0,
+      }),
+      attributes: null,
+      notes: null,
+      status: order?.status || 'orcamento',
+      created_at: new Date().toISOString(),
+      price_mode: 'manual',
+    };
+
+    setEditableItems((prev) => [...prev, newItem]);
+    setNewManualItemName('');
+    setNewManualItemQuantity(1);
+    setNewManualItemUnitPrice(0);
   };
 
   const handleNewItemProductChange = (productId: string) => {
@@ -1337,6 +1436,7 @@ export default function OrderDetails() {
         items: payload,
         orderDiscountType,
         orderDiscountValue,
+        freightAmount: editingFreightAmount,
       });
       const refreshedItems = editableItems.map((item) => ({
         ...item,
@@ -1345,6 +1445,8 @@ export default function OrderDetails() {
       }));
       setOrder((prev) => (prev ? { ...prev, ...updatedOrder } : updatedOrder));
       setItems(refreshedItems);
+      resetEditingComposer();
+      setEditingFreightAmount(roundCurrency(Number(updatedOrder.freight_amount ?? 0)));
       setIsEditingItems(false);
       toast({ title: 'Pedido atualizado com sucesso!' });
     } catch (error: any) {
@@ -2324,10 +2426,11 @@ export default function OrderDetails() {
 
     // Fetch user names for history
     const userIds = [
+      orderData.responsible_id,
       ...(historyResult.data || []).map((h: any) => h.user_id).filter(Boolean),
       ...(finalPhotosResult.data || []).map((photo: any) => photo.created_by).filter(Boolean),
       ...(artFilesResult.data || []).map((file: any) => file.created_by).filter(Boolean),
-    ];
+    ].filter(Boolean) as string[];
     if (userIds.length > 0) {
       const { data: profilesData } = await supabase
         .from('profiles')
@@ -2932,10 +3035,7 @@ export default function OrderDetails() {
 
     setPendingArtUploads(
       validFiles.map((file, index) => ({
-        id:
-          typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-            ? crypto.randomUUID()
-            : `${Date.now()}-${index}`,
+        id: `${Date.now()}-${index}-${createClientUuid()}`,
         file,
         displayName: buildSuggestedArtFileDisplayName(file),
       })),
@@ -3097,9 +3197,78 @@ export default function OrderDetails() {
     }
   };
 
+  const handleAdminCancelCompletedItem = async (item: OrderItem) => {
+    if (!order) return;
+
+    const approved = await confirm({
+      title: 'Cancelar item',
+      description: `Cancelar "${item.product_name}" neste pedido?`,
+      confirmText: 'Cancelar item',
+      cancelText: 'Voltar',
+      destructive: true,
+    });
+
+    if (!approved) return;
+
+    setItemActionId(item.id);
+    setItemActionType('cancel');
+
+    try {
+      await updateOrderItemStatus({
+        orderId: order.id,
+        itemId: item.id,
+        status: 'cancelado',
+        notes: 'Cancelado pelo administrador da loja na tela do pedido.',
+        userId: user.id,
+      });
+      toast({ title: 'Item cancelado' });
+      fetchOrder();
+    } catch (error: any) {
+      toast({ title: 'Erro ao cancelar item', description: error?.message, variant: 'destructive' });
+    } finally {
+      setItemActionId(null);
+      setItemActionType(null);
+    }
+  };
+
+  const handleAdminDeleteCompletedItem = async (item: OrderItem) => {
+    if (!order) return;
+
+    const approved = await confirm({
+      title: 'Excluir item',
+      description: `Excluir "${item.product_name}" do pedido? O total sera recalculado.`,
+      confirmText: 'Excluir item',
+      cancelText: 'Voltar',
+      destructive: true,
+    });
+
+    if (!approved) return;
+
+    setItemActionId(item.id);
+    setItemActionType('delete');
+
+    try {
+      await deleteOrderItemAdmin({
+        orderId: order.id,
+        itemId: item.id,
+        notes: 'Excluido pelo administrador da loja na tela do pedido.',
+        userId: user.id,
+      });
+      toast({ title: 'Item excluido' });
+      fetchOrder();
+    } catch (error: any) {
+      toast({ title: 'Erro ao excluir item', description: error?.message, variant: 'destructive' });
+    } finally {
+      setItemActionId(null);
+      setItemActionType(null);
+    }
+  };
+
   const editableItemsSnapshot = useMemo(() => (
     editableItems.map((item) => ({
+      id: item.id,
       product_id: item.product_id,
+      product_name: item.product_name,
       quantity: item.quantity,
       unit_price: item.unit_price,
       discount_type: item.discount_type,
@@ -3111,7 +3280,9 @@ export default function OrderDetails() {
     items.map((item) => {
       const discountState = getItemDiscountState(item);
       return {
+        id: item.id,
         product_id: item.product_id,
+        product_name: item.product_name,
         quantity: item.quantity,
         unit_price: item.unit_price,
         discount_type: discountState.discountType,
@@ -3122,6 +3293,8 @@ export default function OrderDetails() {
   ), [items]);
   const savedOrderDiscount = getSavedOrderDiscountState();
   const paymentSubtotal = calculateSubtotal(items);
+  const orderFreightAmount = roundCurrency(Number(order?.freight_amount ?? 0));
+  const activeFreightAmount = isEditingItems ? editingFreightAmount : orderFreightAmount;
   const paymentDiscountAmount = calculateOrderDiscountAmount(
     paymentSubtotal,
     paymentDiscountType,
@@ -3131,6 +3304,7 @@ export default function OrderDetails() {
     paymentSubtotal,
     paymentDiscountType,
     paymentDiscountValue,
+    orderFreightAmount,
   );
   const paymentSettledAmount =
     Number(order?.amount_paid ?? 0) +
@@ -3141,9 +3315,19 @@ export default function OrderDetails() {
   const itemsDirty = isEditingItems && (
     JSON.stringify(editableItemsSnapshot) !== JSON.stringify(itemsSnapshot) ||
     orderDiscountType !== savedOrderDiscount.discountType ||
-    Math.abs(orderDiscountValue - savedOrderDiscount.discountValue) > 0.009
+    Math.abs(orderDiscountValue - savedOrderDiscount.discountValue) > 0.009 ||
+    Math.abs(editingFreightAmount - orderFreightAmount) > 0.009
   );
-  const pendingItemInput = isEditingItems && (newItemProductId || newItemQuantity !== 1);
+  const pendingItemInput = isEditingItems && Boolean(
+    newItemProductId ||
+    newItemQuantity !== 1 ||
+    newItemWidthCm ||
+    newItemHeightCm ||
+    Object.keys(newItemAttributes).length > 0 ||
+    newManualItemName.trim() ||
+    newManualItemQuantity !== 1 ||
+    newManualItemUnitPrice > 0,
+  );
   const statusDirty = statusDialogOpen && (newStatus || statusNotes.trim() || entryDialogOpen || entryAmount > 0 || entryMethod);
   const paymentDirty = paymentDialogOpen && (paymentNotes.trim() || paymentMethod || paymentAmount > 0);
   const cancelDirty = cancelDialogOpen && (cancelReason.trim() || cancelConfirmPaid);
@@ -3191,6 +3375,9 @@ export default function OrderDetails() {
     order.status !== 'cancelado' &&
     Boolean(order.customer_id) &&
     !hasRegisteredPayments;
+  const isStoreAdmin = hasPermission(['admin']);
+  const canAdminManageCompletedItems =
+    isStoreAdmin && COMPLETED_ORDER_STATUSES.includes(order.status);
   const selectedMergeOrders = mergeCandidates.filter((candidate) =>
     selectedMergeOrderIds.includes(candidate.id),
   );
@@ -3262,17 +3449,32 @@ export default function OrderDetails() {
       : items[0]) || null;
   const statusSource = selectedStatusItem?.status || order.status;
   const statusDialogConfig = statusConfig[statusSource];
+  const getItemStatusDialogNextOptions = (itemStatus: OrderStatus) =>
+    statusConfig[itemStatus].next.filter((status) => {
+      if (COMPLETED_ORDER_STATUSES.includes(status)) {
+        return false;
+      }
+
+      if (
+        status === 'cancelado' &&
+        !isStoreAdmin &&
+        (
+          COMPLETED_ORDER_STATUSES.includes(order.status) ||
+          COMPLETED_ORDER_STATUSES.includes(itemStatus)
+        )
+      ) {
+        return false;
+      }
+
+      return true;
+    });
   const statusDialogNextOptions = statusTargetIsItem
-    ? statusDialogConfig.next.filter(
-        (status) => !['finalizado', 'pronto', 'aguardando_retirada', 'entregue'].includes(status),
-      )
+    ? getItemStatusDialogNextOptions(statusSource)
     : statusDialogConfig.next;
   const statusTargetLabel = statusTargetIsItem ? 'Produto' : 'Pedido';
   const hasStatusDialogOptions = statusTargetIsItem
     ? items.some((item) =>
-        statusConfig[item.status].next.some(
-          (status) => !['finalizado', 'pronto', 'aguardando_retirada', 'entregue'].includes(status),
-        ),
+        getItemStatusDialogNextOptions(item.status).length > 0,
       )
     : statusConfig[order.status].next.length > 0;
 
@@ -3410,6 +3612,7 @@ export default function OrderDetails() {
     editingSubtotal,
     activeOrderDiscountType,
     activeOrderDiscountValue,
+    activeFreightAmount,
   );
   const newItemProduct = products.find((product) => product.id === newItemProductId);
   const newItemIsM2 = newItemProduct ? isAreaUnit(newItemProduct.unit) : false;
@@ -3423,6 +3626,17 @@ export default function OrderDetails() {
       newItemHeightValue > 0
       ? calculateAreaM2(newItemWidthValue, newItemHeightValue)
       : 0;
+  const orderDeliveryMethodLabel = order.delivery_method
+    ? deliveryMethodLabels[order.delivery_method as keyof typeof deliveryMethodLabels] || order.delivery_method
+    : '-';
+  const orderPriorityLabel = order.priority
+    ? priorityLabels[order.priority as keyof typeof priorityLabels] || order.priority
+    : '-';
+  const orderPaymentConditionLabel = order.payment_condition
+    ? paymentConditionLabels[order.payment_condition] ||
+      order.payment_condition.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase())
+    : '-';
+  const orderResponsibleName = order.responsible_id ? profiles[order.responsible_id] || '-' : '-';
   const artIndicator =
     order.status === 'pendente'
       ? { label: 'Arte: aguardando definição', color: 'bg-slate-100 text-slate-600' }
@@ -3672,6 +3886,38 @@ export default function OrderDetails() {
             </CardContent>
           </Card>
 
+          <Card>
+            <CardHeader>
+              <CardTitle>Dados do pedido</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <p className="text-sm font-medium">Método de entrega</p>
+                  <p className="text-sm text-muted-foreground">{orderDeliveryMethodLabel}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm font-medium">Taxa de entrega</p>
+                  <p className="text-sm text-muted-foreground">
+                    {orderFreightAmount > 0 ? formatCurrency(orderFreightAmount) : 'Sem taxa'}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm font-medium">Condição de pagamento</p>
+                  <p className="text-sm text-muted-foreground">{orderPaymentConditionLabel}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm font-medium">Prioridade</p>
+                  <p className="text-sm text-muted-foreground">{orderPriorityLabel}</p>
+                </div>
+                <div className="space-y-1 sm:col-span-2">
+                  <p className="text-sm font-medium">Responsável</p>
+                  <p className="text-sm text-muted-foreground">{orderResponsibleName}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Items */}
           <Card>
             <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -3699,6 +3945,7 @@ export default function OrderDetails() {
                   {editableItems.map((item, index) => {
                     const m2Data = parseM2Attributes(item.attributes);
                     const isM2 = isItemM2(item);
+                    const isManualItem = !item.product_id;
                     const widthRaw = item.attributes?.[M2_ATTRIBUTE_KEYS.widthCm] ?? '';
                     const heightRaw = item.attributes?.[M2_ATTRIBUTE_KEYS.heightCm] ?? '';
                     const hasValidDimensions =
@@ -3713,22 +3960,38 @@ export default function OrderDetails() {
                         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                           <div className="flex-1 space-y-3">
                             <div className="space-y-2">
-                              <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Produto</Label>
-                              <Select
-                                value={item.product_id ?? ""}
-                                onValueChange={(value) => handleChangeItemProduct(index, value)}
-                              >
-                                <SelectTrigger className="w-full lg:max-w-md">
-                                  <SelectValue placeholder="Selecione o produto" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {products.map((product) => (
-                                    <SelectItem key={product.id} value={product.id}>
-                                      {product.name}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
+                              <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                                {isManualItem ? 'Item avulso' : 'Produto'}
+                              </Label>
+                              {isManualItem ? (
+                                <Input
+                                  value={item.product_name}
+                                  onChange={(e) => handleChangeManualItemName(index, e.target.value)}
+                                  className="w-full lg:max-w-md"
+                                  placeholder="Nome do item avulso"
+                                />
+                              ) : (
+                                <Select
+                                  value={item.product_id ?? ""}
+                                  onValueChange={(value) => handleChangeItemProduct(index, value)}
+                                >
+                                  <SelectTrigger className="w-full lg:max-w-md">
+                                    <SelectValue placeholder="Selecione o produto" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {products.map((product) => (
+                                      <SelectItem key={product.id} value={product.id}>
+                                        {product.name}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              )}
+                              {isManualItem && (
+                                <p className="text-xs text-muted-foreground">
+                                  Item livre sem vínculo com o catálogo.
+                                </p>
+                              )}
                             </div>
 
                             {isM2 && (
@@ -3814,7 +4077,7 @@ export default function OrderDetails() {
                                   onChange={(value) => handleChangeItemUnitPrice(index, value)}
                                   className="w-full lg:w-32"
                                 />
-                                {'price_mode' in item && item.price_mode === 'manual' && (
+                                {'price_mode' in item && item.price_mode === 'manual' && item.product_id && (
                                   <Button
                                     type="button"
                                     variant="ghost"
@@ -3894,15 +4157,18 @@ export default function OrderDetails() {
                 </div>
               ) : (
                 <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-                  <Table className="table-fixed">
+                  <Table className="w-full table-fixed">
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="w-[38%] whitespace-nowrap">Produto</TableHead>
-                        <TableHead className="w-[140px] whitespace-nowrap text-center">Status</TableHead>
-                        <TableHead className="w-[110px] whitespace-nowrap text-center">Qtd</TableHead>
+                        <TableHead className="w-[31%]">Produto</TableHead>
+                        <TableHead className="w-[110px] text-center">Status</TableHead>
+                        <TableHead className="w-[72px] text-center">Qtd</TableHead>
                         <TableHead className="w-[130px] whitespace-nowrap text-center">Preço Unit.</TableHead>
-                        <TableHead className="w-[120px] whitespace-nowrap text-right">Desconto</TableHead>
-                        <TableHead className="w-[120px] whitespace-nowrap text-right">Total</TableHead>
+                        <TableHead className="w-[100px] text-right">Desconto</TableHead>
+                        <TableHead className="w-[110px] text-right">Total</TableHead>
+                        {canAdminManageCompletedItems && (
+                          <TableHead className="w-[132px] text-right">Ações</TableHead>
+                        )}
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -3910,6 +4176,11 @@ export default function OrderDetails() {
                         const m2Data = parseM2Attributes(item.attributes);
                         const displayAttributes = stripM2Attributes(item.attributes);
                         const discountState = getItemDiscountState(item);
+                        const isItemActionLoading = itemActionId === item.id;
+                        const canCancelCompletedItem =
+                          canAdminManageCompletedItems &&
+                          item.status !== 'cancelado' &&
+                          statusConfig[item.status].next.includes('cancelado');
                         const hasValidDimensions =
                           typeof m2Data.widthCm === 'number' &&
                           typeof m2Data.heightCm === 'number' &&
@@ -3989,9 +4260,47 @@ export default function OrderDetails() {
                                 )}
                               </div>
                             </TableCell>
-                            <TableCell className="whitespace-nowrap py-2 text-right font-medium">
+                            <TableCell className="whitespace-nowrap py-2 pr-2 text-right font-medium">
                               {formatCurrency(calculateItemTotal(item))}
                             </TableCell>
+                            {canAdminManageCompletedItems && (
+                              <TableCell className="py-2 pl-2 pr-2 text-right align-middle">
+                                <div className="ml-auto flex w-[104px] flex-col gap-2">
+                                  {canCancelCompletedItem && (
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => handleAdminCancelCompletedItem(item)}
+                                      disabled={isItemActionLoading}
+                                      className="h-8 w-full justify-center gap-1.5 rounded-md border-slate-200 bg-slate-50 px-2 text-[11px] font-medium text-slate-700 hover:border-slate-300 hover:bg-slate-100 hover:text-slate-900"
+                                    >
+                                      {isItemActionLoading && itemActionType === 'cancel' ? (
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                      ) : (
+                                        <XCircle className="h-3.5 w-3.5" />
+                                      )}
+                                      Cancelar
+                                    </Button>
+                                  )}
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleAdminDeleteCompletedItem(item)}
+                                    disabled={isItemActionLoading}
+                                    className="h-8 w-full justify-center gap-1.5 rounded-md border-red-200 bg-red-50 px-2 text-[11px] font-medium text-red-700 hover:border-red-300 hover:bg-red-100 hover:text-red-800"
+                                  >
+                                    {isItemActionLoading && itemActionType === 'delete' ? (
+                                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    ) : (
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    )}
+                                    Excluir
+                                  </Button>
+                                </div>
+                              </TableCell>
+                            )}
                           </TableRow>
                         );
                       })}
@@ -4101,7 +4410,44 @@ export default function OrderDetails() {
 
               {isEditingItems && (
                 <div className="mt-4 rounded-lg border p-4">
-                  <div className="grid gap-3 md:grid-cols-[180px_minmax(0,220px)]">
+                  <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_140px_180px_auto] items-end">
+                    <div className="space-y-2">
+                      <Label>Item avulso</Label>
+                      <Input
+                        value={newManualItemName}
+                        onChange={(e) => setNewManualItemName(e.target.value)}
+                        placeholder="Ex.: serviço extra, ajuste, acabamento"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Quantidade</Label>
+                      <Input
+                        type="number"
+                        min={1}
+                        value={newManualItemQuantity}
+                        onChange={(e) => setNewManualItemQuantity(Number(e.target.value) || 1)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Valor unitário</Label>
+                      <CurrencyInput
+                        value={newManualItemUnitPrice}
+                        onChange={setNewManualItemUnitPrice}
+                      />
+                    </div>
+                    <Button onClick={handleAddManualItem} className="mt-2 w-full md:mt-6 md:w-auto">
+                      Adicionar item avulso
+                    </Button>
+                  </div>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Total do item avulso: {formatCurrency(Math.max(1, Number(newManualItemQuantity) || 1) * Math.max(0, Number(newManualItemUnitPrice) || 0))}
+                  </p>
+                </div>
+              )}
+
+              {isEditingItems && (
+                <div className="mt-4 rounded-lg border p-4">
+                  <div className="grid gap-3 md:grid-cols-[180px_minmax(0,220px)_minmax(0,220px)]">
                     <div className="space-y-2">
                       <Label>Desconto geral</Label>
                       <Select
@@ -4151,9 +4497,16 @@ export default function OrderDetails() {
                         />
                       )}
                     </div>
+                    <div className="space-y-2">
+                      <Label>Taxa de entrega</Label>
+                      <CurrencyInput
+                        value={editingFreightAmount}
+                        onChange={(value) => setEditingFreightAmount(Math.max(0, value))}
+                      />
+                    </div>
                   </div>
                   <p className="mt-2 text-xs text-muted-foreground">
-                    O desconto geral é aplicado após os descontos individuais dos itens.
+                    O desconto geral é aplicado após os descontos individuais dos itens. A taxa de entrega entra no total final do pedido.
                   </p>
                 </div>
               )}
@@ -4179,6 +4532,12 @@ export default function OrderDetails() {
                       Desconto geral ({activeOrderDiscountType === 'percent' ? `${activeOrderDiscountValue}%` : 'R$'})
                     </span>
                     <span className="text-destructive">-{formatCurrency(editingOrderDiscount)}</span>
+                  </div>
+                )}
+                {activeFreightAmount > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Taxa de entrega</span>
+                    <span>{formatCurrency(activeFreightAmount)}</span>
                   </div>
                 )}
                 <Separator />
@@ -4760,6 +5119,12 @@ export default function OrderDetails() {
                     Desconto ({paymentDiscountType === 'percent' ? `${paymentDiscountValue}%` : 'R$'})
                   </span>
                   <span className="text-destructive">-{formatCurrency(paymentDiscountAmount)}</span>
+                </div>
+              )}
+              {orderFreightAmount > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Taxa de entrega</span>
+                  <span>{formatCurrency(orderFreightAmount)}</span>
                 </div>
               )}
               <div className="flex justify-between">

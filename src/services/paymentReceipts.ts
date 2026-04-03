@@ -2,6 +2,7 @@ import { uploadFile } from "@/lib/upload";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import { supabase } from "@/integrations/supabase/client";
+import { createClientUuid } from "@/lib/clientIds";
 import { ensurePublicStorageUrl } from "@/lib/storage";
 import {
   buildPaymentReceiptHtml,
@@ -53,12 +54,7 @@ const appendSuffixToPath = (path: string, suffix: string) => {
   return `${dir}${file.slice(0, dotIndex)}-${suffix}${file.slice(dotIndex)}`;
 };
 
-const generateReceiptNumber = () => {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return crypto.randomUUID();
-  }
-  return `REC-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`.toUpperCase();
-};
+const generateReceiptNumber = () => createClientUuid();
 
 const ensureReceiptNumber = (payload: PaymentReceiptPayload) => {
   const trimmed = payload.numeroRecibo?.trim();

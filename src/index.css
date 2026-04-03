@@ -1376,14 +1376,17 @@
   }
 
   .order-dialog-content {
-    padding: 0;
+    padding: 0 !important;
     border: 0;
     overflow: hidden;
+    background: var(--order-white);
   }
 
   .order-dialog-shell {
     display: flex;
     flex-direction: column;
+    min-height: 100%;
+    background: var(--order-white);
   }
 
   .order-dialog-topbar {
@@ -1471,6 +1474,86 @@
     font-size: 1.05rem;
     font-weight: 800;
     color: var(--order-heading);
+  }
+
+  .order-dialog-results {
+    border: 1.5px solid var(--order-border);
+    border-radius: 14px;
+    background: var(--order-surface);
+    max-height: 240px;
+    overflow-y: auto;
+  }
+
+  .order-dialog-results-empty {
+    padding: 14px 16px;
+    font-size: 0.84rem;
+    color: var(--order-muted);
+  }
+
+  .order-dialog-result-item {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 14px;
+    text-align: left;
+    border-bottom: 1px solid var(--order-border);
+    background: transparent;
+    color: var(--order-heading);
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
+
+  .order-dialog-result-item:last-child {
+    border-bottom: 0;
+  }
+
+  .order-dialog-result-item:hover {
+    background: rgba(99, 102, 241, 0.08);
+  }
+
+  .order-dialog-result-item.is-active {
+    background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%);
+    color: #fff;
+  }
+
+  .order-dialog-result-name {
+    font-size: 0.92rem;
+    font-weight: 700;
+  }
+
+  .order-dialog-result-meta {
+    font-size: 0.76rem;
+    font-weight: 600;
+    color: inherit;
+    opacity: 0.8;
+    white-space: nowrap;
+  }
+
+  .order-product-dialog {
+    height: min(760px, calc(100vh - 48px));
+  }
+
+  .order-product-dialog .order-dialog-shell {
+    height: 100%;
+  }
+
+  .order-product-dialog .order-dialog-body {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    padding-bottom: 18px;
+  }
+
+  .order-product-dialog .order-dialog-results {
+    min-height: 220px;
+  }
+
+  .order-product-dialog .order-dialog-empty-note {
+    margin: auto 0 18px;
+    text-align: center;
   }
 
   .order-quick-dialog-summary {
@@ -2269,6 +2352,29 @@
     border-color: var(--order-blue);
     background: var(--order-blue);
     color: #fff;
+  }
+
+  .order-dialog-cta {
+    min-width: 156px;
+    background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%);
+    border-color: rgba(79, 70, 229, 0.9);
+    color: #fff;
+    box-shadow: 0 16px 30px -18px rgba(79, 70, 229, 0.65);
+    transition: opacity 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .order-dialog-cta:hover {
+    opacity: 1;
+    transform: translateY(-1px);
+    box-shadow: 0 20px 34px -20px rgba(79, 70, 229, 0.72);
+  }
+
+  .order-dialog-cta:disabled {
+    opacity: 1;
+    background: linear-gradient(135deg, rgba(37, 99, 235, 0.58) 0%, rgba(79, 70, 229, 0.52) 100%);
+    border-color: rgba(79, 70, 229, 0.26);
+    color: rgba(255, 255, 255, 0.96);
+    box-shadow: none;
   }
 
   .order-floating-alert {

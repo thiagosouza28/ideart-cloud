@@ -1021,16 +1021,19 @@ export type Database = {
           customer_credit_used: number
           customer_user_id: string | null
           customer_name: string | null
+          delivery_method: string
           delivered_at: string | null
           delivered_by: string | null
           discount: number
           estimated_delivery_date: string | null
+          freight_amount: number
           gateway: string | null
           gateway_order_id: string | null
           id: string
           notes: string | null
           order_number: number
           paid_at: string | null
+          payment_condition: string
           payment_copy_paste: string | null
           payment_id: string | null
           payment_method: Database["public"]["Enums"]["payment_method"] | null
@@ -1038,7 +1041,9 @@ export type Database = {
           payment_link_id: string | null
           payment_link_url: string | null
           payment_status: Database["public"]["Enums"]["payment_status"]
+          priority: string
           production_time_days_used: number | null
+          responsible_id: string | null
           show_notes_on_pdf: boolean
           status: Database["public"]["Enums"]["order_status"]
           subtotal: number
@@ -1059,16 +1064,19 @@ export type Database = {
           customer_credit_used?: number
           customer_user_id?: string | null
           customer_name?: string | null
+          delivery_method?: string
           delivered_at?: string | null
           delivered_by?: string | null
           discount?: number
           estimated_delivery_date?: string | null
+          freight_amount?: number
           gateway?: string | null
           gateway_order_id?: string | null
           id?: string
           notes?: string | null
           order_number?: number
           paid_at?: string | null
+          payment_condition?: string
           payment_copy_paste?: string | null
           payment_id?: string | null
           payment_method?: Database["public"]["Enums"]["payment_method"] | null
@@ -1076,7 +1084,9 @@ export type Database = {
           payment_link_id?: string | null
           payment_link_url?: string | null
           payment_status?: Database["public"]["Enums"]["payment_status"]
+          priority?: string
           production_time_days_used?: number | null
+          responsible_id?: string | null
           show_notes_on_pdf?: boolean
           status?: Database["public"]["Enums"]["order_status"]
           subtotal?: number
@@ -1097,16 +1107,19 @@ export type Database = {
           customer_credit_used?: number
           customer_user_id?: string | null
           customer_name?: string | null
+          delivery_method?: string
           delivered_at?: string | null
           delivered_by?: string | null
           discount?: number
           estimated_delivery_date?: string | null
+          freight_amount?: number
           gateway?: string | null
           gateway_order_id?: string | null
           id?: string
           notes?: string | null
           order_number?: number
           paid_at?: string | null
+          payment_condition?: string
           payment_copy_paste?: string | null
           payment_id?: string | null
           payment_method?: Database["public"]["Enums"]["payment_method"] | null
@@ -1114,7 +1127,9 @@ export type Database = {
           payment_link_id?: string | null
           payment_link_url?: string | null
           payment_status?: Database["public"]["Enums"]["payment_status"]
+          priority?: string
           production_time_days_used?: number | null
+          responsible_id?: string | null
           show_notes_on_pdf?: boolean
           status?: Database["public"]["Enums"]["order_status"]
           subtotal?: number
@@ -1135,6 +1150,13 @@ export type Database = {
             columns: ["customer_id"]
             isOneToOne: false
             referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_responsible_id_fkey"
+            columns: ["responsible_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]

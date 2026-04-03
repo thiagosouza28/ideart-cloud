@@ -1,5 +1,6 @@
 import { Network } from '@capacitor/network';
 import { supabase } from '@/integrations/supabase/client';
+import { createClientUuid } from '@/lib/clientIds';
 import { localDb } from '@/lib/localDb';
 
 export class SyncManager {
@@ -82,7 +83,7 @@ export class SyncManager {
       console.log(`Offline: Queueing ${operation} on ${tableName}`);
       // Generate a temporary ID if it's an insert and doesn't have one
       if (operation === 'INSERT' && !payload.id) {
-        payload.id = crypto.randomUUID ? crypto.randomUUID() : `tmp-${Date.now()}`;
+        payload.id = createClientUuid();
       }
       await localDb.addToSyncQueue(tableName, operation, payload, queryParams);
       return { data: payload, error: null }; // Return the payload as "data" so the UI can proceed

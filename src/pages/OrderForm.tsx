@@ -24,6 +24,7 @@ import { normalizeDigits } from '@/components/ui/masked-input';
 import { useUnsavedChanges } from '@/hooks/use-unsaved-changes';
 import { ensurePublicStorageUrl } from '@/lib/storage';
 import { buildOrderDetailsPath } from '@/lib/orderRouting';
+import { createClientId } from '@/lib/clientIds';
 import { isAreaUnit, M2_ATTRIBUTE_KEYS, calculateAreaM2, formatAreaM2, parseMeasurementInput } from '@/lib/measurements';
 import {
   getProductSaleEquivalentText,
@@ -157,11 +158,18 @@ const paymentConditions = [
 
 const steps = ['Tipo', 'Detalhes', 'Revisão', 'Confirmação'];
 
+const normalizeProductSearchText = (value: string) =>
+  value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim();
+
 const createManualProduct = (name: string): Product =>
   ({
     track_stock: false,
     stock_control_type: null,
-    id: `manual:${crypto.randomUUID()}`,
+    id: createClientId('manual:'),
     name,
     sku: null,
     barcode: null,
@@ -491,6 +499,20 @@ export default function OrderForm() {
       setInitialSnapshot(formSnapshotJson);
     }
   }, [loading, initialSnapshot, formSnapshotJson]);
+
+  useEffect(() => {
+    if (!useCustomerCredit) {
+      if (customerCreditToUse !== 0) {
+        setCustomerCreditToUse(0);
+      }
+      return;
+    }
+
+    const maxAllowed = Math.min(customerAvailableCredit, totals.total);
+    if (customerCreditToUse > maxAllowed) {
+      setCustomerCreditToUse(maxAllowed);
+    }
+  }, [customerAvailableCredit, customerCreditToUse, totals.total, useCustomerCredit]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -874,21 +896,26 @@ export default function OrderForm() {
   }, [customerSearchTerm, customers]);
 
   const filteredProducts = useMemo(() => {
-    const text = productSearchTerm.trim().toLowerCase();
-    if (!text) return products.slice(0, 8);
+    const text = normalizeProductSearchText(productSearchTerm);
+    if (!text) return [];
     return products
       .filter((product) => {
-        const byName = product.name.toLowerCase().includes(text);
-        const bySku = (product.sku || '').toLowerCase().includes(text);
-        const byId = product.id.toLowerCase().includes(text);
+        const byName = normalizeProductSearchText(product.name || '').includes(text);
+        const bySku = normalizeProductSearchText(product.sku || '').includes(text);
+        const byId = normalizeProductSearchText(product.id || '').includes(text);
         return byName || bySku || byId;
       })
       .slice(0, 8);
   }, [productSearchTerm, products]);
-  const selectedDialogProduct = useMemo(
-    () => filteredProducts.find((product) => product.id === selectedDialogProductId) || products.find((product) => product.id === selectedDialogProductId) || null,
-    [filteredProducts, products, selectedDialogProductId],
-  );
+  const hasProductSearch = normalizeProductSearchText(productSearchTerm).length > 0;
+  const selectedDialogProduct = useMemo(() => {
+    if (!hasProductSearch || !selectedDialogProductId) return null;
+    return (
+      filteredProducts.find((product) => product.id === selectedDialogProductId) ||
+      products.find((product) => product.id === selectedDialogProductId) ||
+      null
+    );
+  }, [filteredProducts, hasProductSearch, products, selectedDialogProductId]);
   const productDialogQuantityValue = selectedDialogProduct && isAreaUnit(selectedDialogProduct.unit)
     ? 1
     : Math.max(1, Number(productDialogQuantity) || 1);
@@ -1094,7 +1121,7 @@ export default function OrderForm() {
   const openProductDialog = () => {
     setProductSearchTerm('');
     setProductDialogQuantity(1);
-    setSelectedDialogProductId(products[0]?.id || '');
+    setSelectedDialogProductId('');
     setProductDialogOpen(true);
   };
 
@@ -1286,6 +1313,8 @@ export default function OrderForm() {
   const clearCustomerSelection = () => {
     setCustomerId('');
     setCustomerName('');
+    setCustomerPhone('');
+    setCustomerEmail('');
     setCustomerSearchTerm('');
     setCustomerAvailableCredit(0);
     setUseCustomerCredit(false);
@@ -1429,14 +1458,19 @@ export default function OrderForm() {
           discount_type: discountType,
           discount_value: discount,
           discount: orderDiscountAmount,
+          freight_amount: freight,
           total: totals.total,
+          delivery_method: deliveryMethod,
+          payment_condition: paymentCondition,
           amount_paid: 0,
           payment_status: 'pendente',
           payment_method: paymentMethod,
+          priority,
+          responsible_id: responsibleId || null,
           notes: buildOrderNotes(),
           show_notes_on_pdf: showNotesOnPdf,
           production_time_days_used: productionInfo.productionTimeDaysUsed,
-          estimated_delivery_date: deliveryDate || productionInfo.estimatedDeliveryDate,
+          estimated_delivery_date: deliveryDate || productionInfo.estimatedDeliveryDate || null,
           created_by: user.id,
         } as any)
         .select('id, order_number, customer_name')
@@ -2237,7 +2271,7 @@ export default function OrderForm() {
       </footer>
 
       <Dialog open={productDialogOpen} onOpenChange={closeProductDialog}>
-        <DialogContent className="order-dialog-content sm:max-w-[560px]" aria-describedby={undefined}>
+        <DialogContent className="order-dialog-content order-product-dialog sm:max-w-[980px]" aria-describedby={undefined}>
           <div className="order-dialog-shell">
             <div className="order-dialog-topbar">
               <DialogHeader className="order-dialog-header">
@@ -2249,9 +2283,9 @@ export default function OrderForm() {
             </div>
 
             <div className="order-dialog-body">
-              <div className="order-field-group">
+                  <div className="order-field-group">
                 <label className="order-field-label" htmlFor="product-dialog-search">
-                  ID do produto (atalho)
+                  Buscar produto
                 </label>
                 <div className="order-search-field">
                   <Search className="order-field-icon" />
@@ -2263,35 +2297,44 @@ export default function OrderForm() {
                     className="order-input order-search-input"
                   />
                 </div>
-                <p className="order-dialog-hint">Dica: digite o ID, SKU ou parte do nome para filtrar.</p>
+                <p className="order-dialog-hint">Digite o nome, SKU ou ID para localizar e selecionar o produto.</p>
               </div>
 
-              <div className="order-field-group">
-                <label className="order-field-label" htmlFor="product-dialog-select">
-                  Produto
+                  <div className="order-field-group">
+                <label className="order-field-label">
+                  Produtos encontrados
                 </label>
-                <div className="order-select-wrap">
-                  <select
-                    id="product-dialog-select"
-                    value={selectedDialogProductId}
-                    onChange={(event) => setSelectedDialogProductId(event.target.value)}
-                    className="order-input order-select"
-                  >
-                    {filteredProducts.length === 0 ? (
-                      <option value="">Nenhum produto encontrado</option>
-                    ) : (
-                      filteredProducts.map((product) => (
-                        <option key={product.id} value={product.id}>
-                          {product.name} {product.sku ? `(${product.sku})` : ''}
-                        </option>
-                      ))
-                    )}
-                  </select>
-                  <ChevronDown className="order-select-icon" />
+                <div className="order-dialog-results">
+                  {!hasProductSearch ? (
+                    <div className="order-dialog-results-empty">Digite para buscar produtos.</div>
+                  ) : filteredProducts.length === 0 ? (
+                    <div className="order-dialog-results-empty">Nenhum produto encontrado para essa busca.</div>
+                  ) : (
+                    filteredProducts.map((product) => {
+                      const isActive = selectedDialogProductId === product.id;
+
+                      return (
+                        <button
+                          key={product.id}
+                          type="button"
+                          className={`order-dialog-result-item ${isActive ? 'is-active' : ''}`}
+                          onClick={() => setSelectedDialogProductId(product.id)}
+                        >
+                          <span className="order-dialog-result-name">
+                            {product.name}
+                            {product.sku ? ` (${product.sku})` : ''}
+                          </span>
+                          <span className="order-dialog-result-meta">
+                            {fmt(resolveProductPrice(product, 1))} {getProductSaleUnitPriceSuffix(product.unit_type)}
+                          </span>
+                        </button>
+                      );
+                    })
+                  )}
                 </div>
               </div>
 
-              {selectedDialogProduct ? (
+              {hasProductSearch && selectedDialogProduct ? (
                 <div className="order-dialog-product-card">
                   <div className="order-product-thumb order-dialog-thumb">
                     {ensurePublicStorageUrl('product-images', selectedDialogProduct.image_url) ? (
@@ -2320,38 +2363,50 @@ export default function OrderForm() {
                   </div>
                 </div>
               ) : (
-                <p className="order-dialog-empty-note">Selecione um produto para ver os detalhes.</p>
+                <p className="order-dialog-empty-note">
+                  {hasProductSearch ? 'Selecione um produto para ver os detalhes.' : 'Os detalhes do produto aparecem depois da busca.'}
+                </p>
               )}
 
-              <div className="order-field-group">
-                <label className="order-field-label" htmlFor="product-dialog-quantity">
-                  Quantidade
-                </label>
-                <input
-                  id="product-dialog-quantity"
-                  type="number"
-                  min={1}
-                  value={productDialogQuantityValue}
-                  onChange={(event) => setProductDialogQuantity(Number(event.target.value) || 1)}
-                  className="order-input"
-                  disabled={Boolean(selectedDialogProduct && isAreaUnit(selectedDialogProduct.unit))}
-                />
-                {selectedDialogProduct && isAreaUnit(selectedDialogProduct.unit) ? (
-                  <p className="order-dialog-hint">
-                    Produtos por área iniciam com 1 e as medidas podem ser ajustadas depois na lista do pedido.
-                  </p>
-                ) : null}
-              </div>
+              {selectedDialogProduct && (
+                <>
+                  <div className="order-field-group">
+                    <label className="order-field-label" htmlFor="product-dialog-quantity">
+                      Quantidade
+                    </label>
+                    <input
+                      id="product-dialog-quantity"
+                      type="number"
+                      min={1}
+                      value={productDialogQuantityValue}
+                      onChange={(event) => setProductDialogQuantity(Number(event.target.value) || 1)}
+                      className="order-input"
+                      disabled={Boolean(selectedDialogProduct && isAreaUnit(selectedDialogProduct.unit))}
+                    />
+                    {selectedDialogProduct && isAreaUnit(selectedDialogProduct.unit) ? (
+                      <p className="order-dialog-hint">
+                        Produtos por área iniciam com 1 e as medidas podem ser ajustadas depois na lista do pedido.
+                      </p>
+                    ) : null}
+                  </div>
 
-              <div className="order-dialog-total">Total: {fmt(productDialogPreviewTotal)}</div>
+                  <div className="order-dialog-total">Total: {fmt(productDialogPreviewTotal)}</div>
+                </>
+              )}
             </div>
 
             <DialogFooter className="order-dialog-footer">
-              <button type="button" className="order-btn order-btn-primary" onClick={handleAddSelectedProduct}>
-                Adicionar
-              </button>
               <button type="button" className="order-btn order-btn-ghost" onClick={() => closeProductDialog(false)}>
                 Fechar
+              </button>
+              <button
+                type="button"
+                className="order-btn order-btn-primary order-dialog-cta"
+                onClick={handleAddSelectedProduct}
+                disabled={!selectedDialogProduct}
+              >
+                <Box className="h-4 w-4" />
+                Adicionar produto
               </button>
             </DialogFooter>
           </div>
@@ -2418,11 +2473,12 @@ export default function OrderForm() {
             </div>
 
             <DialogFooter className="order-dialog-footer">
-              <button type="button" className="order-btn order-btn-primary" onClick={addManualItem}>
-                Adicionar
-              </button>
               <button type="button" className="order-btn order-btn-ghost" onClick={() => setManualItemDialogOpen(false)}>
                 Fechar
+              </button>
+              <button type="button" className="order-btn order-btn-primary order-dialog-cta" onClick={addManualItem}>
+                <Plus className="h-4 w-4" />
+                Adicionar item
               </button>
             </DialogFooter>
           </div>

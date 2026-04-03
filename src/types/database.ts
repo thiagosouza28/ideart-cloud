@@ -29,6 +29,8 @@ export type PaymentMethod =
   | 'transferencia'
   | 'outro';
 export type PaymentStatus = 'pendente' | 'parcial' | 'pago';
+export type OrderDeliveryMethod = 'retirada' | 'entrega' | 'motoboy';
+export type OrderPriority = 'baixa' | 'normal' | 'alta';
 export type OrderPaymentSource = 'manual' | 'customer_credit';
 export type CustomerCreditTransactionType = 'credit_generated' | 'credit_used';
 export type PixGateway = 'MercadoPago' | 'PagSeguro' | 'PixManual';
@@ -583,9 +585,14 @@ export interface Order {
   discount_type: 'fixed' | 'percent';
   discount_value: number;
   discount: number;
+  freight_amount?: number;
   total: number;
+  delivery_method?: OrderDeliveryMethod | null;
+  payment_condition?: string | null;
   payment_method: PaymentMethod | null;
   payment_status: PaymentStatus;
+  priority?: OrderPriority | null;
+  responsible_id?: string | null;
   payment_id?: string | null;
   payment_qr_code?: string | null;
   payment_copy_paste?: string | null;
@@ -614,6 +621,7 @@ export interface Order {
   estimated_delivery_date?: string | null;
   customer?: Customer;
   company?: Company;
+  responsible?: Pick<Profile, 'id' | 'full_name'> | null;
   items?: OrderItem[];
   final_photos?: OrderFinalPhoto[];
   art_files?: OrderArtFile[];
