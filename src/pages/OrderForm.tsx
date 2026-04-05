@@ -1784,6 +1784,16 @@ export default function OrderForm() {
               </div>
             </section>
 
+            <div className="order-status-block order-status-banner">
+              <div className="order-status-icon">
+                <Clock3 className="h-4 w-4" />
+              </div>
+              <div>
+                <p>Status: Pendente</p>
+                <small>O pedido será criado aguardando processamento.</small>
+              </div>
+            </div>
+
             <section className="order-card">
               <div className="order-card-header">
                 <h2 className="order-card-title">
@@ -2106,15 +2116,6 @@ export default function OrderForm() {
                   </div>
                 </div>
 
-                <div className="order-status-block">
-                  <div className="order-status-icon">
-                    <Clock3 className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <p>Status: Pendente</p>
-                    <small>O pedido será criado aguardando processamento.</small>
-                  </div>
-                </div>
               </div>
             </section>
 

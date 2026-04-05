@@ -2124,6 +2124,12 @@
     gap: 10px;
   }
 
+  .order-status-banner {
+    margin-top: 0;
+    width: min(100%, 520px);
+    align-self: flex-start;
+  }
+
   .order-status-icon {
     width: 28px;
     height: 28px;
