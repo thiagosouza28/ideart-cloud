@@ -968,6 +968,16 @@ export default function OrderForm() {
     }
   }, [filteredProducts, productDialogOpen, selectedDialogProductId]);
 
+  useEffect(() => {
+    if (!productDialogOpen || !selectedDialogProduct) return;
+
+    setProductDialogQuantity(
+      isAreaUnit(selectedDialogProduct.unit)
+        ? 1
+        : getInitialTierQuantity(selectedDialogProduct.id, priceTiers),
+    );
+  }, [priceTiers, productDialogOpen, selectedDialogProduct]);
+
   const stepStates = useMemo(() => {
     const detailsDone = Boolean((customerId || customerName.trim()) && items.length > 0);
     const reviewDone = Boolean(items.length > 0 && paymentMethod && paymentCondition);
@@ -2312,6 +2322,9 @@ export default function OrderForm() {
                   ) : (
                     filteredProducts.map((product) => {
                       const isActive = selectedDialogProductId === product.id;
+                      const previewQuantity = isAreaUnit(product.unit)
+                        ? 1
+                        : getInitialTierQuantity(product.id, priceTiers);
 
                       return (
                         <button
@@ -2325,7 +2338,7 @@ export default function OrderForm() {
                             {product.sku ? ` (${product.sku})` : ''}
                           </span>
                           <span className="order-dialog-result-meta">
-                            {fmt(resolveProductPrice(product, 1))} {getProductSaleUnitPriceSuffix(product.unit_type)}
+                            {fmt(resolveProductPrice(product, previewQuantity, priceTiers))} {getProductSaleUnitPriceSuffix(product.unit_type)}
                           </span>
                         </button>
                       );
