@@ -66,7 +66,6 @@ import {
   Plus,
   QrCode,
   RefreshCcw,
-  ReceiptText,
   Search,
   ShoppingCart,
   Truck,
@@ -1552,19 +1551,6 @@ export default function OrderForm() {
     }
   };
 
-  const handleChangeOrderDiscountType = (value: string) => {
-    const nextType = normalizeDiscountType(value);
-    const currentDiscountAmount = calculateOrderDiscountAmount(totals.subtotal, discountType, discount);
-    setDiscountType(nextType);
-    setDiscount(
-      calculateDiscountValueFromAmount({
-        baseAmount: totals.subtotal,
-        discountAmount: currentDiscountAmount,
-        discountType: nextType,
-      }),
-    );
-  };
-
   if (loading) {
     return (
       <div className="order-new-page">
@@ -1586,6 +1572,15 @@ export default function OrderForm() {
           <div>
             <h1 className="order-page-title">Novo Pedido / Orçamento</h1>
             <p className="order-page-subtitle">Monte os itens, configure pagamento e confirme o documento.</p>
+          </div>
+          <div className="order-status-block order-status-banner order-status-header">
+            <div className="order-status-icon">
+              <Clock3 className="h-4 w-4" />
+            </div>
+            <div>
+              <p>Status: Pendente</p>
+              <small>O pedido será criado aguardando processamento.</small>
+            </div>
           </div>
         </div>
 
@@ -1784,16 +1779,6 @@ export default function OrderForm() {
               </div>
             </section>
 
-            <div className="order-status-block order-status-banner">
-              <div className="order-status-icon">
-                <Clock3 className="h-4 w-4" />
-              </div>
-              <div>
-                <p>Status: Pendente</p>
-                <small>O pedido será criado aguardando processamento.</small>
-              </div>
-            </div>
-
             <section className="order-card">
               <div className="order-card-header">
                 <h2 className="order-card-title">
@@ -1926,7 +1911,7 @@ export default function OrderForm() {
                       onChange={(event) => setShowNotesOnPdf(event.target.checked)}
                     />
                     <span className="space-y-1">
-                      <span className="block text-sm font-semibold text-[#122046]">
+                      <span className="block text-sm font-semibold text-[var(--order-heading)]">
                         Mostrar observações no PDF
                       </span>
                       <span className="block text-xs text-[var(--order-muted)]">
@@ -1993,76 +1978,24 @@ export default function OrderForm() {
                 </div>
               </section>
             </div>
-          </div>
 
-          <aside className="order-side-column">
-            <section className="order-card" id="order-summary-card">
-              <div className="order-card-header">
-                <h2 className="order-card-title">
-                  <ReceiptText className="order-card-title-icon" />
-                  Resumo
-                </h2>
-              </div>
-              <div className="order-card-body">
-                <div className="order-summary-row">
-                  <span>Subtotal ({totals.itemCount} itens)</span>
-                  <strong>{fmt(totals.subtotal)}</strong>
-                </div>
-                <div className="order-summary-row order-summary-edit">
-                  <label htmlFor="discount-input">Desconto</label>
-                  <div className="flex w-full gap-2">
-                    <div className="order-select-wrap min-w-[86px]">
-                      <select
-                        value={discountType}
-                        onChange={(event) => handleChangeOrderDiscountType(event.target.value)}
-                        className="order-input order-select"
-                      >
-                        <option value="fixed">R$</option>
-                        <option value="percent">%</option>
-                      </select>
-                      <ChevronDown className="order-select-icon" />
+            <div className="order-sub-grid order-sub-grid-secondary">
+              {customerAvailableCredit > 0 && customerId && (
+                <section className="order-card" id="order-customer-credit-card">
+                  <div className="order-card-header">
+                    <h2 className="order-card-title">
+                      <Wallet className="order-card-title-icon" />
+                      Crédito do cliente
+                    </h2>
+                  </div>
+                  <div className="order-card-body">
+                    <div className="order-summary-row">
+                      <span>Saldo disponível</span>
+                      <strong className="text-emerald-600">{fmt(customerAvailableCredit)}</strong>
                     </div>
-                    {discountType === 'percent' ? (
-                      <input
-                        id="discount-input"
-                        type="number"
-                        min={0}
-                        max={100}
-                        step="0.01"
-                        value={discount}
-                        onChange={(event) => setDiscount(normalizeDiscountValue(Number(event.target.value)))}
-                        className="order-input w-full text-right"
-                      />
-                    ) : (
-                      <CurrencyInput
-                        id="discount-input"
-                        value={discount}
-                        onChange={(value) => setDiscount(normalizeDiscountValue(value))}
-                        className="order-input order-currency-input"
-                      />
-                    )}
-                  </div>
-                </div>
-                {orderDiscountAmount > 0 && (
-                  <div className="order-summary-row">
-                    <span>Desconto aplicado</span>
-                    <strong className="text-destructive">-{fmt(orderDiscountAmount)}</strong>
-                  </div>
-                )}
-                <div className="order-summary-row order-summary-edit">
-                  <label htmlFor="freight-input">Frete</label>
-                  <CurrencyInput
-                    id="freight-input"
-                    value={freight}
-                    onChange={setFreight}
-                    className="order-input order-currency-input"
-                  />
-                </div>
 
-                {customerAvailableCredit > 0 && customerId && (
-                  <>
                     <div className="order-summary-row mt-2 pt-2 border-t border-[var(--order-border)]">
-                      <label className="flex items-center gap-2 cursor-pointer text-sm font-medium text-[#122046]">
+                      <label className="flex items-center gap-2 cursor-pointer text-sm font-medium text-[var(--order-heading)]">
                         <input
                           type="checkbox"
                           className="h-4 w-4 rounded border-gray-300 text-[var(--order-primary)] focus:ring-[var(--order-primary)]"
@@ -2078,160 +2011,98 @@ export default function OrderForm() {
                         />
                         Usar saldo de crédito
                       </label>
-                      <span className="text-sm font-semibold text-emerald-600">
-                        Disp: {fmt(customerAvailableCredit)}
-                      </span>
                     </div>
 
                     {useCustomerCredit && (
-                      <div className="order-summary-row order-summary-edit mt-2 bg-emerald-50/50 p-2 rounded-lg border border-emerald-100">
-                        <label htmlFor="credit-use-input" className="text-emerald-700">Valor do crédito</label>
-                        <CurrencyInput
-                          id="credit-use-input"
-                          value={customerCreditToUse}
-                          onChange={(val) => {
-                            const maxAllowed = Math.min(customerAvailableCredit, totals.total);
-                            setCustomerCreditToUse(Math.min(val, maxAllowed));
-                          }}
-                          className="order-input order-currency-input !border-emerald-200 focus:!border-emerald-400"
-                        />
-                      </div>
-                    )}
-                  </>
-                )}
-
-                <div className="order-total-row">
-                  <span>Total</span>
-                  <div className="flex flex-col items-end">
-                    {useCustomerCredit && customerCreditToUse > 0 ? (
                       <>
-                        <span className="text-sm text-muted-foreground line-through decoration-muted-foreground/50">
-                          {fmt(totals.total)}
-                        </span>
-                        <strong className="text-emerald-600">{fmt(finalTotalToPay)}</strong>
+                        <div className="order-summary-row order-summary-edit mt-2 bg-emerald-50/50 p-2 rounded-lg border border-emerald-100">
+                          <label htmlFor="credit-use-input" className="text-emerald-700">Valor do crédito</label>
+                          <CurrencyInput
+                            id="credit-use-input"
+                            value={customerCreditToUse}
+                            onChange={(val) => {
+                              const maxAllowed = Math.min(customerAvailableCredit, totals.total);
+                              setCustomerCreditToUse(Math.min(val, maxAllowed));
+                            }}
+                            className="order-input order-currency-input !border-emerald-200 focus:!border-emerald-400"
+                          />
+                        </div>
+
+                        <div className="order-summary-row">
+                          <span>Total a pagar</span>
+                          <strong className="text-emerald-600">{fmt(finalTotalToPay)}</strong>
+                        </div>
                       </>
-                    ) : (
-                      <strong>{fmt(totals.total)}</strong>
                     )}
                   </div>
+                </section>
+              )}
+
+              <section className="order-card">
+                <div className="order-card-header">
+                  <h2 className="order-card-title">
+                    <AlertCircle className="order-card-title-icon" />
+                    Prioridade
+                  </h2>
                 </div>
+                <div className="order-card-body">
+                  <div className="order-priority-grid">
+                    <button
+                      type="button"
+                      className={`order-priority-btn priority-low ${priority === 'baixa' ? 'is-active' : ''}`}
+                      onClick={() => setPriority('baixa')}
+                    >
+                      Baixa
+                    </button>
+                    <button
+                      type="button"
+                      className={`order-priority-btn priority-normal ${priority === 'normal' ? 'is-active' : ''}`}
+                      onClick={() => setPriority('normal')}
+                    >
+                      Normal
+                    </button>
+                    <button
+                      type="button"
+                      className={`order-priority-btn priority-high ${priority === 'alta' ? 'is-active' : ''}`}
+                      onClick={() => setPriority('alta')}
+                    >
+                      Alta
+                    </button>
+                  </div>
+                </div>
+              </section>
 
-              </div>
-            </section>
-
-            <section className="order-card" id="order-payment-card">
-              <div className="order-card-header">
-                <h2 className="order-card-title">
-                  <Wallet className="order-card-title-icon" />
-                  Pagamento
-                </h2>
-              </div>
-              <div className="order-card-body">
-                <div className="order-field-group">
-                  <label className="order-field-label" htmlFor="payment-condition">
-                    Condição
-                  </label>
+              <section className="order-card">
+                <div className="order-card-header">
+                  <h2 className="order-card-title">
+                    <BriefcaseBusiness className="order-card-title-icon" />
+                    Responsável
+                  </h2>
+                </div>
+                <div className="order-card-body">
                   <div className="order-select-wrap">
                     <select
-                      id="payment-condition"
-                      value={paymentCondition}
-                      onChange={(event) => setPaymentCondition(event.target.value)}
+                      id="responsible"
+                      value={responsibleId}
+                      onChange={(event) => setResponsibleId(event.target.value)}
                       className="order-input order-select"
                     >
-                      {paymentConditions.map((condition) => (
-                        <option key={condition.value} value={condition.value}>
-                          {condition.label}
-                        </option>
-                      ))}
+                      {salespeople.length === 0 ? (
+                        <option value="">Sem usuários</option>
+                      ) : (
+                        salespeople.map((person) => (
+                          <option key={person.id} value={person.id}>
+                            {person.full_name || 'Usuário'}
+                          </option>
+                        ))
+                      )}
                     </select>
                     <ChevronDown className="order-select-icon" />
                   </div>
                 </div>
-
-                <div className="order-payment-grid">
-                  {companyPaymentMethods.map((option) => {
-                    const Icon = paymentMethodIcons[option.type] || Wallet;
-                    const active = paymentMethod === option.type;
-                    return (
-                      <button
-                        key={option.type}
-                        type="button"
-                        className={`order-payment-btn ${active ? 'is-active' : ''}`}
-                        onClick={() => selectPayment(option.type)}
-                      >
-                        <Icon className="h-4 w-4" />
-                        <span>{getPaymentMethodDisplayName(option.type, companyPaymentMethods)}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </section>
-
-            <section className="order-card">
-              <div className="order-card-header">
-                <h2 className="order-card-title">
-                  <AlertCircle className="order-card-title-icon" />
-                  Prioridade
-                </h2>
-              </div>
-              <div className="order-card-body">
-                <div className="order-priority-grid">
-                  <button
-                    type="button"
-                    className={`order-priority-btn priority-low ${priority === 'baixa' ? 'is-active' : ''}`}
-                    onClick={() => setPriority('baixa')}
-                  >
-                    Baixa
-                  </button>
-                  <button
-                    type="button"
-                    className={`order-priority-btn priority-normal ${priority === 'normal' ? 'is-active' : ''}`}
-                    onClick={() => setPriority('normal')}
-                  >
-                    Normal
-                  </button>
-                  <button
-                    type="button"
-                    className={`order-priority-btn priority-high ${priority === 'alta' ? 'is-active' : ''}`}
-                    onClick={() => setPriority('alta')}
-                  >
-                    Alta
-                  </button>
-                </div>
-              </div>
-            </section>
-
-            <section className="order-card">
-              <div className="order-card-header">
-                <h2 className="order-card-title">
-                  <BriefcaseBusiness className="order-card-title-icon" />
-                  Responsável
-                </h2>
-              </div>
-              <div className="order-card-body">
-                <div className="order-select-wrap">
-                  <select
-                    id="responsible"
-                    value={responsibleId}
-                    onChange={(event) => setResponsibleId(event.target.value)}
-                    className="order-input order-select"
-                  >
-                    {salespeople.length === 0 ? (
-                      <option value="">Sem usuários</option>
-                    ) : (
-                      salespeople.map((person) => (
-                        <option key={person.id} value={person.id}>
-                          {person.full_name || 'Usuário'}
-                        </option>
-                      ))
-                    )}
-                  </select>
-                  <ChevronDown className="order-select-icon" />
-                </div>
-              </div>
-            </section>
-          </aside>
+              </section>
+            </div>
+          </div>
         </div>
       </div>
 

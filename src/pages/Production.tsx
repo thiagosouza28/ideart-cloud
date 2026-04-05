@@ -252,14 +252,14 @@ export default function Production() {
               <h2 className="text-lg font-semibold">Pendentes</h2>
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                 {pendingOrders.map((order) => (
-                  <Card key={order.id} className="border-slate-200 shadow-sm">
+                  <Card key={order.id} className="border-slate-200 shadow-sm h-full flex flex-col">
                     <CardHeader className="pb-3">
                       <div className="flex items-center justify-between">
                         <CardTitle className="text-lg">Pedido #{formatOrderNumber(order.order_number)}</CardTitle>
                         <span className="status-badge status-pendente">Pendente</span>
                       </div>
                     </CardHeader>
-                    <CardContent className="space-y-3">
+                    <CardContent className="flex flex-1 flex-col gap-3">
                       <div className="text-sm">
                         <span className="text-muted-foreground">Cliente:</span>{' '}
                         {order.customer_id ? (
@@ -283,7 +283,7 @@ export default function Production() {
                           <span className="text-muted-foreground">Obs:</span> {getDisplayNotes(order)}
                         </div>
                       )}
-                      <div className="grid gap-2">
+                      <div className="mt-auto grid gap-2">
                         <Button variant="outline" className="w-full" onClick={() => openOrderDetails(order)}>
                           <Eye className="mr-2 h-4 w-4" />
                           Ver Pedido
@@ -300,14 +300,14 @@ export default function Production() {
               <h2 className="text-lg font-semibold">Produzindo Arte</h2>
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                 {artOrders.map((order) => (
-                  <Card key={order.id} className="border-slate-200 shadow-sm">
+                  <Card key={order.id} className="border-slate-200 shadow-sm h-full flex flex-col">
                     <CardHeader className="pb-3">
                       <div className="flex items-center justify-between">
                         <CardTitle className="text-lg">Pedido #{formatOrderNumber(order.order_number)}</CardTitle>
                         <span className="status-badge status-produzindo_arte">Produzindo arte</span>
                       </div>
                     </CardHeader>
-                    <CardContent className="space-y-3">
+                    <CardContent className="flex flex-1 flex-col gap-3">
                       <div className="text-sm">
                         <span className="text-muted-foreground">Cliente:</span>{' '}
                         {order.customer_id ? (
@@ -331,7 +331,7 @@ export default function Production() {
                           <span className="text-muted-foreground">Obs:</span> {getDisplayNotes(order)}
                         </div>
                       )}
-                      <div className="grid gap-2">
+                      <div className="mt-auto grid gap-2">
                         <Button variant="outline" className="w-full" onClick={() => openOrderDetails(order)}>
                           <Eye className="mr-2 h-4 w-4" />
                           Ver Pedido
@@ -352,14 +352,14 @@ export default function Production() {
               <h2 className="text-lg font-semibold">Arte Aprovada</h2>
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                 {artApprovedOrders.map((order) => (
-                  <Card key={order.id} className="border-slate-200 shadow-sm">
+                  <Card key={order.id} className="border-slate-200 shadow-sm h-full flex flex-col">
                     <CardHeader className="pb-3">
                       <div className="flex items-center justify-between">
                         <CardTitle className="text-lg">Pedido #{formatOrderNumber(order.order_number)}</CardTitle>
                         <span className="status-badge status-arte_aprovada">Arte aprovada</span>
                       </div>
                     </CardHeader>
-                    <CardContent className="space-y-3">
+                    <CardContent className="flex flex-1 flex-col gap-3">
                       <div className="text-sm">
                         <span className="text-muted-foreground">Cliente:</span>{' '}
                         {order.customer_id ? (
@@ -383,7 +383,7 @@ export default function Production() {
                           <span className="text-muted-foreground">Obs:</span> {getDisplayNotes(order)}
                         </div>
                       )}
-                      <div className="grid gap-2">
+                      <div className="mt-auto grid gap-2">
                         <Button variant="outline" className="w-full" onClick={() => openOrderDetails(order)}>
                           <Eye className="mr-2 h-4 w-4" />
                           Ver Pedido
@@ -404,14 +404,14 @@ export default function Production() {
               <h2 className="text-lg font-semibold">Em Produção</h2>
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                 {inProductionOrders.map((order) => (
-                  <Card key={order.id} className="border-slate-200 shadow-sm">
+                  <Card key={order.id} className="border-slate-200 shadow-sm h-full flex flex-col">
                     <CardHeader className="pb-3">
                       <div className="flex items-center justify-between">
                         <CardTitle className="text-lg">Pedido #{formatOrderNumber(order.order_number)}</CardTitle>
                         <span className="status-badge status-em_producao">Em Produção</span>
                       </div>
                     </CardHeader>
-                    <CardContent className="space-y-3">
+                    <CardContent className="flex flex-1 flex-col gap-3">
                       <div className="text-sm">
                         <span className="text-muted-foreground">Cliente:</span>{' '}
                         {order.customer_id ? (
@@ -435,7 +435,7 @@ export default function Production() {
                           <span className="text-muted-foreground">Obs:</span> {getDisplayNotes(order)}
                         </div>
                       )}
-                      <div className="grid gap-2">
+                      <div className="mt-auto grid gap-2">
                         <Button variant="outline" className="w-full" onClick={() => openOrderDetails(order)}>
                           <Eye className="mr-2 h-4 w-4" />
                           Ver Pedido

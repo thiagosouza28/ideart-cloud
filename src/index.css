@@ -925,6 +925,18 @@
     --order-surface: #f8fafc;
     --order-text: #334155;
     --order-heading: #0f172a;
+    --order-card-border-strong: rgba(226, 232, 240, 0.95);
+    --order-card-divider: rgba(226, 232, 240, 0.85);
+    --order-card-header-bg: rgba(248, 250, 252, 0.85);
+    --order-quick-card-bg:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(248, 250, 252, 0.98) 100%);
+    --order-quick-card-shadow: 0 16px 32px -28px rgba(15, 23, 42, 0.35);
+    --order-quick-card-shadow-hover: 0 24px 38px -30px rgba(15, 23, 42, 0.35);
+    --order-quick-card-neutral-border: rgba(15, 23, 42, 0.12);
+    --order-hero-bg:
+      radial-gradient(circle at top right, rgba(37, 99, 235, 0.16), transparent 34%),
+      linear-gradient(135deg, #f8fbff 0%, #ffffff 58%, #f8fafc 100%);
+    --order-pill-bg: rgba(15, 23, 42, 0.08);
     --order-shadow-soft: 0 12px 26px rgba(15, 23, 42, 0.08);
     --order-shadow-strong: 0 -10px 26px rgba(15, 23, 42, 0.08);
     position: relative;
@@ -951,6 +963,18 @@
     --order-surface: #111c32;
     --order-text: #dbe7fb;
     --order-heading: #f8fbff;
+    --order-card-border-strong: rgba(148, 163, 184, 0.2);
+    --order-card-divider: rgba(148, 163, 184, 0.14);
+    --order-card-header-bg: rgba(15, 23, 42, 0.88);
+    --order-quick-card-bg:
+      linear-gradient(180deg, rgba(15, 23, 42, 0.92) 0%, rgba(17, 28, 50, 0.98) 100%);
+    --order-quick-card-shadow: 0 18px 34px -30px rgba(2, 6, 23, 0.55);
+    --order-quick-card-shadow-hover: 0 26px 42px -34px rgba(2, 6, 23, 0.65);
+    --order-quick-card-neutral-border: rgba(148, 163, 184, 0.18);
+    --order-hero-bg:
+      radial-gradient(circle at top right, rgba(59, 130, 246, 0.2), transparent 34%),
+      linear-gradient(135deg, #0f1a30 0%, #0f172a 58%, #0a1223 100%);
+    --order-pill-bg: rgba(148, 163, 184, 0.14);
     --order-shadow-soft: 0 12px 26px rgba(2, 6, 23, 0.28);
     --order-shadow-strong: 0 -12px 24px rgba(2, 6, 23, 0.42);
     background:
@@ -1023,6 +1047,12 @@
     color: var(--order-muted);
   }
 
+  .order-status-header {
+    margin-top: 0;
+    margin-left: auto;
+    flex: 0 1 420px;
+  }
+
   .order-steps {
     margin-top: 22px;
     display: flex;
@@ -1090,7 +1120,7 @@
   .order-layout {
     margin-top: 24px;
     display: grid;
-    grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr);
+    grid-template-columns: minmax(0, 1fr);
     gap: 24px;
   }
 
@@ -1103,20 +1133,20 @@
 
   .order-card {
     background: var(--order-white);
-    border: 1px solid rgba(226, 232, 240, 0.95);
+    border: 1px solid var(--order-card-border-strong);
     border-radius: 24px;
     overflow: visible;
-    box-shadow: 0 18px 48px -36px rgba(15, 23, 42, 0.35);
+    box-shadow: var(--order-shadow-soft);
   }
 
   .order-card-header {
     padding: 18px 24px;
-    border-bottom: 1px solid rgba(226, 232, 240, 0.85);
+    border-bottom: 1px solid var(--order-card-divider);
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 8px;
-    background: rgba(248, 250, 252, 0.85);
+    background: var(--order-card-header-bg);
     border-radius: 24px 24px 0 0;
   }
 
@@ -1161,9 +1191,7 @@
     justify-content: space-between;
     gap: 18px;
     padding: 22px 24px;
-    background:
-      radial-gradient(circle at top right, rgba(37, 99, 235, 0.16), transparent 34%),
-      linear-gradient(135deg, #f8fbff 0%, #ffffff 58%, #f8fafc 100%);
+    background: var(--order-hero-bg);
   }
 
   .order-creation-hero-eyebrow {
@@ -1197,7 +1225,7 @@
     min-height: 28px;
     padding: 0 0.8rem;
     border-radius: 999px;
-    background: rgba(15, 23, 42, 0.08);
+    background: var(--order-pill-bg);
     color: var(--order-heading);
     font-size: 0.76rem;
     font-weight: 700;
@@ -1301,21 +1329,20 @@
   .order-quick-preview-card {
     border: 1px solid var(--order-border);
     border-radius: 18px;
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(248, 250, 252, 0.98) 100%);
+    background: var(--order-quick-card-bg);
     padding: 14px 15px;
     text-align: left;
     display: flex;
     flex-direction: column;
     gap: 6px;
     min-height: 118px;
-    box-shadow: 0 16px 32px -28px rgba(15, 23, 42, 0.35);
+    box-shadow: var(--order-quick-card-shadow);
     transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
   }
 
   .order-quick-preview-card:hover {
     transform: translateY(-2px);
-    box-shadow: 0 24px 38px -30px rgba(15, 23, 42, 0.35);
+    box-shadow: var(--order-quick-card-shadow-hover);
   }
 
   .order-quick-preview-card.is-discount {
@@ -1331,7 +1358,7 @@
   }
 
   .order-quick-preview-card.is-notes {
-    border-color: rgba(15, 23, 42, 0.12);
+    border-color: var(--order-quick-card-neutral-border);
   }
 
   .order-quick-preview-label {
@@ -2046,6 +2073,10 @@
     gap: 16px;
   }
 
+  .order-sub-grid-secondary {
+    margin-top: 8px;
+  }
+
   .order-select-wrap {
     position: relative;
   }
@@ -2433,6 +2464,12 @@
 
     .order-card-body {
       padding: 16px;
+    }
+
+    .order-status-header {
+      margin-left: 0;
+      width: 100%;
+      flex-basis: 100%;
     }
 
     .order-layout {
