@@ -132,7 +132,7 @@ const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
     return (
       <div
         ref={ref}
-        className="receipt-root mx-auto w-full max-w-[794px] rounded-2xl border border-slate-200 bg-white p-5 text-slate-900 shadow-none"
+        className="receipt-root receipt-fixed-width mx-auto shrink-0 rounded-2xl border border-slate-200 bg-white p-5 text-slate-900 shadow-none"
       >
         <div className="receipt-block border-b border-slate-200 pb-4">
           <div className="flex items-start justify-between gap-6">
@@ -176,7 +176,7 @@ const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
           </div>
         </div>
 
-        <div className="receipt-block mt-4 grid gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] sm:grid-cols-4">
+        <div className="receipt-block mt-4 grid grid-cols-4 gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[11px]">
           <div>
             <p className="uppercase tracking-wide text-slate-500">Cliente</p>
             <p className="font-semibold text-slate-900">{customerLabel}</p>
@@ -199,7 +199,7 @@ const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
 
         {(order.customer || order.customer_name) && (
           <div className="receipt-block mt-4 rounded-xl border border-slate-200 px-3 py-2 text-[11px]">
-            <div className="grid gap-2 sm:grid-cols-3">
+            <div className="grid grid-cols-3 gap-2">
               <div>
                 <p className="uppercase tracking-wide text-slate-500">Cliente</p>
                 <p className="font-semibold text-slate-900">{order.customer?.name || order.customer_name}</p>
@@ -218,7 +218,7 @@ const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
 
         {(productionTimeDays !== null || estimatedDeliveryDateLabel) && (
           <div className="receipt-block mt-4 rounded-xl border border-slate-200 px-3 py-2 text-[11px]">
-            <div className="grid gap-2 sm:grid-cols-2">
+            <div className="grid grid-cols-2 gap-2">
               <div>
                 <p className="uppercase tracking-wide text-slate-500">Tempo de produção</p>
                 <p className="font-medium text-slate-700">
@@ -237,7 +237,7 @@ const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
 
         {(freightAmount > 0 || order.delivery_method || order.payment_condition) && (
           <div className="receipt-block mt-4 rounded-xl border border-slate-200 px-3 py-2 text-[11px]">
-            <div className="grid gap-2 sm:grid-cols-3">
+            <div className="grid grid-cols-3 gap-2">
               <div>
                 <p className="uppercase tracking-wide text-slate-500">Método de entrega</p>
                 <p className="font-medium text-slate-700">{deliveryMethodLabel}</p>
@@ -331,7 +331,7 @@ const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
           </table>
         </div>
 
-        <div className="receipt-block mt-4 grid gap-3 sm:grid-cols-2">
+        <div className="receipt-block mt-4 grid grid-cols-2 gap-3">
           <div className="rounded-xl border border-slate-200 p-3 text-[11px]">
             <div className="space-y-1">
               <div className="flex justify-between">
@@ -394,7 +394,7 @@ const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
           </div>
         )}
 
-        <div className="receipt-block mt-6 grid gap-4 sm:grid-cols-2">
+        <div className="receipt-block mt-6 grid grid-cols-2 gap-4">
           <div className="flex min-h-[138px] flex-col items-center rounded-xl border border-slate-200 px-4 py-3 text-center text-[11px]">
             <p className="w-full text-[10px] uppercase tracking-wide text-slate-500">Assinatura da loja</p>
             <div className="mt-3 flex min-h-[64px] w-full items-end justify-center">

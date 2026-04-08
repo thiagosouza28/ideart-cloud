@@ -6,19 +6,21 @@ import { formatAreaM2, isAreaUnit, M2_ATTRIBUTE_KEYS } from '@/lib/measurements'
 import { getProductSaleUnitLabel } from '@/lib/productSaleUnit';
 
 interface EditableOrderItemProps {
+  itemIndex: number;
   item: OrderItemForm;
   saving: boolean;
   productAttributeGroups: ProductAttributeGroup[];
   tierRangeLabel: string | null;
-  onQuantityChange: (productId: string, value: number) => void;
-  onM2SubQuantityChange: (productId: string, key: string, value: string) => void;
-  onAttributeChange: (productId: string, attributeName: string, value: string) => void;
-  onRemove: (productId: string) => void;
+  onQuantityChange: (itemIndex: number, value: number) => void;
+  onM2SubQuantityChange: (itemIndex: number, key: string, value: string) => void;
+  onAttributeChange: (itemIndex: number, attributeName: string, value: string) => void;
+  onRemove: (itemIndex: number) => void;
   calculateItemTotal: (item: OrderItemForm) => number;
   formatCurrency: (value: number) => string;
 }
 
 export const EditableOrderItem: React.FC<EditableOrderItemProps> = ({
+  itemIndex,
   item,
   saving,
   productAttributeGroups,
@@ -73,9 +75,7 @@ export const EditableOrderItem: React.FC<EditableOrderItemProps> = ({
               inputMode="decimal"
               placeholder="Larg. (cm)"
               value={item.attributes[M2_ATTRIBUTE_KEYS.widthCm] ?? ''}
-              onChange={(event) =>
-                onM2SubQuantityChange(item.product.id, M2_ATTRIBUTE_KEYS.widthCm, event.target.value)
-              }
+              onChange={(event) => onM2SubQuantityChange(itemIndex, M2_ATTRIBUTE_KEYS.widthCm, event.target.value)}
               disabled={saving}
             />
             <span>x</span>
@@ -84,9 +84,7 @@ export const EditableOrderItem: React.FC<EditableOrderItemProps> = ({
               inputMode="decimal"
               placeholder="Alt. (cm)"
               value={item.attributes[M2_ATTRIBUTE_KEYS.heightCm] ?? ''}
-              onChange={(event) =>
-                onM2SubQuantityChange(item.product.id, M2_ATTRIBUTE_KEYS.heightCm, event.target.value)
-              }
+              onChange={(event) => onM2SubQuantityChange(itemIndex, M2_ATTRIBUTE_KEYS.heightCm, event.target.value)}
               disabled={saving}
             />
             <div className="m2-result">{formatAreaM2(item.quantity || 0)} m2</div>
@@ -95,7 +93,7 @@ export const EditableOrderItem: React.FC<EditableOrderItemProps> = ({
           <div className="order-qty-control">
             <button
               type="button"
-              onClick={() => onQuantityChange(item.product.id, -1)}
+              onClick={() => onQuantityChange(itemIndex, Math.max(1, Number(item.quantity || 1) - 1))}
               disabled={saving || item.quantity <= 1}
             >
               <Minus className="h-3.5 w-3.5" />
@@ -104,9 +102,13 @@ export const EditableOrderItem: React.FC<EditableOrderItemProps> = ({
               type="number"
               min={1}
               value={item.quantity}
-              onChange={(event) => onQuantityChange(item.product.id, parseInt(event.target.value, 10) || 1)}
+              onChange={(event) => onQuantityChange(itemIndex, parseInt(event.target.value, 10) || 1)}
             />
-            <button type="button" onClick={() => onQuantityChange(item.product.id, 1)} disabled={saving}>
+            <button
+              type="button"
+              onClick={() => onQuantityChange(itemIndex, Number(item.quantity || 1) + 1)}
+              disabled={saving}
+            >
               <Plus className="h-3.5 w-3.5" />
             </button>
           </div>
@@ -121,7 +123,7 @@ export const EditableOrderItem: React.FC<EditableOrderItemProps> = ({
       <button
         type="button"
         className="order-delete-btn"
-        onClick={() => onRemove(item.product.id)}
+        onClick={() => onRemove(itemIndex)}
         disabled={saving}
         aria-label={`Remover ${item.product.name}`}
       >
@@ -136,7 +138,7 @@ export const EditableOrderItem: React.FC<EditableOrderItemProps> = ({
               <div className="order-select-wrap">
                 <select
                   value={item.attributes?.[group.attributeName] || group.options[0]?.value || ''}
-                  onChange={(event) => onAttributeChange(item.product.id, group.attributeName, event.target.value)}
+                  onChange={(event) => onAttributeChange(itemIndex, group.attributeName, event.target.value)}
                   className="order-input order-select"
                 >
                   {group.options.map((option) => (

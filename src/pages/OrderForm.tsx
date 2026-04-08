@@ -276,6 +276,7 @@ export default function OrderForm() {
   const [productDialogOpen, setProductDialogOpen] = useState(false);
   const [selectedDialogProductId, setSelectedDialogProductId] = useState('');
   const [productDialogQuantity, setProductDialogQuantity] = useState(1);
+  const [productDialogAttributes, setProductDialogAttributes] = useState<Record<string, string>>({});
   const [manualItemDialogOpen, setManualItemDialogOpen] = useState(false);
   const [manualItemDescription, setManualItemDescription] = useState('');
   const [manualItemQuantity, setManualItemQuantity] = useState(1);
@@ -297,6 +298,11 @@ export default function OrderForm() {
 
   const fmt = (n: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(n || 0));
+  const formatPriceAdjustment = (value: number) => {
+    if (value > 0) return `+${fmt(value)}`;
+    if (value < 0) return `-${fmt(Math.abs(value))}`;
+    return 'Sem ajuste';
+  };
 
   const isManualOrderItem = (item: OrderItemForm) => Boolean(item.isManual || item.product.id.startsWith('manual:'));
 
@@ -324,6 +330,39 @@ export default function OrderForm() {
     });
 
     return nextAttributes;
+  };
+
+  const getComparableAttributeSelection = (
+    productId: string,
+    attributes: Record<string, string> = {},
+  ): Record<string, string> => {
+    const normalizedAttributes = ensureSelectedAttributes(productId, attributes);
+
+    return getProductAttributeGroups(productId).reduce((selection, group) => {
+      const selectedValue = String(normalizedAttributes[group.attributeName] || '').trim();
+
+      if (selectedValue) {
+        selection[group.attributeName] = selectedValue;
+      }
+
+      return selection;
+    }, {} as Record<string, string>);
+  };
+
+  const areSelectedAttributesEqual = (
+    productId: string,
+    left: Record<string, string> = {},
+    right: Record<string, string> = {},
+  ) => {
+    const groups = getProductAttributeGroups(productId);
+    if (groups.length === 0) return true;
+
+    const normalizedLeft = getComparableAttributeSelection(productId, left);
+    const normalizedRight = getComparableAttributeSelection(productId, right);
+
+    return groups.every(
+      (group) => normalizedLeft[group.attributeName] === normalizedRight[group.attributeName],
+    );
   };
 
   const getAttributePriceModifier = (
@@ -918,14 +957,36 @@ export default function OrderForm() {
   const productDialogQuantityValue = selectedDialogProduct && isAreaUnit(selectedDialogProduct.unit)
     ? 1
     : Math.max(1, Number(productDialogQuantity) || 1);
+  const selectedDialogAttributes = selectedDialogProduct
+    ? getComparableAttributeSelection(selectedDialogProduct.id, productDialogAttributes)
+    : {};
+  const productDialogAttributeGroups = selectedDialogProduct
+    ? getProductAttributeGroups(selectedDialogProduct.id)
+    : [];
+  const productDialogBasePrice = selectedDialogProduct
+    ? getProductPrice(selectedDialogProduct, productDialogQuantityValue)
+    : 0;
+  const productDialogAttributeModifier = selectedDialogProduct
+    ? getAttributePriceModifier(selectedDialogProduct.id, selectedDialogAttributes)
+    : 0;
   const productDialogPreviewPrice = selectedDialogProduct
     ? calculateUnitPriceWithAttributes(
       selectedDialogProduct,
       productDialogQuantityValue,
-      ensureSelectedAttributes(selectedDialogProduct.id),
+      selectedDialogAttributes,
     )
     : 0;
   const productDialogPreviewTotal = productDialogPreviewPrice * productDialogQuantityValue;
+  const productDialogEquivalentText = selectedDialogProduct
+    ? getProductSaleEquivalentText(
+      selectedDialogProduct.unit_type,
+      productDialogQuantityValue,
+      selectedDialogProduct.name,
+    )
+    : null;
+  const selectedDialogProductKindLabel = selectedDialogProduct?.product_type === 'servico'
+    ? 'Serviço'
+    : 'Produto';
   const customerDisplayName = customerName.trim() || customerSearchTerm.trim() || 'Cliente não informado';
   const documentTypeLabel =
     documentTypeOptions.find((option) => option.id === documentType)?.label || 'Pedido';
@@ -976,6 +1037,15 @@ export default function OrderForm() {
         : getInitialTierQuantity(selectedDialogProduct.id, priceTiers),
     );
   }, [priceTiers, productDialogOpen, selectedDialogProduct]);
+
+  useEffect(() => {
+    if (!productDialogOpen || !selectedDialogProduct) {
+      setProductDialogAttributes({});
+      return;
+    }
+
+    setProductDialogAttributes(getComparableAttributeSelection(selectedDialogProduct.id));
+  }, [productAttributeMap, productDialogOpen, selectedDialogProduct]);
 
   const stepStates = useMemo(() => {
     const detailsDone = Boolean((customerId || customerName.trim()) && items.length > 0);
@@ -1047,13 +1117,17 @@ export default function OrderForm() {
     setPriorityLevel(value);
   };
 
-  const addItem = (productId: string, quantityOverride?: number) => {
+  const addItem = (
+    productId: string,
+    quantityOverride?: number,
+    attributesOverride: Record<string, string> = {},
+  ) => {
     const product = products.find((entry) => entry.id === productId);
     if (!product) return;
     const initialQuantity = isAreaUnit(product.unit)
       ? 1
       : getInitialTierQuantity(product.id, priceTiers);
-    const nextAttributes = ensureSelectedAttributes(product.id);
+    const nextAttributes = ensureSelectedAttributes(product.id, attributesOverride);
     const requestedQuantity =
       Number.isFinite(quantityOverride) && Number(quantityOverride) > 0
         ? Math.max(1, Number(quantityOverride))
@@ -1061,7 +1135,11 @@ export default function OrderForm() {
     const quantityToAdd = isAreaUnit(product.unit) ? 1 : requestedQuantity;
 
     setItems((prev) => {
-      const existingIndex = prev.findIndex((item) => item.product.id === product.id);
+      const existingIndex = prev.findIndex(
+        (item) =>
+          item.product.id === product.id &&
+          areSelectedAttributesEqual(product.id, item.attributes, nextAttributes),
+      );
       if (existingIndex >= 0) {
         const next = [...prev];
         const nextQty = Math.max(1, Number(next[existingIndex].quantity || 1) + quantityToAdd);
@@ -1130,6 +1208,7 @@ export default function OrderForm() {
   const openProductDialog = () => {
     setProductSearchTerm('');
     setProductDialogQuantity(1);
+    setProductDialogAttributes({});
     setSelectedDialogProductId('');
     setProductDialogOpen(true);
   };
@@ -1139,6 +1218,7 @@ export default function OrderForm() {
     if (!open) {
       setProductSearchTerm('');
       setProductDialogQuantity(1);
+      setProductDialogAttributes({});
       setSelectedDialogProductId('');
     }
   };
@@ -1198,16 +1278,16 @@ export default function OrderForm() {
 
   const handleAddSelectedProduct = () => {
     if (!selectedDialogProduct) {
-      toast({ title: 'Selecione um produto', variant: 'destructive' });
+      toast({ title: 'Selecione um item', variant: 'destructive' });
       return;
     }
 
-    addItem(selectedDialogProduct.id, productDialogQuantityValue);
+    addItem(selectedDialogProduct.id, productDialogQuantityValue, selectedDialogAttributes);
     closeProductDialog(false);
   };
 
-  const removeItem = (productId: string) => {
-    setItems((prev) => prev.filter((item) => item.product.id !== productId));
+  const removeItem = (itemIndex: number) => {
+    setItems((prev) => prev.filter((_, index) => index !== itemIndex));
   };
 
   const changeQty = (productId: string, delta: number) => {
@@ -1235,11 +1315,11 @@ export default function OrderForm() {
     );
   };
 
-  const setQty = (productId: string, value: number) => {
+  const setQty = (itemIndex: number, value: number) => {
     const nextValue = Number.isFinite(value) ? Math.max(1, value) : 1;
     setItems((prev) =>
-      prev.map((item) => {
-        if (item.product.id !== productId) return item;
+      prev.map((item, index) => {
+        if (index !== itemIndex) return item;
         if (isManualOrderItem(item)) {
           return {
             ...item,
@@ -1260,10 +1340,10 @@ export default function OrderForm() {
     );
   };
 
-  const changeM2SubQuantity = (productId: string, key: string, value: string) => {
+  const changeM2SubQuantity = (itemIndex: number, key: string, value: string) => {
     setItems((prev) =>
-      prev.map((item) => {
-        if (item.product.id !== productId) return item;
+      prev.map((item, index) => {
+        if (index !== itemIndex) return item;
         if (!isAreaUnit(item.product.unit)) return item;
 
         const nextAttributes = { ...(item.attributes || {}) };
@@ -1284,14 +1364,14 @@ export default function OrderForm() {
           quantity: areaM2,
           unit_price: calculateUnitPriceWithAttributes(item.product, areaM2, normalizedAttributes),
         };
-      })
+      }),
     );
   };
 
-  const changeItemAttribute = (productId: string, attributeName: string, value: string) => {
+  const changeItemAttribute = (itemIndex: number, attributeName: string, value: string) => {
     setItems((prev) =>
-      prev.map((item) => {
-        if (item.product.id !== productId) return item;
+      prev.map((item, index) => {
+        if (index !== itemIndex) return item;
 
         const nextAttributes = ensureSelectedAttributes(item.product.id, {
           ...(item.attributes || {}),
@@ -1791,7 +1871,7 @@ export default function OrderForm() {
                 <div className="order-module-toolbar">
                   <button type="button" className="order-module-chip tone-blue" onClick={openProductDialog}>
                     <Box className="h-4 w-4" />
-                    Produto
+                    Produto/Serviço
                   </button>
                   <button type="button" className="order-module-chip tone-slate" onClick={openManualDialog}>
                     <Plus className="h-4 w-4" />
@@ -1854,7 +1934,7 @@ export default function OrderForm() {
                       <Box className="h-5 w-5" />
                     </div>
                     <h3>Nenhum item adicionado</h3>
-                    <p>Clique em Produto ou Item avulso para montar o pedido no estilo rápido da nova tela.</p>
+                    <p>Clique em Produto/Serviço ou Item avulso para montar o pedido no estilo rápido da nova tela.</p>
                   </div>
                 ) : (
                   <div className="order-items-board">
@@ -1866,14 +1946,15 @@ export default function OrderForm() {
                       <span>Remover</span>
                     </div>
                     <div className="order-items-grid">
-                      {items.map((item) => (
+                      {items.map((item, itemIndex) => (
                         <EditableOrderItem
-                          key={item.product.id}
+                          key={`${item.product.id}-${itemIndex}`}
+                          itemIndex={itemIndex}
                           item={item}
                           saving={saving}
                           productAttributeGroups={getProductAttributeGroups(item.product.id)}
                           tierRangeLabel={getTierRangeLabel(item.product.id)}
-                          onQuantityChange={(productId, value) => setQty(productId, value)}
+                          onQuantityChange={setQty}
                           onM2SubQuantityChange={changeM2SubQuantity}
                           onAttributeChange={changeItemAttribute}
                           onRemove={removeItem}
@@ -2159,125 +2240,350 @@ export default function OrderForm() {
               <DialogHeader className="order-dialog-header">
                 <DialogTitle className="order-dialog-title">
                   <Box className="h-5 w-5" />
-                  Adicionar Produto
+                  Adicionar produto ou serviço
                 </DialogTitle>
               </DialogHeader>
             </div>
 
             <div className="order-dialog-body">
-                  <div className="order-field-group">
-                <label className="order-field-label" htmlFor="product-dialog-search">
-                  Buscar produto
-                </label>
-                <div className="order-search-field">
-                  <Search className="order-field-icon" />
-                  <input
-                    id="product-dialog-search"
-                    value={productSearchTerm}
-                    onChange={(event) => setProductSearchTerm(event.target.value)}
-                    placeholder="Digite o ID, SKU ou nome"
-                    className="order-input order-search-input"
-                  />
-                </div>
-                <p className="order-dialog-hint">Digite o nome, SKU ou ID para localizar e selecionar o produto.</p>
-              </div>
-
-                  <div className="order-field-group">
-                <label className="order-field-label">
-                  Produtos encontrados
-                </label>
-                <div className="order-dialog-results">
-                  {!hasProductSearch ? (
-                    <div className="order-dialog-results-empty">Digite para buscar produtos.</div>
-                  ) : filteredProducts.length === 0 ? (
-                    <div className="order-dialog-results-empty">Nenhum produto encontrado para essa busca.</div>
-                  ) : (
-                    filteredProducts.map((product) => {
-                      const isActive = selectedDialogProductId === product.id;
-                      const previewQuantity = isAreaUnit(product.unit)
-                        ? 1
-                        : getInitialTierQuantity(product.id, priceTiers);
-
-                      return (
-                        <button
-                          key={product.id}
-                          type="button"
-                          className={`order-dialog-result-item ${isActive ? 'is-active' : ''}`}
-                          onClick={() => setSelectedDialogProductId(product.id)}
-                        >
-                          <span className="order-dialog-result-name">
-                            {product.name}
-                            {product.sku ? ` (${product.sku})` : ''}
-                          </span>
-                          <span className="order-dialog-result-meta">
-                            {fmt(resolveProductPrice(product, previewQuantity, priceTiers))} {getProductSaleUnitPriceSuffix(product.unit_type)}
-                          </span>
-                        </button>
-                      );
-                    })
-                  )}
-                </div>
-              </div>
-
-              {hasProductSearch && selectedDialogProduct ? (
-                <div className="order-dialog-product-card">
-                  <div className="order-product-thumb order-dialog-thumb">
-                    {ensurePublicStorageUrl('product-images', selectedDialogProduct.image_url) ? (
-                      <img
-                        src={ensurePublicStorageUrl('product-images', selectedDialogProduct.image_url)!}
-                        alt={selectedDialogProduct.name}
-                        loading="lazy"
-                      />
-                    ) : (
-                      <Box className="h-5 w-5" />
-                    )}
-                  </div>
-                  <div className="order-dialog-product-meta">
-                    <strong>{selectedDialogProduct.name}</strong>
-                    <span>SKU: {selectedDialogProduct.sku || '-'}</span>
-                    <span>
-                      {fmt(productDialogPreviewPrice)} {getProductSaleUnitPriceSuffix(selectedDialogProduct.unit_type)}
-                    </span>
-                    {getTierRangeLabel(selectedDialogProduct.id) ? (
-                      <span>Faixas: {getTierRangeLabel(selectedDialogProduct.id)}</span>
-                    ) : (
-                      <span>
-                        Unidade de venda: {getProductSaleUnitLabel(selectedDialogProduct.unit_type, { capitalize: true })}
+              <div className="order-product-dialog-layout">
+                <section className="order-product-dialog-panel order-product-dialog-panel-search">
+                  <div className="order-product-dialog-section-head">
+                    <div>
+                      <span className="order-field-label">Passo 1</span>
+                      <h3 className="order-product-dialog-section-title">Buscar e selecionar</h3>
+                    </div>
+                    {hasProductSearch ? (
+                      <span className="order-product-dialog-counter">
+                        {filteredProducts.length} {filteredProducts.length === 1 ? 'resultado' : 'resultados'}
                       </span>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <p className="order-dialog-empty-note">
-                  {hasProductSearch ? 'Selecione um produto para ver os detalhes.' : 'Os detalhes do produto aparecem depois da busca.'}
-                </p>
-              )}
-
-              {selectedDialogProduct && (
-                <>
-                  <div className="order-field-group">
-                    <label className="order-field-label" htmlFor="product-dialog-quantity">
-                      Quantidade
-                    </label>
-                    <input
-                      id="product-dialog-quantity"
-                      type="number"
-                      min={1}
-                      value={productDialogQuantityValue}
-                      onChange={(event) => setProductDialogQuantity(Number(event.target.value) || 1)}
-                      className="order-input"
-                      disabled={Boolean(selectedDialogProduct && isAreaUnit(selectedDialogProduct.unit))}
-                    />
-                    {selectedDialogProduct && isAreaUnit(selectedDialogProduct.unit) ? (
-                      <p className="order-dialog-hint">
-                        Produtos por área iniciam com 1 e as medidas podem ser ajustadas depois na lista do pedido.
-                      </p>
                     ) : null}
                   </div>
 
-                  <div className="order-dialog-total">Total: {fmt(productDialogPreviewTotal)}</div>
-                </>
-              )}
+                  <div className="order-field-group">
+                    <label className="order-field-label" htmlFor="product-dialog-search">
+                      Buscar produto ou serviço
+                    </label>
+                    <div className="order-search-field">
+                      <Search className="order-field-icon" />
+                      <input
+                        id="product-dialog-search"
+                        value={productSearchTerm}
+                        onChange={(event) => setProductSearchTerm(event.target.value)}
+                        placeholder="Digite o ID, SKU ou nome"
+                        className="order-input order-search-input"
+                      />
+                    </div>
+                    <p className="order-dialog-hint">
+                      Digite o nome, SKU ou ID para localizar e selecionar o produto ou serviço.
+                    </p>
+                  </div>
+
+                  <div className="order-field-group">
+                    <label className="order-field-label">Itens encontrados</label>
+                    <div className="order-dialog-results">
+                      {!hasProductSearch ? (
+                        <div className="order-dialog-results-empty">Digite para buscar itens.</div>
+                      ) : filteredProducts.length === 0 ? (
+                        <div className="order-dialog-results-empty">Nenhum item encontrado para essa busca.</div>
+                      ) : (
+                        filteredProducts.map((product) => {
+                          const isActive = selectedDialogProductId === product.id;
+                          const previewQuantity = isActive
+                            ? productDialogQuantityValue
+                            : isAreaUnit(product.unit)
+                              ? 1
+                              : getInitialTierQuantity(product.id, priceTiers);
+                          const previewAttributes = isActive
+                            ? selectedDialogAttributes
+                            : getComparableAttributeSelection(product.id);
+                          const previewUnitPrice = calculateUnitPriceWithAttributes(
+                            product,
+                            previewQuantity,
+                            previewAttributes,
+                          );
+                          const resultAttributeGroups = getProductAttributeGroups(product.id);
+                          const resultKindLabel = product.product_type === 'servico' ? 'Serviço' : 'Produto';
+
+                          return (
+                            <button
+                              key={product.id}
+                              type="button"
+                              className={`order-dialog-result-item ${isActive ? 'is-active' : ''}`}
+                              onClick={() => setSelectedDialogProductId(product.id)}
+                            >
+                              <div className="order-dialog-result-content">
+                                <span className="order-dialog-result-name">{product.name}</span>
+                                <span className="order-dialog-result-subtitle">
+                                  {product.sku ? `SKU ${product.sku}` : 'Sem SKU'}
+                                  {' • '}
+                                  {getProductSaleUnitLabel(product.unit_type, { capitalize: true })}
+                                  {resultAttributeGroups.length > 0
+                                    ? ` • ${resultAttributeGroups.length} atributo${resultAttributeGroups.length > 1 ? 's' : ''}`
+                                    : ''}
+                                </span>
+                              </div>
+                              <div className="order-dialog-result-price">
+                                <span className="order-dialog-result-kicker">{resultKindLabel}</span>
+                                <span className="order-dialog-result-meta">
+                                  {fmt(previewUnitPrice)} {getProductSaleUnitPriceSuffix(product.unit_type)}
+                                </span>
+                                {isActive ? (
+                                  <span className="order-dialog-result-selected">
+                                    <Check className="h-3.5 w-3.5" />
+                                    Selecionado
+                                  </span>
+                                ) : null}
+                              </div>
+                            </button>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                </section>
+
+                <section className="order-product-dialog-panel order-product-dialog-panel-config">
+                  <div className="order-product-dialog-section-head">
+                    <div>
+                      <span className="order-field-label">Passo 2</span>
+                      <h3 className="order-product-dialog-section-title">Configurar item</h3>
+                      <p className="order-product-dialog-section-copy">
+                        Confira o preço, escolha os atributos e ajuste a quantidade antes de adicionar.
+                      </p>
+                    </div>
+                  </div>
+
+                  {hasProductSearch && selectedDialogProduct ? (
+                    <div className="order-dialog-product-card order-dialog-product-card-spotlight">
+                      <div className="order-product-thumb order-dialog-thumb">
+                        {ensurePublicStorageUrl('product-images', selectedDialogProduct.image_url) ? (
+                          <img
+                            src={ensurePublicStorageUrl('product-images', selectedDialogProduct.image_url)!}
+                            alt={selectedDialogProduct.name}
+                            loading="lazy"
+                          />
+                        ) : (
+                          <Box className="h-5 w-5" />
+                        )}
+                      </div>
+                      <div className="order-dialog-product-meta">
+                        <div className="order-product-dialog-meta-head">
+                          <div className="order-product-dialog-title-block">
+                            <span className="order-product-dialog-type">{selectedDialogProductKindLabel}</span>
+                            <strong>{selectedDialogProduct.name}</strong>
+                            <span>SKU: {selectedDialogProduct.sku || '-'}</span>
+                          </div>
+                          <div className="order-product-dialog-price-badge">
+                            <small>Preço unitário</small>
+                            <strong>{fmt(productDialogPreviewPrice)}</strong>
+                            <span>{getProductSaleUnitPriceSuffix(selectedDialogProduct.unit_type)}</span>
+                          </div>
+                        </div>
+
+                        <div className="order-product-dialog-chip-row">
+                          <span className="order-product-dialog-chip">
+                            Venda: {getProductSaleUnitLabel(selectedDialogProduct.unit_type, { capitalize: true })}
+                          </span>
+                          {productDialogEquivalentText ? (
+                            <span className="order-product-dialog-chip">{productDialogEquivalentText}</span>
+                          ) : null}
+                          {getTierRangeLabel(selectedDialogProduct.id) ? (
+                            <span className="order-product-dialog-chip">
+                              Faixas: {getTierRangeLabel(selectedDialogProduct.id)}
+                            </span>
+                          ) : null}
+                          {productDialogAttributeGroups.length > 0 ? (
+                            <span className="order-product-dialog-chip">
+                              {productDialogAttributeGroups.length} configuração
+                              {productDialogAttributeGroups.length > 1 ? 'ões' : ''} disponível
+                              {productDialogAttributeGroups.length > 1 ? 'is' : ''}
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="order-product-dialog-placeholder">
+                      <Box className="h-6 w-6" />
+                      <strong>Selecione um item para continuar</strong>
+                      <p>
+                        {hasProductSearch
+                          ? 'Ao escolher um resultado, você verá o preço, os atributos e o total do item de forma mais clara.'
+                          : 'Faça uma busca para visualizar o preço, as configurações e o total do item.'}
+                      </p>
+                      <div className="order-product-dialog-placeholder-steps">
+                        <span>1. Escolha o produto ou serviço</span>
+                        <span>2. Revise o preço e os atributos</span>
+                        <span>3. Ajuste a quantidade e adicione</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {selectedDialogProduct ? (
+                    <>
+                      <div className="order-product-dialog-section">
+                        <div className="order-product-dialog-section-head">
+                          <div>
+                            <span className="order-field-label">Resumo do preço</span>
+                            <p className="order-product-dialog-section-copy">
+                              Veja como o valor final foi montado antes de incluir o item no pedido.
+                            </p>
+                          </div>
+                        </div>
+                        <div className="order-product-dialog-summary">
+                          <div className="order-product-dialog-summary-card">
+                            <span>Preço base</span>
+                            <strong>{fmt(productDialogBasePrice)}</strong>
+                          </div>
+                          <div className="order-product-dialog-summary-card">
+                            <span>Ajuste dos atributos</span>
+                            <strong
+                              className={`order-product-dialog-summary-value ${productDialogAttributeModifier > 0 ? 'is-positive' : productDialogAttributeModifier < 0 ? 'is-negative' : 'is-neutral'}`}
+                            >
+                              {formatPriceAdjustment(productDialogAttributeModifier)}
+                            </strong>
+                          </div>
+                          <div className="order-product-dialog-summary-card">
+                            <span>Preço unitário final</span>
+                            <strong>{fmt(productDialogPreviewPrice)}</strong>
+                          </div>
+                        </div>
+                      </div>
+
+                      {productDialogAttributeGroups.length > 0 ? (
+                        <div className="order-product-dialog-section">
+                          <div className="order-product-dialog-section-head">
+                            <div>
+                              <span className="order-field-label">Atributos</span>
+                              <p className="order-product-dialog-section-copy">
+                                Escolha a configuração certa para usar o valor correto desse item.
+                              </p>
+                            </div>
+                          </div>
+                          <div className="order-product-dialog-attribute-grid">
+                            {productDialogAttributeGroups.map((group) => {
+                              const selectedOption = group.options.find(
+                                (option) => option.value === selectedDialogAttributes[group.attributeName],
+                              );
+                              const optionModifier = Number(selectedOption?.priceModifier || 0);
+
+                              return (
+                                <div key={`dialog-${group.attributeId}`} className="order-product-dialog-attribute-card">
+                                  <label>{group.attributeName}</label>
+                                  <div className="order-select-wrap">
+                                    <select
+                                      value={selectedDialogAttributes[group.attributeName] || group.options[0]?.value || ''}
+                                      onChange={(event) =>
+                                        setProductDialogAttributes((current) => ({
+                                          ...current,
+                                          [group.attributeName]: event.target.value,
+                                        }))
+                                      }
+                                      className="order-input order-select"
+                                    >
+                                      {group.options.map((option) => (
+                                        <option key={option.id} value={option.value}>
+                                          {option.value}
+                                          {option.priceModifier > 0 ? ` (+${fmt(option.priceModifier)})` : ''}
+                                          {option.priceModifier < 0 ? ` (-${fmt(Math.abs(option.priceModifier))})` : ''}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    <ChevronDown className="order-select-icon" />
+                                  </div>
+                                  <p
+                                    className={`order-product-dialog-option-note ${optionModifier > 0 ? 'is-positive' : optionModifier < 0 ? 'is-negative' : 'is-neutral'}`}
+                                  >
+                                    {optionModifier > 0
+                                      ? `Acrescenta ${fmt(optionModifier)} ao preço`
+                                      : optionModifier < 0
+                                        ? `Reduz ${fmt(Math.abs(optionModifier))} do preço`
+                                        : 'Sem alteração no preço'}
+                                  </p>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ) : null}
+
+                      <div className="order-product-dialog-section">
+                        <div className="order-product-dialog-section-head">
+                          <div>
+                            <span className="order-field-label">Passo 3</span>
+                            <h3 className="order-product-dialog-section-title">Quantidade e total</h3>
+                            <p className="order-product-dialog-section-copy">
+                              Ajuste a quantidade para confirmar o valor final antes de adicionar.
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="order-product-dialog-controls">
+                          <div className="order-field-group">
+                            <label className="order-field-label" htmlFor="product-dialog-quantity">
+                              Quantidade
+                            </label>
+                            <div className="order-product-dialog-qty-control">
+                              <button
+                                type="button"
+                                className="order-product-dialog-qty-btn"
+                                onClick={() => setProductDialogQuantity(Math.max(1, productDialogQuantityValue - 1))}
+                                disabled={isAreaUnit(selectedDialogProduct.unit)}
+                                aria-label="Diminuir quantidade"
+                              >
+                                <Minus className="h-4 w-4" />
+                              </button>
+                              <input
+                                id="product-dialog-quantity"
+                                type="number"
+                                min={1}
+                                value={productDialogQuantityValue}
+                                onChange={(event) => setProductDialogQuantity(Number(event.target.value) || 1)}
+                                className="order-input order-product-dialog-qty-input"
+                                disabled={Boolean(selectedDialogProduct && isAreaUnit(selectedDialogProduct.unit))}
+                              />
+                              <button
+                                type="button"
+                                className="order-product-dialog-qty-btn"
+                                onClick={() => setProductDialogQuantity(productDialogQuantityValue + 1)}
+                                disabled={isAreaUnit(selectedDialogProduct.unit)}
+                                aria-label="Aumentar quantidade"
+                              >
+                                <Plus className="h-4 w-4" />
+                              </button>
+                            </div>
+
+                            {selectedDialogProduct && isAreaUnit(selectedDialogProduct.unit) ? (
+                              <p className="order-dialog-hint">
+                                Produtos por área iniciam com 1 e as medidas podem ser ajustadas depois na lista do pedido.
+                              </p>
+                            ) : (
+                              <p className="order-dialog-hint">
+                                Ajuste a quantidade para atualizar o total antes de adicionar.
+                              </p>
+                            )}
+                          </div>
+
+                          <div className="order-product-dialog-total-card">
+                            <span className="order-field-label">Resumo do item</span>
+                            <strong>{fmt(productDialogPreviewTotal)}</strong>
+                            <p>
+                              {productDialogQuantityValue} x {fmt(productDialogPreviewPrice)} ={' '}
+                              {fmt(productDialogPreviewTotal)}
+                            </p>
+                            <small>
+                              {productDialogAttributeModifier === 0
+                                ? 'O valor unitário usa apenas o preço base desse item.'
+                                : `Os atributos selecionados ${productDialogAttributeModifier > 0 ? 'acrescentam' : 'reduzem'} ${fmt(Math.abs(productDialogAttributeModifier))} no valor unitário.`}
+                            </small>
+                          </div>
+                        </div>
+                      </div>
+                    </>
+                  ) : null}
+                </section>
+              </div>
             </div>
 
             <DialogFooter className="order-dialog-footer">
@@ -2291,7 +2597,7 @@ export default function OrderForm() {
                 disabled={!selectedDialogProduct}
               >
                 <Box className="h-4 w-4" />
-                Adicionar produto
+                Adicionar ao pedido
               </button>
             </DialogFooter>
           </div>

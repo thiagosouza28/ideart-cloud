@@ -27,6 +27,7 @@ export default function Production() {
   const [readyPreviews, setReadyPreviews] = useState<string[]>([]);
   const [search, setSearch] = useState('');
   const [savingReady, setSavingReady] = useState(false);
+  const [reopeningOrderId, setReopeningOrderId] = useState<string | null>(null);
   const readyFileInputRef = useRef<HTMLInputElement>(null);
   const { user } = useAuth();
   const { toast } = useToast();
@@ -54,7 +55,7 @@ export default function Production() {
       .from('orders')
       .select('*')
       .is('deleted_at', null)
-      .in('status', ['pendente', 'produzindo_arte', 'arte_aprovada', 'em_producao'])
+      .in('status', ['pendente', 'produzindo_arte', 'arte_aprovada', 'em_producao', 'finalizado', 'pronto'])
       .order('created_at');
     setOrders((data as Order[]) || []);
     setLoading(false);
@@ -77,6 +78,28 @@ export default function Production() {
       fetchOrders();
     } catch (error: any) {
       toast({ title: 'Erro ao atualizar pedido', description: error?.message, variant: 'destructive' });
+    }
+  };
+
+  const reopenProduction = async (orderId: string) => {
+    setReopeningOrderId(orderId);
+    try {
+      await updateOrderStatus({
+        orderId,
+        status: 'em_producao',
+        notes: 'Pedido reaberto para produção.',
+        userId: user.id,
+      });
+      toast({ title: 'Pedido voltou para produção!' });
+      fetchOrders();
+    } catch (error: unknown) {
+      toast({
+        title: 'Erro ao reabrir pedido',
+        description: error instanceof Error ? error.message : 'Erro ao reabrir pedido',
+        variant: 'destructive',
+      });
+    } finally {
+      setReopeningOrderId(null);
     }
   };
 
@@ -205,13 +228,14 @@ export default function Production() {
   const artOrders = filteredOrders.filter((order) => order.status === 'produzindo_arte');
   const artApprovedOrders = filteredOrders.filter((order) => order.status === 'arte_aprovada');
   const inProductionOrders = filteredOrders.filter((order) => order.status === 'em_producao');
+  const finalizedOrders = filteredOrders.filter((order) => order.status === 'finalizado' || order.status === 'pronto');
 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-slate-900">Painel de Produção</h1>
-          <p className="text-sm text-slate-500">Pedidos pendentes, arte e produção aguardando avanços</p>
+          <p className="text-sm text-slate-500">Pedidos pendentes, arte, produção e finalizados para acompanhamento</p>
         </div>
         <Badge variant="outline" className="text-sm px-3 py-1 rounded-full">
           <Clock className="mr-2 h-4 w-4" />
@@ -235,7 +259,7 @@ export default function Production() {
         <Card className="border-slate-200 shadow-sm">
           <CardContent className="py-12 text-center text-muted-foreground">
             <Package className="mx-auto h-12 w-12 mb-4 opacity-50" />
-            Nenhum pedido pendente, arte ou produção
+            Nenhum pedido pendente, arte, produção ou finalizado
           </CardContent>
         </Card>
       ) : filteredOrders.length === 0 ? (
@@ -443,6 +467,63 @@ export default function Production() {
                         <Button className="w-full" onClick={() => openReadyDialog(order)}>
                           <CheckCircle className="mr-2 h-4 w-4" />
                           Marcar como Finalizado
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </div>
+          )}
+          {finalizedOrders.length > 0 && (
+            <div className="space-y-3">
+              <h2 className="text-lg font-semibold">Finalizados</h2>
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {finalizedOrders.map((order) => (
+                  <Card key={order.id} className="border-slate-200 shadow-sm h-full flex flex-col">
+                    <CardHeader className="pb-3">
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-lg">Pedido #{formatOrderNumber(order.order_number)}</CardTitle>
+                        <span className="status-badge status-finalizado">Finalizado</span>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="flex flex-1 flex-col gap-3">
+                      <div className="text-sm">
+                        <span className="text-muted-foreground">Cliente:</span>{' '}
+                        {order.customer_id ? (
+                          <Button
+                            variant="link"
+                            className="h-auto p-0 text-sm text-primary"
+                            onClick={() => navigate(`/clientes/${order.customer_id}/historico`)}
+                          >
+                            {order.customer_name || 'Cliente'}
+                          </Button>
+                        ) : (
+                          <span className="font-medium">{order.customer_name || 'Não informado'}</span>
+                        )}
+                      </div>
+                      <div className="text-sm">
+                        <span className="text-muted-foreground">Total:</span>{' '}
+                        <span className="font-medium">{formatCurrency(Number(order.total))}</span>
+                      </div>
+                      {getDisplayNotes(order) && (
+                        <div className="text-sm bg-muted p-2 rounded">
+                          <span className="text-muted-foreground">Obs:</span> {getDisplayNotes(order)}
+                        </div>
+                      )}
+                      <div className="mt-auto grid gap-2">
+                        <Button variant="outline" className="w-full" onClick={() => openOrderDetails(order)}>
+                          <Eye className="mr-2 h-4 w-4" />
+                          Ver Pedido
+                        </Button>
+                        <Button
+                          variant="outline"
+                          className="w-full"
+                          onClick={() => reopenProduction(order.id)}
+                          disabled={reopeningOrderId === order.id}
+                        >
+                          <Clock className="mr-2 h-4 w-4" />
+                          {reopeningOrderId === order.id ? 'Reabrindo...' : 'Voltar para Produção'}
                         </Button>
                       </div>
                     </CardContent>

@@ -577,6 +577,17 @@ export default function OrdersKanban() {
       return;
     }
 
+    if (['finalizado', 'pronto'].includes(order.status) && targetStatus === 'em_producao') {
+      const approved = await confirm({
+        title: 'Voltar para produção?',
+        description: 'O pedido sairá de finalizado e os itens prontos voltarão para a produção.',
+        confirmText: 'Voltar',
+        cancelText: 'Cancelar',
+      });
+
+      if (!approved) return;
+    }
+
     if (order.status === 'pendente' && targetStatus !== 'cancelado') {
       const needsArt = await confirm({
         title: 'Arte necessária?',

@@ -17,7 +17,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { ProductAttributeGroup } from './OrderForm';
 import { Order, OrderFinalPhoto, OrderArtFile, OrderItem, OrderStatusHistory, OrderStatus, OrderPayment, PaymentMethod, PaymentStatus, Product, Customer, PriceTier } from '@/types/database';
-import { ArrowLeft, Loader2, CheckCircle, Clock, Package, Truck, XCircle, User, FileText, Printer, MessageCircle, Link, Copy, CreditCard, PauseCircle, Trash2, Image as ImageIcon, Upload, Paintbrush, Sparkles, Wallet, FileDown } from 'lucide-react';
+import { ArrowLeft, Loader2, CheckCircle, Clock, Package, Truck, XCircle, User, FileText, Printer, MessageCircle, Link, Copy, CreditCard, PauseCircle, Trash2, Image as ImageIcon, Upload, Paintbrush, Sparkles, Wallet, FileDown, RotateCcw } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -269,6 +269,7 @@ export default function OrderDetails() {
   const [statusItemId, setStatusItemId] = useState('');
   const [statusNotes, setStatusNotes] = useState('');
   const [saving, setSaving] = useState(false);
+  const [reopeningProduction, setReopeningProduction] = useState(false);
   const [readyDialogOpen, setReadyDialogOpen] = useState(false);
   const [readySaving, setReadySaving] = useState(false);
   const [readyItemIds, setReadyItemIds] = useState<string[]>([]);
@@ -2582,6 +2583,39 @@ export default function OrderDetails() {
     setStatusDialogOpen(true);
   };
 
+  const handleReopenProduction = async () => {
+    if (!order) return;
+
+    const approved = await confirm({
+      title: 'Voltar para produção?',
+      description: 'O pedido sairá de finalizado e os itens prontos voltarão para a produção.',
+      confirmText: 'Voltar para produção',
+      cancelText: 'Manter finalizado',
+    });
+
+    if (!approved) return;
+
+    setReopeningProduction(true);
+    try {
+      await updateOrderStatus({
+        orderId: order.id,
+        status: 'em_producao',
+        notes: 'Pedido reaberto para produção.',
+        userId: user.id,
+      });
+      toast({ title: 'Pedido voltou para produção' });
+      await fetchOrder(order.id);
+    } catch (error: unknown) {
+      toast({
+        title: 'Erro ao reabrir produção',
+        description: error instanceof Error ? error.message : 'Erro ao reabrir produção',
+        variant: 'destructive',
+      });
+    } finally {
+      setReopeningProduction(false);
+    }
+  };
+
   const handleOpenPhoto = (photo: { url: string; created_at: string }) => {
     setSelectedPhoto(photo);
     setPhotoViewerOpen(true);
@@ -3496,6 +3530,9 @@ export default function OrderDetails() {
   const canManageReady =
     readyAllowedStatuses.includes(order.status) &&
     hasPermission(['admin', 'atendente', 'caixa', 'producao']);
+  const canReopenProduction =
+    ['finalizado', 'pronto'].includes(order.status) &&
+    hasPermission(['admin', 'atendente', 'caixa', 'producao']);
   const deliveryAllowedStatuses = [
     'em_producao',
     'pronto',
@@ -3718,6 +3755,21 @@ export default function OrderDetails() {
               className="w-full sm:w-auto"
             >
               Excluir
+            </Button>
+          )}
+          {canReopenProduction && (
+            <Button
+              variant="outline"
+              onClick={handleReopenProduction}
+              disabled={reopeningProduction}
+              className="w-full sm:w-auto"
+            >
+              {reopeningProduction ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <RotateCcw className="mr-2 h-4 w-4" />
+              )}
+              Voltar para produção
             </Button>
           )}
           {hasStatusDialogOptions && hasPermission(['admin', 'atendente', 'caixa', 'producao']) && (
@@ -5346,12 +5398,12 @@ export default function OrderDetails() {
       <Dialog open={receiptDialogOpen} onOpenChange={handleReceiptDialogChange}>
         <DialogContent
           aria-describedby={undefined}
-          className="w-[calc(100vw-1.5rem)] max-w-[700px] max-h-[92vh] overflow-hidden"
+          className="w-[calc(100vw-1.5rem)] max-w-[780px] max-h-[92vh] overflow-hidden"
         >
           <DialogHeader>
             <DialogTitle>Recibo de Pagamento</DialogTitle>
           </DialogHeader>
-          <div className="max-h-[calc(92vh-190px)] overflow-y-auto overflow-x-hidden pr-1">
+          <div className="max-h-[calc(92vh-190px)] overflow-y-auto overflow-x-auto pr-1">
             <div className="flex justify-center">
               {receiptPayment ? (
                 <PaymentReceipt

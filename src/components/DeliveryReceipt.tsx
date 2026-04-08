@@ -102,7 +102,7 @@ const DeliveryReceipt = forwardRef<HTMLDivElement, DeliveryReceiptProps>(
     return (
       <div
         ref={ref}
-        className="receipt-root mx-auto w-full max-w-[794px] rounded-xl border border-slate-200 bg-white p-6 text-slate-900 shadow-sm"
+        className="receipt-root receipt-fixed-width mx-auto shrink-0 rounded-xl border border-slate-200 bg-white p-6 text-slate-900 shadow-sm"
       >
         <div className="receipt-block border-b border-slate-200 pb-4">
           <div className="flex items-start justify-between gap-4">
@@ -140,7 +140,7 @@ const DeliveryReceipt = forwardRef<HTMLDivElement, DeliveryReceiptProps>(
           </div>
         </div>
 
-        <div className="receipt-block mt-4 grid gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] sm:grid-cols-4">
+        <div className="receipt-block mt-4 grid grid-cols-4 gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[11px]">
           <div>
             <p className="uppercase tracking-wide text-slate-500">Cliente</p>
             <p className="font-semibold text-slate-900">{customerName}</p>
@@ -242,7 +242,7 @@ const DeliveryReceipt = forwardRef<HTMLDivElement, DeliveryReceiptProps>(
         </div>
 
         {payment && (
-          <div className="receipt-block mt-4 grid gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] sm:grid-cols-3">
+          <div className="receipt-block mt-4 grid grid-cols-3 gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[11px]">
             <div>
               <p className="uppercase tracking-wide text-slate-500">Ultimo pagamento registrado</p>
               <p className="font-semibold text-slate-900">{formatCurrency(Number(payment.amount || 0))}</p>
@@ -268,7 +268,7 @@ const DeliveryReceipt = forwardRef<HTMLDivElement, DeliveryReceiptProps>(
 
         <div
           className={[
-            'receipt-block mt-4 grid gap-2 rounded-lg border px-3 py-2 text-[11px] sm:grid-cols-3',
+            'receipt-block mt-4 grid grid-cols-3 gap-2 rounded-lg border px-3 py-2 text-[11px]',
             hasPendingAmount
               ? 'border-amber-200 bg-amber-50'
               : 'border-slate-200 bg-slate-50',
@@ -295,7 +295,7 @@ const DeliveryReceipt = forwardRef<HTMLDivElement, DeliveryReceiptProps>(
             </div>
           )}
           {hasPendingAmount && (
-            <div className="sm:col-span-3">
+            <div className="col-span-3">
               <p className="font-semibold text-slate-900">
                 Pedido entregue com saldo pendente de {formatCurrency(pendingAmount)}.
               </p>

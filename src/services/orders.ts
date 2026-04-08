@@ -41,8 +41,8 @@ const statusTransitions: Record<OrderStatus, OrderStatus[]> = {
   produzindo_arte: ['arte_aprovada', 'cancelado'],
   arte_aprovada: ['em_producao', 'cancelado'],
   em_producao: ['finalizado', 'cancelado'],
-  finalizado: ['aguardando_retirada', 'entregue', 'cancelado'],
-  pronto: ['aguardando_retirada', 'entregue', 'cancelado'],
+  finalizado: ['em_producao', 'aguardando_retirada', 'entregue', 'cancelado'],
+  pronto: ['em_producao', 'aguardando_retirada', 'entregue', 'cancelado'],
   aguardando_retirada: ['entregue', 'cancelado'],
   entregue: [],
   cancelado: ['pendente'],
@@ -50,6 +50,21 @@ const statusTransitions: Record<OrderStatus, OrderStatus[]> = {
 
 const isStatusTransitionAllowed = (from: OrderStatus, to: OrderStatus) =>
   from === to || statusTransitions[from]?.includes(to);
+
+const readyOrLaterStatuses: OrderStatus[] = [
+  'finalizado',
+  'pronto',
+  'aguardando_retirada',
+  'entregue',
+];
+
+const reopenableProductionStatuses: OrderStatus[] = ['finalizado', 'pronto'];
+
+const isReadyOrLaterStatus = (status: OrderStatus) =>
+  readyOrLaterStatuses.includes(status);
+
+const isReturningToProduction = (from: OrderStatus, to: OrderStatus) =>
+  reopenableProductionStatuses.includes(from) && to === 'em_producao';
 
 const formatStatusLabel = (value: string) => {
   const normalized = value.replace(/_/g, ' ');
@@ -144,12 +159,45 @@ const applyDirectProductStockDeduction = async ({
 
   if (directStockProducts.length === 0) return;
 
-  await Promise.all(
-    directStockProducts.map(async (product) => {
-      const quantity = quantitiesByProduct.get(product.id) || 0;
-      if (quantity <= 0) return;
+  const movementReason = `Pedido ${formatOrderReference(orderNumber)}`;
+  const directStockProductIds = directStockProducts.map((product) => product.id);
+  const { data: existingMovements, error: existingMovementsError } = await supabase
+    .from('stock_movements')
+    .select('product_id, quantity')
+    .in('product_id', directStockProductIds)
+    .eq('movement_type', 'saida')
+    .eq('reason', movementReason);
 
-      const nextStock = Number(product.stock_quantity || 0) - quantity;
+  if (existingMovementsError) {
+    throw existingMovementsError;
+  }
+
+  const deductedQuantitiesByProduct = new Map<string, number>();
+  ((existingMovements || []) as Array<{ product_id: string | null; quantity: number | string | null }>).forEach(
+    (movement) => {
+      if (!movement.product_id) return;
+      deductedQuantitiesByProduct.set(
+        movement.product_id,
+        (deductedQuantitiesByProduct.get(movement.product_id) || 0) + Number(movement.quantity || 0),
+      );
+    },
+  );
+
+  const pendingDirectStockProducts = directStockProducts
+    .map((product) => ({
+      ...product,
+      quantityToDeduct: Math.max(
+        0,
+        (quantitiesByProduct.get(product.id) || 0) - (deductedQuantitiesByProduct.get(product.id) || 0),
+      ),
+    }))
+    .filter((product) => product.quantityToDeduct > 0);
+
+  if (pendingDirectStockProducts.length === 0) return;
+
+  await Promise.all(
+    pendingDirectStockProducts.map(async (product) => {
+      const nextStock = Number(product.stock_quantity || 0) - product.quantityToDeduct;
       const { error } = await supabase
         .from('products')
         .update({ stock_quantity: nextStock })
@@ -163,15 +211,12 @@ const applyDirectProductStockDeduction = async ({
   );
 
   await Promise.all(
-    directStockProducts.map(async (product) => {
-      const quantity = quantitiesByProduct.get(product.id) || 0;
-      if (quantity <= 0) return;
-
+    pendingDirectStockProducts.map(async (product) => {
       const { error } = await supabase.from('stock_movements').insert({
         product_id: product.id,
         movement_type: 'saida',
-        quantity,
-        reason: `Pedido ${formatOrderReference(orderNumber)}`,
+        quantity: product.quantityToDeduct,
+        reason: movementReason,
         user_id: userId || null,
       });
 
@@ -1276,11 +1321,13 @@ export const updateOrderStatus = async ({
     throw orderError || new Error('Pedido não encontrado');
   }
 
-  if (!isStatusTransitionAllowed(order.status as OrderStatus, status)) {
+  const currentStatus = order.status as OrderStatus;
+
+  if (!isStatusTransitionAllowed(currentStatus, status)) {
     throw new Error('Mudança de status não permitida');
   }
 
-  if (order.status === 'cancelado' && status === 'pendente') {
+  if (currentStatus === 'cancelado' && status === 'pendente') {
     const role = await fetchUserRole(userId);
     if (!role || !['admin', 'atendente'].includes(role)) {
       throw new Error('Apenas Admin ou Atendente podem reativar pedidos cancelados');
@@ -1288,8 +1335,8 @@ export const updateOrderStatus = async ({
   }
 
   const fromLabel =
-    statusLabels[order.status as OrderStatus] ??
-    formatStatusLabel(String(order.status));
+    statusLabels[currentStatus] ??
+    formatStatusLabel(String(currentStatus));
   const toLabel = statusLabels[status] ?? formatStatusLabel(String(status));
   const transitionNote = `Status alterado de ${fromLabel} para ${toLabel}.`;
   const historyNotes = notes ? `${transitionNote} ${notes}` : transitionNote;
@@ -1300,8 +1347,9 @@ export const updateOrderStatus = async ({
     cancel_reason: status === 'cancelado' ? notes || null : null,
   };
   const statusChangedAt = new Date().toISOString();
+  const reopeningToProduction = isReturningToProduction(currentStatus, status);
 
-  if (order.status === 'pendente' && status !== 'pendente') {
+  if (currentStatus === 'pendente' && status !== 'pendente') {
     updatePayload.notes = stripPendingCustomerInfoNotes(order.notes);
   }
 
@@ -1321,11 +1369,11 @@ export const updateOrderStatus = async ({
     throw updateError;
   }
 
-  const itemStatusPayload: Record<string, unknown> = {
+  const itemStatusPayload: Partial<OrderItem> = {
     status,
   };
 
-  if (['finalizado', 'pronto', 'aguardando_retirada', 'entregue'].includes(status)) {
+  if (isReadyOrLaterStatus(status)) {
     itemStatusPayload.ready_at = statusChangedAt;
     itemStatusPayload.ready_by = userId || null;
   }
@@ -1335,10 +1383,23 @@ export const updateOrderStatus = async ({
     itemStatusPayload.delivered_by = userId || null;
   }
 
-  const { error: itemStatusError } = await (supabase
+  if (reopeningToProduction) {
+    itemStatusPayload.ready_at = null;
+    itemStatusPayload.ready_by = null;
+    itemStatusPayload.delivered_at = null;
+    itemStatusPayload.delivered_by = null;
+  }
+
+  let orderItemsStatusQuery = supabase
     .from('order_items')
-    .update(itemStatusPayload as any)
-    .eq('order_id', orderId)) as any;
+    .update(itemStatusPayload)
+    .eq('order_id', orderId);
+
+  if (currentStatus !== 'cancelado' && status !== 'cancelado') {
+    orderItemsStatusQuery = orderItemsStatusQuery.neq('status', 'cancelado');
+  }
+
+  const { error: itemStatusError } = await orderItemsStatusQuery;
 
   if (itemStatusError) {
     throw itemStatusError;
@@ -1357,17 +1418,20 @@ export const updateOrderStatus = async ({
     throw historyError;
   }
 
-  if (order.company_id && order.status !== 'finalizado' && status === 'finalizado') {
+  if (order.company_id && ['finalizado', 'pronto'].includes(status)) {
     const { data: orderItems, error: orderItemsError } = await supabase
       .from('order_items')
-      .select('product_id, product_name, quantity')
+      .select('product_id, product_name, quantity, status')
       .eq('order_id', orderId);
 
     if (orderItemsError) {
       throw orderItemsError;
     }
 
-    const normalizedItems = ((orderItems || []) as Partial<OrderStockDeductionItem>[])
+    const normalizedItems = (
+      (orderItems || []) as Array<Partial<OrderStockDeductionItem> & { status?: OrderStatus | null }>
+    )
+      .filter((item) => item.status !== 'cancelado')
       .map((item) => ({
         product_id: item.product_id || null,
         product_name: item.product_name || 'Produto',
@@ -1410,12 +1474,23 @@ export const updateOrderStatus = async ({
     );
 
     if (compositionItems.length > 0) {
-      await consumeProductSupplies({
-        companyId: order.company_id,
-        orderId,
-        userId: userId || null,
-        items: compositionItems,
-      });
+      const { count: consumedSupplyMovementsCount, error: consumedSupplyMovementsError } = await supabase
+        .from('supply_stock_movements')
+        .select('id', { count: 'exact', head: true })
+        .eq('order_id', orderId);
+
+      if (consumedSupplyMovementsError) {
+        throw consumedSupplyMovementsError;
+      }
+
+      if ((consumedSupplyMovementsCount || 0) === 0) {
+        await consumeProductSupplies({
+          companyId: order.company_id,
+          orderId,
+          userId: userId || null,
+          items: compositionItems,
+        });
+      }
     }
 
     await supabase.rpc('recalculate_product_sales_counts', {

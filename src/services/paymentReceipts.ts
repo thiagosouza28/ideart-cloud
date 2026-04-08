@@ -23,7 +23,7 @@ export type ReceiptUploadResult = {
   publicUrl: string | null;
 };
 
-const defaultWidth = 560;
+const defaultWidth = 733;
 const defaultMargin = 32;
 const defaultFitSinglePage = true;
 

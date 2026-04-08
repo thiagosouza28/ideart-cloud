@@ -248,7 +248,9 @@ export const buildPaymentReceiptHtml = (
         border: 1px solid var(--receipt-border);
         border-radius: 14px;
         padding: 24px;
-        width: min(100%, 794px);
+        width: 733px;
+        min-width: 733px;
+        max-width: 733px;
         margin: 0 auto;
         box-sizing: border-box;
       }
@@ -427,26 +429,6 @@ export const buildPaymentReceiptHtml = (
         color: var(--receipt-muted);
       }
 
-      @media (max-width: 640px) {
-        .receipt-root {
-          padding: 16px;
-        }
-
-        .receipt-header-row {
-          flex-direction: column;
-        }
-
-        .receipt-header-side {
-          width: 100%;
-          text-align: left;
-        }
-
-        .receipt-summary,
-        .receipt-grid,
-        .receipt-signatures {
-          grid-template-columns: 1fr;
-        }
-      }
     </style>
 
     <div class="receipt-root">
